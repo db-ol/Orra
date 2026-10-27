@@ -106,6 +106,15 @@ struct ReplyFactsTests {
         }
     }
 
+    /// A greeting on a line of its own stays apart from the paragraph after it, so a file
+    /// name that starts the paragraph is read whole.
+    @Test func aGreetingOnALineOfItsOwnStaysApart() async throws {
+        let text = "林様\n\nspeaker-guidelines.mdをもう一度送っていただけますか。\n\n佐藤"
+        let facts = try #require(await Self.explained(Self.email(text)).replyFacts)
+        #expect(facts.requests.first?.fileNames == ["speaker-guidelines.md"])
+        #expect(ExplainService.sendersOwnWords(Self.email(text)).contains("林様\n\nspeaker-guidelines.md"))
+    }
+
     /// A sender Projects does not know who asks for files gets the warning of a request to
     /// forward mail or files, before the search, so no other project's file reaches the
     /// explanation. A known sender, the user, and a stranger who asks for nothing do not.

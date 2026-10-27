@@ -78,12 +78,18 @@ extension ExplainService {
     /// The words the sender wrote in the email, as the reply rule reads them: its visible
     /// text without quoted history, forwarded messages and the signature, after PromptHygiene,
     /// so hidden text and lines to an assistant are left out too. Only the first part a
-    /// request is read in goes through the hygiene.
+    /// request is read in goes through the hygiene. The markers of what the hygiene took out
+    /// go, and the blank lines stay, so a greeting on a line of its own, such as 林様, stays
+    /// apart from the paragraph after it.
     nonisolated static func sendersOwnWords(_ email: Email) -> String {
         let text = email.visibleText.isEmpty ? email.text : email.visibleText
         let note = QuotedHistory(splitting: text, subject: email.subject).note
         let read = String(note.prefix(FileRequests.readLength * 2))
-        return PromptHygiene.withoutMarkers(PromptHygiene(read, source: .mail).text)
+        var words = PromptHygiene(read, source: .mail).text
+        for marker in PromptHygiene.Markers(.zh).all + PromptHygiene.Markers(.en).all {
+            words = words.replacingOccurrences(of: marker, with: "")
+        }
+        return words
     }
 
     /// Whether the sender asks for a file and is neither the user, nor among the people the
