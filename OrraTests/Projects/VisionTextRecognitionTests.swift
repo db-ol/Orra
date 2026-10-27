@@ -4,11 +4,15 @@ import UniformTypeIdentifiers
 @testable import Orra
 
 /// Vision on this Mac, through TextRecognizer as the index calls it, on a PNG of English and
-/// Chinese drawn with CoreText. Every other test of recognition uses a stand in. This one
-/// skips itself where Vision lacks Chinese or English, and where Vision cannot read an image
-/// at all, as on a virtual machine without its models, so it never fails for that. Run
-/// locally, it runs Vision, so only under the lock the GPU work of the tests shares.
-@Suite(.timeLimit(.minutes(1)))
+/// Chinese drawn with CoreText. Every other test of recognition uses a stand in. Only with
+/// TEST_RUNNER_ORRA_RECOGNITION=1, never in CI: on the virtual machine of CI, with macOS
+/// 27.0.1 on 2026-10-27, Vision could not read the image, and the test took 55 s to skip
+/// itself. It skips itself where Vision lacks Chinese or English, and where Vision cannot
+/// read an image at all, so it never fails for that. It runs Vision, so only under the lock
+/// the GPU work of the tests shares:
+///
+///     TEST_RUNNER_ORRA_RECOGNITION=1 xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData -testLanguage en -testRegion US test-without-building -only-testing:OrraTests/VisionTextRecognitionTests
+@Suite(.timeLimit(.minutes(1)), .enabled(if: ProcessInfo.processInfo.environment["ORRA_RECOGNITION"] != nil))
 struct VisionTextRecognitionTests {
     /// Whether Vision's accurate recognition lists Chinese and English, which the test reads.
     static var readsChineseAndEnglish: Bool {

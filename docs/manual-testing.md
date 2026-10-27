@@ -3959,10 +3959,11 @@ hidden text, the page time, the pauses before every page and during a page, the 
 across a restart, a file given up after two jobs that never ended, which is read again
 once it changes, and the languages Vision is asked for, those of Chinese, English,
 Japanese and Spanish that it reads, with a stand in for Vision. VisionTextRecognitionTests
-reads one image with Vision, and TextRecognitionMeasurementTests measures Vision on
-synthetic scans and images. No scan from a scanner app or photo from an iPhone is among
-them. Check in a Debug build with Projects on and the index watched with the log stream
-above.
+reads one image with Vision, only with TEST_RUNNER_ORRA_RECOGNITION=1, since on the
+virtual machine of CI Vision could not read it and the test took 55 s to skip itself.
+TextRecognitionMeasurementTests measures Vision on synthetic scans and images. No scan
+from a scanner app or photo from an iPhone is among them. Check in a Debug build with
+Projects on and the index watched with the log stream above.
 
 - [ ] Put a scanned PDF from a scanner app or Notes, a PDF with text and one scanned page, an
   iPhone HEIC photo of a printed page, a PNG screenshot and a photo without text into the

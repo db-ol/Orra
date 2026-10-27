@@ -13,8 +13,8 @@ enum RecognitionTestFiles {
     struct Failure: Error {}
 
     /// A stand in for text recognition that finds no text and leaves no page, for the tests
-    /// that index folders without images or scans, so no test but VisionTextRecognitionTests
-    /// and the opt in measurement runs Vision.
+    /// that index folders without images or scans, so only the opt in
+    /// VisionTextRecognitionTests and the opt in measurement run Vision.
     static let findsNothing: FolderIndex.Recognize = { _, _ in .success(RecognitionResult(isDone: true)) }
 
     /// An image of lines drawn with CoreText at `points` pixels, `ink` on `paper` in gray, 0
