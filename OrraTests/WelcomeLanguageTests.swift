@@ -97,20 +97,30 @@ struct WelcomeLanguageTests {
         #expect(image(Text("Done").environment(\.locale, spanish)) == image(Text(verbatim: "Listo")))
     }
 
-    /// VoiceOver reads a step's state after its title, from a key, so the text above shows
-    /// it in the window's language as it shows Done. The welcome window and the Projects
-    /// page of Settings share the step rows.
-    @Test func eachStepSaysItsStateInThePickedLanguage() {
+    /// The words VoiceOver reads after a step's title, Done, In progress or Not done yet,
+    /// come from a key, so they follow the language picked in the window, as the text above
+    /// shows Done. The welcome window and the Projects page of Settings share the step rows.
+    /// A view hosted in a test gives none of SwiftUI's accessibility elements, so whether
+    /// VoiceOver reads the title as a heading with these words is checked by hand, see
+    /// docs/manual-testing.md.
+    @Test func eachStepStateIsAKeyWithWordsInEveryLanguage() {
         #expect(SetupChecklist.Status.done.spokenKey == "Done")
         #expect(SetupChecklist.Status.inProgress.spokenKey == "In progress")
         #expect(SetupChecklist.Status.todo.spokenKey == "Not done yet")
-        let state = { (key: String.LocalizationValue, locale: Locale) in
-            String(localized: LocalizedStringResource(key, locale: locale))
+        let words: [(key: String.LocalizationValue, locale: Locale, text: String)] = [
+            ("Done", chinese, "完成"),
+            ("In progress", chinese, "进行中"),
+            ("Not done yet", chinese, "尚未完成"),
+            ("Done", japanese, "完了"),
+            ("In progress", japanese, "進行中"),
+            ("Not done yet", japanese, "未完了"),
+            ("Done", spanish, "Listo"),
+            ("In progress", spanish, "En curso"),
+            ("Not done yet", spanish, "Pendiente"),
+        ]
+        for word in words {
+            #expect(String(localized: LocalizedStringResource(word.key, locale: word.locale)) == word.text)
         }
-        #expect(state("In progress", chinese) == "进行中")
-        #expect(state("In progress", japanese) == "進行中")
-        #expect(state("In progress", spanish) == "En curso")
-        #expect(state("Not done yet", chinese) == "尚未完成")
     }
 
     @Test func closingRestartsOnlyWhenSetupIsCompleteAndTheLanguageWasPickedInTheWindow() {
