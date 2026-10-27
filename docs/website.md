@@ -93,12 +93,12 @@ The Download button points to
 https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg, so every release must
 upload a copy of its DMG named Orra.dmg, as docs/releasing.md describes.
 
-The version under the top Download button is plain text, once in each page ("Version 0.6.0",
-"版本 0.6.0", "バージョン0.6.0" and "Versión 0.6.0"), next to the system requirements. After a
+The version under the top Download button is plain text, once in each page ("Version 0.6.1",
+"版本 0.6.1", "バージョン0.6.1" and "Versión 0.6.1"), next to the system requirements. After a
 release is published, change it in all four pages and merge, so the site never names a
 version that is not out yet. To find every place:
 
-    grep -rn "0\.6\.0" site
+    grep -rn "0\.6\.1" site
 
 The Download Orra Microphone link in the Meeting Interpretation section points at
 OrraMicrophone.pkg in the v0.4.0 release, as README.md does. Change it only when a newer
