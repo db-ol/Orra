@@ -1318,7 +1318,8 @@ struct MailStoreTests {
         try await store.save([Self.message(id, from: "kim@quay.example", text: "Could you send the floor plan?")], ownAddresses: [Self.work], at: Self.date(1))
         let plan = ChunkSearch.Hit(
             chunk: 7, project: Self.maple, file: URL(fileURLWithPath: "/tmp/maple/floor-plan.pdf"), page: 1, heading: nil,
-            modified: Self.date(-1), text: "The tealkettle floor plan.", fileHiddenRuns: 0, score: 1, matchedTerm: true)
+            modified: Self.date(-1), text: "The tealkettle floor plan.", fileHiddenRuns: 0, score: 1, matchedTerm: true,
+            matchedTerms: ["floor plan", "tealkettle", "lobby"])
         let model = HeldAnswer()
         let known = ExplainService.Known(ownName: "Bai Lu", ownAddresses: [Self.work], projects: [
             ExplainService.Project(id: Self.harbor, name: "Harbor"), ExplainService.Project(id: Self.maple, name: "Maple"),
@@ -1332,7 +1333,7 @@ struct MailStoreTests {
                 search: { query in query.termsOnly ? [plan] : [] },
                 newest: { _, _ in [] },
                 files: { _ in [] },
-                terms: { _ in ["floor plan"] }
+                terms: { _ in ["floor plan", "tealkettle", "lobby"] }
             ),
             run: { request in try await model.answer(request) },
             loadTokenCounter: { { $0.count / 3 } },
