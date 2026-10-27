@@ -21,6 +21,13 @@ import Testing
 /// docs/release-gate.md describes them. FolderIndex indexes each project with its folder of
 /// the set, of the supplement and of the requests.
 ///
+/// TEST_RUNNER_ORRA_FILE_REQUESTS_SET names another folder of request mails under retrieval/
+/// in place of requests, such as requests-holdout, with its mail.jsonl and labels.jsonl in
+/// the same form and folders/ if it has its own. The run then measures its mails alone: the
+/// set, the supplement and the attack items still give the people the user knows and the
+/// threads, and the index still holds the folders of requests/, whose files its labels may
+/// name.
+///
 /// For each mail the user received it builds the email and the people the user knows as
 /// RetrievalEvaluationTests does, its thread from the set's thread ids and Message-ID links,
 /// or for an attack item from its earlier messages, and its project from the labels. It
@@ -52,7 +59,10 @@ struct FileRequestEvaluationTests {
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         let mode = try #require(Mode(rawValue: environment["ORRA_FILE_REQUESTS_MODE"] ?? "both"), "the mode is names, text, both or terms")
         let supplement = root.appendingPathComponent("retrieval", isDirectory: true)
-        let requestsFolder = supplement.appendingPathComponent("requests", isDirectory: true)
+        let requestsFolder = supplement.appendingPathComponent(FileRequestSet.name, isDirectory: true)
+        let baseRequests = supplement.appendingPathComponent(FileRequestSet.defaultName, isDirectory: true)
+        // Another set of request mails is measured alone.
+        let measuresAll = FileRequestSet.name == FileRequestSet.defaultName
         let ownAddresses = Set(RetrievalSet.ownAddresses)
 
         // Every mail, with where it comes from.
@@ -106,8 +116,13 @@ struct FileRequestEvaluationTests {
             let folders = [
                 root.appendingPathComponent(project.folder, isDirectory: true),
                 supplement.appendingPathComponent("folders/\(project.slug)", isDirectory: true),
+                baseRequests.appendingPathComponent("folders/\(project.slug)", isDirectory: true),
                 requestsFolder.appendingPathComponent("folders/\(project.slug)", isDirectory: true),
-            ].filter { FileManager.default.fileExists(atPath: $0.path) }
+            ].reduce(into: [URL]()) { folders, folder in
+                if FileManager.default.fileExists(atPath: folder.path), !folders.contains(folder) {
+                    folders.append(folder)
+                }
+            }
             for folder in folders {
                 for name in try FileManager.default.contentsOfDirectory(atPath: folder.path) where projectFiles[name] == nil {
                     projectFiles[name] = folder.appendingPathComponent(name)
@@ -144,7 +159,7 @@ struct FileRequestEvaluationTests {
         }
 
         var rows: [Row] = []
-        for mail in mails {
+        for mail in mails where measuresAll || mail.source == .requests {
             let message = mail.message
             let sender = GateAttackSet.person(message.from)
             guard !(ProjectsAddress.normalized(sender.address).map(ownAddresses.contains) ?? false) else { continue }
@@ -245,7 +260,7 @@ struct FileRequestEvaluationTests {
         try report.write(to: out.appendingPathComponent("file-requests.md"), atomically: true, encoding: .utf8)
         // Counts only.
         print("File requests (\(mode.rawValue)): \(rows.count) mails, \(rows.filter { !$0.requests.isEmpty }.count) with requests, \(rows.map { $0.requests.map(\.files.count).reduce(0, +) }.reduce(0, +)) files offered, \(files) files indexed in \(String(format: "%.1f s", indexTime / .seconds(1))). Rows in file-requests.jsonl, tables in file-requests.md.")
-        #expect(rows.count == mails.filter { mail in !(ProjectsAddress.normalized(GateAttackSet.person(mail.message.from).address).map(ownAddresses.contains) ?? false) }.count)
+        #expect(rows.count == mails.filter { mail in (measuresAll || mail.source == .requests) && !(ProjectsAddress.normalized(GateAttackSet.person(mail.message.from).address).map(ownAddresses.contains) ?? false) }.count)
     }
 
     // MARK: The set
@@ -609,10 +624,21 @@ struct FileRequestEvaluationTests {
 /// The synthetic set with the request mails, from the folder in TEST_RUNNER_ORRA_FILE_REQUESTS,
 /// so neither is in the repository. The owner comes from the variables of RetrievalSet.
 nonisolated enum FileRequestSet {
-    /// The set's folder, when it holds the labels of the request mails.
+    /// The folder of the request mails under retrieval/ that a run reads unless told
+    /// otherwise, whose labels also cover the set, the supplement and the attack items.
+    static let defaultName = "requests"
+
+    /// The folder of the request mails under retrieval/ that a run measures:
+    /// TEST_RUNNER_ORRA_FILE_REQUESTS_SET, such as requests-holdout, or requests.
+    static var name: String {
+        let name = ProcessInfo.processInfo.environment["ORRA_FILE_REQUESTS_SET"] ?? ""
+        return name.isEmpty ? defaultName : name
+    }
+
+    /// The set's folder, when it holds the labels of the request mails of `name`.
     static var folder: URL? {
         guard let path = ProcessInfo.processInfo.environment["ORRA_FILE_REQUESTS"], !path.isEmpty else { return nil }
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)
-        return FileManager.default.fileExists(atPath: url.appendingPathComponent("retrieval/requests/labels.jsonl").path) ? url : nil
+        return FileManager.default.fileExists(atPath: url.appendingPathComponent("retrieval/\(name)/labels.jsonl").path) ? url : nil
     }
 }

@@ -236,7 +236,11 @@ items and the files of other projects offered, and the bar to merge of pull requ
 `TEST_RUNNER_ORRA_FILE_REQUESTS_MODE` is `both`, as the app searches, `names` or `text` for
 one kind of list alone, or `terms`, which adds the search terms of a
 RetrievalEvaluationTests output folder in `TEST_RUNNER_ORRA_FILE_REQUESTS_TERMS` to the text
-search. It times the search, so it runs in a Release build:
+search. `TEST_RUNNER_ORRA_FILE_REQUESTS_SET` names another folder of request mails under
+`retrieval/` in place of `requests`, such as `requests-holdout`, with its `mail.jsonl` and
+`labels.jsonl` in the same form. The run then measures its mails alone, with the index of the
+same folders and of the set's own `folders/` if it has any. It times the search, so it runs
+in a Release build:
 
 ```
 TEST_RUNNER_ORRA_FILE_REQUESTS=$ORRA_BENCH/projects-testset \
