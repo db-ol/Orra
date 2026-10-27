@@ -1310,6 +1310,28 @@
         }
       }
     },
+    "Add the people you exchange mail with on this project. Their mail goes to the project, and a reply to them counts as staying inside the project." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agrega a las personas con las que intercambias correos en este proyecto. Su correo va al proyecto, y una respuesta a ellas se considera dentro del proyecto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このプロジェクトでメールをやり取りする相手を追加します。その人のメールはこのプロジェクトに振り分けられ、その人への返信もプロジェクト内のやり取りとみなされます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加在这个项目中与你有邮件往来的人。他们的邮件会归入这个项目，回复给他们也算在项目之内。"
+          }
+        }
+      }
+    },
     "Added “%@” to Vocabulary" : {
       "localizations" : {
         "es-419" : {
