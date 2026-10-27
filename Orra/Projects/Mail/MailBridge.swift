@@ -155,10 +155,16 @@ nonisolated struct MailMailbox: Sendable, Hashable, Codable {
 }
 
 /// A reply Mail made through `reply`, by its outgoing message's id, with the Mail session
-/// that made it. The id holds in that session only.
+/// that made it. The id holds in that session only. Only `reply` makes one, from Mail's
+/// answer, so `attach` adds a file only to a reply Mail named.
 nonisolated struct MailReplyRef: Sendable, Hashable {
     let id: Int
     let session: MailEvents.Session
+
+    fileprivate init(id: Int, session: MailEvents.Session) {
+        self.id = id
+        self.session = session
+    }
 }
 
 /// A message in a mailbox. Mail's id holds for one Mail session only, so Projects keys mail

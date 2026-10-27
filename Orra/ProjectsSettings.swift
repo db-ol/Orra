@@ -68,7 +68,8 @@ struct ProjectsSettings: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                // True while the Mail bridge sends only its read requests and reply, which
+                // True while the Mail bridge sends only its read requests, reply and attach,
+                // which adds a file the user ticked to the reply it just opened, as
                 // Tools/ci/check_rules.py holds (rule 10).
                 Text("Assigning, editing and deleting in Projects change only what it keeps on this Mac, never your mail in Mail.")
                     .foregroundStyle(.secondary)

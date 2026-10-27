@@ -160,8 +160,9 @@ docs/privacy.md, as docs/website.md describes.
   It also checks the Projects source rules of Runtime rules: the names code in Orra/Projects
   must not use, where NSAttributedString may appear, that Orra/Projects holds Swift files
   only, Apple Events built or sent in Orra outside the files it allows or sent from tests,
-  the four events the Mail bridge may build, the window each reply opens and the one
-  attachment make may create, with only its file, at the end of a reply's content,
+  the four events the Mail bridge may build and where it sends them, the window each reply
+  opens, the one attachment make may create, with only its file, at the end of a reply's
+  content, and the one place that makes an attach request,
   script text in any file under Orra, OrraTests or Tools, and where SQLite, removing files
   and UserDefaults may appear. It reads names in code, not every way around them, so review
   Projects changes by hand too. The same job runs the tests of the rules check in Tools/ci

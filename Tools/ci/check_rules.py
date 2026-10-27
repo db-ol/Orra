@@ -484,14 +484,17 @@ def check_dependency_doc(doc, pins):
 # also looks inside string literals, and reads every other file whole. Names match on word
 # boundaries. Rules 1 to 9 name paths only, never the syntax of a file they allow, so a file
 # that does not exist yet passes. Rule 10 reads the syntax of the one file it is about,
-# Orra/Projects/Mail/MailEvents.swift, once it exists. A failure names the file, the line,
-# the rule and the name it matched, never the rest of the line.
+# Orra/Projects/Mail/MailEvents.swift, once it exists, and looks for attach requests in the
+# code of every Swift file under Orra/. A failure names the file, the line, the rule and the
+# name it matched, never the rest of the line.
 
 PROJECTS_FOLDER = "Orra/Projects/"
 PROJECTS_TESTS_FOLDER = "OrraTests/Projects/"
 
 # The file of the Mail bridge that builds and sends Mail's events (rule 10).
 MAIL_EVENTS_FILE = "Orra/Projects/Mail/MailEvents.swift"
+# The file whose attach alone may make an attach request (rule 10).
+MAIL_BRIDGE_FILE = "Orra/Projects/Mail/MailBridge.swift"
 # The only Swift files under Orra/ that may build or send an Apple Event (rule 3).
 APPLE_EVENT_FILES = frozenset({MAIL_EVENTS_FILE})
 
@@ -527,9 +530,11 @@ SOURCE_RULES = {
     8: "In Orra/Projects only ProjectsSwitch.swift and Mail/MailChoice.swift use UserDefaults.",
     9: "Orra/Projects holds Swift files only, since Xcode would copy any other file into the app.",
     10: "MailEvents.swift builds only the get, count, reply and attach events of its MailEvent enum, "
-        "opens a window with every reply, makes nothing but an attachment with only its file at the "
-        "end of a reply's content, and holds no other code of a Mail command that changes mail, "
-        "sends it, or opens, prints or quits something, nor the code of content outside that one place.",
+        "sets their parameters only where it builds them, and sends them only from sendNow, after the "
+        "check of the Mail session. It opens a window with every reply, makes nothing but an attachment "
+        "with only its file at the end of a reply's content, and holds no other code of a Mail command "
+        "that changes mail, sends it, or opens, prints or quits something, nor the code of content "
+        "outside that one place. In Orra only MailBridge's attach makes an attach request.",
 }
 
 # Rule 10. The four events the Mail bridge may build, by their names in the MailEvent enum,
@@ -758,13 +763,14 @@ FILE_REMOVAL = _rule(r"\bremoveItem\b", r"\bmoveItem\b", r"\breplaceItem\w*", r"
 DEFAULTS = _rule(r"\bUserDefaults\b", r"\bAppStorage\b", r"\bCFPreferences\w*", r"\bNSUserDefaults\w*")
 
 # Rule 10, in MailEvents.swift. Other ways to build an event, whose codes the rule cannot
-# read, and ways to change the class or the ID of an event after it is built.
+# read, and ways to change the class, the ID or a parameter of an event after it is built.
 MAIL_EVENTS_BANNED = _rule(
     r"\bAECreateAppleEvent\b",
     r"\bAEBuildAppleEvent\b",
     r"\btypeAppleEvent\b",
     r"\bsetAttribute\b",
-    r"\bAEPutAttribute\w*",
+    r"\bAEPut\w*",
+    r"\bAEReplaceDescData\b",
     r"\bkeyEventClassAttr\b",
     r"\bkeyEventIDAttr\b",
 )
@@ -843,6 +849,33 @@ PINNED_FILE_PROPERTIES = """
 # appleEvent(target:) makes the event, fills it in one switch over the request and returns it,
 # with nothing else before or after the switch.
 MAKE_THE_EVENT = re.compile(r"\s*let\s+event\s*=\s*NSAppleEventDescriptor\s*\.\s*appleEvent\s*\(")
+# sendNow(_ request:) sends every event, in these steps and in this order: it finds the running
+# Mail, refuses a request bound to another Mail session, builds the event for that Mail's
+# process id and sends it. Each step stands once in sendNow, sendEvent and a call of
+# appleEvent(target:) stand nowhere else, and sendNow never binds request, mail, target or event
+# again.
+SEND_NOW = re.compile(r"\bfunc\s+sendNow\s*\(")
+SEND_NOW_SIGNATURE = re.compile(r"\bfunc\s+sendNow\s*\(\s*_\s+request\s*:\s*Request\s*\)\s*throws\s*->\s*Value\s*\{")
+SEND_NOW_STEPS = (
+    ("the running Mail", re.compile(r"\bguard\s+let\s+mail\s*=\s*runningMail\s*\(\s*\)\s*else\s*\{")),
+    ("the check of the Mail session", re.compile(
+        r"\bif\s+let\s+code\s*=\s*refusal\s*\(\s*of\s*:\s*request\s*,\s*by\s*:\s*Session\s*\(\s*mail\s*\)\s*\)\s*\{"
+        r"[^{}]*\bthrow\s+Failure\s*\(\s*code\s*:\s*code\s*\)\s*\}"
+    )),
+    ("the target", re.compile(r"\blet\s+target\s*=\s*NSAppleEventDescriptor\s*\(\s*processIdentifier\s*:\s*mail\s*\.\s*processIdentifier\s*\)")),
+    ("the event", re.compile(r"\blet\s+event\s*=\s*try\s+request\s*\.\s*appleEvent\s*\(\s*target\s*:\s*target\s*\)")),
+    ("the send", re.compile(r"\btry\s+event\s*\.\s*sendEvent\s*\(\s*options\s*:\s*request\s*\.\s*sendOptions\s*,\s*timeout\s*:\s*request\s*\.\s*timeout\s*\)")),
+)
+# A name of sendNow bound again: declared, assigned or taken as a closure's parameter.
+SEND_NOW_NAMES = re.compile(r"\b(request|mail|target|event)\b(?=\s*(?:=(?!=)|\bin\b|,[^)]*\bin\b))")
+# The functions whose bodies may set a key of a record: the place and the properties of make,
+# and the builders of an object specifier.
+DESCRIPTOR_BUILDERS = (r"\bfunc\s+endOfContent\s*\(", r"\bfunc\s+fileProperties\s*\(", r"\bfunc\s+descriptor\s*\(", r"\bfunc\s+object\s*\(")
+# An attach request across Orra/: the case attach of MailEvents.Request named through its type,
+# or made with the label toReply, which only its declaration may hold besides.
+REQUEST_ATTACH = re.compile(r"\bRequest\s*\.\s*attach\b")
+TO_REPLY = re.compile(r"\btoReply\b")
+ATTACH_DECLARATION = re.compile(r"\s*case\s+attach\s*\(")
 
 SourceProblem = namedtuple("SourceProblem", "path line rule name")
 
@@ -1487,6 +1520,87 @@ def _check_attach(text, code, uncommented, literals, problem):
             problem(match.start(), match.group())
 
 
+def _check_sending(code, problem):
+    """Rule 10: MailEvents.swift sets an event's parameters only in the switch of
+    appleEvent(target:), sets a key of a record only in the builders that make the place, the
+    properties and the object specifiers, and sends an event only from sendNow, in its steps,
+    after the check of the Mail session."""
+    switch, _ = _switch_of_apple_event(code)
+    for match in re.finditer(r"\bsetParam\s*\(", code):
+        if switch is None or not _inside(match.start(), [switch]):
+            problem(match.start(), "setParam outside the switch of appleEvent(target:)")
+    builders = [span for signature in DESCRIPTOR_BUILDERS for span in _function_bodies(code, signature)]
+    for match in re.finditer(r"\bsetDescriptor\s*\(", code):
+        if not _inside(match.start(), builders):
+            problem(match.start(), "setDescriptor outside the builders of the place, the properties and the specifiers")
+
+    bodies = _function_bodies(code, SEND_NOW.pattern)
+    if len(bodies) != 1 or SEND_NOW_SIGNATURE.search(code) is None:
+        problem(None, "not one sendNow(_ request: Request) throws -> Value")
+        return
+    start, end = bodies[0]
+    body = code[start:end]
+    steps = []
+    for name, pattern in SEND_NOW_STEPS:
+        found = list(pattern.finditer(body))
+        if len(found) != 1:
+            problem(start + found[1].start() if len(found) > 1 else start, "sendNow without " + name + " once")
+        else:
+            steps.append((name, found[0].start()))
+    # A step that stands after a step that must follow it.
+    for number, (name, offset) in enumerate(steps):
+        if any(offset > later for _, later in steps[number + 1:]):
+            problem(start + offset, "sendNow with " + name + " out of its order")
+    # request is the parameter, and mail, target and event are each bound once, by their step.
+    for match in SEND_NOW_NAMES.finditer(body):
+        name = match.group(1)
+        declared = re.search(r"\blet\s+$", body[max(0, match.start() - 12):match.start()]) is not None
+        if name == "request" or not declared or len(re.findall(r"\blet\s+" + name + r"\b", body)) != 1:
+            problem(start + match.start(), "sendNow binds " + name + " again")
+    for match in re.finditer(r"\bsendEvent\b", code):
+        if not _inside(match.start(), [bodies[0]]):
+            problem(match.start(), "sendEvent outside sendNow")
+    if len(re.findall(r"\bsendEvent\b", body)) != 1:
+        problem(start, "sendNow without one sendEvent")
+    calls = []
+    for match in re.finditer(r"\bappleEvent\s*\(\s*target\b", code):
+        if re.search(r"\bfunc\s+$", code[max(0, match.start() - 40):match.start()]) is not None:
+            continue
+        calls.append(match.start())
+        if not _inside(match.start(), [bodies[0]]):
+            problem(match.start(), "appleEvent(target:) outside sendNow")
+    if len(calls) > 1:
+        problem(calls[1], "more than one call of appleEvent(target:)")
+
+
+def check_attach_requests(text, code, path):
+    """Rule 10 for a Swift file of Orra/: an attach request is made only in MailBridge's
+    attach, once. A request names the case through its type, as Request.attach, or with the
+    label toReply, which outside that place only the declaration of the case may hold. A
+    member of a value, such as mail.attach(file, reply), calls the bridge. It reads names,
+    not every way around them."""
+    problems = []
+
+    def problem(offset, name):
+        problems.append(SourceProblem(path, _line(text, offset), 10, name))
+
+    allowed = _function_bodies(code, r"\bfunc\s+attach\s*\(") if path == MAIL_BRIDGE_FILE else []
+    for match in REQUEST_ATTACH.finditer(code):
+        problem(match.start(), "an attach request outside MailBridge's attach")
+    inside = []
+    for match in TO_REPLY.finditer(code):
+        line = code[code.rfind("\n", 0, match.start()) + 1:match.start()]
+        if ATTACH_DECLARATION.match(line):
+            continue
+        if _inside(match.start(), allowed[:1]):
+            inside.append(match.start())
+        else:
+            problem(match.start(), "an attach request outside MailBridge's attach")
+    if len(inside) > 1:
+        problem(inside[1], "more than one attach request in MailBridge's attach")
+    return problems
+
+
 def check_mail_events(text, path=MAIL_EVENTS_FILE):
     """Rule 10 for MailEvents.swift: only the events of MAIL_EVENTS, every reply with its
     window, make only as the attach event, and no code of MAIL_BANNED_CODES outside it."""
@@ -1498,7 +1612,7 @@ def check_mail_events(text, path=MAIL_EVENTS_FILE):
     def problem(offset, name):
         problems.append(SourceProblem(path, None if offset is None else _line(text, offset), 10, name))
 
-    # The enum holds exactly the three events, and its codes come from its raw values.
+    # The enum holds exactly the four events, and its codes come from its raw values.
     body = _enum_body(code, "MailEvent")
     declared = set()
     if body is None:
@@ -1552,6 +1666,8 @@ def check_mail_events(text, path=MAIL_EVENTS_FILE):
 
     # make makes only an attachment, at the end of a reply's content, with only its file.
     _check_attach(text, code, uncommented, literals, problem)
+    # The parameters only where the event is built, and the send only from sendNow.
+    _check_sending(code, problem)
 
     # No code of a command that changes mail, in a string or as a number. content, which
     # _check_attach allows as the place of an attachment, counts there.
@@ -1633,6 +1749,8 @@ def check_sources(root, apple_event_files=APPLE_EVENT_FILES):
             problems += _find(code, path, 3, APPLE_EVENT_BUILDING)
         if path == MAIL_EVENTS_FILE:
             problems += check_mail_events(text, path)
+        if in_app:
+            problems += check_attach_requests(text, code, path)
         if in_tests:
             problems += _find(code, path, 4, APPLE_EVENT_SENDING)
         if (in_app or in_tests) and not in_projects and not path.startswith(PROJECTS_TESTS_FOLDER):

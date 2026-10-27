@@ -6,6 +6,7 @@ Each test writes small files into a temporary repository folder and checks it. T
 are made up here. The last test checks the real tree.
 """
 
+import re
 import tempfile
 import textwrap
 import unittest
@@ -725,6 +726,66 @@ class MailEventsRuleTests(SourceCheckTestCase):
                 for name in names:
                     self.assertIn(name, found)
 
+    def test_the_event_cannot_change_after_it_is_built(self):
+        """The ways around the pinned attach event that a later review found: a parameter set
+        on the built event in sendNow, a key of a record set outside its builders, a second
+        event built and sent there, and the C call that sets a parameter. Each fails."""
+        built = "        let event = try request.appleEvent(target: target)\n"
+        cases = {
+            "a parameter set on the built event": (
+                built + '        if case .attach = request { event.setParam(NSAppleEventDescriptor(string: "x"), forKeyword: keyAEData) }\n',
+                ["setParam outside the switch of appleEvent(target:)"],
+            ),
+            "the direct object set on the built event": (
+                built + '        if case .attach = request { event.setParam(NSAppleEventDescriptor(string: "x"), forKeyword: keyDirectObject) }\n',
+                ["setParam outside the switch of appleEvent(target:)"],
+            ),
+            "a name added to the attachment's properties": (
+                built + "        if case .attach = request, let properties = event.atIndex(3) {\n"
+                '            properties.setDescriptor(NSAppleEventDescriptor(string: "Report.pdf"), forKeyword: MailEvents.Code.name)\n'
+                "            event.setParam(properties, forKeyword: event.keywordForDescriptor(at: 3))\n"
+                "        }\n",
+                ["setDescriptor outside the builders of the place, the properties and the specifiers", "setParam outside the switch of appleEvent(target:)"],
+            ),
+            "a second attach event for another reply": (
+                built + "        if case .attach(let file, let reply, let session) = request {\n"
+                "            _ = try? Request.attach(file, toReply: reply + 1, in: session).appleEvent(target: target).sendEvent(options: request.sendOptions, timeout: request.timeout)\n"
+                "        }\n",
+                ["an attach request outside MailBridge's attach", "sendNow without one sendEvent", "more than one call of appleEvent(target:)"],
+            ),
+            "a parameter set through the C call": (
+                built + "        AEPutParamDesc(event.aeDesc, keyAEData, nil)\n",
+                ["AEPutParamDesc"],
+            ),
+        }
+        for label, (new, names) in cases.items():
+            with self.subTest(label):
+                found = self.rule_ten(self.changed(built, new))
+                for name in names:
+                    self.assertIn(name, found)
+
+    def test_the_send_thread_checks_the_session_first(self):
+        """sendNow refuses a request bound to another Mail session before it builds the event,
+        which no test reaches, since tests never use the live Mail."""
+        refusal = re.search(r"        if let code = refusal\(of: request, by: Session\(mail\)\) \{\n.*?\n        \}\n", self.REAL, re.S).group(0)
+        built = "        let event = try request.appleEvent(target: target)\n"
+        name = "sendNow without the check of the Mail session once"
+        self.assert_rule_ten_fails(self.changed(refusal, ""), name)
+        self.assert_rule_ten_fails(self.changed("refusal(of: request, by: Session(mail))", "refusal(of: request, by: nil)"), name)
+        self.assert_rule_ten_fails(
+            self.changed(refusal, "").replace(built, built + refusal),
+            "sendNow with the check of the Mail session out of its order",
+        )
+        self.assert_rule_ten_fails(self.changed(built, "        let request = Request.get(.application)\n" + built), "sendNow binds request again")
+        self.assert_rule_ten_fails(
+            self.REAL + "func other(_ event: NSAppleEventDescriptor) throws {\n    _ = try event.sendEvent(options: [], timeout: 1)\n}\n",
+            "sendEvent outside sendNow",
+        )
+        self.assert_rule_ten_fails(
+            self.REAL + "func other(_ request: MailEvents.Request) throws {\n    _ = try request.appleEvent(target: .null())\n}\n",
+            "appleEvent(target:) outside sendNow",
+        )
+
     def test_crel_stays_banned_elsewhere(self):
         self.assert_rule_ten_fails(self.REAL + 'let a = "crel"\n', '"crel", the code of make')
         self.assert_rule_ten_fails(self.REAL + "let a = 0x6372_656C\n", "0x6372_656C, the code crel of make")
@@ -736,6 +797,40 @@ class MailEventsRuleTests(SourceCheckTestCase):
     def test_comments_about_the_attachment_pass(self):
         text = self.REAL + '// "ctnt", "atts", "atfn", kAEAfter and keyAEInsertHere in a comment\n'
         self.assertEqual(self.rule_ten(text), [])
+
+
+class AttachRequestTests(SourceCheckTestCase):
+    """Rule 10 across Orra: only MailBridge's attach makes an attach request, from the reply
+    its reply gave back. Tests may build one."""
+
+    BRIDGE = "Orra/Projects/Mail/MailBridge.swift"
+
+    def test_an_attach_request_outside_the_bridge_fails(self):
+        for code in (
+            "let request = MailEvents.Request.attach(url, toReply: 7, in: session)\n",
+            "_ = try await events.send(.attach(url, toReply: 7, in: session))\n",
+            "let make = MailEvents.Request.attach\n",
+        ):
+            with self.subTest(code=code):
+                self.assert_fails("Orra/Projects/Other.swift", code, 10, "an attach request outside MailBridge's attach")
+
+    def test_the_bridge_holds_one_request_in_its_attach(self):
+        bridge = (REPOSITORY / self.BRIDGE).read_text(encoding="utf-8")
+        self.assert_passes(self.BRIDGE, bridge)
+        line = "                _ = try await value(.attach(file, toReply: reply.id, in: reply.session))\n"
+        self.assertEqual(bridge.count(line), 1)
+        self.assert_fails(self.BRIDGE, bridge.replace(line, line + line.replace("reply.id", "reply.id + 1")), 10, "more than one attach request in MailBridge's attach")
+        reply = "            let answer = try await value(.reply(to: message.reference, all: all))\n"
+        self.assertEqual(bridge.count(reply), 1)
+        self.assert_fails(
+            self.BRIDGE,
+            bridge.replace(reply, reply + "            _ = try? await value(.attach(URL(fileURLWithPath: \"/\"), toReply: 1, in: session!))\n"),
+            10, "an attach request outside MailBridge's attach",
+        )
+
+    def test_a_call_of_the_bridge_and_tests_pass(self):
+        self.assert_passes("Orra/Projects/Handoff/Other.swift", "func send() async throws {\n    try await mail.attach(file, reply)\n}\n")
+        self.assert_passes("OrraTests/Projects/OtherTests.swift", "let request = MailEvents.Request.attach(url, toReply: 7, in: session)\n")
 
 
 class ScriptTextTests(SourceCheckTestCase):

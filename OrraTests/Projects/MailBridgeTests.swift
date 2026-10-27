@@ -329,9 +329,17 @@ struct MailBridgeTests {
     @Test func replyGivesTheReplyMailMade() async throws {
         let mail = FakeMail()
         mail.answer(.reply(to: Self.message.reference, all: true), with: .success(.reference(Self.outgoing)))
-        let reply = try await MailBridge(events: mail.events()).reply(Self.message, true)
-        #expect(reply == MailReplyRef(id: 77, session: Self.session))
+        let reply = try #require(try await MailBridge(events: mail.events()).reply(Self.message, true))
+        #expect(reply.id == 77)
+        #expect(reply.session == Self.session)
         #expect(mail.sessionChecks == 2)
+    }
+
+    /// A reply Mail made in `session`, as the bridge gives it back. Only `reply` makes one.
+    private static func madeReply() async throws -> MailReplyRef {
+        let mail = FakeMail()
+        mail.answer(.reply(to: message.reference, all: false), with: .success(.reference(outgoing)))
+        return try #require(try await MailBridge(events: mail.events()).reply(message, false))
     }
 
     /// An answer that names no outgoing message of the application gives no reply, so no
@@ -363,14 +371,16 @@ struct MailBridgeTests {
     }
 
     @Test func attachSendsOneEventForTheFile() async throws {
+        let reply = try await Self.madeReply()
         let mail = FakeMail()
         let bridge = MailBridge(events: mail.events())
-        try await bridge.attach(Self.file, MailReplyRef(id: 77, session: Self.session))
+        try await bridge.attach(Self.file, reply)
         #expect(mail.asked == [.attach(Self.file, toReply: 77, in: Self.session)])
         #expect(bridge.lastPermission() == .allowed)
     }
 
-    @Test func attachErrorsMapAsTheReadsDo() async {
+    @Test func attachErrorsMapAsTheReadsDo() async throws {
+        let reply = try await Self.madeReply()
         let cases: [(code: Int, running: Bool, error: MailBridgeError, permission: MailPermission?)] = [
             (-1712, true, .timedOut, nil),
             (-1743, true, .denied, .denied),
@@ -387,18 +397,19 @@ struct MailBridgeTests {
             let request = Request.attach(Self.file, toReply: 77, in: Self.session)
             mail.answer(request, with: .failure(.init(code: item.code)))
             let bridge = MailBridge(events: mail.events())
-            await #expect(throws: item.error) { try await bridge.attach(Self.file, MailReplyRef(id: 77, session: Self.session)) }
+            await #expect(throws: item.error) { try await bridge.attach(Self.file, reply) }
             #expect(bridge.lastPermission() == item.permission)
         }
     }
 
     /// Once the Mail that made the reply quit, the reply's id may name another message of
     /// the Mail that runs now, so nothing is sent, and the error says Mail quit.
-    @Test func attachAfterMailStartedAgainSendsNothing() async {
+    @Test func attachAfterMailStartedAgainSendsNothing() async throws {
+        let reply = try await Self.madeReply()
         let mail = FakeMail()
         mail.sessions = [Self.laterSession]
         await #expect(throws: MailBridgeError.mailNotRunning) {
-            try await MailBridge(events: mail.events()).attach(Self.file, MailReplyRef(id: 77, session: Self.session))
+            try await MailBridge(events: mail.events()).attach(Self.file, reply)
         }
         #expect(mail.asked.isEmpty)
 
@@ -406,7 +417,7 @@ struct MailBridgeTests {
         gone.sessions = [nil]
         gone.isRunning = false
         await #expect(throws: MailBridgeError.mailNotRunning) {
-            try await MailBridge(events: gone.events()).attach(Self.file, MailReplyRef(id: 77, session: Self.session))
+            try await MailBridge(events: gone.events()).attach(Self.file, reply)
         }
         #expect(gone.asked.isEmpty)
     }
@@ -414,13 +425,14 @@ struct MailBridgeTests {
     /// Mail started again while the attachment waited its turn on the send thread, which
     /// then refuses it with -600 as for a Mail that is gone. While another Mail runs, the
     /// bridge still says that Mail quit, not that Mail did not answer.
-    @Test func mailStartingAgainBeforeTheEventsTurnCountsAsQuit() async {
+    @Test func mailStartingAgainBeforeTheEventsTurnCountsAsQuit() async throws {
+        let reply = try await Self.madeReply()
         let mail = FakeMail()
         mail.sessions = [Self.session, Self.laterSession]
         let request = Request.attach(Self.file, toReply: 77, in: Self.session)
         mail.answer(request, with: .failure(.init(code: -600)))
         await #expect(throws: MailBridgeError.mailNotRunning) {
-            try await MailBridge(events: mail.events()).attach(Self.file, MailReplyRef(id: 77, session: Self.session))
+            try await MailBridge(events: mail.events()).attach(Self.file, reply)
         }
         #expect(mail.asked == [request])
     }
