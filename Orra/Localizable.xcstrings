@@ -5489,6 +5489,28 @@
         }
       }
     },
+    "Files go into a reply only when you tick them, and only you send it. Before that, Mail may save the reply with its files to your account's Drafts on the mail server." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los archivos van en una respuesta solo cuando los marcas, y solo tú la envías. Antes de eso, Mail puede guardar la respuesta con sus archivos en Borradores de tu cuenta en el servidor de correo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返信にファイルが添付されるのはチェックを入れたときだけで、返信を送信するのはあなた自身です。送信する前に、“メール”が返信を添付ファイルごとメールサーバ上のアカウントの“下書き”に保存することがあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有你勾选的文件才会附加到回复中，回复也只由你自己发送。在你发送之前，“邮件”可能会把回复连同附件存到邮件服务器上你账户的草稿箱里。"
+          }
+        }
+      }
+    },
     "Files This Email Asks For" : {
       "localizations" : {
         "es-419" : {
@@ -6991,24 +7013,24 @@
         }
       }
     },
-    "It never sends, moves or deletes mail, and never sends your mail or files anywhere." : {
+    "It never sends, moves or deletes mail." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nunca envía, mueve ni elimina correos, y nunca envía tus correos ni tus archivos a ninguna parte."
+            "value" : "Nunca envía, mueve ni elimina correos."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "メールを送信、移動、削除することはなく、メールやファイルをどこかに送信することもありません。"
+            "value" : "メールを送信、移動、削除することはありません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "它从不发送、移动或删除邮件，也从不把你的邮件或文件发送到任何地方。"
+            "value" : "它从不发送、移动或删除邮件。"
           }
         }
       }

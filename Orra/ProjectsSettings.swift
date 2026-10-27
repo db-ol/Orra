@@ -66,7 +66,10 @@ struct ProjectsSettings: View {
                             }
                             Group {
                                 Text("Reads the Mail mailboxes you choose and the folders you add. What it keeps stays on this Mac.")
-                                Text("It never sends, moves or deletes mail, and never sends your mail or files anywhere.")
+                                Text("It never sends, moves or deletes mail.")
+                                // Files reach Mail only with a reply the user opens, and Mail
+                                // may save that reply to the account's Drafts on the server.
+                                Text("Files go into a reply only when you tick them, and only you send it. Before that, Mail may save the reply with its files to your account's Drafts on the mail server.")
                             }
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
