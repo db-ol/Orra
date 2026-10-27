@@ -66,7 +66,7 @@ final class ProjectsFileChoice {
         case notSaved
     }
 
-    /// The files a section shows at most, besides the chosen ones (a guess).
+    /// The files a section shows at most, besides the chosen ones. Search finds the others.
     nonisolated static let sectionLimit = 200
 
     let email: MailStore.Listed
