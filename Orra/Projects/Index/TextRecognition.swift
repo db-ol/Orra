@@ -75,8 +75,9 @@ nonisolated struct RecognitionResult: Sendable, Equatable {
 ///   task stops the page under way, which then counts as not tried.
 /// - A page that takes longer than `pageTime` is stopped and counts as timed out. A job
 ///   whose every page timed out ends the file as `tooSlow`.
-/// - The lines Vision finds are put in reading order, and text that shows no ink on the
-///   image Vision read is dropped and counted as hidden, as on a PDF page.
+/// - The lines Vision finds are put in reading order, also on a scan turned a little, and
+///   text that shows no ink on the image Vision read is dropped and counted as hidden, as on
+///   a PDF page. A page that gives fewer than two letters or digits counts as blank.
 /// - Languages, `languages`: Chinese, simplified and traditional, and English, read by
 ///   Vision's Chinese model, which reads English too. Japanese and Spanish are not asked
 ///   for: the first language decides the model, so adding them after Chinese changes
@@ -103,11 +104,33 @@ nonisolated struct TextRecognizer: Sendable {
         var minimumTextHeight: Float = 0
     }
 
-    /// A line of text Vision found: its best reading and its box, normalized, with the origin
-    /// at the bottom left of the image.
+    /// A line of text Vision found: its best reading and where it lies, normalized, with the
+    /// origin at the bottom left of the image.
     nonisolated struct Observation: Sendable, Equatable {
         var text: String
+        /// The box that holds it, upright.
         var box: CGRect
+        /// The middles of its left and right edges, which follow its line when a scan is
+        /// turned a little, where the box of a long line reaches into the lines next to it.
+        var start: CGPoint
+        var end: CGPoint
+        /// The height of its text across the line, at its left edge.
+        var height: CGFloat
+
+        /// An observation whose text runs straight across, at its box.
+        init(text: String, box: CGRect) {
+            self.init(
+                text: text, box: box, start: CGPoint(x: box.minX, y: box.midY), end: CGPoint(x: box.maxX, y: box.midY),
+                height: box.height)
+        }
+
+        init(text: String, box: CGRect, start: CGPoint, end: CGPoint, height: CGFloat) {
+            self.text = text
+            self.box = box
+            self.start = start
+            self.end = end
+            self.height = height
+        }
     }
 
     /// How reading one image ended.
@@ -119,6 +142,10 @@ nonisolated struct TextRecognizer: Sendable {
 
     /// The languages Vision reads, in order, see the type's documentation.
     static let languages = ["zh-Hans", "zh-Hant", "en-US"]
+
+    /// The letters and digits a page gives at least to count as text, since a shape alone
+    /// can read as one character, such as a rectangle read as 门.
+    static let fewestCharacters = 2
 
     let limits: Limits
     /// Reads the text of one image, Vision on this Mac by default. Cancelling the calling
@@ -333,7 +360,7 @@ nonisolated struct TextRecognizer: Sendable {
                 let read = Self.text(of: observations, ink: drawing.ink)
                 result.hiddenRuns += read.hiddenRuns
                 let text = FileTextExtractor.normalized(read.text)
-                if text.allSatisfy(\.isWhitespace) {
+                if text.count(where: { $0.isLetter || $0.isNumber }) < Self.fewestCharacters {
                     result.tried[page] = .blank
                 } else {
                     result.tried[page] = .text
@@ -392,51 +419,59 @@ nonisolated struct TextRecognizer: Sendable {
 
     // MARK: Text
 
-    /// A line of text: observations whose vertical centers lie within half a box's height
-    /// of its first one, left to right.
+    /// A line of text: observations whose lines meet the left edge of the image within half
+    /// a line's height of its first one, and that lie side by side, never above each other,
+    /// so the long lines of a turned scan stay apart and the parts of one line stay together.
     private struct Line {
         var observations: [Observation]
-        let center: CGFloat
+        /// Where the line of its first observation meets the left edge of the image.
+        let level: CGFloat
         var height: CGFloat
-        var top: CGFloat
-        var bottom: CGFloat
 
-        init(_ observation: Observation) {
+        init(_ observation: Observation, level: CGFloat) {
             observations = [observation]
-            center = observation.box.midY
-            height = observation.box.height
-            top = observation.box.maxY
-            bottom = observation.box.minY
+            self.level = level
+            height = observation.height
         }
 
-        func holds(_ observation: Observation) -> Bool {
-            abs(observation.box.midY - center) <= max(height, observation.box.height) / 2
+        func holds(_ observation: Observation, level: CGFloat) -> Bool {
+            abs(level - self.level) <= max(height, observation.height) / 2
+                && !observations.contains { other in
+                    let overlap = min(other.box.maxX, observation.box.maxX) - max(other.box.minX, observation.box.minX)
+                    return overlap > min(other.box.width, observation.box.width) / 2
+                }
         }
 
         mutating func add(_ observation: Observation) {
             observations.append(observation)
-            height = max(height, observation.box.height)
-            top = max(top, observation.box.maxY)
-            bottom = min(bottom, observation.box.minY)
+            height = max(height, observation.height)
         }
     }
 
     /// The text of a page's observations in reading order, and the runs of hidden text left
-    /// out. Lines go from the top and their observations from the left, a gap of more than
-    /// 1.5 lines between two lines gives a blank line, so TextChunker cuts there. An
-    /// observation whose box shows no ink on `ink`, the image Vision read, is hidden, such as
-    /// text nearly the color of what lies behind it. Hidden observations next to each other
-    /// count as one run. Internal for tests.
+    /// out. A turned scan turns all its lines alike, so each observation's line is followed
+    /// to the left edge of the image with the page's slope, the middle one of its longer
+    /// observations. Lines go from the top by where they meet that edge, and their
+    /// observations from the left. A gap of more than 1.5 lines between two lines gives a
+    /// blank line, so TextChunker cuts there. An observation whose box shows no ink on `ink`, the image Vision read, is
+    /// hidden, such as text nearly the color of what lies behind it. Hidden observations next
+    /// to each other count as one run. Internal for tests.
     static func text(of observations: [Observation], ink: InkMap?) -> (text: String, hiddenRuns: Int) {
+        let kept = observations.filter { !$0.text.allSatisfy(\.isWhitespace) }
+        let slopes = kept.filter { $0.end.x - $0.start.x > 0.1 }.map { ($0.end.y - $0.start.y) / ($0.end.x - $0.start.x) }.sorted()
+        let slope = slopes.isEmpty ? 0 : slopes[slopes.count / 2]
+        func level(_ observation: Observation) -> CGFloat {
+            observation.start.y - observation.start.x * slope
+        }
         var lines: [Line] = []
-        let sorted = observations.filter { !$0.text.allSatisfy(\.isWhitespace) }.sorted {
-            $0.box.midY != $1.box.midY ? $0.box.midY > $1.box.midY : $0.box.minX < $1.box.minX
+        let sorted = kept.sorted {
+            level($0) != level($1) ? level($0) > level($1) : $0.box.minX < $1.box.minX
         }
         for observation in sorted {
-            if let last = lines.indices.last, lines[last].holds(observation) {
+            if let last = lines.indices.last, lines[last].holds(observation, level: level(observation)) {
                 lines[last].add(observation)
             } else {
-                lines.append(Line(observation))
+                lines.append(Line(observation, level: level(observation)))
             }
         }
         var text = ""
@@ -445,7 +480,7 @@ nonisolated struct TextRecognizer: Sendable {
         var above: Line?
         for line in lines {
             var visible: [String] = []
-            for observation in line.observations.sorted(by: { $0.box.minX < $1.box.minX }) {
+            for observation in line.observations.enumerated().sorted(by: { ($0.element.box.minX, $0.offset) < ($1.element.box.minX, $1.offset) }).map(\.element) {
                 if let ink, !showsInk(observation, on: ink) {
                     if !inHiddenRun { hiddenRuns += 1 }
                     inHiddenRun = true
@@ -456,7 +491,8 @@ nonisolated struct TextRecognizer: Sendable {
             }
             guard !visible.isEmpty else { continue }
             if let above {
-                text += above.bottom - line.top > 1.5 * max(above.height, line.height) ? "\n\n" : "\n"
+                let gap = above.level - line.level - (above.height + line.height) / 2
+                text += gap > 1.5 * max(above.height, line.height) ? "\n\n" : "\n"
             }
             text += visible.joined(separator: " ")
             above = line
@@ -465,8 +501,9 @@ nonisolated struct TextRecognizer: Sendable {
     }
 
     /// Whether an observation's box shows the ink of its letters and digits, by InkMap's
-    /// measure with the box's height as the size of a character. Punctuation alone leaves
-    /// too little ink to judge, and hides nothing.
+    /// measure with the height of its text as the size of a character, not the height of its
+    /// box, which a turned line makes taller. Punctuation alone leaves too little ink to
+    /// judge, and hides nothing.
     private static func showsInk(_ observation: Observation, on ink: InkMap) -> Bool {
         let characters = observation.text.count { $0.isLetter || $0.isNumber }
         guard characters > 0 else { return true }
@@ -475,7 +512,7 @@ nonisolated struct TextRecognizer: Sendable {
         let box = CGRect(
             x: observation.box.minX * width, y: observation.box.minY * height,
             width: observation.box.width * width, height: observation.box.height * height)
-        return ink.showsInk(inPixels: box, characters: characters, size: Double(box.height))
+        return ink.showsInk(inPixels: box, characters: characters, size: Double(observation.height * height))
     }
 }
 
@@ -556,7 +593,13 @@ nonisolated enum VisionText {
             guard !isCancelled.value.withLock({ $0 }) else { return .cancelled }
             let observations = (request.results ?? []).compactMap { observation -> TextRecognizer.Observation? in
                 guard let best = observation.topCandidates(1).first else { return nil }
-                return TextRecognizer.Observation(text: best.string, box: observation.boundingBox)
+                let left = (top: observation.topLeft, bottom: observation.bottomLeft)
+                let right = (top: observation.topRight, bottom: observation.bottomRight)
+                return TextRecognizer.Observation(
+                    text: best.string, box: observation.boundingBox,
+                    start: CGPoint(x: (left.top.x + left.bottom.x) / 2, y: (left.top.y + left.bottom.y) / 2),
+                    end: CGPoint(x: (right.top.x + right.bottom.x) / 2, y: (right.top.y + right.bottom.y) / 2),
+                    height: abs(left.top.y - left.bottom.y))
             }
             return .observations(observations)
         }

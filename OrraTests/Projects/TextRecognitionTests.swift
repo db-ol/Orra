@@ -233,6 +233,31 @@ struct TextRecognitionTests {
         #expect(read.hiddenRuns == 0)
     }
 
+    /// The long lines of a scan turned a little have boxes that reach into the lines next to
+    /// them. They stay apart and in order, and the parts of one line, which start higher the
+    /// further right they lie, stay together.
+    @Test func theLinesOfATurnedScanStayApartAndInOrder() {
+        // The page rises 1 for every 15 across, so a part 0.6 wide rises 0.04, twice the 0.02
+        // between two lines.
+        let slope: CGFloat = 1.0 / 15
+        func turned(_ text: String, line: CGFloat, from left: CGFloat, width: CGFloat) -> TextRecognizer.Observation {
+            let start = CGPoint(x: left, y: line + left * slope)
+            let end = CGPoint(x: left + width, y: start.y + width * slope)
+            return TextRecognizer.Observation(
+                text: text, box: CGRect(x: left, y: start.y - 0.008, width: width, height: end.y - start.y + 0.016), start: start, end: end,
+                height: 0.016)
+        }
+        let observations = [
+            turned("third line", line: 0.86, from: 0.09, width: 0.6),
+            turned("HR-558120", line: 0.88, from: 0.75, width: 0.15),
+            turned("first line", line: 0.90, from: 0.09, width: 0.6),
+            turned("second line", line: 0.88, from: 0.09, width: 0.6),
+            turned("最后一行的", line: 0.84, from: 0.09, width: 0.3),
+            turned("后半", line: 0.84, from: 0.45, width: 0.3),
+        ]
+        #expect(TextRecognizer.text(of: observations, ink: nil).text == "first line\nsecond line HR-558120\nthird line\n最后一行的 后半")
+    }
+
     /// Text that leaves no ink on the image Vision read is dropped, a run of such lines
     /// counts once, and punctuation alone is kept, since it hides nothing.
     @Test func textWithoutInkIsDroppedAndCounted() throws {
@@ -253,6 +278,25 @@ struct TextRecognitionTests {
         #expect(read.hiddenRuns == 1)
     }
 
+    /// A long line of a scan turned a little has a box much taller than its text. Its ink is
+    /// judged by the height of its text, so the line is kept, where the box's height would
+    /// make it read as hidden.
+    @Test func aTurnedLineIsJudgedByTheHeightOfItsText() throws {
+        let text = "Quote for the lobby lamps in week 47 HR-558120 and the brass pendants for the hall"
+        // Six empty lines first, so the line, turned 5 degrees about the middle, stays inside.
+        let image = try RecognitionTestFiles.image(Array(repeating: "", count: 6) + [text], width: 2_400, height: 800, points: 40, degrees: 5)
+        let ink = InkMap(pixels: try RecognitionTestFiles.grayPixels(of: image), width: 2_400, height: 800, bytesPerPixel: 1)
+        let box = try #require(StandIn.box(of: image))
+        // The text is about 48 pixels high, and the line rises far more than that.
+        let height = 48.0 / 800
+        #expect(box.height > 3 * height)
+        let turned = TextRecognizer.Observation(
+            text: text, box: box, start: CGPoint(x: box.minX, y: box.minY + height / 2), end: CGPoint(x: box.maxX, y: box.maxY - height / 2),
+            height: height)
+        #expect(TextRecognizer.text(of: [turned], ink: ink) == (text, 0))
+        #expect(TextRecognizer.text(of: [TextRecognizer.Observation(text: text, box: box)], ink: ink).hiddenRuns == 1)
+    }
+
     /// An image of one frame is one page without a number. Its text is normalized as any
     /// file's, and marked as recognized.
     @Test func anImageIsOnePageOfNormalizedText() async throws {
@@ -266,6 +310,18 @@ struct TextRecognitionTests {
         #expect(result.tried == [0: .text])
         #expect(result.isDone && !result.fileChanged)
         #expect(standIn.sizes == [CGSize(width: 1_200, height: 300)])
+    }
+
+    /// A page that gives fewer than two letters or digits is blank, such as a shape that
+    /// Vision reads as one character.
+    @Test func aStrayCharacterIsNoText() async throws {
+        let folder = try Folder()
+        defer { folder.remove() }
+        let standIn = StandIn([.ink("门")])
+        let job = try folder.job("shapes.png", try RecognitionTestFiles.data([try RecognitionTestFiles.image(["L"])], type: .png))
+        let result = try await recognizer(standIn).recognize(job, mayGoOn: { true }).get()
+        #expect(result.tried == [0: .blank])
+        #expect(result.pages.isEmpty)
     }
 
     // MARK: Images

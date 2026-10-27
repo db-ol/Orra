@@ -4,6 +4,7 @@ import Foundation
 import ImageIO
 import PDFKit
 import UniformTypeIdentifiers
+@testable import Orra
 
 /// Images and PDFs with drawn text for the tests of text recognition, made at test time, so
 /// no real document or photo is needed.
@@ -11,11 +12,18 @@ enum RecognitionTestFiles {
     /// Why a file could not be made.
     struct Failure: Error {}
 
+    /// A stand in for text recognition that finds no text and leaves no page, for the tests
+    /// that index folders without images or scans, so no test but VisionTextRecognitionTests
+    /// and the opt in measurement runs Vision.
+    static let findsNothing: FolderIndex.Recognize = { _, _ in .success(RecognitionResult(isDone: true)) }
+
     /// An image of lines drawn with CoreText at `points` pixels, `ink` on `paper` in gray, 0
-    /// black and 1 white, one line every 1.5 lines from the top left. A line in Chinese takes
-    /// PingFang SC, any other Helvetica.
+    /// black and 1 white, one line every 1.5 lines from the top left, turned `degrees`
+    /// counterclockwise about the image's center. A line in Chinese takes PingFang SC, any
+    /// other Helvetica.
     static func image(
-        _ lines: [String], width: Int = 1_200, height: Int = 300, points: CGFloat = 48, ink: CGFloat = 0, paper: CGFloat = 1
+        _ lines: [String], width: Int = 1_200, height: Int = 300, points: CGFloat = 48, ink: CGFloat = 0, paper: CGFloat = 1,
+        degrees: CGFloat = 0
     ) throws -> CGImage {
         guard let context = CGContext(
             data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
@@ -23,6 +31,11 @@ enum RecognitionTestFiles {
         else { throw Failure() }
         context.setFillColor(gray: paper, alpha: 1)
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        if degrees != 0 {
+            context.translateBy(x: CGFloat(width) / 2, y: CGFloat(height) / 2)
+            context.rotate(by: degrees * .pi / 180)
+            context.translateBy(x: -CGFloat(width) / 2, y: -CGFloat(height) / 2)
+        }
         var baseline = CGFloat(height) - points * 1.5
         for line in lines {
             draw(line, at: CGPoint(x: points, y: baseline), points: points, gray: ink, in: context)
