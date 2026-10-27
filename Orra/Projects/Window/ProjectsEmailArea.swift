@@ -360,7 +360,7 @@ extension ProjectsEmailArea {
                     PointRow(point: point, model: model, emailModel: emailModel)
                 }
                 if explanation.citesOtherProjectFile {
-                    Text(verbatim: ProjectsWindowText.otherProjectsNote)
+                    Text(verbatim: ProjectsWindowText.otherProjectsNote(explanation))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

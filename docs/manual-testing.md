@@ -3890,7 +3890,8 @@ in the test guide, in English and then in 简体中文:
 - [ ] Explain an email in Needs a Project about a document of a project. Its chip names the
   project in brackets, the line under the points says that such files are for you only and
   that the draft was written without them, and the excerpt says From the folders of with
-  the project's name. The log says that the draft was written by a request without other
+  the project's name. For an email that needs no reply the line says only that they are for
+  you. The log says that the draft was written by a request without other
   projects' passages. The draft holds nothing of that file, also in other words, such as
   a date or a count.
 - [ ] Dictate while such an explanation runs, also between its two requests. The dictation

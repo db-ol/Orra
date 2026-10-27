@@ -539,7 +539,7 @@ struct ProjectsWindowViewTests {
 
     /// The line under the points shows only when a point cites another project's file:
     /// not for one the prompt held but no point cites, not for a file the user chose, and
-    /// not for one of the email's project.
+    /// not for one of the email's project. It speaks of the draft only when there is one.
     @Test func theNoteShowsOnlyWhenAPointCitesAnotherProjectsFile() {
         let project = UUID()
         let other = UUID()
@@ -562,7 +562,13 @@ struct ProjectsWindowViewTests {
         explanation.project = nil
         explanation.points[0].sources = ["F1"]
         #expect(explanation.citesOtherProjectFile)
-        #expect(ProjectsWindowText.otherProjectsNote == "Some sources are files of other projects. They are only for you, and the draft was written without them.")
+        // It says that the draft was written without them only when there is a draft.
+        for draft in [Explanation.Draft.missing, .noReply(.sentByUser), .noDraft, .expired] {
+            explanation.draft = draft
+            #expect(ProjectsWindowText.otherProjectsNote(explanation) == "Some sources are files of other projects. They are only for you.")
+        }
+        explanation.draft = .checked(DraftCheck.Result(draft: "Hi Iris,\n\nThe plan is ready.", language: .en))
+        #expect(ProjectsWindowText.otherProjectsNote(explanation) == "Some sources are files of other projects. They are only for you, and the draft was written without them.")
     }
 
     /// The email view says why an email has no text to explain: Projects removed it after

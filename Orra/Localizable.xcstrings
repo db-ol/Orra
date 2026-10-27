@@ -15133,6 +15133,28 @@
         }
       }
     },
+    "Some sources are files of other projects. They are only for you." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Algunas fuentes son archivos de otros proyectos. Son solo para ti."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一部の情報源は別のプロジェクトのファイルです。あなたが読むためだけのものです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分来源是其他项目的文件，只给你参考。"
+          }
+        }
+      }
+    },
     "Someone in it wrote in the project before" : {
       "localizations" : {
         "es-419" : {

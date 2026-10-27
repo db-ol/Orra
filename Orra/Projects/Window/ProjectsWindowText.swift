@@ -260,10 +260,15 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
-    /// The line under the points when one cites an excerpt of another project's file, whose
-    /// draft a request without those excerpts wrote, see ExplainService.explain(_:).
-    static var otherProjectsNote: String {
-        String(localized: "Some sources are files of other projects. They are only for you, and the draft was written without them.")
+    /// The line under the points when one cites an excerpt of another project's file. It says
+    /// that a request without those excerpts wrote the draft, see ExplainService.explain(_:),
+    /// only when the explanation has a draft: none is written when no reply is due or the
+    /// email is in another language, and the draft's request may fail.
+    static func otherProjectsNote(_ explanation: Explanation) -> String {
+        if case .checked = explanation.draft {
+            return String(localized: "Some sources are files of other projects. They are only for you, and the draft was written without them.")
+        }
+        return String(localized: "Some sources are files of other projects. They are only for you.")
     }
 
     /// Why the explanation holds no draft to change.
