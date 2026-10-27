@@ -1423,6 +1423,57 @@ struct FolderIndexTests {
         }
     }
 
+    /// The job asks before every page whether it may go on, so a change of the folders that
+    /// comes between two pages, here a rename, or a pause that begins then, ends the job
+    /// there. The page it read is kept, the change is taken in or the pause passes, and the
+    /// next job goes on with the pages left, at the file's new path after a rename.
+    @Test(arguments: [true, false])
+    func aJobStopsBetweenPagesForAChangeOrAPause(renames: Bool) async throws {
+        let gate = Gate()
+        let answers = Mutex<[Bool]>([])
+        let pause = Pause()
+        try await withFixture(read: Self.readingScans(["scan.pdf": [1, 2, 3]]), recognize: { job, mayGoOn in
+            guard job.done.isEmpty else { return Self.recognized([(2, "Page two"), (3, "Page three")]) }
+            guard await mayGoOn() else { return .success(RecognitionResult()) }
+            // Page 1 is read. The test changes the folder or starts a pause before page 2.
+            await gate.wait()
+            let mayRead = await mayGoOn()
+            answers.withLock { $0.append(mayRead) }
+            return mayRead
+                ? Self.recognized([(1, "Page one"), (2, "Page two"), (3, "Page three")])
+                : Self.recognized([(1, "Page one")], isDone: false)
+        }, pause: pause) { fixture in
+            try fixture.write("scan.pdf", "x")
+            fixture.onSleep = { [unowned fixture] in
+                if fixture.sleeps == 2 {
+                    pause.now = nil
+                }
+            }
+            fixture.index.start(project: fixture.alpha, folders: [fixture.folderURL])
+            await gate.untilARead()
+            if renames {
+                try FileManager.default.moveItem(atPath: fixture.folder + "/scan.pdf", toPath: fixture.folder + "/quote.pdf")
+                // The index takes the change in on the main actor before the job asks again,
+                // since that comes after it.
+                fixture.deliveries.last?(FolderEvents.Changes(renamed: [
+                    FolderEvents.Rename(from: fixture.folder + "/scan.pdf", to: fixture.folder + "/quote.pdf"),
+                ]))
+            } else {
+                pause.now = .captions
+            }
+            gate.open()
+            await fixture.index.waitUntilIdle()
+            let name = renames ? "quote.pdf" : "scan.pdf"
+            #expect(answers.withLock { $0 } == [false])
+            #expect(fixture.jobs.all.withLock { $0.map(\.done) } == [[], [1]])
+            #expect(fixture.jobs.names == ["scan.pdf", name])
+            #expect(fixture.reads.all == ["scan.pdf"])
+            #expect(try await triedPages(name, fixture) == [1: "text", 2: "text", 3: "text"])
+            #expect(try await fixture.rows()[name].map { $0.skip == nil && $0.recognize == 0 } == true)
+            try await fixture.expectTablesAgree()
+        }
+    }
+
     /// A pause that begins during a page stops that page within a poll of the clock, and the
     /// page is read again after the pause.
     @Test func aPauseThatBeginsDuringAPageStopsIt() async throws {

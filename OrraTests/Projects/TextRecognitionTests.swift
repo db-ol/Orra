@@ -327,7 +327,9 @@ struct TextRecognitionTests {
     // MARK: Images
 
     /// The pixels are read from the image's properties before anything is decoded, so an
-    /// image too large never reaches the decoder or Vision.
+    /// image too large never reaches the decoder or Vision. The cap counts the pixels the
+    /// image has, not those of the smaller image Vision would get, and every page of a TIFF
+    /// is measured before the first one is decoded.
     @Test func tooManyPixelsAreRefusedBeforeAnyDecode() async throws {
         let folder = try Folder()
         defer { folder.remove() }
@@ -335,7 +337,14 @@ struct TextRecognitionTests {
         let job = try folder.job("poster.png", try RecognitionTestFiles.data([try RecognitionTestFiles.image(["Poster"])], type: .png))
         var limits = TextRecognizer.Limits()
         limits.pixels = 1_200 * 300 - 1
+        // Vision would get the poster at 600 by 150 pixels, within the cap.
+        limits.longestSide = 600
         #expect(await recognizer(standIn, limits: limits).recognize(job, mayGoOn: { true }) == .failure(.tooLarge))
+        // The first page is within the cap, and the second is not.
+        limits.pixels = 1_200 * 300
+        let pages = [try RecognitionTestFiles.image(["Page 1"]), try RecognitionTestFiles.image(["Page 2"], height: 1_200)]
+        let tiff = try folder.job("plan.tif", try RecognitionTestFiles.data(pages, type: .tiff))
+        #expect(await recognizer(standIn, limits: limits).recognize(tiff, mayGoOn: { true }) == .failure(.tooLarge))
         #expect(standIn.sizes.isEmpty)
     }
 
