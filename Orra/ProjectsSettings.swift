@@ -108,7 +108,7 @@ struct ProjectsSettings: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if showsSetup, let mail {
-                SetupSection(cleanup: cleanup, mail: mail, openMail: openMail, openWindow: openWindow, editProject: editProject) {
+                SetupSection(cleanup: cleanup, mail: mail, isDeleting: projects.isDeleting, openMail: openMail, openWindow: openWindow, editProject: editProject) {
                     openURL(Self.automationSettings)
                 }
             } else {
@@ -520,6 +520,9 @@ struct ProjectsSettings: View {
     private struct SetupSection: View {
         let cleanup: TextCleanup
         let mail: MailAccess
+        /// Whether Delete All Projects Data runs, which stops Projects and closes its window
+        /// while the switch stays on.
+        let isDeleting: Bool
         let openMail: (() -> Void)?
         let openWindow: (() -> Void)?
         let editProject: ((UUID) -> Void)?
@@ -630,6 +633,7 @@ struct ProjectsSettings: View {
             note("In the Projects window, click New Project… and add the project's folders, so explanations can use their files. You can also explain an email that has no project.")
             if let openWindow {
                 Button("Open Projects Window", action: openWindow)
+                    .disabled(isDeleting)
             }
         }
 
