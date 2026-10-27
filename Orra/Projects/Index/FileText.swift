@@ -40,8 +40,8 @@ nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable 
     case notDownloaded
     /// A format Projects does not read.
     case unsupportedFormat
-    /// An Excel or PowerPoint file (xlsx or pptx). Reading them needs a ZIP reader, which
-    /// Orra does not have.
+    /// An Excel or PowerPoint file (xlsx or pptx) in a project folder, which the index does
+    /// not read yet.
     case spreadsheetOrSlides
     /// A file or folder Orra may not read, or one that went away.
     case noAccess
@@ -61,10 +61,15 @@ nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable 
 /// The text of one file, page by page.
 nonisolated struct FileTextResult: Sendable, Equatable {
     nonisolated struct Page: Sendable, Equatable {
-        /// The page number in a PDF, from 1. Nil for the other formats, which have no
-        /// fixed pages.
+        /// The page number in a PDF and the slide number in a deck, from 1. Nil for the
+        /// other formats, which have no fixed pages.
         var number: Int?
         var text: String
+        /// The name of the sheet in a workbook, which is a page with no number.
+        var sheet: String? = nil
+        /// Whether the page stands alone, as a slide or a sheet does, so its chunks take
+        /// no heading from the pages before it.
+        var isStandAlone = false
     }
 
     /// The pages that hold text, in order. None only for bytes whose only text was hidden,
@@ -78,12 +83,14 @@ nonisolated struct FileTextResult: Sendable, Equatable {
     var hiddenRuns: Int
     /// The file's modification date when it was read.
     var modified: Date
-    /// Whether pages past `FileTextExtractor.Limits.pdfPages` were left out.
+    /// Whether pages past `FileTextExtractor.Limits.pdfPages` were left out, or the later
+    /// sheets, cells or slides of an xlsx or pptx.
     var isCut: Bool
 }
 
 /// Reads the text of one file in a project folder: PDF, docx, doc, rtf, odt, md and txt.
-/// MailAttachment reads the bytes of an email's attachments with it too.
+/// MailAttachment reads the bytes of an email's attachments with it too, xlsx and pptx
+/// among them.
 ///
 /// The files may come from anyone and are read in Orra's own process, so:
 /// - A file is read only after a check of its type, flags and size, through a descriptor
@@ -92,15 +99,21 @@ nonisolated struct FileTextResult: Sendable, Equatable {
 ///   extension, and always with the document type of that extension. Never with automatic
 ///   detection and never as HTML, so a .doc that holds HTML is unreadable and never reaches
 ///   WebKit.
-/// - One call reads an Office or text file whole and cannot be stopped, so their size is
-///   capped before the call. For docx and odt, which are ZIP files, the sizes their parts
-///   unpack to are capped too. A PDF is read page by page, with the time and cancellation
-///   checked after each page and the number of pages capped.
+/// - One call reads a Word, RTF, OpenDocument or text file whole and cannot be stopped, so
+///   their size is capped before the call. For docx and odt, which are ZIP files, the sizes
+///   their parts unpack to are capped too. A PDF is read page by page, with the time and
+///   cancellation checked after each page and the number of pages capped. An xlsx or pptx
+///   is read part by part with ZipArchive and OfficeXMLText, never by AppKit, with the time
+///   and cancellation checked as it goes.
 /// - Hidden text is dropped and counted, see `FileTextResult.hiddenRuns`.
 nonisolated struct FileTextExtractor: Sendable {
     /// The formats it reads.
     nonisolated enum Format: Sendable, CaseIterable {
         case pdf, docx, doc, rtf, odt
+        /// xlsx and xlsm.
+        case xlsx
+        /// pptx and ppsx.
+        case pptx
         /// md and txt.
         case text
     }
@@ -110,7 +123,8 @@ nonisolated struct FileTextExtractor: Sendable {
         /// Any file, the same as FolderWalk's.
         var fileBytes = FolderWalk.maximumFileSize
         /// docx, doc, rtf and odt. For docx and odt it also caps the sizes of their parts
-        /// unpacked, added up, since AppKit unpacks them in memory.
+        /// unpacked, added up, since AppKit unpacks them in memory, and for xlsx and pptx the
+        /// parts read, see OfficeXMLText.
         var officeBytes: Int64 = 20_000_000
         /// md and txt.
         var textBytes: Int64 = 10_000_000
@@ -118,6 +132,10 @@ nonisolated struct FileTextExtractor: Sendable {
         var pdfPages = 2_000
         /// The time a PDF may take. A PDF over it is skipped as `tooSlow`.
         var pdfTime: Duration = .seconds(10)
+        /// The time an xlsx or pptx may take, whose parts are read in steps that can stop.
+        var officeTime: Duration = .seconds(10)
+        /// The characters read from an xlsx or pptx. Later cells and slides are left out.
+        var officeCharacters = 1_000_000
     }
 
     let limits: Limits
@@ -193,7 +211,9 @@ nonisolated struct FileTextExtractor: Sendable {
     /// The most bytes a file of the format may have.
     private func limit(of format: Format) -> Int64 {
         switch format {
-        case .pdf: limits.fileBytes
+        // A deck is mostly pictures, which are never unpacked, so an xlsx or pptx may be as
+        // large as any file. The parts it reads are capped.
+        case .pdf, .xlsx, .pptx: limits.fileBytes
         case .text: min(limits.fileBytes, limits.textBytes)
         case .docx, .doc, .rtf, .odt: min(limits.fileBytes, limits.officeBytes)
         }
@@ -218,13 +238,32 @@ nonisolated struct FileTextExtractor: Sendable {
                 hiddenRuns = read.hiddenRuns
             case .failure(let reason): return .failure(reason)
             }
+        case .xlsx, .pptx:
+            guard data.starts(with: Self.zipSignature) else { return .failure(.unreadable) }
+            let archive: ZipArchive
+            do {
+                archive = try ZipArchive(data)
+            } catch {
+                return .failure(error)
+            }
+            let read = format == .xlsx
+                ? OfficeXMLText.workbook(archive, limits: limits, now: now)
+                : OfficeXMLText.presentation(archive, limits: limits, now: now)
+            switch read {
+            case .success(let read): (pages, hiddenRuns, isCut) = read
+            case .failure(let reason): return .failure(reason)
+            }
         case .text:
             guard let text = Self.decoded(data) else { return .failure(.unreadable) }
             pages = [FileTextResult.Page(number: nil, text: text)]
         }
 
-        pages = pages.map { FileTextResult.Page(number: $0.number, text: Self.normalized($0.text)) }
-            .filter { !$0.text.allSatisfy(\.isWhitespace) }
+        pages = pages.map { page in
+            var page = page
+            page.text = Self.normalized(page.text)
+            return page
+        }
+        .filter { !$0.text.allSatisfy(\.isWhitespace) }
         guard !pages.isEmpty || (keepsHiddenOnly && hiddenRuns > 0) else { return .failure(.noText) }
         return .success(FileTextResult(pages: pages, hiddenRuns: hiddenRuns, modified: modified, isCut: isCut))
     }
@@ -435,11 +474,21 @@ nonisolated struct FileTextExtractor: Sendable {
         case .odt: (signature, documentType) = (Self.zipSignature, .openDocument)
         case .doc: (signature, documentType) = ([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1], .docFormat)
         case .rtf: (signature, documentType) = (Array(#"{\rtf"#.utf8), .rtf)
-        case .pdf, .text: return .failure(.unsupportedFormat)
+        case .pdf, .xlsx, .pptx, .text: return .failure(.unsupportedFormat)
         }
         guard data.starts(with: signature) else { return .failure(.unreadable) }
-        if signature == Self.zipSignature, let reason = Self.zipRefusal(data, unpackedLimit: min(limits.fileBytes, limits.officeBytes)) {
-            return .failure(reason)
+        if signature == Self.zipSignature {
+            // AppKit unpacks each part in memory, at the size the ZIP's central directory
+            // gives for it, and fails on a part that unpacks larger (local test), so those
+            // sizes added up cap what it unpacks. A ZIP whose directory could show this check
+            // one thing and AppKit another is unreadable, see ZipArchive.
+            let archive: ZipArchive
+            do {
+                archive = try ZipArchive(data)
+            } catch {
+                return .failure(error)
+            }
+            if archive.unpackedSize > min(limits.fileBytes, limits.officeBytes) { return .failure(.tooLarge) }
         }
         let readable = format == .rtf ? Self.markingHiddenText(inRTF: data) : data
         var attributes: NSDictionary?
@@ -451,44 +500,6 @@ nonisolated struct FileTextExtractor: Sendable {
     }
 
     private static let zipSignature: [UInt8] = [0x50, 0x4B, 0x03, 0x04]
-
-    /// Why the parts of a docx or odt must not be unpacked, or nil when they may. AppKit
-    /// unpacks each part in memory, at the size the ZIP's central directory gives for it, and
-    /// fails on a part that unpacks larger (local test), so those sizes added up cap what it
-    /// unpacks. A file with more than one central directory, encrypted parts, ZIP64 sizes or
-    /// a compression other than deflate is unreadable.
-    private static func zipRefusal(_ data: Data, unpackedLimit: Int64) -> FileSkipReason? {
-        data.withUnsafeBytes { bytes -> FileSkipReason? in
-            func number(_ offset: Int, _ size: Int) -> Int {
-                (0..<size).reduce(0) { $0 | Int(bytes[offset + $1]) << (8 * $1) }
-            }
-            // The end of the central directory: 22 bytes, then a comment of up to 65,535
-            // bytes that runs to the end of the file.
-            let lowest = max(0, bytes.count - 22 - 65_535)
-            let ends = stride(from: bytes.count - 22, through: lowest, by: -1).filter { offset in
-                number(offset, 4) == 0x0605_4B50 && offset + 22 + number(offset + 20, 2) == bytes.count
-            }
-            guard ends.count == 1, let end = ends.first else { return .unreadable }
-            let entries = number(end + 10, 2), directorySize = number(end + 12, 4), directoryStart = number(end + 16, 4)
-            // One disk, no ZIP64, and the directory just before its end.
-            guard number(end + 4, 4) == 0, number(end + 8, 2) == entries, entries != 0xFFFF,
-                  directoryStart + directorySize == end else { return .unreadable }
-            var offset = directoryStart
-            var unpacked: Int64 = 0
-            for _ in 0..<entries {
-                guard offset + 46 <= end, number(offset, 4) == 0x0201_4B50 else { return .unreadable }
-                let flags = number(offset + 8, 2), method = number(offset + 10, 2)
-                let packedSize = number(offset + 20, 4), size = number(offset + 24, 4)
-                guard flags & 1 == 0, method == 0 || method == 8, packedSize != 0xFFFF_FFFF, size != 0xFFFF_FFFF else {
-                    return .unreadable
-                }
-                unpacked += Int64(size)
-                if unpacked > unpackedLimit { return .tooLarge }
-                offset += 46 + number(offset + 28, 2) + number(offset + 30, 2) + number(offset + 32, 2)
-            }
-            return offset == end ? nil : .unreadable
-        }
-    }
 
     /// The kerning that marks Word's hidden text in RTF, in points. No real document uses it.
     private static let hiddenKerning = -1_000.0

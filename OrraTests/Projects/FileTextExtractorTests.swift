@@ -88,9 +88,9 @@ struct FileTextExtractorTests {
         defer { folder.remove() }
         let cell = #"<w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="1F3864"/></w:tcPr>"#
             + #"<w:p><w:r><w:rPr><w:color w:val="FFFFFF"/></w:rPr><w:t>Header in a shaded cell</w:t></w:r></w:p></w:tc>"#
-        let body = Self.paragraph("Visible first.") + "<w:tbl><w:tr>\(cell)</w:tr></w:tbl>"
-            + Self.paragraph("Vanished words.", properties: "<w:vanish/>") + Self.paragraph("Visible last.")
-        let file = try folder.write("brief.docx", try Self.docx(body: body))
+        let body = OfficeTestFiles.paragraph("Visible first.") + "<w:tbl><w:tr>\(cell)</w:tr></w:tbl>"
+            + OfficeTestFiles.paragraph("Vanished words.", properties: "<w:vanish/>") + OfficeTestFiles.paragraph("Visible last.")
+        let file = try folder.write("brief.docx", try OfficeTestFiles.docx(body: body))
         let result = try await FileTextExtractor().text(of: file).get()
         let text = try #require(result.pages.first?.text)
         #expect(text.contains("Visible first.") && text.contains("Visible last."))
@@ -106,8 +106,8 @@ struct FileTextExtractorTests {
     @Test func capsWhatADocxUnpacksTo() async throws {
         let folder = try Folder()
         defer { folder.remove() }
-        let body = String(repeating: Self.paragraph("The print run is 500 calendars."), count: 400)
-        let data = try Self.docx(body: body)
+        let body = String(repeating: OfficeTestFiles.paragraph("The print run is 500 calendars."), count: 400)
+        let data = try OfficeTestFiles.docx(body: body)
         let file = try folder.write("brief.docx", data)
         #expect(data.count < 10_000)
         let small = FileTextExtractor(limits: FileTextExtractor.Limits(officeBytes: 10_000))
@@ -120,11 +120,11 @@ struct FileTextExtractorTests {
     @Test func refusesZipFilesItCannotMeasure() async throws {
         let folder = try Folder()
         defer { folder.remove() }
-        let docx = try Self.docx(body: Self.paragraph("The print run is 500 calendars."))
-        let end = try #require(Self.lastRange(of: [0x50, 0x4B, 0x05, 0x06], in: docx))
+        let docx = try OfficeTestFiles.docx(body: OfficeTestFiles.paragraph("The print run is 500 calendars."))
+        let end = try #require(OfficeTestFiles.lastRange(of: [0x50, 0x4B, 0x05, 0x06], in: docx))
         // An encrypted part.
         var encrypted = docx
-        let directory = try #require(Self.lastRange(of: [0x50, 0x4B, 0x01, 0x02], in: docx))
+        let directory = try #require(OfficeTestFiles.lastRange(of: [0x50, 0x4B, 0x01, 0x02], in: docx))
         encrypted[directory.lowerBound + 8] |= 1
         // A second end record, in a comment of the first.
         var twoEnds = docx
@@ -473,64 +473,6 @@ struct FileTextExtractorTests {
     }
 
     private static let html = Data(#"<html><body><p>Hello</p><img src="https://images.example/a.png"></body></html>"#.utf8)
-
-    /// A Word paragraph with one run.
-    private static func paragraph(_ text: String, properties: String = "") -> String {
-        "<w:p><w:r><w:rPr>\(properties)</w:rPr><w:t>\(text)</w:t></w:r></w:p>"
-    }
-
-    /// A docx built by hand, with its parts deflated as Word does, since AppKit's writer
-    /// cannot write cell shading or Word's hidden text.
-    private static func docx(body: String) throws -> Data {
-        let types = #"<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">"#
-            + #"<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>"#
-            + #"<Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" "#
-            + #"ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#
-        let relationships = #"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#
-            + #"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" "#
-            + #"Target="word/document.xml"/></Relationships>"#
-        let document = #"<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#
-            + "<w:body>\(body)</w:body></w:document>"
-        return try zip([("[Content_Types].xml", types), ("_rels/.rels", relationships), ("word/document.xml", document)])
-    }
-
-    /// A ZIP file of deflated parts.
-    private static func zip(_ parts: [(name: String, text: String)]) throws -> Data {
-        func bytes<Number: FixedWidthInteger>(_ number: Number) -> Data {
-            withUnsafeBytes(of: number.littleEndian) { Data($0) }
-        }
-        var file = Data()
-        var directory = Data()
-        for part in parts {
-            let data = Data(part.text.utf8)
-            let packed = try (data as NSData).compressed(using: .zlib) as Data
-            let name = Data(part.name.utf8)
-            // Version 2.0, no flags, deflate, no time, the CRC and both sizes.
-            let fields = bytes(UInt16(20)) + bytes(UInt16(0)) + bytes(UInt16(8)) + bytes(UInt32(0)) + bytes(crc32(data))
-                + bytes(UInt32(packed.count)) + bytes(UInt32(data.count)) + bytes(UInt16(name.count)) + bytes(UInt16(0))
-            directory += bytes(UInt32(0x0201_4B50)) + bytes(UInt16(20)) + fields + bytes(UInt16(0)) + bytes(UInt16(0))
-                + bytes(UInt16(0)) + bytes(UInt32(0)) + bytes(UInt32(file.count)) + name
-            file += bytes(UInt32(0x0403_4B50)) + fields + name + packed
-        }
-        let start = file.count
-        file += directory
-        file += bytes(UInt32(0x0605_4B50)) + bytes(UInt32(0)) + bytes(UInt16(parts.count)) + bytes(UInt16(parts.count))
-            + bytes(UInt32(directory.count)) + bytes(UInt32(start)) + bytes(UInt16(0))
-        return file
-    }
-
-    private static func crc32(_ data: Data) -> UInt32 {
-        var crc: UInt32 = 0xFFFF_FFFF
-        for byte in data {
-            crc ^= UInt32(byte)
-            for _ in 0..<8 { crc = crc & 1 == 1 ? (crc >> 1) ^ 0xEDB8_8320 : crc >> 1 }
-        }
-        return ~crc
-    }
-
-    private static func lastRange(of pattern: [UInt8], in data: Data) -> Range<Int>? {
-        data.lastRange(of: Data(pattern)).map { $0.lowerBound..<$0.upperBound }
-    }
 
     /// A clock that moves on by `step` each time it is read.
     private final class SteppingClock: Sendable {

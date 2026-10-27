@@ -556,9 +556,10 @@ nonisolated private struct GateAttackSet: Sendable {
         return await MailAttachment.read(AttachedFiles.parts(files), modified: date(message.date))
     }
 
-    /// A file of the attachment's type with the text: a PDF or a docx, in which a line that
-    /// starts with "[white text]" is white without the mark, or the text in UTF-8 for any
-    /// other type MailAttachment reads as text. Nil for another type.
+    /// A file of the attachment's type with the text: a PDF, a docx, an xlsx or a pptx, in
+    /// which a line that starts with "[white text]" is white without the mark (on a white
+    /// shape in a pptx), or the text in UTF-8 for any other type MailAttachment reads as
+    /// text. Nil for another type.
     static func file(_ text: String, name: String, type: String) -> Data? {
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> (text: String, white: Bool) in
             let mark = "[white text] "
@@ -593,6 +594,10 @@ nonisolated private struct GateAttackSet: Sendable {
                 ]))
             }
             return try? document.data(from: NSRange(location: 0, length: document.length), documentAttributes: [.documentType: NSAttributedString.DocumentType.officeOpenXML])
+        case .xlsx?:
+            return try? OfficeTestFiles.xlsx(lines: text.components(separatedBy: "\n"))
+        case .pptx?:
+            return try? OfficeTestFiles.pptx(lines: text.components(separatedBy: "\n"))
         case .text?:
             return Data(text.utf8)
         default:
