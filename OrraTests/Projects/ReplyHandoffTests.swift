@@ -29,6 +29,18 @@ struct ReplyHandoffTests {
         .send(.attach(file, toReply: 77, in: session))
     }
 
+    /// A ticked file as the handoff takes it, with an identity of its own.
+    private static func ticked(_ url: URL) -> ReplyFile {
+        ReplyFile(url: url, projects: [], identity: ReplyFile.Identity(
+            device: 16_777_231, fileSystem: 26, number: 7,
+            made: Date(timeIntervalSince1970: 1_760_000_000), size: 1_000, modified: Date(timeIntervalSince1970: 1_761_000_000)))
+    }
+
+    /// The ticked files, each of which passes its check as it is.
+    private static func files(_ urls: [URL]) -> ReplyHandoff.Files {
+        ReplyHandoff.Files(urls.map(ticked)) { .success($0) }
+    }
+
     @Test(arguments: [false, true])
     func openReplyCopiesRepliesCopiesAgainThenBringsMailToTheFront(all: Bool) async {
         let fixture = Fixture()
@@ -168,7 +180,7 @@ struct ReplyHandoffTests {
     @Test func aDraftThePasteboardRefusesOpensNoReply() async {
         let fixture = Fixture()
         fixture.copyWorks = false
-        #expect(await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: [Self.plan]) == .notCopied)
+        #expect(await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: Self.files([Self.plan])) == .notCopied)
         #expect(fixture.handoff().copyOnly(Self.draft) == .notCopied)
         #expect(fixture.steps == [.copy(Self.draft), .copy(Self.draft)])
         #expect(fixture.runningChecks == 0)
@@ -181,7 +193,7 @@ struct ReplyHandoffTests {
     @Test(arguments: [false, true])
     func openReplyAttachesEachFileBetweenTheReplyAndTheSecondCopy(all: Bool) async {
         let fixture = Fixture()
-        let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: all, files: [Self.plan, Self.sketch])
+        let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: all, files: Self.files([Self.plan, Self.sketch]))
         #expect(outcome == .replyOpened(files: [.attached, .attached]))
         #expect(fixture.steps == [
             .copy(Self.draft),
@@ -197,7 +209,7 @@ struct ReplyHandoffTests {
         for code in [-10000, -1700, -43] {
             let fixture = Fixture()
             fixture.attachFailures = [Self.plan: code]
-            let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: [Self.plan, Self.quote])
+            let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: Self.files([Self.plan, Self.quote]))
             #expect(outcome == .replyOpened(files: [.notAttached(.refused(code: code)), .attached]))
             #expect(fixture.steps.suffix(4) == [Self.attach(Self.plan), Self.attach(Self.quote), .copy(Self.draft), .front])
         }
@@ -217,7 +229,7 @@ struct ReplyHandoffTests {
             let fixture = Fixture()
             fixture.attachFailures = [Self.quote: item.code]
             fixture.quitsOnAttach = item.quits ? Self.quote : nil
-            let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: [Self.plan, Self.quote, Self.sketch])
+            let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: Self.files([Self.plan, Self.quote, Self.sketch]))
             #expect(outcome == .replyOpened(files: [.attached, .notAttached(item.problem), .notAttached(item.problem)]))
             #expect(fixture.steps.filter(\.isAttach) == [Self.attach(Self.plan), Self.attach(Self.quote)])
         }
@@ -228,7 +240,7 @@ struct ReplyHandoffTests {
     @Test func aTimeOutStopsTheRest() async {
         let fixture = Fixture()
         fixture.attachFailures = [Self.plan: -1712]
-        let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: [Self.plan, Self.quote, Self.sketch])
+        let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: Self.files([Self.plan, Self.quote, Self.sketch]))
         #expect(outcome == .replyOpened(files: [.notAttached(.timedOut), .notAttached(.afterTimeOut), .notAttached(.afterTimeOut)]))
         #expect(fixture.steps.filter(\.isAttach) == [Self.attach(Self.plan)])
         #expect(fixture.steps.suffix(2) == [.copy(Self.draft), .front])
@@ -239,7 +251,7 @@ struct ReplyHandoffTests {
     @Test func mailStartingAgainStopsTheRest() async {
         let fixture = Fixture()
         fixture.restartsOnAttach = Self.plan
-        let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: [Self.plan, Self.quote, Self.sketch])
+        let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: Self.files([Self.plan, Self.quote, Self.sketch]))
         #expect(outcome == .replyOpened(files: [.attached, .notAttached(.mailQuit), .notAttached(.mailQuit)]))
         #expect(fixture.steps.filter(\.isAttach) == [Self.attach(Self.plan)])
     }
@@ -251,15 +263,70 @@ struct ReplyHandoffTests {
         for answer in answers {
             let fixture = Fixture()
             fixture.replyAnswer = answer
-            let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: [Self.plan, Self.quote])
+            let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: Self.files([Self.plan, Self.quote]))
             #expect(outcome == .replyOpened(files: [.notAttached(.noReplyNamed), .notAttached(.noReplyNamed)]))
             #expect(fixture.steps == [.copy(Self.draft), .send(.reply(to: Self.message.reference, all: false)), .copy(Self.draft), .front])
         }
         let restarted = Fixture()
         restarted.restartsOnReply = true
-        let outcome = await restarted.handoff().openReply(Self.draft, to: Self.message, all: false, files: [Self.plan])
+        let outcome = await restarted.handoff().openReply(Self.draft, to: Self.message, all: false, files: Self.files([Self.plan]))
         #expect(outcome == .replyOpened(files: [.notAttached(.noReplyNamed)]))
         #expect(restarted.steps.filter(\.isAttach).isEmpty)
+    }
+
+    /// Each file is checked again right before its event, in order, and the event takes the
+    /// file as the check gives it, at its new place after a rename. A file that fails its
+    /// check is not asked for, and the next one still goes.
+    @Test func eachFileIsCheckedRightBeforeItsEvent() async {
+        let fixture = Fixture()
+        let (plan, quote) = (Self.plan, Self.quote)
+        let renamed = Self.folder.appending(path: "floor-plan-v3-final.pdf")
+        // Each file checked, with how many files Mail was asked for before its check.
+        let checks = Mutex<[(URL, Int)]>([])
+        let files = ReplyHandoff.Files([Self.plan, Self.quote, Self.sketch].map(Self.ticked)) { file in
+            let asked = fixture.steps.filter(\.isAttach).count
+            checks.withLock { $0.append((file.url, asked)) }
+            switch file.url {
+            case plan:
+                var moved = file
+                moved.url = renamed
+                return .success(moved)
+            case quote:
+                return .failure(.changed)
+            default:
+                return .success(file)
+            }
+        }
+        let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: files)
+        #expect(outcome == .replyOpened(files: [.attached, .notAttached(.notChecked(.changed)), .attached]))
+        #expect(checks.withLock { $0.map(\.0) } == [Self.plan, Self.quote, Self.sketch])
+        #expect(checks.withLock { $0.map(\.1) } == [0, 1, 1])
+        #expect(fixture.steps == [
+            .copy(Self.draft),
+            .send(.reply(to: Self.message.reference, all: false)),
+            Self.attach(renamed),
+            Self.attach(Self.sketch),
+            .copy(Self.draft),
+            .front,
+        ])
+    }
+
+    /// No file is checked when Mail named no reply or a stop came first, since none goes.
+    @Test func noCheckRunsForAFileThatCannotGo() async {
+        let fixture = Fixture()
+        fixture.replyAnswer = .missing
+        let checked = Mutex(0)
+        let files = ReplyHandoff.Files([Self.plan, Self.quote].map(Self.ticked)) { file in
+            checked.withLock { $0 += 1 }
+            return .success(file)
+        }
+        #expect(await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: files) == .replyOpened(files: [.notAttached(.noReplyNamed), .notAttached(.noReplyNamed)]))
+        #expect(checked.withLock { $0 } == 0)
+
+        let closed = Fixture()
+        closed.attachFailures = [Self.plan: -1728]
+        #expect(await closed.handoff().openReply(Self.draft, to: Self.message, all: false, files: files) == .replyOpened(files: [.notAttached(.replyClosed), .notAttached(.replyClosed)]))
+        #expect(checked.withLock { $0 } == 1)
     }
 
     /// The window goes away while Mail adds the first file, which nothing can call back.
@@ -270,7 +337,7 @@ struct ReplyHandoffTests {
         let gate = DispatchSemaphore(value: 0)
         let fixture = Fixture(sendThread: MailEvents.SendThread(), attachGate: gate)
         let handoff = fixture.handoff()
-        let reply = Task { await handoff.openReply(Self.draft, to: Self.message, all: false, files: [Self.plan, Self.quote, Self.sketch]) }
+        let reply = Task { await handoff.openReply(Self.draft, to: Self.message, all: false, files: Self.files([Self.plan, Self.quote, Self.sketch])) }
         while !fixture.steps.contains(Self.attach(Self.plan)) {
             await Task.yield()
         }
@@ -285,7 +352,7 @@ struct ReplyHandoffTests {
     /// but nothing on the clipboard.
     @Test func withoutADraftNothingIsCopied() async {
         let fixture = Fixture()
-        let outcome = await fixture.handoff().openReply(nil, to: Self.message, all: true, files: [Self.plan])
+        let outcome = await fixture.handoff().openReply(nil, to: Self.message, all: true, files: Self.files([Self.plan]))
         #expect(outcome == .replyOpened(files: [.attached]))
         #expect(fixture.steps == [.send(.reply(to: Self.message.reference, all: true)), Self.attach(Self.plan), .front])
     }
@@ -297,19 +364,19 @@ struct ReplyHandoffTests {
     func withoutADraftNoFailureTouchesTheClipboard() async throws {
         let notRunning = Fixture()
         notRunning.mailRunning = false
-        #expect(await notRunning.handoff().openReply(nil, to: Self.message, all: false, files: [Self.plan]) == .mailNotRunning)
+        #expect(await notRunning.handoff().openReply(nil, to: Self.message, all: false, files: Self.files([Self.plan])) == .mailNotRunning)
         #expect(notRunning.steps.isEmpty)
 
         let quitting = Fixture()
         quitting.replyFailure = -600
         quitting.quitsOnReply = true
-        #expect(await quitting.handoff().openReply(nil, to: Self.message, all: false, files: [Self.plan]) == .mailNotRunning)
+        #expect(await quitting.handoff().openReply(nil, to: Self.message, all: false, files: Self.files([Self.plan])) == .mailNotRunning)
         #expect(quitting.steps == [.send(.reply(to: Self.message.reference, all: false))])
 
         for (code, error) in [(-1743, MailBridgeError.denied), (-1712, .timedOut), (-1728, .notFound), (-10000, .failed(code: -10000))] {
             let failing = Fixture()
             failing.replyFailure = code
-            #expect(await failing.handoff().openReply(nil, to: Self.message, all: false, files: [Self.plan]) == .replyFailed(error))
+            #expect(await failing.handoff().openReply(nil, to: Self.message, all: false, files: Self.files([Self.plan])) == .replyFailed(error))
             #expect(failing.steps == [.send(.reply(to: Self.message.reference, all: false))])
         }
 
@@ -327,7 +394,7 @@ struct ReplyHandoffTests {
         await iterator.next()
         let cancelled = Fixture(sendThread: thread)
         let handoff = cancelled.handoff()
-        let reply = Task { await handoff.openReply(nil, to: Self.message, all: false, files: [Self.plan]) }
+        let reply = Task { await handoff.openReply(nil, to: Self.message, all: false, files: Self.files([Self.plan])) }
         while cancelled.runningChecks == 0 {
             await Task.yield()
         }
@@ -366,9 +433,14 @@ struct ReplyHandoffTests {
     @Test func theOutcomeHoldsNoNameOrPath() async {
         let fixture = Fixture()
         fixture.attachFailures = [Self.quote: -10000, Self.sketch: -1728]
-        let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: [Self.plan, Self.quote, Self.sketch])
+        let plan = Self.plan
+        let files = ReplyHandoff.Files([Self.plan, Self.quote, Self.sketch].map(Self.ticked)) { file in
+            file.url == plan ? .failure(.notInAddedFolder) : .success(file)
+        }
+        let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: files)
         let logged = String(describing: outcome)
         #expect(logged.contains("refused"))
+        #expect(logged.contains("notInAddedFolder"))
         for word in ["floor-plan", "quote-2026", "平面图", "Harbor", "Drawings", "/Users", "someone", ".pdf"] {
             #expect(!logged.contains(word))
         }

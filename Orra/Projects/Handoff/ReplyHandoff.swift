@@ -16,10 +16,11 @@ import os
 ///
 /// Between the reply and the second copy, Mail adds the files the user ticked for the
 /// reply, one event a file in their order, each at the end of that reply, see
-/// `attach(_:to:)`. An email Projects wrote no draft for gets the reply and its files
-/// without the clipboard: with no draft, no step of a handoff, the failed ones included,
-/// puts anything on the clipboard. The draft and the files go to Mail only on the user's
-/// click.
+/// `attach(_:to:)`. Each file is checked again right before its event, so what Mail reads is
+/// still the file the user ticked, in a folder a project holds at that moment. An email
+/// Projects wrote no draft for gets the reply and its files without the clipboard: with no
+/// draft, no step of a handoff, the failed ones included, puts anything on the clipboard.
+/// The draft and the files go to Mail only on the user's click.
 ///
 /// The window runs one handoff at a time. It turns off Open Reply, Reply All and Copy while
 /// one runs, so the clipboard holds the draft of the reply window that Mail brings forward.
@@ -78,6 +79,10 @@ struct ReplyHandoff {
 
     /// Why a file is not in the reply. None names the file.
     nonisolated enum AttachProblem: Equatable, Sendable {
+        /// The check right before its event found it changed, gone, outside the folders the
+        /// projects hold now, or not on this Mac, so Mail was not asked for it. The next
+        /// file still goes.
+        case notChecked(ReplyFileProblem)
         /// Mail's answer to the reply named no outgoing message of its own, or Mail started
         /// again while it made the reply, so Orra cannot say where the files go.
         case noReplyNamed
@@ -96,6 +101,23 @@ struct ReplyHandoff {
         case mailQuit
     }
 
+    /// The files the user ticked for a reply, in their order, with the check each passes
+    /// again right before Mail is asked to add it, such as ReplyFiles.recheck with the
+    /// folders the projects hold at that moment. The check gives the file as it is then, at
+    /// its new place after a rename, and the event takes that place.
+    nonisolated struct Files: Sendable {
+        var files: [ReplyFile]
+        var check: @Sendable (ReplyFile) async -> Result<ReplyFile, ReplyFileProblem>
+
+        init(_ files: [ReplyFile], check: @escaping @Sendable (ReplyFile) async -> Result<ReplyFile, ReplyFileProblem>) {
+            self.files = files
+            self.check = check
+        }
+
+        /// No file, as for every reply before the user ticks one.
+        static let none = Files([]) { .success($0) }
+    }
+
     /// Puts the draft on the clipboard as it is, and says whether the pasteboard took it.
     let copy: (String) -> Bool
     /// Mail. The handoff uses only `isRunning`, `reply` and `attach`.
@@ -108,9 +130,9 @@ struct ReplyHandoff {
     /// Open Reply in Mail, or Reply All with `all`, with the files the user ticked for the
     /// reply, in their order. Only on the user's click. A nil draft is an email Projects
     /// wrote no draft for, and nothing then goes on the clipboard.
-    func openReply(_ draft: String?, to message: MailMessageRef, all: Bool, files: [URL] = []) async -> Outcome {
+    func openReply(_ draft: String?, to message: MailMessageRef, all: Bool, files: Files = .none) async -> Outcome {
         let outcome = await handOver(draft, to: message, all: all, files: files)
-        Logger.projects.notice("Reply handoff, open reply\(all ? " to all" : "", privacy: .public) with \(files.count) files: \(String(describing: outcome), privacy: .public)")
+        Logger.projects.notice("Reply handoff, open reply\(all ? " to all" : "", privacy: .public) with \(files.files.count) files: \(String(describing: outcome), privacy: .public)")
         return outcome
     }
 
@@ -136,7 +158,7 @@ struct ReplyHandoff {
         return outcome
     }
 
-    private func handOver(_ draft: String?, to message: MailMessageRef, all: Bool, files: [URL]) async -> Outcome {
+    private func handOver(_ draft: String?, to message: MailMessageRef, all: Bool, files: Files) async -> Outcome {
         if let draft {
             let copied = put(draft)
             guard copied == .copied else {
@@ -184,25 +206,35 @@ struct ReplyHandoff {
     }
 
     /// Adds the files to the reply Mail made, one event a file, in order, each at the end of
-    /// the reply. Without a reply Mail named, none goes. A closed reply window, a refused
-    /// permission, Mail quitting and a timeout stop the files after it: a timeout since a
-    /// slow Mail would hold the send thread for each file in turn. Any other error skips its
-    /// file only. A cancelled task ends the loop, and the files after it are left out of the
-    /// results, since Mail was never asked for them.
-    private func attach(_ files: [URL], to reply: MailReplyRef?) async -> [FileResult] {
+    /// the reply. Without a reply Mail named, none goes. Each file is checked again right
+    /// before its event, and one that fails the check is left out, with the reason. A closed
+    /// reply window, a refused permission, Mail quitting and a timeout stop the files after
+    /// it: a timeout since a slow Mail would hold the send thread for each file in turn. Any
+    /// other error skips its file only. A cancelled task ends the loop, and the files after
+    /// it are left out of the results, since Mail was never asked for them.
+    private func attach(_ files: Files, to reply: MailReplyRef?) async -> [FileResult] {
         guard let reply else {
-            return files.map { _ in .notAttached(.noReplyNamed) }
+            return files.files.map { _ in .notAttached(.noReplyNamed) }
         }
         var results: [FileResult] = []
         var stopped: AttachProblem?
-        for file in files {
+        for file in files.files {
             if let stopped {
                 results.append(.notAttached(stopped))
                 continue
             }
             guard !Task.isCancelled else { break }
+            let current: ReplyFile
+            switch await files.check(file) {
+            case .success(let checked):
+                current = checked
+            case .failure(let problem):
+                results.append(.notAttached(.notChecked(problem)))
+                continue
+            }
+            guard !Task.isCancelled else { break }
             do {
-                try await mail.attach(file, reply)
+                try await mail.attach(current.url, reply)
                 results.append(.attached)
             } catch is CancellationError {
                 break
@@ -214,7 +246,7 @@ struct ReplyHandoff {
                     stopped = problem
                 case .timedOut:
                     stopped = .afterTimeOut
-                case .noReplyNamed, .refused, .afterTimeOut:
+                case .noReplyNamed, .refused, .afterTimeOut, .notChecked:
                     break
                 }
             }
