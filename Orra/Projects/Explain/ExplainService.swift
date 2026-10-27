@@ -121,19 +121,21 @@ nonisolated extension ExplainPrompt.Source {
 /// For one email it:
 /// - gathers by closure the user's own addresses, the projects and the people the user
 ///   knows, the other messages of the thread, and for an email in a project the chunks
-///   that search finds, at most 2 of one file, the newest files when search finds fewer
-///   than 3, the project's files for their versions, and the project's other mail. Search
-///   reads the email's subject and text after PromptHygiene, so hidden lines never steer
-///   it.
+///   that search finds, at most 2 of one file before the other files, the newest files
+///   when search finds fewer than 3, the project's files for their versions, and the
+///   project's other mail. Search reads the email's subject and text after PromptHygiene,
+///   so hidden lines never steer it.
 /// - runs the sender and content checks and the hygiene of the email and its attachments
 ///   before the search, and searches with the email's search terms too, see
 ///   `files(for:project:known:query:warnings:lookups:)`: the terms saved with the email's
 ///   explanation or new ones from the model, see SearchTerms. An email in Needs a Project,
 ///   and one whose project holds fewer than `ownTermMatches` passages a term matched, also
-///   get passages a term matched in the folders of the user's other projects, unless a
-///   warning of `otherProjectWarnings` was found. They go into <other_files>, and the
-///   draft check takes their data and copied sentences out of the draft. Mail set aside
-///   gets no files and asks for no terms. Without terms it explains as it did before.
+///   get passages that a term matched in the folders of the user's other projects, a term
+///   that names the user, the sender or a recipient or that is a date left out, unless a
+///   warning of `otherProjectWarnings` was found. They go into <other_files>, and the draft
+///   check takes out of the draft their data, their copied sentences and the names of
+///   their projects, see `otherProjectNames(_:)`. Mail set aside gets no files and asks for
+///   no terms. Without terms only the email's words search, and only its project's folders.
 /// - decides the reply with ReplyRule.
 /// - builds ExplainPrompt off the main actor, counting with the cleanup model's own
 ///   tokenizer, see ProjectsTokenCounter, and runs it through ProjectsModelQueue as a
@@ -264,9 +266,11 @@ final class ExplainService {
     /// The passages of other projects an email in a project gets at most, in place of its
     /// project's weakest. An email in Needs a Project gets up to `ExplainPrompt.chunkLimit`.
     nonisolated static let otherProjectChunks = 2
-    /// The passages of one file the prompt takes at most, so a long file that matches many
-    /// words, such as a log, leaves room for other files. In the synthetic set's retrieval
-    /// supplement one log took five or six of the six places of many emails.
+    /// The passages of one file the prompt takes before those of other files, so a long file
+    /// that matches many words, such as a log, leaves room for other files. In the synthetic
+    /// set's retrieval supplement one log took five or six of the six places of many emails.
+    /// The email's project fills the places other files leave with more of its passages, see
+    /// `capped(_:perFile:limit:fill:)`, and other projects never get more than this.
     nonisolated static let perFileChunks = 2
     /// The chunks a search asks for, so `perFileChunks` leaves enough of other files.
     nonisolated static let searchedChunks = ExplainPrompt.chunkLimit * 4
@@ -422,6 +426,9 @@ final class ExplainService {
             case notNeeded = "not needed"
             /// There are no search terms, so the email's words search its project alone.
             case noTerms = "no terms"
+            /// The terms only name the user, the sender or a recipient, or a date, see
+            /// `SearchTerms.withoutNamesAndDates(_:people:own:)`.
+            case namesAndDates = "only names and dates"
             /// A check found one of `otherProjectWarnings`.
             case warned
             /// The email is set aside.
@@ -453,7 +460,7 @@ final class ExplainService {
     /// 2. Other projects are allowed when none of `otherProjectWarnings` is among
     ///    `warnings`, those of the email and of its attachments.
     /// 3. The terms come from the lookup for an email in a project, and for one without a
-    ///    project while other projects are allowed.
+    ///    project while other projects are allowed and the user has a project to search.
     /// 4. In a project: the best passages for the email's words and terms, the newest files
     ///    when fewer than `ExplainPrompt.fillUpTo` come back, and the project's files. When
     ///    other projects are allowed and fewer than `ownTermMatches` of those passages
@@ -464,10 +471,21 @@ final class ExplainService {
     ///    `ExplainPrompt.chunkLimit` passages a term matched in all projects' folders.
     /// 6. The files of each project of those passages, for their versions.
     ///
-    /// Each list takes at most `perFileChunks` passages of one file, from the best
-    /// `searchedChunks` of its search. `ownTermMatches` and `perFileChunks` are the app's,
-    /// evaluations try others, and a nil `perFileChunks` searches for
-    /// `ExplainPrompt.chunkLimit` chunks and takes them all, as 0.6.0 did.
+    /// Other projects' folders are searched without the terms that name the user, the
+    /// sender or a recipient, or that are only a date, see
+    /// `SearchTerms.withoutNamesAndDates(_:people:own:)`, also when they come from a list
+    /// saved before: such a term matches passages of every project. The email's own project
+    /// is searched with them, since the name of one of its people in its files says that the
+    /// project holds the email's matter. In the synthetic set's retrieval supplement, leaving
+    /// them out there too sent two more emails that no file answers to other projects.
+    ///
+    /// Each list takes at most `perFileChunks` passages of one file from the best
+    /// `searchedChunks` of its search, and the email's project's list then fills the places
+    /// that are left with the passages it passed over, so a project whose matching text sits
+    /// in one long file still gets `ExplainPrompt.chunkLimit` passages, as in 0.6.0.
+    /// `ownTermMatches` and `perFileChunks` are the app's, evaluations try others, and a nil
+    /// `perFileChunks` searches for `ExplainPrompt.chunkLimit` chunks and takes them all, as
+    /// 0.6.0 did.
     @concurrent
     nonisolated static func files(
         for email: Email, project: Project?, known: Known, query: String, warnings: Set<ProjectsWarning>, lookups: Lookups,
@@ -476,18 +494,23 @@ final class ExplainService {
         guard !email.isSetAside else { return Files(otherProjects: .setAside) }
         let allowed = warnings.isDisjoint(with: otherProjectWarnings)
         guard project != nil || allowed else { return Files(otherProjects: .warned) }
+        let others = known.projects.map(\.id).filter { $0 != project?.id }
+        // Without a project and without any project to search, terms would serve nothing.
+        guard project != nil || !others.isEmpty else { return Files(otherProjects: .none) }
         var found = Files(terms: try await lookups.terms(email), otherProjects: .searched)
         let terms = found.terms ?? []
         let searched = perFileChunks == nil ? ExplainPrompt.chunkLimit : searchedChunks
         if let project {
             let hits = try await lookups.search(ChunkSearch.Query(text: query, terms: terms, projects: [project.id], limit: searched))
-            found.hits = capped(hits, perFile: perFileChunks, limit: ExplainPrompt.chunkLimit)
+            found.hits = capped(hits, perFile: perFileChunks, limit: ExplainPrompt.chunkLimit, fill: true)
             if found.hits.count < ExplainPrompt.fillUpTo {
                 found.newest = try await lookups.newest(project.id, newestChunks)
             }
             found.files = try await lookups.files(project.id)
         }
-        let others = known.projects.map(\.id).filter { $0 != project?.id }
+        // Names and dates match passages of every project, so they search no other project.
+        let people = ([email.sender] + email.replyTo + email.to + email.cc).map(\.name)
+        let otherTerms = SearchTerms.withoutNamesAndDates(found.terms, people: people, own: known.ownName) ?? []
         if !allowed {
             found.otherProjects = .warned
         } else if terms.isEmpty {
@@ -496,10 +519,12 @@ final class ExplainService {
             found.otherProjects = .none
         } else if project != nil, found.hits.count(where: \.matchedTerm) >= ownTermMatches {
             found.otherProjects = .notNeeded
+        } else if otherTerms.isEmpty {
+            found.otherProjects = .namesAndDates
         } else {
             let own = Set(found.files.map(\.url.path) + (found.hits + found.newest).map(\.file.path))
             let limit = project == nil ? ExplainPrompt.chunkLimit : otherProjectChunks
-            let hits = try await lookups.search(ChunkSearch.Query(text: query, terms: terms, projects: others, termsOnly: true, limit: searched))
+            let hits = try await lookups.search(ChunkSearch.Query(text: query, terms: otherTerms, projects: others, termsOnly: true, limit: searched))
             var seen = Set<String>()
             let fresh = hits.filter { hit in
                 !own.contains(hit.file.path) && seen.insert(hit.file.path + "\u{0}" + String(hit.page ?? 0) + "\u{0}" + hit.text).inserted
@@ -516,15 +541,24 @@ final class ExplainService {
         return found
     }
 
-    /// The first `limit` hits, in their order, with at most `perFile` of one file, or the first
+    /// The first `limit` hits, in their order, with at most `perFile` of one file, then with
+    /// `fill` the hits it passed over, in their order, while places are left. The first
     /// `limit` of all when `perFile` is nil.
-    nonisolated static func capped(_ hits: [ChunkSearch.Hit], perFile: Int?, limit: Int) -> [ChunkSearch.Hit] {
+    nonisolated static func capped(_ hits: [ChunkSearch.Hit], perFile: Int?, limit: Int, fill: Bool = false) -> [ChunkSearch.Hit] {
         guard let perFile else { return Array(hits.prefix(limit)) }
         var taken: [String: Int] = [:]
         var kept: [ChunkSearch.Hit] = []
-        for hit in hits where kept.count < limit && taken[hit.file.path, default: 0] < perFile {
-            taken[hit.file.path, default: 0] += 1
-            kept.append(hit)
+        var passed: [ChunkSearch.Hit] = []
+        for hit in hits where kept.count < limit {
+            if taken[hit.file.path, default: 0] < perFile {
+                taken[hit.file.path, default: 0] += 1
+                kept.append(hit)
+            } else {
+                passed.append(hit)
+            }
+        }
+        if fill {
+            kept += passed.prefix(max(limit - kept.count, 0))
         }
         return kept
     }

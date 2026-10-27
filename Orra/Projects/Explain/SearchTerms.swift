@@ -297,3 +297,180 @@ nonisolated enum SearchTerms {
         return String(reflecting: type(of: error))
     }
 }
+
+// MARK: Names and dates
+
+nonisolated extension SearchTerms {
+    /// The terms without those that name one of `people` or the user, or that are only a
+    /// date, a month or a weekday. The prompt tells the model to leave them out, and it
+    /// sometimes writes them all the same: the user's name, as 林女士 or Ms. Lin, matches
+    /// passages of every project, and so does a date. A name counts as a whole, with a title
+    /// such as Ms. or 女士 and in pinyin, and for the user, whose name `own` is, the surname
+    /// and the given name alone count too. Nil when no term is left, as for no terms.
+    static func withoutNamesAndDates(_ terms: [String]?, people: [String], own: String) -> [String]? {
+        guard let terms else { return nil }
+        var names = nameKeys(own, parts: true)
+        for name in people {
+            names.formUnion(nameKeys(name, parts: false))
+        }
+        let kept = terms.filter { term in !isDate(term) && names.isDisjoint(with: nameForms(of: term)) }
+        return kept.isEmpty ? nil : kept
+    }
+
+    /// The forms a name is compared in, lowercased and without spaces or marks: its Latin
+    /// words together in both orders, without a title, each run of Chinese characters, and
+    /// the pinyin of such a run of two to four characters in both orders. With `parts` also
+    /// each Latin word, and the surname and the given name of that run, alone and in pinyin.
+    static func nameKeys(_ name: String, parts: Bool) -> Set<String> {
+        let folded = SortingText.withoutFormatCharacters(name).precomposedStringWithCompatibilityMapping.lowercased()
+        var latin: [String] = []
+        var han: [String] = []
+        var word = ""
+        var run = ""
+        for character in folded + " " {
+            if character.isHan {
+                if !word.isEmpty { latin.append(word) }
+                word = ""
+                run.append(character)
+            } else if character.isLetter || character.isNumber {
+                if !run.isEmpty { han.append(run) }
+                run = ""
+                word.append(character)
+            } else {
+                if !word.isEmpty { latin.append(word) }
+                if !run.isEmpty { han.append(run) }
+                word = ""
+                run = ""
+            }
+        }
+        latin.removeAll(where: ScreenNames.isTitle)
+        var keys = Set<String>()
+        if !latin.isEmpty {
+            keys.insert(latin.joined())
+            keys.insert(latin.reversed().joined())
+            if parts {
+                keys.formUnion(latin.filter { $0.count >= 2 })
+            }
+        }
+        for run in han {
+            keys.insert(run)
+            for order in DraftCheck.pinyinForms(of: run) {
+                let syllables = order.map { $0.filter { !$0.isWhitespace } }
+                keys.insert(syllables.joined())
+                if parts {
+                    keys.formUnion(syllables)
+                }
+            }
+            if parts, (2...4).contains(run.count) {
+                let surname = run.count >= 3 && ScreenNames.compoundSurnames.contains(String(run.prefix(2))) ? 2 : 1
+                keys.insert(String(run.prefix(surname)))
+                keys.insert(String(run.dropFirst(surname)))
+            }
+        }
+        keys.remove("")
+        return keys
+    }
+
+    /// The forms a term is compared with names in, lowercased and without spaces or marks:
+    /// as it is, without a title before it, such as Ms. or Dr., and without a Chinese title
+    /// or word of address before or after it, such as 女士, 老师 or 小.
+    static func nameForms(of term: String) -> Set<String> {
+        let folded = SortingText.withoutFormatCharacters(term).precomposedStringWithCompatibilityMapping.lowercased()
+        var words = folded.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        var forms: Set<String> = [words.joined()]
+        while words.count > 1, ScreenNames.isTitle(words[0]) {
+            words.removeFirst()
+        }
+        let bare = words.joined()
+        forms.insert(bare)
+        for title in chineseTitles where bare.count > title.count {
+            if bare.hasSuffix(title) {
+                forms.insert(String(bare.dropLast(title.count)))
+            }
+            if bare.hasPrefix(title) {
+                forms.insert(String(bare.dropFirst(title.count)))
+            }
+        }
+        return forms
+    }
+
+    /// Titles and words of address that go with a Chinese name, as in 林女士, 何经理 or 小林.
+    private static let chineseTitles = [
+        "先生", "女士", "小姐", "老师", "经理", "总监", "主任", "博士", "教授", "医生", "太太", "夫人", "同学", "总", "姐", "哥", "小", "老", "阿",
+    ]
+
+    /// Whether the term is only a date, a month or a weekday, such as October 30,
+    /// 10 月 30 日, 2026-11-11, next Wednesday or 周三: its words are numbers of up to four
+    /// digits, names of months and weekdays and words of dates, and one of them says that it
+    /// is a date. A number alone, such as 2027, is not.
+    static func isDate(_ term: String) -> Bool {
+        let folded = term.precomposedStringWithCompatibilityMapping.lowercased()
+        if folded.wholeMatch(of: #/\d{4}[-\/.]\d{1,2}(?:[-\/.]\d{1,2})?/#) != nil || folded.wholeMatch(of: #/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/#) != nil {
+            return true
+        }
+        var marked = false
+        var word = ""
+        /// Whether the word just read may stand in a date.
+        func take() -> Bool {
+            defer { word = "" }
+            guard !word.isEmpty else { return true }
+            if word.allSatisfy(\.isNumber) {
+                return word.count <= 4
+            }
+            if dateNames.contains(word) {
+                marked = true
+                return true
+            }
+            return dateWords.contains(word)
+        }
+        let characters = Array(folded)
+        var index = 0
+        while index < characters.count {
+            let character = characters[index]
+            if character.isHan {
+                guard take() else { return false }
+                if index + 1 < characters.count, ["星期", "礼拜"].contains(String(characters[index...index + 1])) {
+                    marked = true
+                    index += 2
+                    continue
+                }
+                if hanDateMarks.contains(character) {
+                    marked = true
+                } else if !hanDateCharacters.contains(character) {
+                    return false
+                }
+            } else if character.isASCII, character.isLetter || character.isNumber {
+                // A number and the letters after it, as in 30th, are two words.
+                if let last = word.last, last.isNumber != character.isNumber {
+                    guard take() else { return false }
+                }
+                word.append(character)
+            } else if character.isWhitespace || "-/.,:".contains(character) {
+                guard take() else { return false }
+            } else {
+                return false
+            }
+            index += 1
+        }
+        return take() && marked
+    }
+
+    /// Words that make a term a date: months, weekdays, and days and periods.
+    private static let dateNames: Set<String> = [
+        "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december",
+        "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec",
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "mon", "tue", "tues", "thu", "thur", "thurs", "fri",
+        "today", "tomorrow", "yesterday", "tonight", "weekend", "week", "month", "year",
+    ]
+
+    /// Words that may stand in a date beside the words that make it one.
+    private static let dateWords: Set<String> = ["st", "nd", "rd", "th", "of", "the", "next", "this", "last", "on", "by", "early", "mid", "late", "end"]
+
+    /// Chinese characters that make a term a date: year, month, day, week. 星期 and 礼拜 count
+    /// as a pair.
+    private static let hanDateMarks: Set<Character> = Set("年月日号周天")
+
+    /// Chinese characters that may stand in a date beside those that make it one: numbers,
+    /// and words such as 今, 明, 下 and 底.
+    private static let hanDateCharacters: Set<Character> = Set("〇零一二三四五六七八九十两今明后昨前上下这每末初旬底")
+}

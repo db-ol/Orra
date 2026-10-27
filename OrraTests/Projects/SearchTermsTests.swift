@@ -109,6 +109,36 @@ struct SearchTermsTests {
         #expect(SearchTermsPrompt.terms(#"!!!", "???"]}"#) == nil)
     }
 
+    // MARK: Names and dates
+
+    /// Terms that name the user, the sender or a recipient, with a title or in pinyin, and
+    /// terms that are only a date, are left out, since they match passages of every project.
+    /// For the user the surname and the given name alone count too, for others only the
+    /// whole name, so a word of a company's name, such as garden, stays.
+    @Test func termsThatNameSomeoneOrADateAreLeftOut() {
+        let terms = [
+            "林女士", "Ms. Lin", "林", "Lin", "林舟", "Lin Zhou", "舟", "小林", "林老师",
+            "李薇", "Li Wei", "Wei Li", "Mira Holt", "Holt, Mira", "Garden Club",
+            "10 月 30 日", "October 30", "30th Oct", "周三", "Wednesday", "next Monday", "星期五", "下周", "2026-11-11", "11/12", "年底",
+            "garden", "Mira", "平面图", "floor plan", "2027", "Q3 report", "园林", "日本", "明星", "十一", "10 月付款计划", "HT-2026-0912-A",
+        ]
+        let kept = SearchTerms.withoutNamesAndDates(terms, people: ["Mira Holt", "李薇", "Garden Club", "林舟"], own: "林舟")
+        #expect(kept == ["garden", "Mira", "平面图", "floor plan", "2027", "Q3 report", "园林", "日本", "明星", "十一", "10 月付款计划", "HT-2026-0912-A"])
+        #expect(SearchTerms.withoutNamesAndDates(["Ms. Lin", "Wednesday"], people: [], own: "林舟") == nil)
+        #expect(SearchTerms.withoutNamesAndDates(nil, people: ["Mira Holt"], own: "林舟") == nil)
+        // A user without a name, as before Orra knows it, leaves the terms as they are.
+        #expect(SearchTerms.withoutNamesAndDates(["Lin", "lamp"], people: [], own: "") == ["Lin", "lamp"])
+    }
+
+    @Test func aDateIsADayAMonthOrAWeekdayAndNotANumberAlone() {
+        for date in ["10 月 30 日", "10月30日", "１０月３０日", "October 30", "30 October", "30th of October", "Oct 30", "November", "周三", "星期三", "礼拜天", "下周一", "明天", "月底", "2026-11-11", "2026/11", "11/12/2026", "Wednesday", "next week", "end of year", "tomorrow"] {
+            #expect(SearchTerms.isDate(date), "\(date)")
+        }
+        for term in ["2027", "88341", "Q3", "Q3 2027", "十一", "双十一", "日本", "中日", "明星", "日程", "年会", "月饼", "周报表", "March Page", "10 月账", "October Accounts", "HT-2026-0912-A", "3-4 层", "lamp"] {
+            #expect(!SearchTerms.isDate(term), "\(term)")
+        }
+    }
+
     // MARK: Asking the model
 
     @Test func itIsOneRequestOfTheUserWithItsLimitAndPrefill() async throws {

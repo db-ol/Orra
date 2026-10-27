@@ -970,9 +970,10 @@ struct ExplainServiceTests {
         #expect(fakes.callList.contains("files"))
     }
 
-    /// A long file, such as a log, gives two passages at most, so the others go to other
-    /// files.
-    @Test func aLongFileGivesTwoPassagesAtMost() async throws {
+    /// A long file, such as a log, gives two passages before other files get theirs, so
+    /// other files are not pushed out, and the places they leave go to the rest of its
+    /// passages, in their order, as 0.6.0 gave them.
+    @Test func aLongFileGivesTwoPassagesBeforeOtherFilesAndFillsThePlacesLeft() async throws {
         let log = (1...5).map { day in
             var hit = Fixture.hit("site-log.md", "Day \(day) of the site log: the crew worked on the lobby.")
             hit.chunk = Int64(500 + day)
@@ -981,18 +982,73 @@ struct ExplainServiceTests {
         let fakes = Fakes(hits: log + [Fixture.quote], answer: .success(Fixture.englishAnswer))
         _ = try await fakes.service().explain(Fixture.email())
         let prompt = try #require(fakes.requestList.first?.prompt)
-        #expect(prompt.contains("Day 1 of the site log") && prompt.contains("Day 2 of the site log"))
-        #expect(!prompt.contains("Day 3 of the site log"))
-        #expect(prompt.contains("Quote v2: 500 calendars"))
+        let places = ["Day 1 of", "Day 2 of", "Quote v2: 500 calendars", "Day 3 of", "Day 4 of", "Day 5 of"].map { prompt.range(of: $0)?.lowerBound }
+        let found = places.compactMap { $0 }
+        #expect(found.count == places.count)
+        #expect(found == found.sorted())
+        #expect(!fakes.callList.contains { $0.hasPrefix("newest") })
     }
 
-    @Test func cappedKeepsTheOrderWithTwoOfAFileAndNilKeepsThemAll() {
+    @Test func cappedKeepsTheOrderWithTwoOfAFileThenFillsAndNilKeepsThemAll() {
         let hits = ["a.md", "a.md", "b.md", "a.md", "c.md", "b.md", "b.md"].enumerated().map { index, name in
             Fixture.hit(name, "Passage \(index).")
         }
         #expect(ExplainService.capped(hits, perFile: 2, limit: 4).map(\.text) == ["Passage 0.", "Passage 1.", "Passage 2.", "Passage 4."])
         #expect(ExplainService.capped(hits, perFile: 2, limit: 10).map(\.text) == ["Passage 0.", "Passage 1.", "Passage 2.", "Passage 4.", "Passage 5."])
+        // The places left go to the hits it passed over, in their order.
+        #expect(ExplainService.capped(hits, perFile: 2, limit: 4, fill: true).map(\.text) == ["Passage 0.", "Passage 1.", "Passage 2.", "Passage 4."])
+        #expect(ExplainService.capped(hits, perFile: 2, limit: 6, fill: true).map(\.text) == ["Passage 0.", "Passage 1.", "Passage 2.", "Passage 4.", "Passage 5.", "Passage 3."])
+        #expect(ExplainService.capped(hits, perFile: 2, limit: 10, fill: true).map(\.text) == ["Passage 0.", "Passage 1.", "Passage 2.", "Passage 4.", "Passage 5.", "Passage 3.", "Passage 6."])
         #expect(ExplainService.capped(hits, perFile: nil, limit: 4).map(\.text) == ["Passage 0.", "Passage 1.", "Passage 2.", "Passage 3."])
+    }
+
+    /// Other projects' passages never fill the places other files leave: two of a file at
+    /// most.
+    @Test func anotherProjectsLongFileGivesTwoPassagesAtMost() async throws {
+        let notes = (1...5).map { day in
+            var hit = Fixture.otherHit("move-notes.md", "Day \(day) of the move: the floor plan of the lobby.")
+            hit.chunk = Int64(700 + day)
+            return hit
+        }
+        let fakes = Fakes(terms: ["floor plan"], otherHits: notes, answer: .success(Fixture.englishAnswer))
+        let explanation = try await fakes.service().explain(Fixture.email(from: Fixture.rufus, project: nil))
+        #expect(explanation.sources.keys.filter(ExplainPrompt.isOtherFileSource).sorted() == ["O1", "O2"])
+    }
+
+    /// An email in Needs a Project asks for no terms when the user has no project, since no
+    /// search would read them.
+    @Test func anEmailInNeedsAProjectAsksForNoTermsWithoutAProjectToSearch() async throws {
+        var known = Fixture.known
+        known.projects = []
+        let fakes = Fakes(known: known, terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.englishAnswer))
+        let explanation = try await fakes.service().explain(Fixture.email(from: Fixture.rufus, project: nil))
+        #expect(fakes.callList == ["known", "thread"])
+        #expect(explanation.searchTerms == nil)
+        let found = try await ExplainService.files(for: Fixture.email(project: nil), project: nil, known: known, query: "floor plan", warnings: [], lookups: fakes.lookups)
+        #expect(found.otherProjects == .none)
+        #expect(found.terms == nil)
+        #expect(fakes.queryList.isEmpty)
+    }
+
+    /// Other projects' folders are searched without the terms that name the user, the
+    /// sender or a recipient, or that are a date, also when they come from a list saved
+    /// with an earlier explanation, while the email's own project is searched with all of
+    /// them. With only such terms, no other project is searched.
+    @Test func termsThatNameSomeoneOrADateSearchNoOtherProject() async throws {
+        let terms = ["Ms. Bai", "Iris Fang", "Wednesday", "proof", "打样"]
+        let fakes = Fakes(terms: terms, otherHits: [Fixture.plan], answer: .success(Fixture.englishAnswer))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.queryList.map(\.terms) == [terms, ["proof", "打样"]])
+        #expect(fakes.queryList.last?.termsOnly == true)
+        #expect(explanation.searchTerms == terms)
+        let names = ["Bai Lu", "Lu", "October 30"]
+        let none = Fakes(terms: names, otherHits: [Fixture.plan], answer: .success(Fixture.englishAnswer))
+        let alone = try await ExplainService.files(
+            for: Fixture.email(from: Fixture.rufus, project: nil), project: nil, known: Fixture.known, query: "proof", warnings: [], lookups: none.lookups)
+        #expect(alone.otherProjects == .namesAndDates)
+        #expect(alone.others.isEmpty)
+        #expect(alone.terms == names)
+        #expect(none.queryList.isEmpty)
     }
 
     /// The draft check gets the names of the projects whose passages are in the prompt: each

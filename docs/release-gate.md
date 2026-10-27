@@ -176,7 +176,7 @@ RetrievalEvaluationTests indexes each project with its folder of the set and its
 the supplement, and for each labeled mail picks the passages as 0.6.0 did, without terms
 and with every passage of a file, and as Explain now does, with the terms of the cleanup
 model, through ProjectsModelQueue as a request of the user, and at most two passages of a
-file. It also picks with each of the two changes alone. It writes `retrieval.jsonl`, one row a mail, `retrieval-terms.jsonl` with the terms,
+file before the passages of other files. It also picks with each of the two changes alone. It writes `retrieval.jsonl`, one row a mail, `retrieval-terms.jsonl` with the terms,
 and `retrieval.md` with the tables, the time of the terms jobs and the bar to merge of pull
 request E. `TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_TERMS` takes the terms of an earlier run
 without the model, `TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_THRESHOLDS=1,2,3` picks again with

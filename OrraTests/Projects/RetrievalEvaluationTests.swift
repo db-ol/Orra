@@ -6,10 +6,10 @@ import Testing
 /// Measures which passages of project files Explain gives the model for the labeled mails of
 /// the synthetic Projects set and its retrieval supplement, before, as 0.6.0 chose them
 /// without terms and with every passage of a file, and after, with the terms of the real
-/// cleanup model, at most `ExplainService.perFileChunks` passages of a file and the files of
-/// other projects, see ExplainService.files(for:project:known:query:warnings:lookups:). It
-/// also picks with each of the two changes alone. Only when asked for, never in CI, and in a
-/// Release build:
+/// cleanup model, at most `ExplainService.perFileChunks` passages of a file before the
+/// passages of other files, and the files of other projects, see
+/// ExplainService.files(for:project:known:query:warnings:lookups:). It also picks with each
+/// of the two changes alone. Only when asked for, never in CI, and in a Release build:
 ///
 ///     TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL=~/projects/orra-project/bench/projects-testset \
 ///     TEST_RUNNER_ORRA_PROJECTS_OWN_ADDRESSES=<work address>,<home address> \
@@ -627,7 +627,7 @@ struct RetrievalEvaluationTests {
         func mean(_ values: [Double]) -> Double { values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count) }
         func subset(_ name: String) -> [Row] { rows.filter { $0.kinds.contains(name) } }
         var text = "# Retrieval with search terms\n\n\(rows.count) labeled mails, \(files) files in \(chunks) chunks, indexed in \(seconds(indexTime)). Recall at 6 is the share of a mail's relevant files among the passages a prompt holds before its budget, at most 6. Hit at 6 says that one of them is there.\n\n"
-        text += "Before is the selection of 0.6.0, without terms and with every passage of a file. After has the terms and at most \(ExplainService.perFileChunks) passages of a file. The two columns between take one of the changes alone.\n\n"
+        text += "Before is the selection of 0.6.0, without terms and with every passage of a file. After has the terms and at most \(ExplainService.perFileChunks) passages of a file before the passages of other files. The two columns between take one of the changes alone.\n\n"
         text += "| Subset | Mails | Recall before | Recall, cap alone | Recall, terms alone | Recall after | Hit before | Hit after | First relevant rank after, median | Other projects' passages a mail |\n|---|---|---|---|---|---|---|---|---|---|\n"
         for name in subsets + ["zh-en or en-zh"] {
             let chosen = name == "zh-en or en-zh" ? rows.filter { !Set($0.kinds).isDisjoint(with: ["zh-en", "en-zh"]) } : subset(name)
