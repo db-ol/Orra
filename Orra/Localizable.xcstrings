@@ -14043,24 +14043,24 @@
         }
       }
     },
-    "Sorts your mail into projects and explains each email with the files of its project." : {
+    "Sorts your mail into projects and explains each email with the files of your projects." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Clasifica tu correo en proyectos y explica cada correo con los archivos de su proyecto."
+            "value" : "Clasifica tu correo en proyectos y explica cada correo con los archivos de tus proyectos."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "メールをプロジェクトごとに振り分け、各メールをそのプロジェクトのファイルと合わせて説明します。"
+            "value" : "メールをプロジェクトごとに振り分け、各メールをプロジェクトのファイルと合わせて説明します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "把你的邮件分到各个项目里，并结合项目里的文件解释每封邮件。"
+            "value" : "把你的邮件分到各个项目里，并结合你各个项目里的文件解释每封邮件。"
           }
         }
       }

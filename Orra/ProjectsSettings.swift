@@ -75,7 +75,7 @@ struct ProjectsSettings: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Link("Privacy details", destination: Self.privacyPage(for: AppLanguage.launchLocalization))
             } header: {
-                Text("Sorts your mail into projects and explains each email with the files of its project.")
+                Text("Sorts your mail into projects and explains each email with the files of your projects.")
                     .font(.subheadline)
                     .fontWeight(.regular)
                     .foregroundStyle(.secondary)
