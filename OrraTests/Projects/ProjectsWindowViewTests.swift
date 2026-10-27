@@ -1444,9 +1444,11 @@ struct ProjectsWindowViewTests {
     /// plan: two versions of it in the project's folder, a sketch of it in the folder of Kiln
     /// studio and a drawing found by its folder, the newest plan ticked with the line about
     /// Kai Moss, who is outside the project. Then the window at its first and its smallest
-    /// size, a sender that looks spoofed, an email in Japanese without a draft, and the note
-    /// after a handoff where Mail did not take one of two files, with the draft's claim
-    /// that a file is attached once none is ticked.
+    /// size, at the top and scrolled to each section, a sender that looks spoofed, an email
+    /// in Japanese without a draft, and the note after a handoff where Mail did not take one
+    /// of three files and Orra kept back another that changed after it was ticked, with the
+    /// draft's claim that a file is attached once none is ticked, and a blank draft with a
+    /// ticked file.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_PROJECTS_WINDOW_SNAPSHOTS"] != nil))
     func renderTheReplyFiles() async throws {
         let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["ORRA_PROJECTS_WINDOW_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true)
@@ -1493,6 +1495,26 @@ struct ProjectsWindowViewTests {
         model.selectedMessageID = explained.messageID
         try await render(ProjectsWindowView(runtime: runtime, model: model, openSettings: {}, openMail: {}), size: ProjectsWindow.defaultSize, to: folder.appendingPathComponent("\(language)-projects-reply-files-window.png"))
         try await render(ProjectsWindowView(runtime: runtime, model: model, openSettings: {}, openMail: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-reply-files-window-760.png"))
+        // The window at both sizes scrolled to each section, as the user scrolls to it: to
+        // Files This Email Asks For, by the request's sentence, which shows in a text field of
+        // its own as it can be selected, a third of the height under the top, and to the top
+        // of Attachments for the Reply, which takes the files dropped from Finder in a view of
+        // its own.
+        var scrolled: [String] = []
+        let sentence = request.sentence
+        let anchors: [(String, (NSView) -> Bool, (NSRect, CGFloat) -> CGFloat)] = [
+            ("asks", { ($0 as? NSTextField)?.stringValue == sentence }, { frame, visible in frame.minY - visible * 0.38 }),
+            ("attachments", { String(describing: type(of: $0)).contains("DraggingDestination") }, { frame, _ in frame.minY - 12 }),
+        ]
+        for (size, name) in [(ProjectsWindow.defaultSize, "window"), (ProjectsWindow.minimumSize, "window-760")] {
+            for (part, anchor, top) in anchors {
+                let file = folder.appendingPathComponent("\(language)-projects-reply-files-\(name)-\(part).png")
+                if try await render(ProjectsWindowView(runtime: runtime, model: model, openSettings: {}, openMail: {}), size: size, scrolledTo: anchor, top: top, to: file) {
+                    scrolled.append("\(name)-\(part)")
+                }
+            }
+        }
+        #expect(scrolled.count == 4, "scrolled to \(scrolled)")
 
         // A sender whose domain imitates the project's.
         let spoofedID = "lamps-3@harbor.example"
@@ -1532,8 +1554,9 @@ struct ProjectsWindowViewTests {
         try await render(ProjectsEmailArea(runtime: runtime, model: model, email: japaneseListed), size: NSSize(width: 480, height: 1_900), to: folder.appendingPathComponent("\(language)-projects-reply-files-no-draft.png"))
         try await render(ProjectsEmailArea(runtime: runtime, model: model, email: japaneseListed), size: NSSize(width: 200, height: 3_000), to: folder.appendingPathComponent("\(language)-projects-reply-files-no-draft-200.png"))
 
-        // The note after a handoff where Mail did not take the sketch, then the draft's claim
-        // that a file is attached once no file is ticked.
+        // The note after a handoff where Mail did not take the sketch and Orra kept back the
+        // drawing, which changed after it was ticked, then the draft's claim that a file is
+        // attached once no file is ticked.
         let refusing = ProjectsWindowModel(runtime: runtime, emailActions: { Self.handingOffActions(runtime, refusing: "平面图草图.png") })
         await refusing.show(explained.messageID)
         let handed = refusing.emailModel(for: explained.messageID)
@@ -1541,9 +1564,13 @@ struct ProjectsWindowViewTests {
         try await waitUntil { !handed.replyFiles.isLooking }
         await handed.replyFiles.setTicked(lobby.appending(path: "floor-plan-v3.pdf"), true)
         await handed.replyFiles.setTicked(kilnFolder.appending(path: "Sketches/平面图草图.png"), true)
+        await handed.replyFiles.setTicked(lobby.appending(path: "lobby-elevation.dwg"), true)
+        #expect(handed.replyFiles.ticked.count == 3)
+        try Data("AC1032 saved again".utf8).write(to: lobby.appending(path: "lobby-elevation.dwg"))
         await handed.loadFolderRoots(for: [harbor, kiln.id])
         await handed.openReply(all: true)
         #expect(handed.handoffFiles?.attached == 1)
+        #expect(handed.handoffFiles?.notAttached.map(\.problem) == [.refused(code: -10000), .notChecked(.changed)])
         let draft = ProjectsEmailArea.DraftSection(runtime: runtime, emailModel: handed, explanation: explanation, isExplaining: false, openMail: {})
             .padding(20)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1554,6 +1581,12 @@ struct ProjectsWindowViewTests {
         handed.text = handed.text + "\n\nAttached is the floor plan."
         try await waitUntil { handed.replyFiles.claimsAttachment }
         try await render(draft, size: NSSize(width: 480, height: 1_300), to: folder.appendingPathComponent("\(language)-projects-reply-files-claim.png"))
+        // A blank draft with a ticked file, which opens the reply without the clipboard: the
+        // line above the buttons and the footer say so, and Copy does not show.
+        handed.text = ""
+        await handed.replyFiles.setTicked(lobby.appending(path: "floor-plan-v3.pdf"), true)
+        #expect(!handed.handsOffDraft)
+        try await render(draft, size: NSSize(width: 480, height: 1_300), to: folder.appendingPathComponent("\(language)-projects-reply-files-blank.png"))
         await fixture.stop()
     }
 
@@ -1757,6 +1790,70 @@ struct ProjectsWindowViewTests {
         let png = try #require(image.representation(using: .png, properties: [:]))
         try png.write(to: file)
         offscreen.close()
+    }
+
+    /// Renders the window as `render` does, with the email view scrolled as the user
+    /// scrolls it: the scroll view that holds the draft's editor, scrolled so that `top`, of
+    /// the frame of the first view in it that `anchor` picks and of the height that shows,
+    /// is the top of what shows, both in the scroll view's content from its top. Says whether
+    /// it found the email view and such a view in it, and writes nothing when it did not.
+    private func render(_ view: some View, size: NSSize, scrolledTo anchor: (NSView) -> Bool, top: (NSRect, CGFloat) -> CGFloat, to file: URL) async throws -> Bool {
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        let offscreen = NSWindow(contentRect: hosting.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        offscreen.isReleasedWhenClosed = false
+        offscreen.contentView = hosting
+        defer { offscreen.close() }
+        for _ in 0..<20 {
+            hosting.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        guard let editor = Self.firstView(in: hosting, where: { ($0 as? NSScrollView)?.documentView is NSTextView }),
+              let scroll = Self.outermostScrollView(of: editor), let document = scroll.documentView,
+              let found = Self.firstView(in: document, where: anchor) else { return false }
+        var frame = document.convert(found.bounds, from: found)
+        if !document.isFlipped {
+            frame.origin.y = document.bounds.height - frame.maxY
+        }
+        let visible = scroll.contentView.bounds.height
+        let wanted = min(max(0, top(frame, visible)), max(0, document.bounds.height - visible))
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: document.isFlipped ? wanted : document.bounds.height - visible - wanted))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        for _ in 0..<10 {
+            hosting.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let image = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: image)
+        let png = try #require(image.representation(using: .png, properties: [:]))
+        try png.write(to: file)
+        return true
+    }
+
+    /// The first view under `view`, depth first, that `matches` picks.
+    private static func firstView(in view: NSView, where matches: (NSView) -> Bool) -> NSView? {
+        for subview in view.subviews {
+            if matches(subview) {
+                return subview
+            }
+            if let found = firstView(in: subview, where: matches) {
+                return found
+            }
+        }
+        return nil
+    }
+
+    /// The outermost scroll view that holds a view.
+    private static func outermostScrollView(of view: NSView) -> NSScrollView? {
+        var found: NSScrollView?
+        var current = view.superview
+        while let ancestor = current {
+            if let scroll = ancestor as? NSScrollView {
+                found = scroll
+            }
+            current = ancestor.superview
+        }
+        return found
     }
 
     /// Renders the window as the app makes it, at its smallest size, with its title bar and
