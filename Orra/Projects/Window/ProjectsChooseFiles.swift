@@ -652,13 +652,7 @@ struct ProjectsChooseFiles: View {
             Text(verbatim: ProjectsWindowText.choiceNotice(notice))
                 .fixedSize(horizontal: false, vertical: true)
             if case .outside(let file) = notice {
-                if runtime.projectList.isEmpty {
-                    Text("Make a project with New Project… and add the folder there.")
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    addFolder(for: file)
-                }
+                addFolder(for: file)
             }
         }
         .font(.callout)
@@ -666,7 +660,7 @@ struct ProjectsChooseFiles: View {
 
     /// Add a Folder to the email's project, or for an email without one a menu of the
     /// projects, which opens the open panel, in the folder of the dropped file when there is
-    /// one. Nothing while Projects has no project.
+    /// one. While Projects has no project, the line that says to make one.
     @ViewBuilder
     private func addFolder(for dropped: URL?) -> some View {
         let projects = runtime.projectList
@@ -696,6 +690,10 @@ struct ProjectsChooseFiles: View {
             }
             .fixedSize()
             .disabled(runtime.phase != .on)
+        } else {
+            Text("Make a project with New Project… and add the folder there.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
