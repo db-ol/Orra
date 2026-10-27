@@ -109,6 +109,8 @@ struct FileRequestsTests {
             ("合同签字后寄回即可", "合同", [.contract]),
             ("请帮我直接回复同意，并把装修合同和您的身份证照片发过来。", "装修合同和身份证照片", [.contract, .photo]),
             ("请把报价单和您的营业执照发给我", "报价单和营业执照", [.quote, .certificate]),
+            ("麻烦把合同再发我一下", "合同", [.contract]),
+            ("方便的话把你们文件夹里的报价单和合同都发我参考一下", "报价单和合同", [.quote, .contract]),
         ])
         #expect(Self.found("麻烦把 proof-feedback-2026-10-14.md 再发我一下").first?.fileNames == ["proof-feedback-2026-10-14.md"])
         Self.expectNone([

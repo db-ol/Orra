@@ -609,10 +609,10 @@ nonisolated enum FileRequests {
                 }
                 var asking = hanObject(text)
                 // What is asked for stands before the frame, as in 厨电规格麻烦发我一下, when the
-                // verb has only me, 一下 or 一份 after it: the clause before the frame, at most
-                // as long as an object after a verb.
+                // verb has only me, 一下 or 一份 after it: the clause before the frame, after its
+                // last 把 or 将, at most as long as an object after a verb.
                 if objectGroup > verbGroup, asking.isEmpty {
-                    let boundaries = ",;:，；：。!?！？、"
+                    let boundaries = ",;:，；：。!?！？、把将"
                     let start = sentence[..<frame.lowerBound].lastIndex(where: { boundaries.contains($0) }).map { sentence.index(after: $0) } ?? sentence.startIndex
                     asking = hanObject(String(sentence[start..<frame.lowerBound].suffix(30)))
                 }
@@ -791,7 +791,7 @@ nonisolated enum FileRequests {
     private static let hanVersion = latin(#"^(?:(?:最新|最终|最終|最后|最後|新|旧|修改|修订|修正|改訂|更新|正式|完整|当前|現行|初|定|终|終|草|原)(?:版本|版|稿|バージョン)?|版本|バージョン|(?:pdf|cad|dwg|word|excel|jpe?g|png|tiff?|zip|ppt|pptx|xlsx?|docx?)(?:版|格式|形式|ファイル|档|文件)?)$"#)
 
     private static let hanLead = regex(#"^(?:一下|一份|一个|一张|个|以下的?|下面的?|下列的?|如下的?|上述的?|以上的?|下|给我们|给我|过来|我的邮箱|我邮箱|这个邮箱|邮箱|我们|我|你们的|您的|贵司的|贵方的|另外|还有|对了|顺便|此外|然后)"#)
-    private static let hanTrail = regex(#"(?:吧|吗|呢|啊|哦|哈|呗|一下|也|过来|给我们|给我|好吗|可以吗|谢谢|嗎|即可|就行|就好|就可以)$"#)
+    private static let hanTrail = regex(#"(?:吧|吗|呢|啊|哦|哈|呗|一下|也|再|都|先|过来|给我们|给我|好吗|可以吗|谢谢|嗎|即可|就行|就好|就可以)$"#)
 
     /// The kinds a text names, each once, in the order the text names them.
     static func kinds(in text: String) -> [DocumentKind] {
