@@ -222,6 +222,36 @@ struct SettingsPageTests {
         try await render(.about, height: 900, name: "\(language)-6-about-full-height")
     }
 
+    /// Renders Set Up Projects in each state the spec of the checklist names, at the window's
+    /// first width and at its smallest, 680 points, each as tall as the page, and the first
+    /// one also at the window's first size and its smallest, to see what shows without
+    /// scrolling. Off unless ORRA_SETTINGS_SNAPSHOTS names a folder, as above.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] != nil))
+    func renderTheProjectsSetup() async throws {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let language = Bundle.main.preferredLocalizations.first ?? "en"
+        // The smallest size of the window, see SettingsView.
+        let narrow: CGFloat = 680
+        let tall: CGFloat = 1_400
+        try await render(.projects, physicalMemory: 48 << 30, width: narrow, height: 440, name: "\(language)-7-setup-0-off-680")
+        for width in [SettingsWindow.defaultSize.width, narrow] {
+            let suffix = "-\(Int(width))"
+            // On, with the model not on this Mac and Mail closed.
+            try await render(.projects, projectsOn: true, mail: .notAsked, mailRunning: false, width: width, height: tall, name: "\(language)-7-setup-1-closed\(suffix)")
+            // The model downloads, Mail is open and macOS was not asked yet.
+            try await render(.projects, projectsOn: true, mail: .notAsked, downloading: true, width: width, height: tall, name: "\(language)-7-setup-2-downloading\(suffix)")
+            // Allowed, with nothing ticked, then with a mailbox ticked.
+            try await render(.projects, cleanupInstalled: true, projectsOn: true, mail: .allowed, ticks: false, width: width, height: tall, name: "\(language)-7-setup-3-allowed-unticked\(suffix)")
+            try await render(.projects, cleanupInstalled: true, projectsOn: true, mail: .allowed, width: width, height: tall, name: "\(language)-7-setup-4-allowed-ticked\(suffix)")
+            try await render(.projects, cleanupInstalled: true, projectsOn: true, mail: .denied, width: width, height: tall, name: "\(language)-7-setup-5-denied\(suffix)")
+            // After Start Reading Mail, with Mail open, then after a restart with Mail closed.
+            try await render(.projects, cleanupInstalled: true, projectsOn: true, mail: .allowed, reading: true, width: width, height: tall, name: "\(language)-7-setup-6-confirmed\(suffix)")
+            try await render(.projects, cleanupInstalled: true, projectsOn: true, mail: .allowed, reading: true, mailRunning: false, remembers: false, width: width, height: tall, name: "\(language)-7-setup-7-returning\(suffix)")
+        }
+        try await render(.projects, projectsOn: true, mail: .notAsked, mailRunning: false, name: "\(language)-7-setup-1-closed-first-size")
+        try await render(.projects, projectsOn: true, mail: .notAsked, mailRunning: false, width: narrow, height: 440, name: "\(language)-7-setup-1-closed-smallest-size")
+    }
+
     /// The mailboxes of the stand in Mail: the two of all accounts, two of an account, and
     /// one On My Mac.
     private nonisolated static let snapshotMailboxes: [MailMailbox] = {
@@ -232,14 +262,15 @@ struct SettingsPageTests {
         return [.inbox, .sent, mailbox("Clients", account, "Studio"), mailbox("Archive/2026", account, "Studio"), mailbox("orra-test", .application, nil)]
     }()
 
-    /// Mail access over a stand in Mail that runs and never sends an Apple Event: macOS last
-    /// answered `permission`, and the listing follows it. `projects` link their mailboxes,
-    /// and Mail no longer has those in `missing`.
-    private static func mailAccess(answering permission: MailPermission, defaults: UserDefaults, projects: [Project] = [], missing: Set<String> = [], isOn: @escaping () -> Bool) -> ProjectsSettings.MailAccess {
+    /// Mail access over a stand in Mail that never sends an Apple Event: macOS last answered
+    /// `permission`, and the listing follows it. Mail runs unless `running` is false, and the
+    /// bridge remembers the answer unless `remembers` is false, as after a restart. `projects`
+    /// link their mailboxes, and Mail no longer has those in `missing`.
+    private static func mailAccess(answering permission: MailPermission, running: Bool = true, remembers: Bool = true, defaults: UserDefaults, projects: [Project] = [], missing: Set<String> = [], isOn: @escaping () -> Bool) -> ProjectsSettings.MailAccess {
         let bridge = MailBridge(
-            isRunning: { true },
+            isRunning: { running },
             permission: { _ in permission },
-            lastPermission: { permission },
+            lastPermission: { remembers ? permission : nil },
             accounts: { [] },
             mailboxes: {
                 switch permission {
@@ -273,20 +304,34 @@ struct SettingsPageTests {
     /// `projectsData` bytes kept, in folders of its own, and on with `projectsOn`. With
     /// `mail`, it shows Mail access as macOS last answered it, over a stand in Mail with a
     /// few made up mailboxes, one of them ticked and another linked to a project once access
-    /// is allowed, and the choice confirmed with `reading`, where the project also links a
-    /// mailbox that Mail no longer has.
-    private func render(_ tab: SettingsTab, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, dictating: DictationLanguage = .chinese, talkKey: Hotkey = .defaultKey, talkMode: TriggerMode = .hold, translationMode: TriggerMode = .newTranslationKeyMode, cleanupInstalled: Bool = false, physicalMemory: UInt64 = 48 << 30, projectsData: Int = 0, projectsOn: Bool = false, mail: MailPermission? = nil, reading: Bool = false, scrollingTo section: SettingsSection? = nil, height: CGFloat? = nil, name: String) async throws {
+    /// is allowed, unless `ticks` is false, and the choice confirmed with `reading`, where the
+    /// project also links a mailbox that Mail no longer has. `mailRunning` and `remembers`
+    /// say whether Mail runs and whether the bridge remembers the answer, see
+    /// `mailAccess(answering:)`. With `downloading`, the cleanup model downloads from a
+    /// stand in that never finishes. The window is `width` wide.
+    private func render(_ tab: SettingsTab, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, dictating: DictationLanguage = .chinese, talkKey: Hotkey = .defaultKey, talkMode: TriggerMode = .hold, translationMode: TriggerMode = .newTranslationKeyMode, cleanupInstalled: Bool = false, physicalMemory: UInt64 = 48 << 30, projectsData: Int = 0, projectsOn: Bool = false, mail: MailPermission? = nil, reading: Bool = false, ticks: Bool = true, mailRunning: Bool = true, remembers: Bool = true, downloading: Bool = false, scrollingTo section: SettingsSection? = nil, width: CGFloat = SettingsWindow.defaultSize.width, height: CGFloat? = nil, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
-        // it is missing, or the files of the test model in place.
+        // it is missing, or the files of the test model in place. A download gets half of
+        // the first file and then waits until it is cancelled.
+        let fetch = downloading
+            ? FileFetch { _, _, _, size, _, progress in
+                progress(size / 2)
+                try await Task.sleep(for: .seconds(3_600))
+            }
+            : FileFetch { _, _, _, _, _, _ in throw URLError(.notConnectedToInternet) }
         let models = ModelInstaller(
             manifest: cleanupInstalled ? temporary.manifest : .qwen35Cleanup,
             folders: temporary.folders,
-            environment: ModelDownload.Environment(fetch: FileFetch { _, _, _, _, _, _ in throw URLError(.notConnectedToInternet) }, freeSpace: { _ in 100_000_000_000 }, sleep: { _ in })
+            environment: ModelDownload.Environment(fetch: fetch, freeSpace: { _ in 100_000_000_000 }, sleep: { _ in })
         )
         if cleanupInstalled {
             try temporary.write(Array(TestModel.sizes.keys), to: temporary.installed)
         }
         await models.prepare()
+        if downloading {
+            models.download()
+        }
+        defer { models.cancel() }
         let projectsRoot = FileManager.default.temporaryDirectory.appendingPathComponent("SettingsPageTests-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: projectsRoot) }
         let storage = ProjectsStorage(root: projectsRoot)
@@ -303,12 +348,15 @@ struct SettingsPageTests {
         }
         let missing: Set<String> = reading ? ["/Harbor 2025"] : []
         let linked = mail == .allowed ? ProjectsRuntime.mailboxName(Self.snapshotMailboxes[3]).map { [Project(name: "Harbor lobby", mailboxes: [$0] + missing.sorted())] } ?? [] : []
-        let projectsMail = mail.map { Self.mailAccess(answering: $0, defaults: defaults, projects: linked, missing: missing, isOn: { projects.isOn }) }
+        let projectsMail = mail.map { Self.mailAccess(answering: $0, running: mailRunning, remembers: remembers, defaults: defaults, projects: linked, missing: missing, isOn: { projects.isOn }) }
         if mail == .allowed, let projectsMail {
             await projectsMail.show()
-            projectsMail.choose(Self.snapshotMailboxes[2], true)
+            if ticks {
+                projectsMail.choose(Self.snapshotMailboxes[2], true)
+            }
             if reading {
-                projectsMail.startReading()
+                // As Start Reading Mail confirmed it, also before a restart with Mail closed.
+                projectsMail.choice.confirm()
             }
         }
         let cleanup = TextCleanup(
@@ -360,10 +408,11 @@ struct SettingsPageTests {
             projects: projects,
             projectsMail: projectsMail,
             openProjectsWindow: {},
-            editProject: { _ in }
+            editProject: { _ in },
+            openMail: {}
         )
-        // The window's first size.
-        let size = NSSize(width: SettingsWindow.defaultSize.width, height: height ?? SettingsWindow.defaultSize.height)
+        // The window's first size, or as wide as asked.
+        let size = NSSize(width: width, height: height ?? SettingsWindow.defaultSize.height)
         // The sidebar's list does not draw outside a window on screen, so its rows stand
         // next to the page in a plain column, at the sidebar's width.
         let content = HStack(spacing: 0) {

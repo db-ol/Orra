@@ -8,12 +8,20 @@ import SwiftUI
 /// draft as soon as the dictation ends, and what it keeps on this Mac with a way to delete
 /// it.
 ///
-/// While Projects is on, the page has Open Projects Window: at the top once Start Reading
-/// Mail confirmed the mailboxes, and after Mailboxes before that, so the steps that remain
-/// come first. Its title is Projects Settings, so it is not taken for the Projects window
+/// While Projects is on and Start Reading Mail has not confirmed the mailboxes, Set Up
+/// Projects shows under the switch: five numbered steps with check marks, download the
+/// cleanup model, open the Mail app, allow Mail access, choose mailboxes and start reading,
+/// and make a first project, which is optional. The steps hold the controls of the Model,
+/// Mail, Mailboxes and Projects window sections, which show only after the confirm, so no
+/// control shows twice. The checklist comes under the switch, so the switch does not move
+/// under the pointer when it turns on. After the confirm the page has Open Projects Window
+/// at the top. Its title is Projects Settings, so it is not taken for the Projects window
 /// itself. The window also opens by itself once setting up is done here: when the user
 /// confirms the mailbox choice, or turns Projects on with a choice confirmed before. Never
 /// at launch.
+///
+/// Open Mail opens the Mail app on the user's click, through `openMail`, MailApp.open in the
+/// app. Nothing else here opens Mail.
 ///
 /// The page sits outside Orra/Projects, since it is the one place where Projects may link to
 /// the privacy page, the user guide and System Settings. Code in Orra/Projects never opens a
@@ -30,13 +38,21 @@ struct ProjectsSettings: View {
     /// Opens the Projects window with Edit Project for a project, nil where the page is
     /// shown without it, which leaves out the button beside each linked mailbox.
     var editProject: ((UUID) -> Void)? = nil
+    /// Opens the Mail app, MailApp.open in the app, nil where the page is shown without it,
+    /// which leaves out every Open Mail button. Only the user's click calls it.
+    var openMail: (() -> Void)? = nil
     @State private var isConfirmingDelete = false
     @State private var isAskingKeepOrDelete = false
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         Form {
-            windowSection(first: true)
+            if projects.isOn, let openWindow, !showsSetup {
+                WindowSection(openWindow: openWindow)
+                    // Delete All Projects Data stops Projects and closes the window while the
+                    // switch stays on.
+                    .disabled(projects.isDeleting)
+            }
             Section {
                 Toggle(isOn: Binding(
                     get: { projects.isOn },
@@ -91,30 +107,35 @@ struct ProjectsSettings: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Section {
-                LabeledContent {
-                    Text(verbatim: Self.modelStatus(cleanup.models.state, engine: cleanup.engineState))
-                        .foregroundStyle(.secondary)
-                } label: {
-                    DescribedLabel(
-                        title: "Cleanup model",
-                        detail: "Projects works with the local model of Clean Up Text, on this Mac.",
-                        systemImage: "wand.and.sparkles"
-                    )
-                }
-                if projects.isOn {
-                    ModelDownload(cleanup: cleanup)
-                }
-            } header: {
-                Text("Model")
-            }
-            if projects.isOn, let mail {
-                MailAccessSection(mail: mail) {
+            if showsSetup, let mail {
+                SetupSection(cleanup: cleanup, mail: mail, openMail: openMail, openWindow: openWindow, editProject: editProject) {
                     openURL(Self.automationSettings)
                 }
-                MailboxesSection(mail: mail, openWindow: openWindow, editProject: editProject)
+            } else {
+                Section {
+                    LabeledContent {
+                        Text(verbatim: Self.modelStatus(cleanup.models.state, engine: cleanup.engineState))
+                            .foregroundStyle(.secondary)
+                    } label: {
+                        DescribedLabel(
+                            title: "Cleanup model",
+                            detail: "Projects works with the local model of Clean Up Text, on this Mac.",
+                            systemImage: "wand.and.sparkles"
+                        )
+                    }
+                    if projects.isOn {
+                        ModelDownload(cleanup: cleanup)
+                    }
+                } header: {
+                    Text("Model")
+                }
+                if projects.isOn, let mail {
+                    MailAccessSection(mail: mail, openMail: openMail) {
+                        openURL(Self.automationSettings)
+                    }
+                    MailboxesSection(mail: mail, editProject: editProject)
+                }
             }
-            windowSection(first: false)
             if projects.isOn {
                 Section {
                     Toggle(isOn: Binding(
@@ -200,7 +221,7 @@ struct ProjectsSettings: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Projects reads mail only in the mailboxes you choose, and only while Mail is open. It never sends, moves or deletes mail. macOS asks next whether Orra may control Mail.")
+            Text("Projects reads mail only in the mailboxes you choose, and only while Mail is open. It never sends, moves or deletes mail. macOS asks next whether Orra may control Mail. Click Allow.")
         }
         .alert("Delete all Projects data?", isPresented: $isConfirmingDelete) {
             Button("Delete All", role: .destructive) {
@@ -235,17 +256,10 @@ struct ProjectsSettings: View {
         }
     }
 
-    /// The Projects window's section: at the top once Start Reading Mail confirmed the
-    /// mailboxes, as on a page without Mail, and after Mailboxes before that, so the steps that
-    /// remain come first.
-    @ViewBuilder
-    private func windowSection(first: Bool) -> some View {
-        if projects.isOn, let openWindow, (mail?.choice.isConfirmed != false) == first {
-            WindowSection(openWindow: openWindow)
-                // Delete All Projects Data stops Projects and closes the window while the switch
-                // stays on.
-                .disabled(projects.isDeleting)
-        }
+    /// Whether the page shows Set Up Projects: while Projects is on and Start Reading Mail has
+    /// not confirmed the mailboxes. Never on a page without Mail.
+    private var showsSetup: Bool {
+        projects.isOn && mail?.choice.isConfirmed == false
     }
 
     /// Turns Projects on, or asks first whether to download the cleanup model when it is
@@ -337,6 +351,16 @@ struct ProjectsSettings: View {
         }
     }
 
+    /// The line beside Start Reading Mail in Set Up Projects: that nothing is read before the
+    /// click while the button works, and what the user does first while it is gray.
+    static func startLine(_ blocker: MailAccess.StartBlocker?) -> String {
+        switch blocker {
+        case nil: String(localized: "Nothing is read before you click Start Reading Mail.")
+        case .access?: String(localized: "Allow Mail access first.")
+        case .mailbox?: String(localized: "Tick at least one mailbox first.")
+        }
+    }
+
     /// How long Projects keeps what it read, see Retention, and that it removes old data
     /// only while it is on, so data kept while it is off stays until it is on again.
     static var retention: String {
@@ -354,8 +378,9 @@ struct ProjectsSettings: View {
     }
 
     /// The Projects window's own section while Projects is on, with Open Projects Window,
-    /// since the projects and the mail are in that window, not here. See
-    /// `windowSection(first:)` for where it shows.
+    /// since the projects and the mail are in that window, not here. At the top once Start
+    /// Reading Mail confirmed the mailboxes, as on a page without Mail. Before that, the last
+    /// step of Set Up Projects has the button.
     private struct WindowSection: View {
         let openWindow: () -> Void
 
@@ -486,10 +511,164 @@ struct ProjectsSettings: View {
         }
     }
 
-    /// Orra's access to Mail: allowed, refused with the way to System Settings, or the
-    /// button that asks.
+    /// Set Up Projects: the five steps from turning Projects on to the first mail, each with
+    /// its number, a spinner while it runs and a check mark once it is done, while Projects
+    /// is on and Start Reading Mail has not confirmed the mailboxes. The first step that
+    /// waits for the user has a light tint, see Setup. A step holds the words and the
+    /// controls of its part of the page, which shows in sections of its own after the
+    /// confirm.
+    private struct SetupSection: View {
+        let cleanup: TextCleanup
+        let mail: MailAccess
+        let openMail: (() -> Void)?
+        let openWindow: (() -> Void)?
+        let editProject: ((UUID) -> Void)?
+        let openAutomationSettings: () -> Void
+
+        var body: some View {
+            let setup = Setup(
+                model: cleanup.models.state, engine: cleanup.engineState, mailIsRunning: mail.mailIsRunning,
+                access: mail.access, isAsking: mail.isAsking, confirmed: mail.choice.isConfirmed, hasProjects: mail.hasProjects
+            )
+            Section {
+                SetupStepRow(number: 1, status: setup.model, title: "Download the cleanup model", isCurrent: setup.current == .model) {
+                    modelStep
+                }
+                SetupStepRow(number: 2, status: setup.mail, title: "Open the Mail app", isCurrent: setup.current == .mail) {
+                    mailStep
+                }
+                SetupStepRow(number: 3, status: setup.access, title: "Allow Mail access", isCurrent: setup.current == .access) {
+                    accessStep
+                }
+                SetupStepRow(number: 4, status: setup.mailboxes, title: "Choose mailboxes and start reading", isCurrent: setup.current == .mailboxes) {
+                    mailboxesStep
+                }
+                SetupStepRow(number: 5, status: setup.project, title: "Make your first project (optional)") {
+                    projectStep
+                }
+            } header: {
+                Text("Set Up Projects")
+                    .accessibilityAddTraits(.isHeader)
+            }
+        }
+
+        /// The model's state as the Model section shows it, and its download. While it
+        /// downloads or is checked, the download's own lines say so.
+        @ViewBuilder private var modelStep: some View {
+            let state = cleanup.models.state
+            note("Projects works with the local model of Clean Up Text, on this Mac.")
+            switch state {
+            case .downloading, .verifying:
+                EmptyView()
+            default:
+                Text(verbatim: ProjectsSettings.modelStatus(state, engine: cleanup.engineState))
+                    .foregroundStyle(.secondary)
+            }
+            ModelDownload(cleanup: cleanup)
+            if case .downloading = state {
+                note("You can do the next steps while it downloads.")
+            }
+        }
+
+        /// Done while Mail runs. Open Mail opens it on the user's click only.
+        @ViewBuilder private var mailStep: some View {
+            if mail.mailIsRunning {
+                note("Mail is open.")
+            } else {
+                note("Projects reads mail in the Mail app on this Mac, only while Mail is open.")
+                note("Orra opens Mail only when you click Open Mail.")
+                if let openMail {
+                    Button("Open Mail", action: openMail)
+                }
+            }
+        }
+
+        /// Allow Mail Access… works only while Mail is open, and the line says what to do or
+        /// what macOS answered.
+        @ViewBuilder private var accessStep: some View {
+            switch mail.access {
+            case .allowed:
+                note("Orra can read mail in the Mail app.")
+            case .denied:
+                if let line = mail.line {
+                    Text(verbatim: line)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Button("Open Automation Settings…", action: openAutomationSettings)
+            case .unknown:
+                if let line = mail.line {
+                    Text(verbatim: line)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    note("When macOS asks whether Orra may control Mail, click Allow.")
+                }
+                AllowButton(mail: mail)
+            }
+        }
+
+        /// The mailboxes with the period, then Start Reading Mail, right under the mailboxes
+        /// the user ticks, with why it is gray while it is.
+        @ViewBuilder private var mailboxesStep: some View {
+            MailboxRows(mail: mail, editProject: editProject)
+            HStack {
+                Text(verbatim: ProjectsSettings.startLine(mail.startBlocker))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Start Reading Mail") {
+                    if mail.startReading() {
+                        openWindow?()
+                    }
+                }
+                .disabled(!mail.canStartReading)
+            }
+        }
+
+        @ViewBuilder private var projectStep: some View {
+            note("In the Projects window, click New Project… and add the project's folders, so explanations can use their files. You can also explain an email that has no project.")
+            if let openWindow {
+                Button("Open Projects Window", action: openWindow)
+            }
+        }
+
+        private func note(_ text: LocalizedStringKey) -> some View {
+            Text(text)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Allow Mail Access…, with a spinner while macOS is asked. Gray while Mail is closed,
+    /// with the line under it saying why.
+    private struct AllowButton: View {
+        let mail: MailAccess
+
+        var body: some View {
+            HStack {
+                if mail.isAsking {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Button("Allow Mail Access…") {
+                    mail.allowClicked()
+                }
+                .disabled(!mail.canAsk)
+            }
+        }
+    }
+
+    /// Orra's access to Mail after Start Reading Mail: allowed, refused with the way to
+    /// System Settings, or the button that asks. While Mail is closed and the access is not
+    /// known, as after Orra opened again with Mail closed, Open Mail takes the place of Allow
+    /// Mail Access…: the user allowed access once, since Start Reading Mail confirms only
+    /// then, and once Mail is open the listing learns the answer without asking. With access
+    /// allowed and Mail closed, a line says that Mail is not open, with Open Mail, except
+    /// after a no, where the way out is System Settings.
     private struct MailAccessSection: View {
         let mail: MailAccess
+        let openMail: (() -> Void)?
         let openAutomationSettings: () -> Void
 
         var body: some View {
@@ -503,22 +682,18 @@ struct ProjectsSettings: View {
                         Text("Not allowed")
                             .foregroundStyle(.secondary)
                     case .unknown:
-                        HStack {
-                            if mail.isAsking {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                            Button("Allow Mail Access…") {
-                                mail.allowClicked()
-                            }
-                            .disabled(mail.isAsking)
+                        if !mail.mailIsRunning, mail.choice.isConfirmed, let openMail {
+                            Button("Open Mail", action: openMail)
+                        } else {
+                            AllowButton(mail: mail)
                         }
                     }
                 } label: {
                     DescribedLabel(
                         title: "Mail access",
-                        detail: "Orra reads mail in the Mail app only while Mail is open, and never opens it.",
-                        systemImage: "envelope"
+                        detail: "Orra reads mail in the Mail app only while Mail is open.",
+                        systemImage: "envelope",
+                        note: "Orra opens Mail only when you click Open Mail."
                     )
                 }
                 if let line = mail.line {
@@ -534,22 +709,58 @@ struct ProjectsSettings: View {
                         }
                     }
                 }
+                if mail.access == .allowed, !mail.mailIsRunning {
+                    HStack {
+                        Text("Mail is not open. Projects reads new mail while Mail runs.")
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let openMail {
+                            Spacer()
+                            Button("Open Mail", action: openMail)
+                                .fixedSize()
+                        }
+                    }
+                }
             } header: {
                 Text("Mail")
             }
         }
     }
 
-    /// The mailboxes Projects reads, ticked one by one, the days, and Start Reading Mail,
-    /// before which nothing is read. The two of all accounts show on their own, and each
-    /// account's mailboxes and those On My Mac under a disclosure that is open while one of
-    /// them is ticked, so the days and Start Reading Mail stay near. The mailboxes linked to
-    /// a project follow, since Projects reads them too, ticked or not.
+    /// The mailboxes Projects reads once Start Reading Mail confirmed them, with the days, as
+    /// a section of its own, and what a change of them does. Before the confirm the same rows
+    /// are in step 4 of Set Up Projects.
     private struct MailboxesSection: View {
         let mail: MailAccess
-        /// Opens the Projects window once Start Reading Mail confirms the choice, where the
-        /// mail Projects reads shows. Nil where the page is shown without the window.
-        let openWindow: (() -> Void)?
+        /// Opens Edit Project for the project of a linked mailbox. Nil where the page is
+        /// shown without the window.
+        let editProject: ((UUID) -> Void)?
+
+        var body: some View {
+            Section {
+                MailboxRows(mail: mail, editProject: editProject)
+                Text("Projects reads mail from the chosen period in these mailboxes while Mail is open.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } header: {
+                Text("Mailboxes")
+            } footer: {
+                Text("Changes apply only to the mail Projects reads from now on. Mail it already saved stays until it expires or you delete Projects data.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// The mailboxes Projects reads, ticked one by one, and the days. The two of all
+    /// accounts show on their own, and each account's mailboxes and those On My Mac under a
+    /// disclosure that is open while one of them is ticked, so the days and Start Reading
+    /// Mail stay near. The mailboxes linked to a project follow, since Projects reads them
+    /// too, ticked or not. Nothing here opens Mail: while it is closed, a line says to open
+    /// it to see its mailboxes.
+    private struct MailboxRows: View {
+        let mail: MailAccess
         /// Opens Edit Project for the project of a linked mailbox. Nil where the page is
         /// shown without the window.
         let editProject: ((UUID) -> Void)?
@@ -557,93 +768,64 @@ struct ProjectsSettings: View {
         @State private var expanded: [String: Bool] = [:]
 
         var body: some View {
-            Section {
-                ForEach(MailAccess.groups(mail.rows), id: \.self) { group in
-                    if let place = group.place {
-                        DisclosureGroup(isExpanded: Binding(
-                            get: { expanded[place] ?? group.mailboxes.contains(where: mail.isChosen) },
-                            set: { expanded[place] = $0 }
-                        )) {
-                            ForEach(group.mailboxes, id: \.self) { mailbox in
-                                row(mailbox, in: place)
-                            }
-                        } label: {
-                            Text(verbatim: place)
+            ForEach(MailAccess.groups(mail.rows), id: \.self) { group in
+                if let place = group.place {
+                    DisclosureGroup(isExpanded: Binding(
+                        get: { expanded[place] ?? group.mailboxes.contains(where: mail.isChosen) },
+                        set: { expanded[place] = $0 }
+                    )) {
+                        ForEach(group.mailboxes, id: \.self) { mailbox in
+                            row(mailbox, in: place)
                         }
-                        .disclosureGroupStyle(RowDisclosureStyle())
-                    } else {
-                        ForEach(group.mailboxes, id: \.self) { row($0, in: nil) }
+                    } label: {
+                        Text(verbatim: place)
                     }
-                }
-                if mail.isListing {
-                    HStack {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Listing the mailboxes in Mail…")
-                            .foregroundStyle(.secondary)
-                    }
-                } else if mail.listed == nil {
-                    if !mail.mailIsRunning {
-                        Text("Open Mail to see its mailboxes.")
-                            .foregroundStyle(.secondary)
-                    } else if mail.listFailed {
-                        HStack {
-                            Text("Mail did not answer.")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Button("Try Again") {
-                                Task { await mail.refresh() }
-                            }
-                        }
-                    } else if mail.access != .allowed {
-                        Text("Allow Mail access to see its mailboxes.")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                ForEach(mail.links, id: \.self) { link in
-                    linkRow(link)
-                }
-                Picker(selection: Binding(
-                    get: { mail.choice.days },
-                    set: { mail.choice.choose(days: $0) }
-                )) {
-                    ForEach(MailChoice.dayChoices, id: \.self) { days in
-                        Text("Last \(days) days").tag(days)
-                    }
-                } label: {
-                    DescribedLabel(
-                        title: "Period",
-                        detail: "Projects reads only mail received within this period.",
-                        systemImage: "calendar"
-                    )
-                }
-                if mail.choice.isConfirmed {
-                    Text("Projects reads mail from the chosen period in these mailboxes while Mail is open.")
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    .disclosureGroupStyle(RowDisclosureStyle())
                 } else {
-                    HStack {
-                        Text("Nothing is read before you click Start Reading Mail.")
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Spacer()
-                        Button("Start Reading Mail") {
-                            if mail.startReading() {
-                                openWindow?()
-                            }
-                        }
-                        .disabled(!mail.canStartReading)
-                    }
+                    ForEach(group.mailboxes, id: \.self) { row($0, in: nil) }
                 }
-            } header: {
-                Text("Mailboxes")
-            } footer: {
-                if mail.choice.isConfirmed {
-                    Text("Changes apply only to the mail Projects reads from now on. Mail it already saved stays until it expires or you delete Projects data.")
-                        .font(.callout)
+            }
+            if mail.isListing {
+                HStack {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Listing the mailboxes in Mail…")
                         .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
+            } else if mail.listed == nil {
+                if !mail.mailIsRunning {
+                    Text("Open Mail to see its mailboxes.")
+                        .foregroundStyle(.secondary)
+                } else if mail.listFailed {
+                    HStack {
+                        Text("Mail did not answer.")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Try Again") {
+                            Task { await mail.refresh() }
+                        }
+                    }
+                } else if mail.access != .allowed {
+                    Text("Allow Mail access to see its mailboxes.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            ForEach(mail.links, id: \.self) { link in
+                linkRow(link)
+            }
+            Picker(selection: Binding(
+                get: { mail.choice.days },
+                set: { mail.choice.choose(days: $0) }
+            )) {
+                ForEach(MailChoice.dayChoices, id: \.self) { days in
+                    Text("Last \(days) days").tag(days)
+                }
+            } label: {
+                DescribedLabel(
+                    title: "Period",
+                    detail: "Projects reads only mail received within this period.",
+                    systemImage: "calendar"
+                )
             }
         }
 
@@ -703,7 +885,9 @@ extension ProjectsSettings {
     /// - It asks macOS whether Orra may control Mail only after the user clicked Allow
     ///   Mail Access… and read Orra's explanation, and only while Mail runs. Otherwise it
     ///   shows what the bridge last learned, never a fresh check, see
-    ///   MailBridge.lastPermission.
+    ///   MailBridge.lastPermission. While Mail is closed it says to open Mail first, or,
+    ///   with a confirmed choice, to open Mail to check the access, since the user allowed
+    ///   it once and the bridge learns nothing before Mail runs.
     /// - It lists Mail's mailboxes for the picker while the page shows, Projects is on and
     ///   Mail runs. The first listing after launch also learns the access, since its events
     ///   never bring up the prompt (kAEDoNotPromptForUserConsent, see MailEvents). Once one
@@ -739,12 +923,19 @@ extension ProjectsSettings {
             var isMissing = false
         }
 
-        /// A line under the access after the user clicked Allow Mail Access….
+        /// A line under the access after the user clicked Allow Mail Access…. While Mail does
+        /// not run, the line says to open it without a note.
         nonisolated enum Note: Equatable, Sendable {
-            /// Mail does not run, so nothing was asked. Orra never opens it.
-            case openMailFirst
             /// macOS gave no answer in time.
             case noAnswer
+        }
+
+        /// Why Start Reading Mail is gray, what the user does first.
+        nonisolated enum StartBlocker: Equatable, Sendable {
+            /// Orra may not read Mail yet.
+            case access
+            /// No mailbox is ticked.
+            case mailbox
         }
 
         let bridge: MailBridge
@@ -794,39 +985,52 @@ extension ProjectsSettings {
             }
         }
 
-        /// The line under the access: what to do after a click that asked nothing or got
-        /// no answer, or the way to System Settings after a no.
+        /// The line under the access: what to do while Mail is closed and the access is not
+        /// known, that a question got no answer, or the way to System Settings after a no.
         var line: String? {
-            Self.line(access: access, note: note)
+            Self.line(access: access, note: note, mailIsRunning: mailIsRunning, confirmed: choice.isConfirmed)
         }
 
         /// The access comes first, so a note from before the user answered never hides the
-        /// line after a no.
-        nonisolated static func line(access: Access, note: Note?) -> String? {
-            switch (access, note) {
-            case (.denied, _):
+        /// line after a no. While Mail is closed and the access is not known, a confirmed
+        /// choice tells a returning user, who allowed access before Start Reading Mail
+        /// confirmed it, so the line asks to open Mail to check the access, not to allow it
+        /// again.
+        nonisolated static func line(access: Access, note: Note?, mailIsRunning: Bool, confirmed: Bool) -> String? {
+            switch access {
+            case .denied:
                 String(localized: "Orra is not allowed to control Mail. Turn on Mail under Orra in Privacy & Security, Automation.")
-            case (.allowed, _), (.unknown, nil):
+            case .allowed:
                 nil
-            case (.unknown, .openMailFirst?):
-                String(localized: "Open Mail first. Orra never opens it.")
-            case (.unknown, .noAnswer?):
-                String(localized: "macOS gave no answer. Try again.")
+            case .unknown where !mailIsRunning:
+                confirmed
+                    ? String(localized: "Open Mail to check access.")
+                    : String(localized: "Open Mail first. Orra can check or ask for access only while Mail is open.")
+            case .unknown:
+                note == .noAnswer ? String(localized: "macOS gave no answer. Try again.") : nil
             }
+        }
+
+        /// Whether Allow Mail Access… can ask: Projects is on, Mail runs as last read and
+        /// macOS is not being asked already.
+        var canAsk: Bool {
+            isOn() && mailIsRunning && !isAsking
+        }
+
+        /// Whether the user has a project, for the last step of Set Up Projects. The
+        /// runtime's list in the app, read where it can be observed.
+        var hasProjects: Bool {
+            !projects().isEmpty
         }
 
         // MARK: Access
 
-        /// Allow Mail Access… was clicked. While Mail runs, the page shows Orra's
-        /// explanation first and asks nothing yet, see `ask()`. Otherwise it says to open
-        /// Mail first.
+        /// Allow Mail Access… was clicked, which works only while Mail runs. The page shows
+        /// Orra's explanation first and asks nothing yet, see `ask()`. While Mail is closed
+        /// the button is gray, and the line says to open Mail first.
         func allowClicked() {
             mailIsRunning = bridge.isRunning()
-            guard isOn(), !isAsking else { return }
-            guard mailIsRunning else {
-                note = .openMailFirst
-                return
-            }
+            guard isOn(), !isAsking, mailIsRunning else { return }
             note = nil
             isExplaining = true
         }
@@ -838,10 +1042,8 @@ extension ProjectsSettings {
             isExplaining = false
             guard isOn(), !isAsking else { return }
             mailIsRunning = bridge.isRunning()
-            guard mailIsRunning else {
-                note = .openMailFirst
-                return
-            }
+            // Mail quit while the explanation showed, so the line says to open it.
+            guard mailIsRunning else { return }
             isAsking = true
             let answer = await bridge.permission(true)
             isAsking = false
@@ -856,8 +1058,8 @@ extension ProjectsSettings {
                 note = nil
             case .mailNotRunning:
                 // Read right after the answer: a Mail that still runs gave no answer, which
-                // the bridge reads so too.
-                note = mailIsRunning ? .noAnswer : .openMailFirst
+                // the bridge reads so too. Once Mail quit, the line says to open it.
+                note = mailIsRunning ? .noAnswer : nil
             case .notAsked, .unknown:
                 note = .noAnswer
             }
@@ -912,10 +1114,10 @@ extension ProjectsSettings {
             await refresh()
         }
 
-        /// Drops the note under the access once it no longer holds: Mail runs again after
-        /// "Open Mail first", or macOS has answered since "no answer".
+        /// Drops the note under the access once it no longer holds: macOS has answered since
+        /// "no answer", or Mail quit, after which the line says to open it.
         private func dropOutdatedNote() {
-            if access != .unknown || (mailIsRunning && note == .openMailFirst) {
+            if access != .unknown || !mailIsRunning {
                 note = nil
             }
         }
@@ -1012,6 +1214,20 @@ extension ProjectsSettings {
             isOn() && access == .allowed && !choice.mailboxes.isEmpty && !choice.isConfirmed
         }
 
+        /// What Start Reading Mail waits for, the first that is missing, nil once Orra may
+        /// read Mail and a mailbox is ticked. Set Up Projects shows it beside the button,
+        /// where Projects is on and the choice not confirmed yet.
+        var startBlocker: StartBlocker? {
+            Self.startBlocker(access: access, ticked: !choice.mailboxes.isEmpty)
+        }
+
+        nonisolated static func startBlocker(access: Access, ticked: Bool) -> StartBlocker? {
+            if access != .allowed {
+                return .access
+            }
+            return ticked ? nil : .mailbox
+        }
+
         /// Start Reading Mail: confirms the choice, after which the scan reads the chosen
         /// mailboxes while Mail runs. Returns whether it confirmed, so the page opens the
         /// Projects window, where the mail shows.
@@ -1038,6 +1254,55 @@ extension ProjectsSettings {
         nonisolated static func place(_ mailbox: MailMailbox) -> String? {
             guard mailbox.kind == .mailbox else { return nil }
             return mailbox.account ?? String(localized: "On My Mac")
+        }
+    }
+}
+
+extension ProjectsSettings {
+    /// Where setting up Projects stands, for Set Up Projects: the state of each of its five
+    /// steps and the first step that waits for the user. A value made from the model's state
+    /// and the access to Mail on each draw, so tests check it without a view. It holds no
+    /// mail data.
+    nonisolated struct Setup: Equatable, Sendable {
+        nonisolated enum Step: Equatable, Sendable {
+            case model
+            case mail
+            case access
+            case mailboxes
+            case project
+        }
+
+        /// Download the cleanup model: done once it is on this Mac and did not fail to load,
+        /// in progress while Orra looks for it, downloads it or checks it.
+        var model: SetupChecklist.Status
+        /// Open the Mail app: done while Mail runs.
+        var mail: SetupChecklist.Status
+        /// Allow Mail access: done once Orra may control Mail, in progress while macOS asks.
+        var access: SetupChecklist.Status
+        /// Choose mailboxes and start reading: done once Start Reading Mail confirmed them,
+        /// when the checklist gives way to the sections of the page.
+        var mailboxes: SetupChecklist.Status
+        /// Make your first project, optional: done while a project exists. Never in progress.
+        var project: SetupChecklist.Status
+        /// The first of the first four steps that waits for the user, nil when none does. A
+        /// step in progress waits for Orra or macOS, as a download that runs does, so the next
+        /// step not done is the current one then. The optional last step never is.
+        var current: Step?
+
+        init(model: ModelInstaller.State, engine: TextCleanup.EngineState, mailIsRunning: Bool, access: MailAccess.Access, isAsking: Bool, confirmed: Bool, hasProjects: Bool) {
+            self.model = switch model {
+            case .installed: engine == .failed ? .todo : .done
+            case .checking, .downloading, .verifying: .inProgress
+            case .missing, .failed: .todo
+            }
+            mail = mailIsRunning ? .done : .todo
+            self.access = access == .allowed ? .done : isAsking ? .inProgress : .todo
+            mailboxes = confirmed ? .done : .todo
+            project = hasProjects ? .done : .todo
+            let steps: [(step: Step, status: SetupChecklist.Status)] = [
+                (.model, self.model), (.mail, mail), (.access, self.access), (.mailboxes, mailboxes),
+            ]
+            current = steps.first { $0.status == .todo }?.step
         }
     }
 }
