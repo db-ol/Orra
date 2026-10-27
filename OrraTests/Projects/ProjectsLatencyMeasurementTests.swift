@@ -13,8 +13,9 @@ import Testing
 ///
 /// The clips folder holds dictations made with macOS say, named zh… and en… .wav, each with
 /// a filler or a self correction so that the cleanup model always runs. Optional, with the
-/// same prefix: PARTS (latency, memory, default both), ROUNDS (default 2) and ANSWER, the
-/// most answer tokens of a job (default 1,500, as an explanation with a draft may have).
+/// same prefix: PARTS (latency, memory and terms, default latency and memory), ROUNDS
+/// (default 2) and ANSWER, the most answer tokens of a job (default 1,500, as an
+/// explanation with a draft may have).
 ///
 /// `latency` drives PushToTalkController as LatencyMeasurementTests does: a stand in
 /// microphone that returns a clip, held as long as the clip lasts, the real speech model,
@@ -30,6 +31,16 @@ import Testing
 /// `memory` notes the footprint, the number Activity Monitor shows, at rest and at its
 /// peak during a dictation, a job and a dictation during a job, and the swap used before
 /// and after. It is meant for a Mac with 16 GB, with Mail and a browser open. No bar.
+///
+/// `terms`, not among the parts by default, runs the search terms prompt of SearchTerms for
+/// 10 made up mails, 5 in Chinese and 5 in English, 3 times each after a warm up, as
+/// requests of the user, and reports the median, p90 and maximum of the job with its prompt
+/// and answer tokens. It times whole explanations through ExplainService and the same
+/// queue, with search terms and without, as Explain runs them. Then it runs the dictations
+/// of the part latency while a worker keeps the queue busy with terms jobs back to back,
+/// under the bar of the part latency. The bar of pull request E for the job alone is a
+/// median of 2.0 s or less and a p90 of 3.5 s or less on the M5 Pro, with no job over the
+/// time limit.
 ///
 /// The prompt is a made up thread with invented people at .example addresses. The reports
 /// hold durations, counts and bytes only, never text.
@@ -252,12 +263,12 @@ struct ProjectsLatencyMeasurementTests {
         }
 
         /// Keeps the queue busy with background jobs until stopped.
-        func startWorker() -> Task<Int, Never> {
+        func startWorker(_ work: ProjectsModelRequest = job) -> Task<Int, Never> {
             Task {
                 var done = 0
                 while !Task.isCancelled {
                     do {
-                        _ = try await queue.run(job)
+                        _ = try await queue.run(work)
                         done += 1
                     } catch {
                         break
@@ -325,6 +336,116 @@ struct ProjectsLatencyMeasurementTests {
             }
         }
 
+        if parts.contains("terms") {
+            let counter = try await ProjectsTokenCounter.reading(cleanupFolder)
+            let emails = Self.termMails.enumerated().map { index, mail in
+                ExplainService.Email(
+                    messageID: "terms-\(index)@studio.example", date: Date(timeIntervalSince1970: 1_792_411_200),
+                    sender: ExplainPrompt.Person(name: "Mei Tan", address: "mei@harbor.example"), subject: mail.subject,
+                    text: mail.text, visibleText: mail.text)
+            }
+            func termsRequest(_ email: ExplainService.Email, priority: ProjectsModelRequest.Priority = .user) async -> ProjectsModelRequest {
+                let prompt = SearchTermsPrompt(searchText: await ExplainService.searchText(email), attachmentNames: [])
+                return ProjectsModelRequest(prompt: prompt.text, maximumTokens: SearchTermsPrompt.maximumTokens, priority: priority)
+            }
+            // The job alone.
+            _ = try await queue.run(await termsRequest(emails[0]))
+            var times: [Double] = []
+            var promptTokens: [Int] = []
+            var answerTokens: [Int] = []
+            var valid = 0
+            for _ in 0..<3 {
+                for email in emails {
+                    let request = await termsRequest(email)
+                    let started = ContinuousClock.now
+                    let written = try await queue.run(request)
+                    times.append(started.duration(to: .now) / .seconds(1))
+                    promptTokens.append(counter.count(request.prompt))
+                    answerTokens.append(counter.count(SearchTermsPrompt.prefill + written))
+                    valid += SearchTermsPrompt.terms(written) == nil ? 0 : 1
+                }
+            }
+            // Whole explanations through the same queue, with and without search terms.
+            let project = ExplainService.Project(id: UUID(), name: "Harbor lobby", description: "The lobby of the harbor office, with Mei Tan.")
+            let chunk = ChunkSearch.Hit(
+                chunk: 1, project: project.id, file: URL(fileURLWithPath: "/Harbor/schedule.md"), page: nil, heading: nil,
+                modified: Date(timeIntervalSince1970: 1_792_000_000), text: "The lobby lamps arrive on 22 November. Twelve brass lamps at CNY 980 each.",
+                fileHiddenRuns: 0, score: 1)
+            var explained: [String: [Double]] = [:]
+            for withTerms in [false, true] {
+                let service = ExplainService(
+                    lookups: ExplainService.Lookups(
+                        known: { _ in ExplainService.Known(ownName: "Lin", ownAddresses: ["me@studio.example"], projects: [project]) },
+                        thread: { _ in [] }, projectMail: { _ in [] },
+                        search: { _ in [chunk] }, newest: { _, _ in [] }, files: { _ in [] },
+                        terms: { email in
+                            guard withTerms else { return nil }
+                            return try await SearchTerms.ask(for: email, run: { try await queue.run($0) }, sleep: { try await Task.sleep(for: $0) })
+                        }),
+                    run: { try await queue.run($0) },
+                    loadTokenCounter: { counter.count },
+                    save: { _ in },
+                    language: .en)
+                for var email in emails.prefix(6) {
+                    email.project = project.id
+                    let started = ContinuousClock.now
+                    _ = try await service.explain(email)
+                    explained[withTerms ? "with search terms" : "without search terms", default: []].append(started.duration(to: .now) / .seconds(1))
+                }
+            }
+            // Dictations while terms jobs run back to back.
+            var records: [Record] = []
+            let conditions = ["no Projects work", "terms jobs"]
+            let backgroundTerms = await termsRequest(emails[0], priority: .background)
+            for round in 0..<Self.rounds {
+                for condition in (round % 2 == 0 ? conditions : conditions.reversed()) {
+                    let worker = condition == conditions[1] ? startWorker(backgroundTerms) : nil
+                    if worker != nil {
+                        try await Task.sleep(for: .milliseconds(1_500))
+                    }
+                    for (clipIndex, clip) in clips.enumerated() {
+                        let paths: [Path] = (clipIndex + round) % 2 == 0 ? [.cleanup, .translation] : [.translation, .cleanup]
+                        for path in paths {
+                            records.append(try await dictate(clip, path, condition: condition))
+                        }
+                    }
+                    if let worker {
+                        _ = await stop(worker)
+                    }
+                }
+            }
+            _ = slices.take()
+            _ = bursts.take()
+            let limit = SearchTerms.timeLimit / .seconds(1)
+            var report = "# Search terms next to dictation, chip \(SpeechCorpus.chip()), \(ProcessInfo.processInfo.physicalMemory) bytes of memory\n\n"
+            report += "Cells are median / p90 / max.\n\n"
+            report += "| measure | n | value |\n|---|---|---|\n"
+            report += "| terms job, s | \(times.count) | \(Self.cell(times)) |\n"
+            report += "| prompt tokens | \(promptTokens.count) | \(Self.cell(promptTokens.map(Double.init))) |\n"
+            report += "| answer tokens, with the prefill | \(answerTokens.count) | \(Self.cell(answerTokens.map(Double.init))) |\n"
+            for (name, values) in explained.sorted(by: { $0.key < $1.key }) {
+                report += "| whole Explain \(name), s | \(values.count) | \(Self.cell(values)) |\n"
+            }
+            report += "\nUsable terms in \(valid) of \(times.count) answers. Jobs over the time limit of \(M.f(limit, 0)) s: \(times.filter { $0 > limit }.count). Bar of pull request E: median 2.0 s or less, p90 3.5 s or less, none over the limit.\n\n"
+            report += "## Dictations while terms jobs run\n\n| path | condition | n | release to paste | missed limits |\n|---|---|---|---|---|\n"
+            for path in Path.allCases {
+                for condition in conditions {
+                    let mine = records.filter { $0.condition == condition && $0.path == path }
+                    report += "| \(path.rawValue) | \(condition) | \(mine.count) | \(Self.cell(mine.compactMap(\.total))) | \(mine.flatMap(\.calls).filter(\.missedLimit).count) |\n"
+                }
+            }
+            try Self.write(report, named: "terms.md")
+            #expect(times.allSatisfy { $0 <= limit }, "a terms job ran past the time limit")
+            #expect(records.allSatisfy { $0.timings != nil }, "a dictation next to terms jobs pasted nothing")
+            for path in Path.allCases {
+                let none = records.filter { $0.condition == conditions[0] && $0.path == path }.compactMap(\.total)
+                let busy = records.filter { $0.condition == conditions[1] && $0.path == path }.compactMap(\.total)
+                #expect(records.filter { $0.path == path }.flatMap(\.calls).allSatisfy { !$0.missedLimit }, "a \(path.rawValue) call missed its limit next to terms jobs")
+                #expect(LatencyMeasurement.percentile(busy, 0.5) - LatencyMeasurement.percentile(none, 0.5) <= 0.1, "\(path.rawValue) median next to terms jobs")
+                #expect(LatencyMeasurement.percentile(busy, 0.9) - LatencyMeasurement.percentile(none, 0.9) <= 0.1, "\(path.rawValue) p90 next to terms jobs")
+            }
+        }
+
         if parts.contains("memory") {
             Memory.clearCache()
             await memoryReport.idle("speech and cleanup models, after the warm up")
@@ -357,6 +478,20 @@ struct ProjectsLatencyMeasurementTests {
     static var environment: [String: String] {
         ProcessInfo.processInfo.environment
     }
+
+    /// Made up mails for the terms part, at .example addresses, 5 in Chinese and 5 in English.
+    static let termMails: [(subject: String, text: String)] = [
+        ("大堂灯具", "林老师好，\n\n大堂的灯具报价出来了吗？吊灯的安装高度和数量麻烦再确认一下。\n\n周敏"),
+        ("台历打样", "林老师，\n\n第二次打样明天寄出，三月页的红色已经按色板调过，请收到后确认。\n\n何立伟"),
+        ("厨房平面图", "林舟，\n\n厨房的平面图改好了吗？冰箱的位置和插座要一起定。\n\n陈默"),
+        ("入职安排", "林老师好，\n\n我下周一入职，需要提前准备什么材料？电脑是工作室配吗？\n\n宋佳"),
+        ("合同补充条款", "林老师，\n\n批发页的补充协议我们看过了，付款节点能不能改成两期？\n\n郑远山"),
+        ("Hotel and flight", "Dear Lin,\n\nPlease confirm your arrival flight and the nights you need at the conference hotel.\n\nBest,\nHannah"),
+        ("Wholesale samples", "Hi Lin,\n\nCould you send samples of the oolong and the black tea for our buyers, with the price list?\n\nOliver"),
+        ("Take home task", "Hi Lin,\n\nI finished the take home task. The product page has a language switch and works on small screens.\n\nSam"),
+        ("Corporate order", "Hello,\n\nWe would like 200 desk calendars with our logo on the box. What is the lead time?\n\nDaniel"),
+        ("Slides", "Hi Lin,\n\nPlease upload your slides to the speaker portal by 5 November, as a PDF.\n\nHannah"),
+    ]
 
     static var parts: Set<String> {
         Set((environment["ORRA_PROJECTS_LATENCY_PARTS"] ?? "latency,memory").split(separator: ",").map(String.init))
