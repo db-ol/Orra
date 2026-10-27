@@ -799,11 +799,16 @@ final class ProjectsEmailModel {
     /// happens while a handoff of the window runs. Mail first confirms that its message is
     /// this email, and when it is not, or Mail cannot say, the draft is only copied. Without
     /// a draft, no step puts anything on the clipboard, see ReplyHandoff.
+    ///
+    /// The draft is the one in the editor at the click. When the explanation goes while Mail
+    /// answers, as after a move to another project, the handoff still takes that draft, so
+    /// the note never says that a draft is on the clipboard when none was copied.
     func openReply(all: Bool) async {
         guard !handoffs.isRunning else { return }
         handoffs.isRunning = true
         handoffNote = nil
         defer { handoffs.isRunning = false }
+        let draft = handoffDraft
         let reference: MailMessageRef?
         do {
             reference = try await actions.mailReference(messageID, all)
@@ -818,7 +823,7 @@ final class ProjectsEmailModel {
             // Mail was not asked to reply, so the note must not say that the reply may still
             // open.
             if error == .timedOut { error = .failed(code: -1712) }
-            handoffNote = .outcome(actions.handoff.replyNotAsked(handoffDraft, because: error))
+            handoffNote = .outcome(actions.handoff.replyNotAsked(draft, because: error))
             return
         }
         guard !Task.isCancelled else { return }
@@ -826,11 +831,11 @@ final class ProjectsEmailModel {
             // Mail's handles go when it quits, so say that Mail is not open rather than that
             // the email was not found.
             let error: MailBridgeError = actions.handoff.mail.isRunning() ? .notFound : .mailNotRunning
-            let outcome = actions.handoff.replyNotAsked(handoffDraft, because: error)
+            let outcome = actions.handoff.replyNotAsked(draft, because: error)
             handoffNote = outcome == .copiedReplyFailed(.notFound) ? .messageNotFound : .outcome(outcome)
             return
         }
-        handoffNote = .outcome(await actions.handoff.openReply(handoffDraft, to: reference, all: all))
+        handoffNote = .outcome(await actions.handoff.openReply(draft, to: reference, all: all))
     }
 
     /// The draft in the editor for a handoff, nil when the email has no draft.

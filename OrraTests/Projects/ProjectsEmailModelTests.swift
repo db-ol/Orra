@@ -1220,6 +1220,29 @@ struct ProjectsEmailModelTests {
         #expect(fakes.value.replies == [true])
     }
 
+    /// The handoff takes the draft in the editor at the click. When the explanation goes
+    /// while Mail confirms the email, as after a move to another project, Mail opens the
+    /// reply with that draft on the clipboard, so the note that says so is true.
+    @Test func theHandoffTakesTheDraftAsItWasAtTheClick() async throws {
+        var current: Explanation? = Self.explanation()
+        let model = model(explanation: { current })
+        await model.load()
+        fakes.update { $0.referenceHolds = true }
+        model.perform { await $0.openReply(all: false) }
+        try await waitUntil { fakes.value.referenceRelease != nil }
+        current = nil
+        await model.load()
+        #expect(!model.hasDraft)
+        fakes.state.withLock { state in
+            state.referenceRelease?.resume()
+            state.referenceRelease = nil
+        }
+        try await waitUntil { !model.isHandingOff }
+        #expect(model.handoffNote == .outcome(.replyOpened(files: [])))
+        #expect(fakes.value.copies == [Self.draft, Self.draft])
+        #expect(fakes.value.replies == [false])
+    }
+
     /// One handoff at a time for the whole window: while Mail opens the reply to one email,
     /// another email's Open Reply and Copy do nothing, so the clipboard keeps the draft of
     /// the reply window Mail brings forward.
