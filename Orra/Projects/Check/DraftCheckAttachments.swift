@@ -15,8 +15,8 @@ nonisolated extension DraftCheck {
     /// "please attach", 请附上 or "adjunta el plano", a promise, such as 稍后附上 or "I'll send it
     /// as an attachment", and a negation, such as "Nothing is attached", is no claim: those
     /// words are taken out of the sentence before the claim patterns read it, so a sentence
-    /// that also makes a claim of its own still counts. The patterns read the matching form of SortingText and are
-    /// bounded, and the first `claimedLength` characters are read.
+    /// that also makes a claim of its own still counts. The patterns read the matching form
+    /// of SortingText and are bounded, and the first `claimedLength` characters are read.
     static func attachmentClaims(in draft: String) -> [String] {
         let text = SortingText.withoutFormatCharacters(String(String.UnicodeScalarView(draft.unicodeScalars.prefix(claimedLength))))
         return sentenceRanges(in: text).compactMap { range in
@@ -62,7 +62,7 @@ nonisolated extension DraftCheck {
         #"\b(?:please|kindly|could you|can you|would you)(?: also)? (?:attach|enclose)\b"#,
         // What is not attached, and what the sender will attach later.
         #"\b(?:nothing|none|no [a-z]+(?: [a-z]+)?) (?:is|are|was|were|has been|have been)(?: yet| also| now)? (?:attached|enclosed)\b"#,
-        #"\b(?:i|we)(?:['’]ll| will| shall| am going to| are going to| plan to)\b[^.!?]{0,60}?\b(?:as (?:an )?attachments?|attach(?:ed)?|enclosed?)\b"#,
+        #"\b(?:i|we)(?:['’]ll| will| shall| am going to| are going to| plan to)\b[^.!?,;]{0,60}?\b(?:as (?:an )?attachments?|attach(?:ed)?|enclosed?)\b"#,
         // Chinese
         #"(?:感谢|谢谢|多谢)(?:您|你|贵司)?(?:的)?附上"#,
         #"(?:您|你|贵司|对方)(?:们)?(?:之前|刚才|上次)?附上的"#,

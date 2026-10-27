@@ -38,6 +38,7 @@ struct DraftCheckAttachmentsTests {
         "Va adjunta la factura.",
         "Encontrarás adjunto el informe.",
         "Los datos están en el archivo adjunto.",
+        "I will call you tomorrow, attached is the plan.",
     ])
     func attachmentClaimsInFourLanguages(_ sentence: String) {
         let draft = "Hi Mei,\n\nThanks for the update. " + sentence + "\n\nBest,\nLin"
