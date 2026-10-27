@@ -11,13 +11,21 @@ import Foundation
 /// [O1], [A1] or [M1, T1]. The model often names the email [E1], as if it were a source like
 /// F1, though the prompt names it 本邮件 or this email, so E1 reads as the email while the
 /// prompt names no E source. Sources that are not in the prompt's table, any other E id
-/// among them, are dropped and flagged, and so are missing and repeated sections. A
-/// repeated section's second copy is not read, but the heading written again right after
-/// itself, as after the prefill, is not a copy. An item copied from the prompt's own rules
-/// is left out, and so is a lead in copied from them before a colon, see `Echo`. A list
-/// leaves out an item that repeats an earlier one, and in an answer without a draft the
-/// last list that repeated ends before its first repeat, see `loop`. The answer is data,
-/// and nothing here follows it: the window shows it as plain text only.
+/// among them, are dropped and flagged, and so are missing and repeated sections. The
+/// model cites sources in the questions and the draft too, which the user would have to
+/// delete from a reply. A bracket there whose ids are all in the prompt's table leaves the
+/// text as in a point, while the questions gain no sources. A bracket with anything else
+/// stays, such as a placeholder [待确认：合计], a version (v2), or a size (A4) while the
+/// table has no A4. The separators between brackets that leave go with them, see
+/// `removing(_:from:)`. DraftCheck reads the draft after this, so it checks the text the
+/// user copies, and an id inside a sentence copied from another project's file cannot
+/// split the run of words that gives the copy away. A repeated section's second copy is
+/// not read, but the heading written again right after itself, as after the prefill, is
+/// not a copy. An item copied from the prompt's own rules is left out, and so is a lead in
+/// copied from them before a colon, see `Echo`. A list leaves out an item that repeats an
+/// earlier one, and in an answer without a draft the last list that repeated ends before
+/// its first repeat, see `loop`. The answer is data, and nothing here follows it: the
+/// window shows it as plain text only.
 nonisolated struct ExplainAnswer: Sendable, Equatable {
     nonisolated enum Section: String, Sendable, CaseIterable, Codable {
         case warnings
@@ -89,7 +97,7 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
     /// the prompt's source table, such as 本邮件, F1 and M1, and `rules` the prompt's own
     /// rules, see `ExplainPrompt.rules`.
     init(_ answer: String, sources: some Collection<String>, rules: String = "") {
-        let known = Set(sources)
+        let table = SourceTable(sources)
         let echo = Echo(rules)
         var sections: [Section: [Line]] = [:]
         var current: Section?
@@ -127,7 +135,7 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
             problems.append(.missing(section))
         }
         if let lines = sections[.draft] {
-            draft = Self.draft(lines.map(\.text))
+            draft = Self.draft(lines.map(\.text), table)
             if draft == .missing {
                 problems.append(.missing(.draft))
             }
@@ -151,8 +159,10 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         }
         warnings = (lists[.warnings] ?? []).map(\.text).compactMap(echo.withoutCopy)
         questions = (lists[.questions] ?? []).map(\.text).compactMap(echo.withoutCopy)
+            .map { Self.withoutCitations($0, table) }
+            .filter { !$0.isEmpty }
         for item in (lists[.points] ?? []).map(\.text).compactMap(echo.withoutCopy) {
-            let (point, unknown) = Self.point(item, known: known)
+            let (point, unknown) = Self.point(item, table)
             for id in unknown where !unknownSources.contains(id) {
                 unknownSources.append(id)
             }
@@ -327,39 +337,171 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         }
     }
 
-    // MARK: Points
+    // MARK: Sources
+
+    /// The ids of the prompt's source table, and how the ids a model writes read as them.
+    nonisolated private struct SourceTable {
+        let known: Set<String>
+        /// The table's label of the email, 本邮件 or this email, which every label of the
+        /// email reads as.
+        let emailLabel: String?
+        /// The model's own id of the email, E1, while the table names no E source.
+        let emailID: String?
+
+        init(_ ids: some Collection<String>) {
+            known = Set(ids)
+            emailLabel = known.first(where: { ExplainAnswer.emailLabels.contains($0.lowercased()) })
+            emailID = known.contains { $0.wholeMatch(of: /E\d+/) != nil } ? nil : ExplainAnswer.modelsEmailID
+        }
+
+        /// The id as the table names it.
+        func resolved(_ id: String) -> String {
+            let isEmail = ExplainAnswer.emailLabels.contains(id.lowercased()) || id == emailID
+            return isEmail ? (emailLabel ?? id) : id
+        }
+    }
+
+    /// A bracket that holds source ids only, such as [F2], （F1） or [本邮件, A1], with its
+    /// ids as the prompt's table names them.
+    nonisolated private struct Citation {
+        var range: Range<String.Index>
+        var ids: [String]
+    }
+
+    /// The brackets of the text that hold source ids only, in order, also those with an id
+    /// the table does not have.
+    private static func citations(in text: String, _ table: SourceTable) -> [Citation] {
+        sourcePattern.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
+            guard let range = Range(match.range, in: text),
+                  let group = (1..<match.numberOfRanges).lazy.compactMap({ Range(match.range(at: $0), in: text) }).first,
+                  let ids = sourceIDs(String(text[group])) else { return nil }
+            return Citation(range: range, ids: ids.map(table.resolved))
+        }
+    }
 
     /// A point without its source brackets, and the ids it named that are not known.
-    private static func point(_ item: String, known: Set<String>) -> (Point, [String]) {
-        var text = item
+    private static func point(_ item: String, _ table: SourceTable) -> (Point, [String]) {
+        let citations = citations(in: item, table)
         var sources: [String] = []
         var unknown: [String] = []
-        let emailLabel = known.first(where: { emailLabels.contains($0.lowercased()) })
-        // The model's own E1 is the email unless the prompt names E sources itself.
-        let emailID = known.contains { $0.wholeMatch(of: /E\d+/) != nil } ? nil : modelsEmailID
-        let range = NSRange(item.startIndex..., in: item)
-        for match in sourcePattern.matches(in: item, range: range).reversed() {
-            guard let whole = Range(match.range, in: text),
-                  let group = (1..<match.numberOfRanges).lazy.compactMap({ Range(match.range(at: $0), in: item) }).first else { continue }
-            guard let ids = sourceIDs(String(item[group])) else { continue }
-            text.replaceSubrange(whole, with: " ")
-            for id in ids.reversed() {
-                let isEmail = emailLabels.contains(id.lowercased()) || id == emailID
-                let resolved = isEmail ? (emailLabel ?? id) : id
-                if known.contains(resolved) {
-                    if !sources.contains(resolved) { sources.insert(resolved, at: 0) }
-                } else if !unknown.contains(resolved) {
-                    unknown.insert(resolved, at: 0)
-                }
+        for id in citations.reversed().flatMap({ $0.ids.reversed() }) {
+            if table.known.contains(id) {
+                if !sources.contains(id) { sources.insert(id, at: 0) }
+            } else if !unknown.contains(id) {
+                unknown.insert(id, at: 0)
             }
         }
-        let cleaned = text
+        let cleaned = removing(citations.map(\.range), from: item)
             .split(whereSeparator: { $0 == " " || $0 == "\t" })
             .joined(separator: " ")
             .replacing(/\s+([。，、；：！？.,;:!?])/, with: { $0.output.1 })
             .trimmingCharacters(in: .whitespaces)
         return (Point(text: cleaned, sources: sources), unknown)
     }
+
+    /// The text of a question or the draft without its brackets whose ids are all in the
+    /// table. A bracket with anything else stays, also one with an id the table does not
+    /// have, such as a size (A4).
+    private static func withoutCitations(_ text: String, _ table: SourceTable) -> String {
+        let cited = citations(in: text, table).filter { $0.ids.allSatisfy(table.known.contains) }
+        return cited.isEmpty ? text : removing(cited.map(\.range), from: text)
+    }
+
+    /// The text without the brackets at `ranges`, which are in order and apart, and without
+    /// the separators between two of them, a comma, 、, a semicolon, and, 和, と or y, so
+    /// "2026 [this email], [A1]." reads "2026.". A bracket goes with the spaces after it, or
+    /// with those before it at the end of a line or before a mark that ends a sentence, a
+    /// clause or a bracket. Between Chinese characters it takes the spaces on both sides, as
+    /// in 录用意向书中. Where no space was on either side, a space keeps a Latin word or a
+    /// number apart from the word next to it, as in "合同 v3". A line that held nothing but
+    /// brackets goes, and so does a blank line after such lines when a blank line is before
+    /// them or they began the text.
+    private static func removing(_ ranges: [Range<String.Index>], from text: String) -> String {
+        var runs: [Range<String.Index>] = []
+        for range in ranges {
+            if let last = runs.last, isSeparator(text[last.upperBound..<range.lowerBound]) {
+                runs[runs.count - 1] = last.lowerBound..<range.upperBound
+            } else {
+                runs.append(range)
+            }
+        }
+        // No cut reaches past the end of its line, so each line stays where it is.
+        var result = ""
+        var cursor = text.startIndex
+        for run in runs {
+            let (range, replacement) = cut(run, in: text)
+            result += text[cursor..<range.lowerBound] + replacement
+            cursor = range.upperBound
+        }
+        result += text[cursor...]
+        let lines = result.split(separator: "\n", omittingEmptySubsequences: false)
+        let written = text.split(separator: "\n", omittingEmptySubsequences: false)
+        guard lines.count == written.count else { return result }
+        var kept: [Substring] = []
+        var went = false
+        for (line, before) in zip(lines, written) {
+            let blank = line.allSatisfy(\.isWhitespace)
+            if blank, !before.allSatisfy(\.isWhitespace) {
+                went = true
+            } else if blank, went, kept.last?.allSatisfy(\.isWhitespace) ?? true {
+                went = false
+            } else {
+                went = false
+                kept.append(line)
+            }
+        }
+        return kept.joined(separator: "\n")
+    }
+
+    /// Whether the text between two brackets only parts them: spaces, commas, 、 and
+    /// semicolons, and the words and, 和, と and y, on one line.
+    private static func isSeparator(_ gap: Substring) -> Bool {
+        !gap.contains(where: \.isNewline) && gap
+            .split(whereSeparator: { isSpace($0) || ",，、;；".contains($0) })
+            .allSatisfy { ["and", "和", "と", "y"].contains($0.lowercased()) }
+    }
+
+    private static func isSpace(_ character: Character) -> Bool {
+        character.isWhitespace && !character.isNewline
+    }
+
+    /// The part of the text that leaves with a run of brackets, see `removing(_:from:)`, and
+    /// what stands in its place.
+    private static func cut(_ run: Range<String.Index>, in text: String) -> (Range<String.Index>, String) {
+        var start = run.lowerBound
+        while start > text.startIndex, isSpace(text[text.index(before: start)]) {
+            start = text.index(before: start)
+        }
+        var end = run.upperBound
+        while end < text.endIndex, isSpace(text[end]) {
+            end = text.index(after: end)
+        }
+        let before = start > text.startIndex ? text[text.index(before: start)] : nil
+        let after = end < text.endIndex ? text[end] : nil
+        guard let before, !before.isNewline else {
+            // At the start of a line, after any indent.
+            return (run.lowerBound..<end, "")
+        }
+        guard let after, !after.isNewline, !closingMarks.contains(after), !(isWide(before) && isWide(after)) else {
+            return (start..<end, "")
+        }
+        if start < run.lowerBound || end > run.upperBound {
+            // One space stays, the one before when there are both.
+            return (start < run.lowerBound ? run.lowerBound..<end : run, "")
+        }
+        let apart = [before, after].allSatisfy { $0.isLetter || $0.isNumber } && (before.isASCIILetterOrDigit || after.isASCIILetterOrDigit)
+        return (run, apart ? " " : "")
+    }
+
+    /// Whether a character is Chinese or Japanese, or a full width or Chinese mark, which
+    /// take no space between them.
+    private static func isWide(_ character: Character) -> Bool {
+        character.isHan || character.unicodeScalars.allSatisfy { (0x3000...0x30FF).contains($0.value) || (0xFF00...0xFFEF).contains($0.value) }
+    }
+
+    /// The marks that take no space before them, so a bracket before one goes with the
+    /// spaces before it.
+    private static let closingMarks: Set<Character> = ["。", "，", "、", "；", "：", "！", "？", ".", ",", ";", ":", "!", "?", "…", ")", "）", "」", "』", "”", "’", "]", "】", "》"]
 
     /// The ids in a bracket group when every part of it is a source id, or nil when the
     /// group is text, such as a placeholder [待确认：合计].
@@ -400,10 +542,11 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
     /// The longest draft that can still be a note with a short reason.
     private static let noteLength = 60
 
-    private static func draft(_ lines: [String]) -> Draft {
-        let text = lines.joined(separator: "\n")
+    /// The draft, without its brackets of the table's ids, or the note in its place.
+    private static func draft(_ lines: [String], _ table: SourceTable) -> Draft {
+        let written = lines.joined(separator: "\n")
             .replacing(/^\s*```[a-z]*\s*\n?|\n?\s*```\s*$/, with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = withoutCitations(written, table).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return .missing }
         let word = text.trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines).union(CharacterSet(charactersIn: "“”\"「」"))).lowercased()
         if noReplyNotes.contains(where: { isNote($0, word) }) {
