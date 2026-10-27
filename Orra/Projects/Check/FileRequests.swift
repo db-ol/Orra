@@ -261,11 +261,14 @@ nonisolated enum DocumentKind: String, CaseIterable, Sendable {
 /// for nothing when none is named.
 ///
 /// Never a request: what is no file (comments, feedback, availability, an address, bank or
-/// tax details, information, money, goods, a link, the email itself), a portal to upload to
-/// or a form to fill in online, a quote or an invoice still to prepare ("send us a quote for
-/// 500 units"), a negation before the verb, the sender's own attachments, offers and promises
-/// (I'll send you, attached, 我发给你, 添付します, te envío), a question about what arrived or
-/// what the reader did to a document, and a file that came, as in 你发给我的平面图.
+/// tax details, information, money, goods, a link, the email itself, a question such as "how
+/// the client reacted", a number or a value such as a price or a size, and the details a form
+/// asks for), a portal to upload to or a form to fill in online, a quote or an invoice still
+/// to prepare ("send us a quote for 500 units"), a negation before the verb, leave to pass a
+/// file on to others ("feel free to share it with your team"), the sender's own attachments,
+/// offers and promises (I'll send you, attached, 我发给你, 添付します, te envío), a question
+/// about what arrived or what the reader did to a document, and a file that came, as in
+/// 你发给我的平面图.
 ///
 /// It reads the subject, unless it is that of a reply or a forward, and the first
 /// `readLength` characters of the sender's own words, cut into sentences as DraftCheck cuts
@@ -495,7 +498,7 @@ nonisolated enum FileRequests {
     private static let englishWrittenThings: Set<String> = [
         "list", "lists", "sheet", "sheets", "chart", "charts", "notes", "draft", "drafts", "summary", "agenda", "checklist",
         "checklists", "log", "logs", "records", "diagram", "diagrams", "layout", "sketch", "sketches", "outline", "handbook",
-        "manual", "guidelines", "brief", "template", "templates", "map", "maps",
+        "manual", "guidelines", "guide", "guides", "brief", "template", "templates", "map", "maps",
     ]
     private static let spanishWrittenThings: Set<String> = [
         "lista", "listas", "notas", "borrador", "borradores", "resumen", "agenda", "esquema", "bosquejo", "registro", "registros",
@@ -506,15 +509,17 @@ nonisolated enum FileRequests {
     private static let hanWrittenThing = regex(#"(?:(?<!简|买)单|(?<!代|发|外|手|电|仪|钟|水)表|稿|(?<!注)册|记录|笔记|日志|明细|模板|草图|地图|指南|须知|细则|一覧|リスト|書|録|原稿|下書き|明細|テンプレート|マニュアル|まとめ)$"#)
 
     /// The request of a sentence that ends in a colon, with the items of the list under it
-    /// as what it asks for. Items that name no kind ask for documents by their own words,
-    /// unless they are no file, as a name or an address.
+    /// as what it asks for. Items that name no kind ask for documents by their own words when
+    /// one of them names a written thing, as "the guest list" or 签到表 does, so a list of a
+    /// name, a city and a size, as on a form to sign up, asks for none.
     private static func listRequest(_ original: String, items: [String]) -> FileRequest? {
         let object = items.map { clipped($0, to: objectKept) }.joined(separator: ", ")
         var kinds = self.kinds(in: object)
         let names = fileNames(in: object)
         if kinds.isEmpty, names.isEmpty, items.contains(where: { item in
             let language: Language = item.contains(where: { $0.isHan || $0.isKana }) ? (item.contains(where: \.isKana) ? .japanese : .chinese) : latinLanguage(item)
-            return !ownWords(item).isEmpty && !isNoFile(language == .chinese || language == .japanese ? hanObject(item) : item, language)
+            let head = language == .chinese || language == .japanese ? hanObject(item) : item
+            return !ownWords(item).isEmpty && !isNoFile(head, language) && namesAWrittenThing(head, language)
         }) {
             kinds = [.document]
         }
@@ -732,6 +737,12 @@ nonisolated enum FileRequests {
                 if ContentChecks.matches([englishAnyone], String(sentence[verb.upperBound...])) {
                     continue
                 }
+                // Leave to pass a file on to others, as in "feel free to share the slides with
+                // your students", gives a permission and asks the reader for no file.
+                if let frame, ContentChecks.matches([englishPermission], String(sentence[frame])),
+                   ContentChecks.matches([englishToOthers], String(sentence[verb.upperBound...])) {
+                    continue
+                }
                 // "include me" or "attach us" asks for no file.
                 if ["include", "including", "attach", "attaching", "upload", "uploading", "submit", "submitting"].contains(sentence[verb].lowercased()),
                    ContentChecks.matches([objectIsAPerson], String(sentence[verb.upperBound...])) {
@@ -754,6 +765,12 @@ nonisolated enum FileRequests {
     private static let objectIsAPerson = latin(#"^\s*(?:me|us|him|her)\b"#)
     /// Anyone at all as whom something goes to, as in a newsletter.
     private static let englishAnyone = latin(#"\b(?:with|to)\s+(?:anyone|anybody|everyone|everybody|a friend|friends|your friends|your network|your colleagues|others|other people|people you know)\b"#)
+    /// The words that ask which also give leave, as in "feel free to share it".
+    private static let englishPermission = latin(#"^(?:feel free to|do not hesitate to|don['’]?t hesitate to)$"#)
+    /// Someone other than the writer whom a file would go to, in the clause after the verb:
+    /// with or to and a name, or a determiner or a pronoun of others, as in "with your
+    /// students", "to the parents" or "with Kai", but not "with me" or "with our team".
+    private static let englishToOthers = regex(#"^[^.!?;]*?(?i:\b(?:with|to)\s+)(?!(?i:me|us|myself|ourselves|our)\b)(?:(?i:your|the|his|her|their|any|all|other|others|everyone|anyone|anybody|everybody|people|whoever|them|him)\b|[A-Z])"#)
 
     // MARK: Spanish
 
@@ -834,6 +851,12 @@ nonisolated enum FileRequests {
     private static let spanishCliticOnVerb = latin(#"(?:lo|la|los|las)(?:\s+llegar)?$"#)
     private static let spanishCliticBefore = latin(#"(?:^|[\s¿¡,])(?:(?:me|nos|te|se|le|les)\s+)?(?:lo|la|los|las)\s*$|(?:^|[\s¿¡,])(?:lo|la|los|las)\s+(?:puedes|podr[ií]as|puede|podr[ií]a|pueden|podr[ií]an|pod[eé]s)\b"#)
     private static let spanishAnyone = latin(#"\b(?:con|a)\s+(?:todos|todo el mundo|cualquiera|tus amigos|sus amigos|un amigo|una amiga|tus colegas|quien quieras)\b"#)
+    /// The words that ask which outside a question give leave, as "puedes compartirlo" does.
+    private static let spanishPermission = latin(#"^(?:puedes|puede|pueden|pod[eé]s)$"#)
+    /// Someone other than the writer whom a file would go to, in the clause after the verb:
+    /// con or a and a name, or a determiner or a pronoun of others, as in "con tus clientes" or
+    /// "a Marta", but not "a mí" or "con nosotros".
+    private static let spanishToOthers = regex(#"^[^.!?;]*?(?i:\b(?:con|a)\s+)(?!(?i:m[ií]|mis|nosotros|nosotras|nuestro|nuestra|nuestros|nuestras)\b)(?:(?i:tus?|sus?|los|las|el|la|todos|todas|quien|quienes|cualquiera|otros|otras)\b|[A-ZÁÉÍÓÚÑ])"#)
     private static let spanishPointer = latin(#"^(?:eso|esto|esos|estos|esa|esas|ese|este|ello|lo mismo|el mismo|la misma|los mismos|las mismas)$"#)
 
     private static func spanish(_ sentence: String) -> [Asked] {
@@ -849,6 +872,13 @@ nonisolated enum FileRequests {
                 }
                 // Passing something on to anyone at all, as in "compártelo con tus amigos".
                 if ContentChecks.matches([spanishAnyone], String(sentence[verb.upperBound...])) {
+                    continue
+                }
+                // Leave to pass a file on to others, as "puedes compartir el folleto con tus
+                // clientes" says outside a question, gives a permission and asks for no file.
+                if let frame, ContentChecks.matches([spanishPermission], String(sentence[frame])),
+                   !sentence[..<frame.lowerBound].contains("¿"), !sentence.hasSuffix("?"),
+                   ContentChecks.matches([spanishToOthers], String(sentence[verb.upperBound...])) {
                     continue
                 }
                 guard !negated(sentence, from: frame?.lowerBound, before: verb.lowerBound, negation: spanishNegation),
@@ -893,8 +923,9 @@ nonisolated enum FileRequests {
     /// A verb of sending of one character, which 发 X 给我 and X 发我一下 need.
     private static let chineseSendCharacter = regex(#"发|传|寄|转|分享|共享"#)
     /// A verb of sending that stands before what it sends, as in 发排练流程给我, and not the
-    /// first character of a word such as 发票, 发现, 传真 or 寄存.
-    private static let chineseBareSend = #"(?:发(?!票|现|布|生|展|言|表|明|起|出|货|动|挥|放|行|育|达|烧|热|音|射|酵|型|量|觉|愁|呆|火|疯|抖|胖|财|奋|掘|源|件|给|到|过|了|送)|传(?!统|说|达|播|真|染|承|奇|闻|授|唤|递|输|给|到|过|了)|寄(?!存|托|生|宿|养|居|给|到|过|了)|转发|分享|共享)"#
+    /// first character of a word such as 发票, 发现, 传真 or 寄存, nor of 发回, 传回 or 寄回,
+    /// after which comes whom it goes back to, not what.
+    private static let chineseBareSend = #"(?:发(?!票|现|布|生|展|言|表|明|起|出|货|动|挥|放|行|育|达|烧|热|音|射|酵|型|量|觉|愁|呆|火|疯|抖|胖|财|奋|掘|源|件|给|到|过|了|送|回)|传(?!统|说|达|播|真|染|承|奇|闻|授|唤|递|输|给|到|过|了|回)|寄(?!存|托|生|宿|养|居|给|到|过|了|回)|转发|分享|共享)"#
     /// A character of a clause: no punctuation that ends one, but the dot of a file name.
     private static let chineseClause = #"(?:[^,.!?;:。，！？；：、\n]|\.(?=[A-Za-z0-9]))"#
     /// A character of a topic before its verb, as in 合同也发我一份: one of a clause, but not
@@ -1008,6 +1039,10 @@ nonisolated enum FileRequests {
     private static let chineseTowardTheWriter = regex(#"^(?:给)?(?:我们|我|过来)|^(?:一下|一份)?(?:吧|呗|哈|啊|呀)|^(?:一下)?(?:$|[,，;；:：。!！?？])"#)
     /// A verb whose next words name whom or where it goes, not what.
     private static let chineseToWhom = regex(#"(?:给|到|至|抄送)$"#)
+    /// A verb that handles what 把 takes before it is sent, followed by 一下, 后, 好, 完 or 成
+    /// or by the verb of sending, as in 整理一下, 汇总后, 扫描后, 签好 or 整理成表, but not
+    /// before 的, as in 更新后的报价单 or 整理好的资料, where it tells which document.
+    private static let chineseHandled = regex(#"(?:整理|汇总|总结|归纳|扫描|签字|签名|签好|签完|签署|盖章|盖好|盖完|打印|修改|改好|改完|填好|填完|填写|确认|核对|检查|翻译|压缩|打包|转换|导出|做成|做好|准备好|准备|补充|完善|更新|处理|标注|审核|审阅|校对|看完|看过|拍好|拍完)(?:(?=(?:一下|之后|以后|后|好|完|成|了|过|并|再)(?!的))|$)"#)
     /// What asks for the document named before it.
     private static let chinesePointer = regex(#"^(?:它|它们|这个|那个|这份|那份|这些|那些|这一份|那一份|这个东西|那个东西)$"#)
 
@@ -1071,6 +1106,12 @@ nonisolated enum FileRequests {
                 var text = objectRange.map { String(sentence[$0]) } ?? ""
                 let objectAfterVerb = objectRange.map { $0.lowerBound >= verb.upperBound } ?? true
                 if objectAfterVerb, let end = chineseObjectEnd.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)), let range = Range(end.range, in: text) {
+                    text = String(text[..<range.lowerBound])
+                }
+                // What 把 takes ends at a verb that handles it before it is sent, as 整理一下 in
+                // 把意见整理一下发给我 or 扫描后 in 把协议扫描后发回, so what is sent is what was
+                // handled, and 意见 stays comments.
+                if !objectAfterVerb, let handled = chineseHandled.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)), let range = Range(handled.range, in: text) {
                     text = String(text[..<range.lowerBound])
                 }
                 var object = hanObject(text)
@@ -1228,6 +1269,12 @@ nonisolated enum FileRequests {
         if folded.contains(where: { $0.isHan || $0.isKana }) {
             let head = trimmed(folded)
             return hanNoFile.contains(where: { head.hasSuffix($0) }) || hanNoFileWhole.contains(head)
+                || ContentChecks.matches([hanQuestion], head)
+        }
+        // A question as what is asked for, as "how the client reacted", "whether the venue has
+        // parking" or "cómo quieres seguir", asks for an answer.
+        if ContentChecks.matches([latinQuestion], trimmed(object)) {
+            return true
         }
         let words = folded.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
         guard !words.isEmpty else { return false }
@@ -1266,6 +1313,10 @@ nonisolated enum FileRequests {
         "regards", "greetings", "wishes", "love", "best",
         "someone", "somebody", "anyone", "anybody", "people", "person", "technician", "driver", "courier", "screen", "location",
         "help", "support", "assistance", "what", "whatever", "anything", "something", "everything", "nothing",
+        "price", "prices", "pricing", "rate", "rates", "cost", "costs", "fee", "fees", "amount", "amounts", "total", "totals",
+        "quantity", "quantities", "size", "sizes", "measurement", "measurements", "dimensions",
+        "username", "handle", "venmo", "paypal", "zelle", "linkedin", "instagram", "twitter", "facebook",
+        "preference", "preferences", "restrictions", "allergies",
     ]
     /// Words that count what follows them, as couple in "a couple of times".
     private static let englishCounts: Set<String> = ["couple", "few", "number", "lot", "lots", "bunch", "handful", "pair", "series", "range", "selection", "some", "any", "all", "both", "each", "one", "two", "three"]
@@ -1282,6 +1333,9 @@ nonisolated enum FileRequests {
         "correo", "correos", "mensaje", "mensajes", "hilo", "lineas", "palabras", "parrafo", "boletin", "boletines", "publicacion",
         "saludos", "saludo", "abrazo",
         "alguien", "persona", "personas", "tecnico", "ubicacion", "pantalla", "ayuda", "apoyo", "algo", "todo", "nada",
+        "precio", "precios", "tarifa", "tarifas", "costo", "costos", "coste", "costes", "monto", "importe", "total", "cantidad",
+        "talla", "tallas", "tamano", "medida", "medidas", "dimensiones",
+        "usuario", "venmo", "paypal", "linkedin", "instagram", "preferencias", "restricciones", "alergias",
     ]
     private static let spanishDeterminers: Set<String> = [
         "el", "la", "los", "las", "un", "una", "unos", "unas", "tu", "tus", "su", "sus", "mi", "mis", "nuestro", "nuestra", "nuestros",
@@ -1306,9 +1360,17 @@ nonisolated enum FileRequests {
         "詳細", "状況", "進捗", "近況", "返信", "返事", "回答", "確認", "結果", "連絡", "支払い", "代金", "入金", "振込", "振り込み",
         "サンプル", "荷物", "商品", "リンク", "url", "パスワード", "コード", "招待", "担当者", "画面", "質問", "メール", "メッセージ", "一言", "数行",
         "メルマガ", "ニュースレター", "公众号", "推文",
+        // Numbers and values: an account, a card or an ID number, a price, a size or a count,
+        // and a name, as on a form.
+        "号", "价格", "价钱", "单价", "费用", "金额", "尺码", "尺寸", "数量", "人数", "姓名", "名字", "城市",
+        "番号", "価格", "料金", "金額", "費用", "サイズ", "寸法", "名前", "氏名", "所属", "アカウント",
     ]
     /// Chinese words that name no file only on their own: money, goods, a person.
     private static let hanNoFileWhole: Set<String> = ["款", "钱", "货", "人"]
+    /// A question as what is asked for, as in 怎么去会场, 是否需要停车 or 参加できるかどうか.
+    private static let hanQuestion = regex(#"怎么|怎样|如何|为什么|为何|是否|是不是|多少|哪里|哪儿|哪些|哪天|什么时候|何时|几点|几号|かどうか|どのよう|どうやって|いくら|なぜ|何時|何名|何人"#)
+    /// A question as what is asked for in English or Spanish, by its first word.
+    private static let latinQuestion = latin(#"^(?:how|why|whether|what|when|where|who|whom|whose|which|if|cómo|por qué|qué|cuándo|dónde|quién|quiénes|cuánto|cuánta|cuántos|cuántas|cuál|cuáles)(?![\p{L}\p{N}])"#)
 
     /// A quote, an estimate, a proposal or an invoice asked for with a or una, which is one
     /// still to prepare, not a file to send, as in "send us a quote for 500 units".
@@ -1410,7 +1472,7 @@ nonisolated enum FileRequests {
     /// What marks a Chinese noun phrase that names a thing: 的 or a demonstrative.
     private static let chineseTopicMark = regex(#"的|那份|这份|那个|这个|那张|这张|那些|这些|上次|上周|之前的|昨天"#)
     private static let japaneseNotATopic = regex(#"です|ます|ました|ません|でした|だった|ください|下さい|ので|けど|から|たら|れば|ない|たい|私|僕|弊社"#)
-    private static let japaneseTopicMark = regex(#"(?:については|につきましては|は|も)$"#)
+    private static let japaneseTopicMark = regex(#"(?:については|につきましては|は|も|を|が)$"#)
     private static let latinTopic = latin(#"^(?:the|that|this|these|those|your|our|el|la|los|las|ese|esa|esos|esas|este|esta|tu|tus|su|sus)\b"#)
     private static let latinNotATopic = latin(#"\b(?:is|are|was|were|has|have|had|will|would|can|could|should|do|does|did|i|we|you|es|est[aá]n?|son|fue|tiene|tienen|hay|ser[aá])\b"#)
 
@@ -1697,7 +1759,7 @@ nonisolated enum FileRequests {
     /// 最終版, データ and their like.
     private static let hanVersion = latin(#"^(?:(?:最新|最终|最終|最后|最後|新|旧|修改|修订|修正|改訂|更新|正式|完整|当前|現行|初|定|终|終|草|原)(?:版本|版|稿|バージョン)?|版本|バージョン|(?:pdf|cad|dwg|word|excel|jpe?g|png|tiff?|zip|ppt|pptx|xlsx?|docx?)(?:版|格式|形式|ファイル|档|文件)?)$"#)
 
-    private static let hanLead = regex(#"^(?:一下|一份|一个|一张|(?:几|两|三|若干|多)(?:张|份|个|些|页|套)|一些|个|以下的?|下面的?|下列的?|如下的?|上述的?|以上的?|下|给我们|给我|过来|我的邮箱|我邮箱|这个邮箱|邮箱|我们|我|你们的|您的|你的|贵司的|贵方的|另外|还有|对了|顺便|此外|然后|把|将|的)"#)
+    private static let hanLead = regex(#"^(?:一下|一份|一个|一张|(?:几|两|三|若干|多)(?:张|份|个|些|页|套)|一些|个|(?:以下|下面|下列|如下|下記)(?:的|の)?(?:内容|事项|事項|几项|几点|项目|項目)?|上述的?|以上的?|下|给我们|给我|过来|我的邮箱|我邮箱|这个邮箱|邮箱|我们|我|你们的|您的|你的|贵司的|贵方的|另外|还有|对了|顺便|此外|然后|把|将|的)"#)
     private static let hanTrail = regex(#"(?:吧|吗|呢|啊|哦|哈|呗|一下|也|再|都|先|过来|给我们|给我|好吗|可以吗|谢谢|嗎|即可|就行|就好|就可以|(?:如果|要是)?有的话|的话|看看|参考)$"#)
 
     /// The kinds a text names, each once, in the order the text names them.

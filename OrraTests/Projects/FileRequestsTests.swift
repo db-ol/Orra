@@ -370,6 +370,90 @@ struct FileRequestsTests {
         ])
     }
 
+    /// A question as what is asked for asks for an answer, also when its words name a
+    /// document, as "how the tenants felt about the new layout" does.
+    @Test func aQuestionAsWhatIsAskedForIsNoFile() {
+        Self.expectNone([
+            "Could you share how the tenants felt about the new layout?",
+            "Please send me how many chairs you still need.",
+            "Could you forward whether the hall is free on Sunday?",
+            "¿Me puedes compartir cómo prefieres organizar la visita?",
+            "麻烦发一下怎么去仓库。",
+        ])
+    }
+
+    /// Numbers and values, as a price, a size, a total, a count, an account or a member number,
+    /// and the details of a form, are no file.
+    @Test func numbersAndValuesAreNoFile() {
+        Self.expectNone([
+            "Please send over your hourly rates.",
+            "Can you email me the total for the catering?",
+            "Please send me your jacket size.",
+            "Could you send me your PayPal so I can pay you back?",
+            "Envíame tu talla de camiseta, por favor.",
+            "¿Podrías mandarme el precio de las sillas?",
+            "请把你的会员号发给我。",
+            "能不能把订单号发我？",
+            "请把报名人数发我一下。",
+            "ご希望のサイズをお送りください。",
+            "参加人数を送っていただけますか。",
+        ])
+    }
+
+    /// The details a form asks for, listed under a colon, are no file, and a list of written
+    /// things is.
+    @Test func aListOfDetailsIsNoFile() {
+        Self.expectNone([
+            "To book your place, please send us the following:\n- your full name\n- your company\n- your arrival date",
+            "参会前请把以下信息发给我们：\n1. 姓名\n2. 单位\n3. 手机号",
+            "申込のため、以下をお送りください：\n・お名前\n・会社名\n・電話番号",
+        ])
+        Self.expectConstruction("a list of written things under a colon", [
+            ("Before the fair, please send the following:\n- the booth layout\n- the staff list", "the booth layout, the staff list", [.document]),
+            ("请把以下内容发给我：\n1. 装箱清单\n2. 签到表", "装箱清单, 签到表", [.document]),
+        ])
+    }
+
+    /// What 把 takes ends at a verb that handles it before it is sent, so comments that are to
+    /// be summed up stay comments, and a paper to scan or stamp stays the paper.
+    @Test func whatIsHandledBeforeItIsSentIsWhatIsAskedFor() {
+        Self.expectNone([
+            "麻烦把大家的意见汇总一下发给我。",
+            "请把修改建议整理后发我们。",
+        ])
+        Self.expectConstruction("把 X, a verb that handles it, then a verb of sending", [
+            ("请把签好字的协议扫描一下发给我。", "协议", [.contract]),
+            ("麻烦把报价单盖章后寄回给我们。", "报价单", [.quote]),
+        ])
+    }
+
+    /// 发回, 传回 and 寄回 send back to whom follows, so a paper to sign and send back names
+    /// no file of its own.
+    @Test func sendingBackNamesNoFileOfItsOwn() {
+        Self.expectNone([
+            "请签好字后发回给我们。",
+            "麻烦盖章后寄回给我。",
+            "确认无误后请传回给我们。",
+        ])
+        Self.expectRequests([
+            ("请把租赁合同发回给我们。", "租赁合同", [.contract]),
+        ])
+    }
+
+    /// Leave to pass a file on to others gives a permission and asks the reader for no file,
+    /// and the same words toward the writer, or a question, still ask.
+    @Test func leaveToPassAFileOnIsNoRequest() {
+        Self.expectNone([
+            "Feel free to forward the brochure to your neighbours.",
+            "Feel free to share the recording with Priya and the rest of the class.",
+            "Puedes reenviar el programa a tus compañeros si quieres.",
+        ])
+        Self.expectRequests([
+            ("Feel free to send me the floor plan whenever it's ready.", "the floor plan", [.floorPlan]),
+            ("¿Puedes compartir el plano con Marta?", "el plano", [.floorPlan, .drawing]),
+        ])
+    }
+
     @Test func availabilityIsNoFile() {
         Self.expectNone([
             "Could you send me your availability for next week?",
@@ -459,6 +543,7 @@ struct FileRequestsTests {
             "请把定金转给我们",
             "麻烦发一下产品信息",
             "这封邮件麻烦转发给设计团队，谢谢。",
+            "このメッセージを、営業チームに転送していただけますか。",
             "Comparte este boletín con tus amigos.",
         ])
     }
