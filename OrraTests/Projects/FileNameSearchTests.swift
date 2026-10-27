@@ -135,4 +135,62 @@ struct FileNameSearchTests {
         #expect(try await database.run("SELECT count(*) FROM index_files") == [[.integer(2)]])
         await database.close()
     }
+
+    // MARK: Terms, for the files an email asks for
+
+    /// A term matches as a phrase, its words in a row, so the words for a floor plan rank
+    /// floor-plan-v3.pdf above Project plan.docx, which shares only plan, and find a file
+    /// named in another language.
+    @Test func aTermMatchesAsAPhrase() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        try await add("/p/Project plan.docx", folder: "", project: alpha, to: database)
+        try await add("/p/Drawings/floor-plan-v3.pdf", folder: "Drawings", project: alpha, to: database)
+        try await add("/p/Sketches/平面图草图.png", folder: "Sketches", project: alpha, skip: "waitsForRecognition", to: database)
+        try await add("/p/Plans for the floor tiles.pdf", folder: "", project: alpha, to: database)
+        let search = FileNameSearch(database: database)
+        let terms = DocumentKind.floorPlan.terms.all
+        let found = try await search.search("floor plan", terms: terms).map(\.url.lastPathComponent)
+        #expect(found.first == "floor-plan-v3.pdf")
+        #expect(found.contains("平面图草图.png"))
+        let plan = try #require(found.firstIndex(of: "Project plan.docx"))
+        #expect(found.firstIndex(of: "平面图草图.png").map { $0 < plan } == true)
+        // A Chinese term alone finds the Chinese name, through both tables.
+        #expect(try await search.search("", terms: ["平面图"]).map(\.url.lastPathComponent) == ["平面图草图.png"])
+        await database.close()
+    }
+
+    /// A file whose whole name is a term comes first, such as a file name the email gives,
+    /// and every term counts, not only ChunkSearch's first ones.
+    @Test func aFileNamedByATermComesFirstAndEveryTermCounts() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        try await add("/p/Lobby/lobby drawings lobby plan.pdf", folder: "Lobby", project: alpha, to: database)
+        try await add("/p/Archive/lobby-plan-v2.dwg", folder: "Archive", project: alpha, skip: "unsupportedFormat", to: database)
+        try await add("/p/Lists/kiln-inventory.xlsx", folder: "Lists", project: alpha, to: database)
+        let search = FileNameSearch(database: database)
+        #expect(try await search.search("lobby plan", terms: ["lobby-plan-v2.dwg"]).first?.url.lastPathComponent == "lobby-plan-v2.dwg")
+        let many = (1...20).map { "unknown word \($0)" } + ["kiln inventory"]
+        #expect(try await search.search("", terms: many).map(\.url.lastPathComponent) == ["kiln-inventory.xlsx"])
+        await database.close()
+    }
+
+    /// The rows of a path, one for each project whose folders hold the file, and none for a
+    /// path the index does not hold.
+    @Test func filesAtAPathInEveryProject() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        let first = try await add("/shared/Lobby/plan.pdf", folder: "Lobby", project: alpha, size: 4_096, to: database)
+        let second = try await add("/shared/Lobby/plan.pdf", folder: "Lobby", project: beta, skip: "notDownloaded", size: 4_096, to: database)
+        try await add("/shared/Lobby/plan-old.pdf", folder: "Lobby", project: alpha, to: database)
+        let search = FileNameSearch(database: database)
+        let rows = try await search.files(atPath: "/shared/Lobby/plan.pdf")
+        #expect(rows.map(\.file) == [first, second])
+        #expect(rows.map(\.project) == [alpha, beta])
+        #expect(rows.map(\.skip) == [nil, .notDownloaded])
+        #expect(rows.allSatisfy { $0.size == 4_096 && $0.url.path == "/shared/Lobby/plan.pdf" })
+        #expect(try await search.files(atPath: "/shared/Lobby").isEmpty)
+        #expect(try await search.files(atPath: "/shared/Lobby/PLAN.pdf").isEmpty)
+        await database.close()
+    }
 }
