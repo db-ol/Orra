@@ -80,7 +80,7 @@ nonisolated enum DocumentKind: String, CaseIterable, Sendable {
                   spanish: ["plano", "planos", "plano de planta", "planos de planta", "distribución"])
         case .drawing:
             Terms(english: ["drawing", "drawings", "blueprint", "blueprints", "cad", "dwg", "elevation", "elevations", "shop drawings"],
-                  chinese: ["图纸", "施工图", "设计图", "立面图", "剖面图", "图則", "圖紙", "施工圖", "設計圖"],
+                  chinese: ["图纸", "施工图", "设计图", "立面图", "剖面图", "图则", "圖紙", "施工圖", "設計圖", "圖則"],
                   japanese: ["図面", "設計図", "施工図", "立面図", "断面図"],
                   spanish: ["plano", "planos", "dibujo", "dibujos", "alzado", "alzados"])
         case .rendering:
