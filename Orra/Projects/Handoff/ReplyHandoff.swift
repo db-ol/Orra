@@ -18,11 +18,10 @@ import os
 /// Between the reply and the second copy, Mail adds the files the user ticked for the
 /// reply, one event a file in their order, each at the end of that reply, see
 /// `attach(_:to:)`. Each file is checked again right before its event, so what Mail reads is
-/// still the file the user ticked, in a folder a project holds at that moment, and still
-/// ticked at that moment. An email
-/// Projects wrote no draft for gets the reply and its files without the clipboard: with no
-/// draft, no step of a handoff, the failed ones included, puts anything on the clipboard.
-/// The draft and the files go to Mail only on the user's click.
+/// still the file the user ticked, still ticked and in a folder a project holds at that
+/// moment. An email Projects wrote no draft for gets the reply and its files without the
+/// clipboard: with no draft, no step of a handoff, the failed ones included, puts anything
+/// on the clipboard. The draft and the files go to Mail only on the user's click.
 ///
 /// The window runs one handoff at a time. It turns off Open Reply, Reply All and Copy while
 /// one runs, so the clipboard holds the draft of the reply window that Mail brings forward.
@@ -262,7 +261,7 @@ struct ReplyHandoff {
                 continue
             }
             guard !Task.isCancelled else { break }
-            // The check can take a while, on a folder of a share for one.
+            // The check can take a while, such as for a folder on a share that hangs.
             guard await files.isTicked(file) else {
                 results.append(.notAttached(.unticked))
                 continue

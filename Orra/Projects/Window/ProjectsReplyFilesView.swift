@@ -290,8 +290,8 @@ extension ProjectsEmailArea {
     /// email's, as one element for VoiceOver, with Remove beside them, or under them in a
     /// column too narrow for both, then the people a reply may reach outside its project and
     /// why it cannot go. When the pointer comes onto the row, the file is checked again, and
-    /// the row can be dragged out as its file only while that check, or the one before it,
-    /// found nothing, see ProjectsReplyFiles.canDrag(_:).
+    /// the row can be dragged out as its file only while its last check found nothing, see
+    /// ProjectsReplyFiles.canDrag(_:).
     struct TickedFileRow: View {
         let file: ReplyFile
         let emailModel: ProjectsEmailModel
