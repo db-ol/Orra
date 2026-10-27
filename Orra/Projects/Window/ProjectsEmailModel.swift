@@ -514,10 +514,14 @@ final class ProjectsEmailModel {
         }
     }
 
-    /// After a new explanation in this window: reads it, and runs the answer check of its
-    /// draft once (decision 9).
+    /// After a new explanation in this window: reads it, opens Project Files for This
+    /// Explanation when it was made with files the user chose, which the list shows first,
+    /// Chosen by you, and runs the answer check of its draft once (decision 9).
     func explained() async {
         await load()
+        if explanation?.chosenFiles?.isEmpty == false {
+            showsProjectFiles = true
+        }
         guard !isEdited else { return }
         await checkAnswers()
     }

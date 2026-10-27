@@ -3896,9 +3896,9 @@ this Mac, until you use Delete All Projects Data… in its Settings.
   Clear the search, and the newest files show again.
 - [ ] Copy a drawing or an archive into the project's folder, so a file is marked Name
   only. Tick a file of another project and that file, and click Save. The line under
-  Explain Again says it uses the 2 files you chose. Click Explain Again. The 2 files come
-  first in Project Files for This Explanation, with the reason Chosen by you, and the line
-  goes.
+  Explain Again says it uses the 2 files you chose. Click Explain Again. Project Files for
+  This Explanation opens with the 2 files first, with the reason Chosen by you, and the
+  line goes.
 - [ ] Type into the draft, open the sheet and click Explain Again. The sheet closes and Orra
   asks Replace your draft? first. Cancel keeps the draft, and the line under Explain Again
   still says it uses the 2 files.

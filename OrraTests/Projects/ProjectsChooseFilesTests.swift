@@ -422,6 +422,30 @@ struct ProjectsChooseFilesTests {
         await projects.fixture.stop()
     }
 
+    /// An explanation made with files the user chose opens Project Files for This
+    /// Explanation, which shows them first, Chosen by you. One made without a choice leaves
+    /// the list as it was.
+    @Test func anExplanationWithChosenFilesOpensItsListOfFiles() async throws {
+        let projects = try await Self.projects()
+        defer { projects.fixture.cleanUp() }
+        let runtime = projects.fixture.runtime
+        let store = try #require(runtime.running?.store)
+        let email = try await Self.email(in: projects.harbor.id, runtime: runtime)
+        let emailModel = ProjectsEmailModel(messageID: email.messageID, actions: .live(runtime))
+        var explanation = Explanation(
+            messageID: email.messageID, project: projects.harbor.id, language: .en, today: Self.today, reply: .reply(.en), warnings: [], modelWarnings: [],
+            points: [], questions: [], draft: .missing, draftCheck: nil, sources: [:], removed: [:], problems: [], unknownSources: [])
+        #expect(try await store.save(explanation, at: Self.today))
+        await emailModel.explained()
+        #expect(!emailModel.showsProjectFiles)
+        let plan = projects.harborFolder.appending(path: "plan.dwg")
+        explanation.chosenFiles = [Explanation.ChosenFile(path: plan.path, project: projects.harbor.id, sources: [], missing: .notInIndex)]
+        #expect(try await store.save(explanation, at: Self.today))
+        await emailModel.explained()
+        #expect(emailModel.showsProjectFiles)
+        await projects.fixture.stop()
+    }
+
     // MARK: The window
 
     /// The window gives the sheet the email as its list shows it now, so the sheet says
