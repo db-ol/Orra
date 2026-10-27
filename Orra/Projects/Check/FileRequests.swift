@@ -572,8 +572,9 @@ nonisolated enum FileRequests {
                 let asksTheReader = sentence[frame].contains("你") || sentence[frame].contains("您")
                 if !asksTheReader, ContentChecks.matches([chineseFirstPerson], String(sentence[..<frame.lowerBound])) { continue }
                 if ContentChecks.matches([chineseFirstPerson], String(sentence[gap])) { continue }
-                // 也附上 or 再附上 without a word that asks brings the sender's own file.
-                if sentence[verb].hasPrefix("附"), !ContentChecks.matches([chineseAsking], String(sentence[frame.lowerBound..<verb.lowerBound])) { continue }
+                // 也附上 or 再附上 without a word that asks, in the frame or right after it,
+                // brings the sender's own file.
+                if sentence[verb].hasPrefix("附"), !ContentChecks.matches([chineseAsking], String(sentence[frame.lowerBound..<gap.upperBound])) { continue }
                 // 附上了 or 发过 tell what was done.
                 if sentence[verb.upperBound...].hasPrefix("了") || sentence[verb.upperBound...].hasPrefix("过") { continue }
                 guard !negated(sentence, before: verb.lowerBound, negation: chineseNegation) else { continue }
@@ -604,8 +605,9 @@ nonisolated enum FileRequests {
 
     private static let japaneseClause = #"(?:[^,.!?;:。、，！？；：\n]|\.(?=[A-Za-z0-9]))"#
     private static let japaneseEndings = #"ください|下さい|くださいませ|いただけますか|いただけませんか|いただけますでしょうか|いただけないでしょうか|頂けますか|頂けませんか|頂けますでしょうか|もらえますか|もらえませんか|お願いします|お願いいたします|お願い致します|お願いできますか|いただければ|頂ければ|いただけると|頂けると|いただきたく|いただきたいです|頂きたく|願います|ほしいです|欲しいです"#
-    /// A polite request anywhere, which the first three patterns need.
-    private static let japaneseEnding = regex(japaneseEndings + "|お願い")
+    /// A polite request anywhere, which the first three patterns need: an ending of
+    /// `japaneseEndings`, of the noun pattern (お願い…) or of the give pattern (いただきたい).
+    private static let japaneseEnding = regex(japaneseEndings + "|お願い|いただきたい|頂きたい")
     /// A verb of sending anywhere, which the first two patterns need.
     private static let japaneseSend = regex(#"送って|送付して|共有して|添付して|送信して|転送して|お送り|ご送付|ご共有|ご提供|ご送信|ご転送"#)
     /// The object before を or も, a verb of sending, and a polite request.
@@ -924,7 +926,7 @@ nonisolated enum FileRequests {
 
     /// Negations that ask all the same: "don't forget to", "do not hesitate to", "no
     /// olvides", 别忘了 and their like.
-    private static let askingNegations = latin(#"\b(?:don['’]?t|do not) (?:forget|hesitate)\b|\bno (?:te |se |os )?olvid(?:es|e|éis|eis|en)\b|(?:千万|可)?(?:别|不要)忘(?:记|了)*"#)
+    private static let askingNegations = latin(#"\b(?:don['’]?t|do not) (?:forget|hesitate)\b|\bno (?:te |se |os )?olvid(?:es|e|éis|eis|en)\b|(?:千万|可)?(?:别|不要|勿)忘(?:记|了)*"#)
 
     /// An if clause, up to the comma that ends it.
     private static let conditionalClause = latin(#"\b(?:if|si)\b[^,;:]*(?:[,;:]|$)"#)

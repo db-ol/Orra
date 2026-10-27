@@ -92,6 +92,7 @@ struct FileRequestsTests {
             ("请把平面图的最新版发给我。", "平面图的最新版", [.floorPlan]),
             ("请别忘了把平面图发给我。", "平面图", [.floorPlan]),
             ("不要忘记发报价单给我。", "报价单", [.quote]),
+            ("请勿忘记把平面图发给我。", "平面图", [.floorPlan]),
         ])
     }
 
@@ -119,6 +120,7 @@ struct FileRequestsTests {
             ("カタログを送っていただけますでしょうか", "カタログ", [.catalog]),
             ("平面図の最新版を送っていただけますか。", "平面図の最新版", [.floorPlan]),
             ("図面を送るのを忘れないでください。", "図面", [.drawing]),
+            ("平面図をいただきたい。", "平面図", [.floorPlan]),
         ])
     }
 
@@ -187,8 +189,9 @@ struct FileRequestsTests {
         ])
         // The sender's own attachment counts in its own clause only.
         #expect(Self.found("我已附上合同，请发一下平面图。").first?.documentKinds == [.floorPlan])
-        // A word that asks makes 也附上 a request.
+        // A word that asks makes 也附上 a request, and one in what is attached does not.
         #expect(Self.found("也请附上平面图。").first?.documentKinds == [.floorPlan])
+        #expect(Self.found("也把需要的平面图附上。").isEmpty)
     }
 
     /// The sender offers to send, with me or us before the verb, a first person between the
