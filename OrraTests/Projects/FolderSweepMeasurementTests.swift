@@ -121,13 +121,20 @@ struct FolderSweepMeasurementTests {
             let index = FolderIndex(database: database, isDictating: { false }, watch: { _, _, _ in {} })
             let started = ContinuousClock.now
             index.start(project: project, folders: folders)
-            await index.waitUntilIdle()
+            // The sweep alone, the same way on every build. Where text recognition follows
+            // the sweep, waitUntilIdle() would wait for it too, so this waits until the
+            // project page would stop saying Indexing…, and the index stops before the store
+            // is looked at, so no recognized text comes into it.
+            while index.reports[project]?.isIndexing != false {
+                try await Task.sleep(for: .milliseconds(10))
+            }
             times.append(seconds(since: started))
+            let report = index.reports[project]
+            index.stopAll()
             if isLast {
-                last = index.reports[project]
+                last = report
                 try await inspect(database)
             }
-            index.stopAll()
             await database.close()
             if isLast {
                 storeBytes = await storage.size()
