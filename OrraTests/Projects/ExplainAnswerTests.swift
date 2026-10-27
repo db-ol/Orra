@@ -178,6 +178,77 @@ struct ExplainAnswerTests {
         #expect(noEmail.unknownSources == ["E1", "this email"])
     }
 
+    /// In a point, the separators between brackets that leave go with them, commas, 、 and
+    /// semicolons and the words and, 和, と and y, so "2026 [this email], [A1]." reads "2026."
+    /// and not "2026,.". A separator before more text stays.
+    @Test func theSeparatorsBetweenSourceBracketsLeaveAPoint() {
+        let english = ExplainAnswer(
+            "Points:\n- Signed in 2026 [this email], [A1].\n- Paid on Friday [F1] and [F2], and the rest later.\n- Due in May [F1]; [F2]; [A1]\n- Sent twice [F1] y [F2].",
+            sources: ["this email", "F1", "F2", "A1"])
+        #expect(english.points.map(\.text) == ["Signed in 2026.", "Paid on Friday, and the rest later.", "Due in May", "Sent twice."])
+        #expect(english.points.map(\.sources) == [["this email", "A1"], ["F1", "F2"], ["F1", "F2", "A1"], ["F1", "F2"]])
+
+        let chinese = read("要点：\n- 合同已于 10 月 11 日盖章 [本邮件]，[F1]，[F2]。\n- 定金已付（F1）、（M1）\n- 尾款另付 [F1]和[T1]。\n- 交期不变（F2）と（T1）")
+        #expect(chinese.points.map(\.text) == ["合同已于 10 月 11 日盖章。", "定金已付", "尾款另付。", "交期不变"])
+        #expect(chinese.points.map(\.sources) == [["本邮件", "F1", "F2"], ["F1", "M1"], ["F1", "T1"], ["F2", "T1"]])
+        #expect(chinese.unknownSources.isEmpty)
+    }
+
+    // MARK: Source ids in the questions and the draft
+
+    /// The model cites sources in the draft too, which the user copies to Mail with the
+    /// reply. A bracket of ids the prompt names leaves it as it leaves a point, in square
+    /// brackets, 【】 and parentheses of both widths, with ids in full width forms, E1 and the
+    /// labels of the email, and with its line when nothing else is on it. Chinese characters
+    /// on both sides join, and a Latin word or a number keeps a space.
+    @Test func theDraftLosesItsBracketsOfSourceIDs() {
+        let chinese = read("""
+            回复草稿：
+            周敏你好，
+
+            根据技术规格（F1）及合同范围【F2】，费用由甲方承担 [F1][M1]。录用意向书 (F1) 中的合同（F2）v3 已盖章。
+            - 2026-10-15 已补付差额 2,625 元 [本邮件]
+            - 每周二到岗（Ｆ２）
+            [T1]
+
+            林舟 [E1]
+            """)
+        #expect(chinese.draft == .reply("周敏你好，\n\n根据技术规格及合同范围，费用由甲方承担。录用意向书中的合同 v3 已盖章。\n- 2026-10-15 已补付差额 2,625 元\n- 每周二到岗\n\n林舟"))
+
+        let english = read("Draft reply:\nHi Iris,\n\nThe proof (F1) is ready [this email]. Delivery is on 2026-11-20 [F1], [M1].\n\n[T1]\n\nBest,\nBai Lu", Self.englishSources)
+        #expect(english.draft == .reply("Hi Iris,\n\nThe proof is ready. Delivery is on 2026-11-20.\n\nBest,\nBai Lu"))
+    }
+
+    /// The questions lose their brackets of ids the prompt names the same way, and gain no
+    /// sources: a question that was only a bracket goes, and a bracket with an id the prompt
+    /// does not name stays text without a flag.
+    @Test func theQuestionsLoseTheirBracketsOfSourceIDs() {
+        let chinese = read("回复前需确认：\n- 是否确认入职日期 [F1]【M1】。\n- 林舟回国日期 [E1]\n- 录用意向书（F1）中的条款是否不变（Ｔ１）\n- [本邮件]\n- 尾款是否另付 [F7]")
+        #expect(chinese.questions == ["是否确认入职日期。", "林舟回国日期", "录用意向书中的条款是否不变", "尾款是否另付 [F7]"])
+        #expect(chinese.points.isEmpty)
+        #expect(chinese.unknownSources.isEmpty)
+        #expect(!chinese.problems.contains(.unknownSources))
+
+        let english = read("Before you reply:\n- Whether it was settled later [T1], [M1].\n- Confirm the address [email], [F1].\n- The rate (F1) for 2027 [this email]", Self.englishSources)
+        #expect(english.questions == ["Whether it was settled later.", "Confirm the address.", "The rate for 2027"])
+    }
+
+    /// A bracket with anything but ids the prompt names stays in the questions and the draft:
+    /// a placeholder, a version, a size such as A4 while the prompt has no A4, and an id
+    /// with words, while the ids beside them leave. With A4 in the table, (A4) is the fourth
+    /// attachment and leaves too.
+    @Test func aBracketWithAnythingElseStaysInTheQuestionsAndTheDraft() {
+        let text = "合计 [待确认：合计] [F1]，总价 [to confirm: total]（F2），版本 (v2) [本邮件]，纸张 (A4) [M1]，另见 (F1 第 2 页)。"
+        let kept = "合计 [待确认：合计]，总价 [to confirm: total]，版本 (v2)，纸张 (A4)，另见 (F1 第 2 页)。"
+        let answer = read("回复前需确认：\n- \(text)\n\n回复草稿：\n\(text)")
+        #expect(answer.questions == [kept])
+        #expect(answer.draft == .reply(kept))
+
+        let withA4 = read("回复前需确认：\n- 纸张 (A4)\n\n回复草稿：\n纸张 (A4)", Self.chineseSources + ["A4"])
+        #expect(withA4.questions == ["纸张"])
+        #expect(withA4.draft == .reply("纸张"))
+    }
+
     // MARK: The draft
 
     @Test(arguments: [
