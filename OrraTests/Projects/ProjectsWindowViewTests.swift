@@ -927,7 +927,9 @@ struct ProjectsWindowViewTests {
 
     /// The focus follows a press of Compare with Original or Exit Comparison to the other
     /// button only from VoiceOver's cursor or the keyboard focus on the button pressed, each
-    /// for itself. A click with the mouse moves neither.
+    /// for itself. A click with the mouse moves neither. Exit Comparison for an email
+    /// without an explanation, chosen in the list while comparing, sends it to Explain,
+    /// since Compare with Original does not show.
     @Test func theFocusFollowsOnlyAPressFromVoiceOverOrTheKeyboard() {
         typealias Area = ProjectsEmailArea
         #expect(Area.focusAfterPress(.compare, voiceOver: nil, keyboard: nil) == nil)
@@ -937,6 +939,8 @@ struct ProjectsWindowViewTests {
         #expect(Area.focusAfterPress(.compare, voiceOver: .compare, keyboard: nil) == Area.FocusMove(button: .exit, voiceOver: true, keyboard: false))
         #expect(Area.focusAfterPress(.compare, voiceOver: nil, keyboard: .compare) == Area.FocusMove(button: .exit, voiceOver: false, keyboard: true))
         #expect(Area.focusAfterPress(.exit, voiceOver: .exit, keyboard: .exit) == Area.FocusMove(button: .compare, voiceOver: true, keyboard: true))
+        #expect(Area.focusAfterPress(.exit, voiceOver: .exit, keyboard: nil, isExplained: false) == Area.FocusMove(button: .explain, voiceOver: true, keyboard: false))
+        #expect(Area.focusAfterPress(.exit, voiceOver: nil, keyboard: nil, isExplained: false) == nil)
     }
 
     /// Hosts a view in a window that is never ordered front, lays it out and returns both,

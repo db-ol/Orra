@@ -253,7 +253,9 @@ struct ProjectsEmailArea: View {
                         .help("Back to Previous Email")
                     }
                     Button("Exit Comparison") {
-                        let move = Self.focusAfterPress(.exit, voiceOver: voiceOverFocus, keyboard: keyboardFocus)
+                        let move = Self.focusAfterPress(
+                            .exit, voiceOver: voiceOverFocus, keyboard: keyboardFocus,
+                            isExplained: model.emailModel(for: email.messageID).explanation != nil)
                         model.endComparing()
                         focusAfterSwitch = model.isComparing ? nil : move
                     }
@@ -401,6 +403,9 @@ struct ProjectsEmailArea: View {
             }
         }
         .disabled(state == .explaining || isChanging || noText != nil || runtime.phase != .on)
+        // Where Exit Comparison sends the focus for an email without an explanation.
+        .accessibilityFocused($voiceOverFocus, equals: .explain)
+        .focused($keyboardFocus, equals: .explain)
         // The window's choice, so the next email shows the same way.
         if model.emailModel(for: email.messageID).explanation != nil, !comparing {
             Button {

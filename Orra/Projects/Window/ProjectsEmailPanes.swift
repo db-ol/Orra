@@ -156,9 +156,13 @@ extension ProjectsEmailArea {
         }
     }
 
-    /// The two buttons that switch the layout, for the focus that follows a press.
+    /// The two buttons that switch the layout, and Explain, for the focus that follows a
+    /// press.
     enum SwitchButton: Hashable {
         case compare, exit
+        /// Explain, where Exit Comparison leaves an email without an explanation, which has
+        /// no Compare with Original.
+        case explain
     }
 
     /// Where the focus goes once the layout switched after a press: the other button, for
@@ -171,12 +175,14 @@ extension ProjectsEmailArea {
 
     /// Where the focus goes after a press of a button that switches the layout: to the
     /// other button, for VoiceOver when its cursor sat on the button pressed and for the
-    /// keyboard when its focus did. Nil after a click with the mouse, which leaves the focus
-    /// where it was, such as in the draft.
-    static func focusAfterPress(_ pressed: SwitchButton, voiceOver: SwitchButton?, keyboard: SwitchButton?) -> FocusMove? {
+    /// keyboard when its focus did. After Exit Comparison for an email without an
+    /// explanation, which the window shows when another email was chosen while comparing,
+    /// that is Explain, since Compare with Original does not show. Nil after a click with
+    /// the mouse, which leaves the focus where it was, such as in the draft.
+    static func focusAfterPress(_ pressed: SwitchButton, voiceOver: SwitchButton?, keyboard: SwitchButton?, isExplained: Bool = true) -> FocusMove? {
         let moves = (voiceOver: voiceOver == pressed, keyboard: keyboard == pressed)
         guard moves.voiceOver || moves.keyboard else { return nil }
-        let other: SwitchButton = pressed == .compare ? .exit : .compare
+        let other: SwitchButton = pressed == .compare ? .exit : isExplained ? .compare : .explain
         return FocusMove(button: other, voiceOver: moves.voiceOver, keyboard: moves.keyboard)
     }
 }
