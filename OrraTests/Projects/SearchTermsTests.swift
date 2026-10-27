@@ -30,7 +30,7 @@ struct SearchTermsTests {
 
     // MARK: The prompt
 
-    @Test func thePromptHoldsTheSubjectTheStartOfTheTextAndTheAttachmentNames() async {
+    @Test func thePromptHoldsTheSubjectTheStartOfTheTextAndTheAttachmentNames() async throws {
         let long = String(repeating: "灯具。", count: 1_000)
         var email = Self.email
         email.text = "大堂的平面图改好了吗？\n" + long
@@ -44,8 +44,11 @@ struct SearchTermsTests {
         let body = shown.components(separatedBy: "\nAttachments:")[0].dropFirst("<email>\n".count)
         #expect(body.count == SearchTermsPrompt.textLimit)
         #expect(prompt.text.hasPrefix("<|im_start|>system\nYou find the files an email is about."))
-        #expect(prompt.text.contains("Write each term in Chinese and in English"))
-        #expect(prompt.text.hasSuffix("<|im_start|>assistant\n" + RewritePrompt.noThinking + #"{"terms": [""#))
+        #expect(prompt.text.contains(#"Write Chinese terms under "zh" and English terms for the same things under "en", whatever the language of the email."#))
+        // No example term the model could copy into its answer.
+        let system = try #require(prompt.text.components(separatedBy: "<|im_end|>").first)
+        #expect(!system.contains("floor plan") && !system.contains("平面图"))
+        #expect(prompt.text.hasSuffix("<|im_start|>assistant\n" + RewritePrompt.noThinking + #"{"zh": [""#))
         #expect(SearchTermsPrompt(searchText: "Lamps", attachmentNames: []).text.contains("<email>\nLamps\nAttachments: none\n</email>"))
     }
 
@@ -75,19 +78,27 @@ struct SearchTermsTests {
     // MARK: The answer
 
     @Test func termsAreReadAsDataWithTheirLimits() {
-        let answer = #"平面图", "floor plan", 42, null, {"x": 1}, "", "  layout   drawing  ", "ＬＡＭＰ", "lamp", "the of and", "!!!", "a very long term that goes on and on and on for sure", "one two three four five", "布\#u{200B}置图", "Floor Plan", "灯具", "lobby", "reception", "chandelier", "ceiling", "wiring", "fixture", "cable"]}"#
+        let answer = #"平面图", 42, null, "", "布\#u{200B}置图", "灯具", "项目", "the of and"], "en": ["floor plan", {"x": 1}, "  layout   drawing  ", "ＬＡＭＰ", "lamp", "!!!", "a very long term that goes on and on and on for sure", "one two three four five", "Floor Plan", "Status", "lobby", "reception", "chandelier", "ceiling", "wiring", "fixture", "cable"]}"#
         let terms = SearchTermsPrompt.terms(answer)
-        #expect(terms == ["平面图", "floor plan", "layout drawing", "LAMP", "布置图", "灯具", "lobby", "reception", "chandelier", "ceiling", "wiring", "fixture"])
+        // Chinese and English in turn, folded, without what is no term, a general word or a
+        // repeat.
+        #expect(terms == ["平面图", "floor plan", "布置图", "layout drawing", "灯具", "LAMP", "lobby", "reception", "chandelier", "ceiling", "wiring", "fixture"])
         #expect(terms?.count == SearchTerms.maximumTerms)
-        // Other keys and other values count for nothing.
-        #expect(SearchTermsPrompt.terms(#"lamp"], "terms2": ["x"]}"#) == ["lamp"])
+        // Other keys and other values count for nothing, "terms" among them.
+        #expect(SearchTermsPrompt.terms(#"lamp"], "terms": ["x"]}"#) == ["lamp"])
+        #expect(SearchTermsPrompt.terms(#""], "en": "lamp"}"#) == nil)
         #expect(SearchTermsPrompt.terms(#""], "note": "none"}"#) == nil)
     }
 
     @Test func anAnswerCutAtItsLimitKeepsItsWholeTerms() {
-        #expect(SearchTermsPrompt.terms(#"平面图", "floor plan", "layo"#) == ["平面图", "floor plan"])
+        #expect(SearchTermsPrompt.terms(#"平面图", "布置图", "灯"#) == ["平面图", "布置图"])
         #expect(SearchTermsPrompt.terms(#"lamp", "say \"hi\"", "x"#) == ["lamp", #"say "hi""#])
         #expect(SearchTermsPrompt.terms(#"lamp", "fixture"], "more"#) == ["lamp", "fixture"])
+        #expect(SearchTermsPrompt.terms(#"平面图"], "en": ["floor plan", "layo"#) == ["平面图", "floor plan"])
+        // Cut in the key "en", just after it, or just after its bracket.
+        #expect(SearchTermsPrompt.terms(#"平面图"], "e"#) == ["平面图"])
+        #expect(SearchTermsPrompt.terms(#"平面图"], "en"#) == ["平面图"])
+        #expect(SearchTermsPrompt.terms(#"平面图"], "en": ["#) == ["平面图"])
         #expect(SearchTermsPrompt.terms(#"lamp"]} Then some text."#) == ["lamp"])
     }
 
