@@ -1,18 +1,21 @@
 import Foundation
 
-/// What the welcome window suggests once Orra is ready: cleanup, translation and meeting
-/// interpretation, each with one line and a button that opens Settings where it is set
-/// up. Not a step. The user can ignore it, and Done still closes the window.
+/// What the welcome window suggests once Orra is ready: cleanup, translation, meeting
+/// interpretation and, on a Mac where it can be turned on, Projects, each with one line and
+/// a button that opens Settings where it is set up. Not a step. The user can ignore it, and
+/// Done still closes the window.
 nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
     nonisolated enum Kind: CaseIterable, Sendable {
         case cleanup
         case translation
         case meeting
+        /// Last, and only in a build that shows Projects on a Mac with the memory it needs.
+        case projects
     }
 
     let kind: Kind
     /// Shown as on, with no button. Meeting interpretation is never shown as on, since it
-    /// is made of more than one switch.
+    /// is made of more than one switch. Projects is on once its switch is.
     let isOn: Bool
     let title: String
     let line: String
@@ -29,6 +32,7 @@ nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
         case .cleanup: "wand.and.sparkles"
         case .translation: "translate"
         case .meeting: "captions.bubble"
+        case .projects: "briefcase"
         }
     }
 
@@ -45,12 +49,16 @@ nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
     ///   - language: The dictation language, which translation goes between with English.
     ///   - translationKey: The translation key, which the translation line names.
     ///   - translationMode: How the translation key works, which the translation line says.
-    static func all(cleanupOn: Bool, cleanupModelInstalled: Bool, translationOn: Bool, language: DictationLanguage = .chinese, translationKey: Hotkey = .rightOption, translationMode: TriggerMode = .newTranslationKeyMode, locale: Locale = .interface) -> [WelcomeSuggestion] {
-        Kind.allCases.map { kind in
+    ///   - projectsAvailable: Whether Projects can be turned on: a build that shows it, on a
+    ///     Mac with the memory it needs. Its row shows only then.
+    ///   - projectsOn: Whether Projects is on.
+    static func all(cleanupOn: Bool, cleanupModelInstalled: Bool, translationOn: Bool, language: DictationLanguage = .chinese, translationKey: Hotkey = .rightOption, translationMode: TriggerMode = .newTranslationKeyMode, projectsAvailable: Bool = false, projectsOn: Bool = false, locale: Locale = .interface) -> [WelcomeSuggestion] {
+        Kind.allCases.filter { $0 != .projects || projectsAvailable }.map { kind in
             let isOn: Bool = switch kind {
             case .cleanup: cleanupOn && cleanupModelInstalled
             case .translation: translationOn
             case .meeting: false
+            case .projects: projectsOn
             }
             let waitsForModel = kind == .cleanup && cleanupOn && !cleanupModelInstalled
             return WelcomeSuggestion(kind: kind, isOn: isOn, waitsForModel: waitsForModel, language: language, translateHint: translationKey.translateHint(mode: translationMode, in: locale), locale: locale)
@@ -81,16 +89,25 @@ nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
         case .meeting:
             title = text("Meeting interpretation")
             line = text("Read what others say in your language, and let them hear you in theirs, even in your own voice.")
+        case .projects:
+            title = text("Projects")
+            // The line at the top of Settings, Projects.
+            line = text("Sorts your mail into projects and explains each email with the files of your projects.")
         }
         // The button opens the Meeting Interpretation page, and the Orra menu has the same
         // switches. Speaking translations waits for Translation, which has its own page.
-        // So the row says where both parts are and what they need.
-        note = kind == .meeting
-            ? text("Live Captions and Speak Translations to Others are under Meeting Interpretation, in Settings and in the Orra menu. Speaking translations needs Translation on.")
-            : nil
+        // So the row says where both parts are and what they need. Projects is a preview
+        // that needs the Mail app, which its row says before the user turns it on.
+        note = switch kind {
+        case .meeting: text("Live Captions and Speak Translations to Others are under Meeting Interpretation, in Settings and in the Orra menu. Speaking translations needs Translation on.")
+        case .projects: text("A preview. It works with the Mail app on this Mac.")
+        case .cleanup, .translation: nil
+        }
         if isOn || waitsForModel {
             button = nil
-        } else if kind == .meeting {
+        } else if kind == .meeting || kind == .projects {
+            // Projects is set up in Settings, with its switch and then the Set Up Projects
+            // checklist.
             button = text("Set Up in Settings…")
         } else {
             button = text("Turn On in Settings…")

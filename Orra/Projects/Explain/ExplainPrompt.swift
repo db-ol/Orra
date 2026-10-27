@@ -9,7 +9,8 @@ import Foundation
 /// - excerpts of the project's files, best first. When search found fewer than 3, the
 ///   newest files of the project fill up to 3 (code step 7). A file a newer one replaced
 ///   says so, and so does a file that is only earlier than a newer one of its kind (code
-///   step 3).
+///   step 3). The source of each excerpt keeps why it is in the prompt and the project
+///   whose folder holds its file, which the prompt never shows.
 /// - the project's other mail, each marked as earlier or later than the email
 /// - the other messages of the thread, with their own text, trimmed. No summaries.
 /// - the email
@@ -103,6 +104,9 @@ nonisolated struct ExplainPrompt: Sendable {
         var versions = FileVersions([])
         /// Files whose text held hidden runs, which FileTextExtractor dropped.
         var filesWithHiddenText: Set<URL> = []
+        /// Why each file is in the prompt, by file, for the source of each of its excerpts.
+        /// The prompt's text never reads it.
+        var fileOrigins: [URL: FileOrigin] = [:]
         /// The project's other mail, best first.
         var projectMail: [Mail] = []
         /// The email's attachments with what Projects read of them. Those with text go into
@@ -144,9 +148,32 @@ nonisolated struct ExplainPrompt: Sendable {
         /// An email, by its Message-ID.
         case message(String)
         /// The chunk of a file the prompt shows, with its file and its page in a PDF.
-        case file(TextChunker.Chunk)
+        case file(TextChunker.Chunk, origin: FileOrigin? = nil)
         /// An attachment of the email, with the excerpt of its text the prompt shows.
         case attachment(name: String, excerpt: String)
+    }
+
+    /// Why a file's excerpt is in the prompt, and the project whose folder holds the file. The
+    /// prompt never shows it. A reason from a later Orra reads as nil, so the explanation still
+    /// reads.
+    nonisolated struct FileOrigin: Sendable, Equatable, Codable {
+        nonisolated enum Reason: String, Sendable, Codable {
+            case match, newest, chosen
+        }
+
+        var reason: Reason?
+        var project: UUID?
+
+        init(reason: Reason?, project: UUID?) {
+            self.reason = reason
+            self.project = project
+        }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            reason = try? container.decodeIfPresent(Reason.self, forKey: .reason)
+            project = try container.decodeIfPresent(UUID.self, forKey: .project)
+        }
     }
 
     /// A finding the checks section names.
@@ -560,7 +587,7 @@ nonisolated struct ExplainPrompt: Sendable {
             for (number, index) in chunkIndices.enumerated() {
                 let id = "F\(number + 1)"
                 chunkIDs[index] = id
-                sources[id] = .file(chunks[index].chunk)
+                sources[id] = .file(chunks[index].chunk, origin: input.fileOrigins[chunks[index].chunk.file])
                 if firstID[chunks[index].chunk.file] == nil {
                     firstID[chunks[index].chunk.file] = id
                 }

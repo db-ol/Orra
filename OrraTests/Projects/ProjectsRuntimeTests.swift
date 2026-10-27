@@ -43,9 +43,10 @@ struct ProjectsRuntimeTests {
     /// the cleanup model is on this Mac, `countsTokens` gives the explain service a
     /// tokenizer, `openFails` makes the start fail at the database, `folders` stands in for
     /// how the index reaches project folders, `keyDown` for the presses of the talk key,
-    /// `retryLoading` for Try Loading Again, and `recognize` for text recognition, which by
-    /// default finds no text. The dictation, Low Power Mode and heat come from `machine`.
-    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, recognize: FolderIndex.Recognize? = nil) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+    /// `retryLoading` for Try Loading Again, `download` for where the model's download
+    /// stands, and `recognize` for text recognition, which by default finds no text. The
+    /// dictation, Low Power Mode and heat come from `machine`.
+    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, download: Download = Download(), recognize: FolderIndex.Recognize? = nil) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
         let projects = ProjectsSwitch(defaults: defaults, isVisible: isVisible, physicalMemory: 32 << 30, storage: storage)
         if isOn {
             projects.turnOn()
@@ -71,6 +72,7 @@ struct ProjectsRuntimeTests {
             whenDictationStarts: { [keyDown] handler in keyDown?.handlers.append(handler) },
             modelEnvironment: { _ in model.environment },
             modelIsInstalled: { installed.value },
+            modelDownloadStatus: { download.status },
             retryLoadingModel: retryLoading,
             loadTokenCounter: { [tokenizer] in try await tokenizer.load(counter) },
             handoff: ReplyHandoff(copy: { _ in true }, mail: mail.bridge, isOrraActive: { true }, bringMailToFront: {}),
@@ -94,8 +96,8 @@ struct ProjectsRuntimeTests {
         return (runtime, projects, choice)
     }
 
-    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, recognize: FolderIndex.Recognize? = nil, sourceLocation: SourceLocation = #_sourceLocation) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
-        let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown, retryLoading: retryLoading, recognize: recognize)
+    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, download: Download = Download(), recognize: FolderIndex.Recognize? = nil, sourceLocation: SourceLocation = #_sourceLocation) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+        let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown, retryLoading: retryLoading, download: download, recognize: recognize)
         made.0.follow()
         try await waitUntil({ made.0.phase == .on }, sourceLocation: sourceLocation)
         return made
@@ -984,6 +986,29 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// While the cleanup model is not on this Mac, a line under the list says so: its
+    /// download with a spinner, the check of its files, or Settings… while it is missing,
+    /// where it downloads. Nothing once it is on this Mac, or while Projects is off.
+    @Test func theWindowSaysWhileTheModelIsNotOnThisMac() async throws {
+        defer { cleanUp() }
+        let download = Download()
+        let (runtime, projects, _) = try await started(download: download)
+        #expect(Lines.modelLine(runtime: runtime) == nil)
+        download.status = .downloading(bytes: 1_525_000_000, total: 3_050_000_000)
+        let downloading = try #require(Lines.modelLine(runtime: runtime))
+        #expect(downloading.text == CleanupLabels.progress(bytes: 1_525_000_000, total: 3_050_000_000))
+        #expect(downloading.text.hasPrefix("Downloading the cleanup model: 50% of "))
+        #expect(downloading.isActivity)
+        #expect(downloading.action == nil)
+        download.status = .verifying
+        #expect(Lines.modelLine(runtime: runtime) == Line(text: "Checking the downloaded files…", isActivity: true))
+        download.status = .missing
+        #expect(Lines.modelLine(runtime: runtime) == Line(text: "The cleanup model is not on this Mac yet. Download it in Projects Settings to explain mail.", action: .settings))
+        await projects.turnOff(keepingData: false)
+        try await waitUntil { runtime.phase == .off }
+        #expect(Lines.modelLine(runtime: runtime) == nil)
+    }
+
     /// The window says why no mail comes in: no mailbox chosen, Mail not open, or Orra not
     /// allowed to control Mail, each with its way out. A notice of Explain Message Selected
     /// in Mail that says the same shows once.
@@ -993,7 +1018,7 @@ struct ProjectsRuntimeTests {
         #expect(problems(runtime) == [Line(text: "Projects reads no mail yet. Choose its mailboxes in Settings.", action: .settings)])
         choice.choose([.inbox])
         choice.confirm()
-        #expect(problems(runtime) == [Line(text: "Mail is not open. Projects reads new mail while Mail runs.")])
+        #expect(problems(runtime) == [Line(text: "Mail is not open. Projects reads new mail while Mail runs.", action: .openMail)])
 
         mail.update {
             $0.isRunning = true
@@ -1377,6 +1402,185 @@ struct ProjectsRuntimeTests {
         try await waitUntil { folders.watchedFolders == [["Alpha"]] }
         #expect(runtime.indexReport(project.id) != nil)
         #expect(folders.resolves == 1)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// The email view reads where a project's folders are now: their real paths, as the
+    /// index keeps its files. A project the list does not hold has none, and nothing is read
+    /// while Projects is off.
+    @Test func theFoldersOfAProjectResolveToTheirRealPaths() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let alpha = try folder("Alpha", holding: "alpha.txt")
+        let project = Project(name: "Harbor", folders: [try Project.bookmark(of: alpha)])
+        try await runtime.add(project)
+        let real = URL(fileURLWithPath: try #require(FolderWalk.realPath(alpha.path)), isDirectory: true)
+        let roots = try #require(await runtime.folderRoots(of: project.id))
+        #expect(roots == ProjectsEmailFiles.Roots(folders: [real]))
+        #expect(ProjectsEmailFiles.place(of: real.appending(path: "Drawings/plan.pdf"), in: roots) == .inFolder(name: "Alpha", path: ["Drawings"]))
+        #expect(await runtime.folderRoots(of: UUID()) == ProjectsEmailFiles.Roots())
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+        #expect(await runtime.folderRoots(of: project.id) == nil)
+    }
+
+    /// A folder whose bookmark finds nothing, such as one on a disk that is not connected,
+    /// is not available, by the path its bookmark keeps, next to the folders that are there.
+    /// So its files are not taken for files that left the project.
+    @Test func aFolderWhoseBookmarkFindsNothingIsNotAvailable() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let alpha = try folder("Alpha", holding: "alpha.txt")
+        let gone = try folder("Gone", holding: "gone.txt")
+        let goneBookmark = try Project.bookmark(of: gone)
+        let goneReal = URL(fileURLWithPath: try #require(FolderWalk.realPath(gone.path)), isDirectory: true)
+        try FileManager.default.removeItem(at: gone)
+        let project = Project(name: "Harbor", folders: [goneBookmark, try Project.bookmark(of: alpha)])
+        try await runtime.add(project)
+        let roots = try #require(await runtime.folderRoots(of: project.id))
+        let alphaReal = URL(fileURLWithPath: try #require(FolderWalk.realPath(alpha.path)), isDirectory: true)
+        #expect(roots == ProjectsEmailFiles.Roots(folders: [alphaReal], unavailable: [goneReal]))
+        #expect(ProjectsEmailFiles.place(of: goneReal.appending(path: "Plans/plan.pdf"), in: roots) == .unavailable(name: "Gone", path: ["Plans"]))
+        #expect(ProjectsEmailFiles.place(of: alphaReal.appending(path: "alpha.txt"), in: roots) == .inFolder(name: "Alpha", path: []))
+
+        let only = Project(name: "Kiln", folders: [goneBookmark])
+        try await runtime.add(only)
+        #expect(await runtime.folderRoots(of: only.id) == ProjectsEmailFiles.Roots(unavailable: [goneReal]))
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Projects turns off while the email view waits for a project's folder to resolve, such
+    /// as on a share that hangs. Once it resolves, nothing reads the folder.
+    @Test(.timeLimit(.minutes(1))) func aFolderIsNotReadOnceProjectsTurnedOffDuringItsResolve() async throws {
+        defer { cleanUp() }
+        let folders = StallingFolders()
+        let (runtime, projects, _) = try await started(folders: folders)
+        var project = Project(name: "Harbor")
+        try await runtime.add(project)
+        try await waitUntil { runtime.indexReport(project.id)?.isIndexing == false }
+        project.folders = [try Project.bookmark(of: folder("Alpha", holding: "alpha.txt"))]
+        try await runtime.update(project)
+        try await waitUntil { folders.isHolding }
+        let reads = HeldReads(holds: false)
+        runtime.readRealPath = { await reads.read($0) }
+
+        let roots = Task { await runtime.folderRoots(of: project.id) }
+        try await Task.sleep(for: .milliseconds(100))
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+        folders.letGo()
+        #expect(await roots.value == nil)
+        #expect(reads.started.isEmpty)
+    }
+
+    /// The email view reads the real path of a project's folders one at a time. When the
+    /// first takes long, as on a share that hangs, and Projects turns off or the user takes
+    /// the second folder out of the project meanwhile, the second is never read.
+    @Test(.timeLimit(.minutes(1)), arguments: [false, true])
+    func theNextFolderIsNotReadOnceProjectsChangedDuringARead(_ removesFolder: Bool) async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let alpha = try Project.bookmark(of: folder("Alpha", holding: "alpha.txt"))
+        var project = Project(name: "Harbor", folders: [alpha, try Project.bookmark(of: folder("Beta", holding: "beta.txt"))])
+        try await runtime.add(project)
+        let reads = HeldReads()
+        runtime.readRealPath = { await reads.read($0) }
+
+        let roots = Task { await runtime.folderRoots(of: project.id) }
+        try await waitUntil { reads.isHolding }
+        if removesFolder {
+            project.folders = [alpha]
+            try await runtime.update(project)
+        } else {
+            await projects.turnOff(keepingData: true)
+            try await waitUntil { runtime.phase == .off }
+        }
+        reads.letGo()
+        #expect(await roots.value == nil)
+        #expect(reads.started == ["Alpha"])
+        if removesFolder {
+            await projects.turnOff(keepingData: true)
+            try await waitUntil { runtime.phase == .off }
+        }
+    }
+
+    /// The list closes while the email view reads the real path of a project's first
+    /// folder, as on a share that hangs, so the task that asked is cancelled. The second
+    /// folder is never read.
+    @Test(.timeLimit(.minutes(1))) func theNextFolderIsNotReadOnceTheListCloses() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let project = Project(name: "Harbor", folders: [
+            try Project.bookmark(of: folder("Alpha", holding: "alpha.txt")),
+            try Project.bookmark(of: folder("Beta", holding: "beta.txt")),
+        ])
+        try await runtime.add(project)
+        let reads = HeldReads()
+        runtime.readRealPath = { await reads.read($0) }
+
+        let roots = Task { await runtime.folderRoots(of: project.id) }
+        try await waitUntil { reads.isHolding }
+        roots.cancel()
+        reads.letGo()
+        #expect(await roots.value == nil)
+        #expect(reads.started == ["Alpha"])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A folder the user renamed, then took out of reach, is not available under the name
+    /// it had when Orra last found it too, not only under the one it had when the user added
+    /// it.
+    @Test func aRenamedFolderThatIsGoneIsNotAvailableUnderItsLastName() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let old = try folder("Old lobby", holding: "plan.txt")
+        let bookmark = try Project.bookmark(of: old)
+        let added = URL(fileURLWithPath: try #require(FolderWalk.realPath(old.path)), isDirectory: true)
+        let renamed = root.appendingPathComponent("Harbor lobby", isDirectory: true)
+        try FileManager.default.moveItem(at: old, to: renamed)
+        let project = Project(name: "Harbor", folders: [bookmark])
+        try await runtime.add(project)
+        let real = URL(fileURLWithPath: try #require(FolderWalk.realPath(renamed.path)), isDirectory: true)
+        #expect(await runtime.folderRoots(of: project.id) == ProjectsEmailFiles.Roots(folders: [real]))
+
+        try FileManager.default.removeItem(at: renamed)
+        let roots = try #require(await runtime.folderRoots(of: project.id))
+        #expect(roots.folders.isEmpty)
+        #expect(roots.unavailable.map(\.path) == [real.path, added.path])
+        #expect(ProjectsEmailFiles.place(of: real.appending(path: "Drawings/plan.pdf"), in: roots) == .unavailable(name: "Harbor lobby", path: ["Drawings"]))
+        #expect(ProjectsEmailFiles.place(of: added.appending(path: "plan.txt"), in: roots) == .unavailable(name: "Old lobby", path: []))
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// The user takes the folder out of the project while the email view waits for it to
+    /// resolve. Once it resolves, nothing reads it, and the view gets the folders as they
+    /// are now when it asks again.
+    @Test(.timeLimit(.minutes(1))) func aFolderTheProjectNoLongerHoldsIsNotReadOnceItResolves() async throws {
+        defer { cleanUp() }
+        let folders = StallingFolders()
+        let (runtime, projects, _) = try await started(folders: folders)
+        var project = Project(name: "Harbor")
+        try await runtime.add(project)
+        try await waitUntil { runtime.indexReport(project.id)?.isIndexing == false }
+        project.folders = [try Project.bookmark(of: folder("Alpha", holding: "alpha.txt"))]
+        try await runtime.update(project)
+        try await waitUntil { folders.isHolding }
+        let reads = HeldReads(holds: false)
+        runtime.readRealPath = { await reads.read($0) }
+
+        let roots = Task { await runtime.folderRoots(of: project.id) }
+        try await Task.sleep(for: .milliseconds(100))
+        project.folders = []
+        try await runtime.update(project)
+        folders.letGo()
+        #expect(await roots.value == nil)
+        #expect(reads.started.isEmpty)
+        #expect(await runtime.folderRoots(of: project.id) == ProjectsEmailFiles.Roots())
+        #expect(reads.started.isEmpty)
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
     }
@@ -2946,6 +3150,12 @@ struct ProjectsRuntimeTests {
         }
     }
 
+    /// Where the cleanup model's download stands, as the app maps it from the installer,
+    /// which a test changes.
+    @Observable final class Download {
+        var status = ProjectsRuntime.ModelDownloadStatus.none
+    }
+
     /// How the index reaches project folders, recorded by name: resolves bookmarks with
     /// Project.resolve, but holds the first resolve of a bookmark until the test lets it go,
     /// as on a share that hangs and recovers. Reads files with FileTextExtractor and
@@ -3029,6 +3239,62 @@ struct ProjectsRuntimeTests {
         nonisolated func watch(_ folders: [URL], _ since: UInt64?, _ deliver: @escaping @Sendable (FolderEvents.Changes) -> Void) -> () -> Void {
             state.withLock { $0.watchedFolders.append(folders.map(\.lastPathComponent)) }
             return {}
+        }
+    }
+
+    /// Reads the real path of a folder as the email view does, but holds the first read
+    /// until the test lets it go, as a folder on a share that hangs would, and records the
+    /// names of the folders it was asked for, in order. With `holds` false it only records
+    /// them.
+    final class HeldReads: Sendable {
+        private nonisolated struct State: Sendable {
+            var started: [String] = []
+            var held: CheckedContinuation<Void, Never>?
+            var letGo = false
+        }
+
+        private let state: Mutex<State>
+
+        nonisolated init(holds: Bool = true) {
+            state = Mutex(State(letGo: !holds))
+        }
+
+        nonisolated var isHolding: Bool {
+            state.withLock { $0.held != nil }
+        }
+
+        nonisolated var started: [String] {
+            state.withLock { $0.started }
+        }
+
+        nonisolated func letGo() {
+            let held = state.withLock { state in
+                state.letGo = true
+                defer { state.held = nil }
+                return state.held
+            }
+            held?.resume()
+        }
+
+        nonisolated func read(_ folder: URL) async -> URL? {
+            let first = state.withLock { state in
+                state.started.append(folder.lastPathComponent)
+                return state.started.count == 1
+            }
+            if first {
+                await withCheckedContinuation { continuation in
+                    let goes = state.withLock { state in
+                        if !state.letGo {
+                            state.held = continuation
+                        }
+                        return state.letGo
+                    }
+                    if goes {
+                        continuation.resume()
+                    }
+                }
+            }
+            return await FolderWalk.realPath(of: folder)
         }
     }
 

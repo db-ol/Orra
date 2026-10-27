@@ -2,9 +2,9 @@ import Foundation
 import Observation
 
 /// One email in the email view of the Projects window (projects-email-view): the email
-/// itself as Mail shows it, its explanation, the versions of its draft, the draft as the
-/// user edits it, the translation next to it, the answer check, the change under way and
-/// the handoff to Mail.
+/// itself as Mail shows it, its explanation with where its project files are now, the
+/// versions of its draft, the draft as the user edits it, the translation next to it, the
+/// answer check, the change under way and the handoff to Mail.
 ///
 /// - The draft is plain text the user may edit. ReviseService saves the versions the model
 ///   makes. The text the user types is saved apart from them once the user pauses typing,
@@ -70,6 +70,9 @@ final class ProjectsEmailModel {
         /// What a change changed, worked out off the main actor, ProjectsDraftDiff.highlight
         /// in the app.
         var highlight: (_ before: String, _ after: String) async -> [ProjectsDraftDiff.Segment]
+        /// Where a project's folders are now, nil when Projects did not read them, see
+        /// ProjectsRuntime.folderRoots(of:). None by default, for tests that never ask.
+        var folderRoots: (UUID) async -> ProjectsEmailFiles.Roots? = { _ in nil }
 
         /// The actions of the running app.
         static func live(_ runtime: ProjectsRuntime) -> Actions {
@@ -93,7 +96,8 @@ final class ProjectsEmailModel {
                 handoff: runtime.handoff,
                 userLanguage: runtime.userLanguage,
                 now: runtime.dependencies.now,
-                highlight: { await ProjectsDraftDiff.highlight(from: $0, to: $1) }
+                highlight: { await ProjectsDraftDiff.highlight(from: $0, to: $1) },
+                folderRoots: { [weak runtime] id in await runtime?.folderRoots(of: id) }
             )
         }
     }
@@ -194,6 +198,12 @@ final class ProjectsEmailModel {
     /// The email as Mail shows it, nil until it is read or when the store keeps no text of
     /// it.
     private(set) var original: ProjectsEmailOriginal.Content?
+    /// Whether Project Files for This Explanation is open. It starts folded and stays as the
+    /// user leaves it for this email while the window is open. Nothing saves it.
+    var showsProjectFiles = false
+    /// Where the folders of the projects of the explanation's files are now, by project, as
+    /// last read while that list was open, see `loadFolderRoots(for:)`.
+    private(set) var folderRoots: [UUID: ProjectsEmailFiles.Roots] = [:]
     /// The draft as the editor holds it. What the user types is saved once the user pauses
     /// typing, see `saveText()`.
     var text = "" {
@@ -455,7 +465,7 @@ final class ProjectsEmailModel {
                 let email = await actions.email(messageID)
                 let sender = email.map { $0.sender.name.isEmpty ? $0.sender.address : $0.sender.name }
                 sources[id] = .mail(messageID: messageID, sender: sender, date: email?.date)
-            case .file(let chunk):
+            case .file(let chunk, _):
                 sources[id] = .file(chunk)
             case .attachment(let name, let excerpt):
                 sources[id] = .attachment(name: name, excerpt: excerpt)
@@ -463,6 +473,19 @@ final class ProjectsEmailModel {
         }
         self.sources = sources
         emailText = email.map { $0.text.isEmpty ? $0.visibleText : $0.text } ?? ""
+    }
+
+    /// Reads where the folders of these projects are now, for the list of the explanation's
+    /// files. It stops when its task is cancelled, as when the list closes or the folders
+    /// change, and keeps what it had for a project whose folders Projects did not read.
+    func loadFolderRoots(for projects: [UUID]) async {
+        for project in projects {
+            let roots = await actions.folderRoots(project)
+            guard !Task.isCancelled else { return }
+            if let roots, roots != folderRoots[project] {
+                folderRoots[project] = roots
+            }
+        }
     }
 
     /// After a new explanation in this window: reads it, and runs the answer check of its
