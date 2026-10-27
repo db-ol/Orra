@@ -1282,16 +1282,18 @@ final class ProjectsRuntime {
     ///
     /// Empty for a project the list does not hold. Nil while Projects is off, and when
     /// Projects stopped, is turning off or the project's folders changed meanwhile, as in
-    /// `startIndex(_:resortAfter:)`: after every wait, before the next folder is read and
-    /// before it returns, so no folder is read after Projects turned off or for a folder the
-    /// project no longer holds, also when one folder takes long. The view asks again once
+    /// `startIndex(_:resortAfter:)`, or the task that asked was cancelled, as when the list
+    /// closed: after every wait, before the next folder is read and before it returns, so no
+    /// folder is read after Projects turned off, for a folder the project no longer holds or
+    /// for a list that closed, also when one folder takes long. The view asks again once
     /// the folders changed.
     func folderRoots(of projectID: UUID) async -> ProjectsEmailFiles.Roots? {
         // The switch itself, since `wantsOn` follows it a moment later.
         guard projects.isOn, !projects.isDeleting, let list = running?.list else { return nil }
         guard let project = list.project(projectID) else { return ProjectsEmailFiles.Roots() }
         func isCurrent() -> Bool {
-            projects.isOn && !projects.isDeleting && running?.list === list && list.project(projectID)?.folders == project.folders
+            !Task.isCancelled && projects.isOn && !projects.isDeleting && running?.list === list
+                && list.project(projectID)?.folders == project.folders
         }
         var folders = await resolve(project.folders)
         guard isCurrent() else { return nil }

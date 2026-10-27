@@ -105,7 +105,7 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     for another email. ProjectsRuntimeTests checks the folders' real paths, a bookmark that
     finds nothing, a renamed folder that is gone, and that no folder is read once Projects
     turned off or the project let go of the folder while its bookmark resolved or while
-    another folder was read.
+    another folder was read, nor once the list closed.
     ExplainPromptTests and ExplainServiceTests check that why a file is in the prompt
     changes nothing in it.
   - ProjectSuggestionsTests, ProjectSuggestionPromptTests, ProjectSuggestionServiceTests and

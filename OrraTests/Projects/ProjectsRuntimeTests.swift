@@ -1434,6 +1434,8 @@ struct ProjectsRuntimeTests {
         project.folders = [try Project.bookmark(of: folder("Alpha", holding: "alpha.txt"))]
         try await runtime.update(project)
         try await waitUntil { folders.isHolding }
+        let reads = HeldReads(holds: false)
+        runtime.readRealPath = { await reads.read($0) }
 
         let roots = Task { await runtime.folderRoots(of: project.id) }
         try await Task.sleep(for: .milliseconds(100))
@@ -1441,6 +1443,7 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
         folders.letGo()
         #expect(await roots.value == nil)
+        #expect(reads.started.isEmpty)
     }
 
     /// The email view reads the real path of a project's folders one at a time. When the
@@ -1472,6 +1475,30 @@ struct ProjectsRuntimeTests {
             await projects.turnOff(keepingData: true)
             try await waitUntil { runtime.phase == .off }
         }
+    }
+
+    /// The list closes while the email view reads the real path of a project's first
+    /// folder, as on a share that hangs, so the task that asked is cancelled. The second
+    /// folder is never read.
+    @Test(.timeLimit(.minutes(1))) func theNextFolderIsNotReadOnceTheListCloses() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let project = Project(name: "Harbor", folders: [
+            try Project.bookmark(of: folder("Alpha", holding: "alpha.txt")),
+            try Project.bookmark(of: folder("Beta", holding: "beta.txt")),
+        ])
+        try await runtime.add(project)
+        let reads = HeldReads()
+        runtime.readRealPath = { await reads.read($0) }
+
+        let roots = Task { await runtime.folderRoots(of: project.id) }
+        try await waitUntil { reads.isHolding }
+        roots.cancel()
+        reads.letGo()
+        #expect(await roots.value == nil)
+        #expect(reads.started == ["Alpha"])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
     }
 
     /// A folder the user renamed, then took out of reach, is not available under the name
@@ -1513,6 +1540,8 @@ struct ProjectsRuntimeTests {
         project.folders = [try Project.bookmark(of: folder("Alpha", holding: "alpha.txt"))]
         try await runtime.update(project)
         try await waitUntil { folders.isHolding }
+        let reads = HeldReads(holds: false)
+        runtime.readRealPath = { await reads.read($0) }
 
         let roots = Task { await runtime.folderRoots(of: project.id) }
         try await Task.sleep(for: .milliseconds(100))
@@ -1520,7 +1549,9 @@ struct ProjectsRuntimeTests {
         try await runtime.update(project)
         folders.letGo()
         #expect(await roots.value == nil)
+        #expect(reads.started.isEmpty)
         #expect(await runtime.folderRoots(of: project.id) == ProjectsEmailFiles.Roots())
+        #expect(reads.started.isEmpty)
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
     }
@@ -3100,7 +3131,8 @@ struct ProjectsRuntimeTests {
 
     /// Reads the real path of a folder as the email view does, but holds the first read
     /// until the test lets it go, as a folder on a share that hangs would, and records the
-    /// names of the folders it was asked for, in order.
+    /// names of the folders it was asked for, in order. With `holds` false it only records
+    /// them.
     final class HeldReads: Sendable {
         private nonisolated struct State: Sendable {
             var started: [String] = []
@@ -3108,7 +3140,11 @@ struct ProjectsRuntimeTests {
             var letGo = false
         }
 
-        private let state = Mutex(State())
+        private let state: Mutex<State>
+
+        nonisolated init(holds: Bool = true) {
+            state = Mutex(State(letGo: !holds))
+        }
 
         nonisolated var isHolding: Bool {
             state.withLock { $0.held != nil }
