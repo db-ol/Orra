@@ -80,7 +80,7 @@ New in 0.4.0.
 
 ### Projects (Preview)
 
-Optional, for Macs with 16 GB of memory or more, and a preview that may still change. Choose the Mail mailboxes Orra reads and add your projects with their folders and people, or start from the projects Orra suggests, and Orra sorts each new email into its project. Click Explain, and the local model lists what the email says, with sources in the project's files, its attachments and earlier mail, and the questions only you can decide. When the email needs a reply, a draft follows in the email's language, Chinese or English. An email that Projects finds to be in another language, such as Japanese, gets no draft. You change the draft by typing or with the talk key, and paste it into Mail's reply window. Orra never sends, moves or deletes mail, and nothing it reads leaves your Mac.
+Optional, for Macs with 16 GB of memory or more, and a preview that may still change. Choose the Mail mailboxes Orra reads and add your projects with their folders and people, or start from the projects Orra suggests, and Orra sorts each new email into its project. Click Explain, and the local model lists what the email says, with sources in the files of its project, and of your other projects where they match, in its attachments and in earlier mail, and the questions only you can decide. When the email needs a reply, a draft follows in the email's language, Chinese or English. An email that Projects finds to be in another language, such as Japanese, gets no draft. You change the draft by typing or with the talk key, and paste it into Mail's reply window. Orra never sends, moves or deletes mail, and nothing it reads leaves your Mac.
 
 </td>
 </tr>
@@ -110,7 +110,7 @@ When you open Orra, a welcome window walks you through downloading the models, a
 
 Orra turns your speech into text on your Mac and never sends your recordings or their text anywhere. It has no account, no analytics and no server of its own. It goes online only to download the models you ask for and, once you allow it, to check for updates. Features that keep anything, such as Learn from my corrections, Remember my voice and Projects, are off until you turn them on.
 
-Projects reads mail through the Mail app on your Mac and the files in the folders you add, and works on them only with the model on your Mac. Orra itself never connects to a mail server. The Mail app keeps fetching your mail as it always does.
+Projects reads mail through the Mail app on your Mac and the files in the folders you add, and works on them only on your Mac, with the model on your Mac and, for images and scanned pages, the text recognition of macOS. Orra itself never connects to a mail server. The Mail app keeps fetching your mail as it always does.
 
 [docs/privacy.md](docs/privacy.md) lists what Orra and Projects keep, when Orra goes online and how to remove the models.
 

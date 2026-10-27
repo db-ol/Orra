@@ -3,10 +3,10 @@
 # writes one JSON file per suite and compares them with a baseline. docs/release-gate.md
 # describes the suites, the rules and the variables below.
 #
-#   Tools/release-gate/run.sh [--baseline DIR] [--only corpus,context,cleanup,latency,sets,projects] [--out DIR] [--skip-build]
+#   Tools/release-gate/run.sh [--baseline DIR] [--only corpus,context,cleanup,latency,sets,projects,retrieval] [--out DIR] [--skip-build]
 #
-# Without --only it runs every suite, the projects suite too, which needs the variables of
-# docs/release-gate.md. Exit status: 0 when every suite ran and nothing got worse, 1 when a
+# Without --only it runs every suite, the projects and retrieval suites too, which need the
+# variables of docs/release-gate.md. Exit status: 0 when every suite ran and nothing got worse, 1 when a
 # rule failed or, with or without a baseline, the projects bar, 2 when the build or a suite
 # failed to run.
 set -u
@@ -20,7 +20,7 @@ derived=${GATE_DERIVED_DATA:-$repo/build/DerivedDataRelease}
 lock=${GATE_LOCK:-}
 context_count=${GATE_CONTEXT_COUNT:-100}
 projects_set=${GATE_PROJECTS_SET:-$bench/projects-testset}
-all_suites=(corpus context cleanup latency sets projects)
+all_suites=(corpus context cleanup latency sets projects retrieval)
 default_suites=($all_suites)
 
 baseline=""
@@ -44,6 +44,10 @@ done
 # The set owner's addresses and name, from the set's README, stay out of the repository.
 if (( ${suites[(Ie)projects]} )) && [[ -z ${GATE_PROJECTS_OWN_ADDRESSES:-} || -z ${GATE_PROJECTS_OWN_NAME:-} || ! -s $projects_set/adversarial.jsonl ]]; then
   echo "the projects suite needs GATE_PROJECTS_OWN_ADDRESSES, GATE_PROJECTS_OWN_NAME and the set in $projects_set" >&2
+  exit 2
+fi
+if (( ${suites[(Ie)retrieval]} )) && [[ -z ${GATE_PROJECTS_OWN_ADDRESSES:-} || -z ${GATE_PROJECTS_OWN_NAME:-} || ! -s $projects_set/retrieval/labels.jsonl ]]; then
+  echo "the retrieval suite needs GATE_PROJECTS_OWN_ADDRESSES, GATE_PROJECTS_OWN_NAME and the retrieval supplement in $projects_set/retrieval" >&2
   exit 2
 fi
 sha=$(git -C $repo rev-parse --short HEAD)
@@ -119,7 +123,14 @@ for suite in $suites; do
       env+=(TEST_RUNNER_ORRA_PROJECTS_GATE=$projects_set TEST_RUNNER_ORRA_PROJECTS_OWN_ADDRESSES=$GATE_PROJECTS_OWN_ADDRESSES
         TEST_RUNNER_ORRA_PROJECTS_OWN_NAME=$GATE_PROJECTS_OWN_NAME)
       [[ -n ${GATE_CLEANUP_MODEL_DIR:-} ]] && env+=(TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=$GATE_CLEANUP_MODEL_DIR)
+      # The choose mode, with the files of gate-choose.json chosen, see docs/release-gate.md.
+      [[ -n ${GATE_PROJECTS_CHOOSE:-} ]] && env+=(TEST_RUNNER_ORRA_PROJECTS_GATE_CHOOSE=$GATE_PROJECTS_CHOOSE)
       test_id=OrraTests/ProjectsGateEvaluationTests ;;
+    retrieval)
+      env+=(TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL=$projects_set TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_OUT=$out/raw
+        TEST_RUNNER_ORRA_PROJECTS_OWN_ADDRESSES=$GATE_PROJECTS_OWN_ADDRESSES TEST_RUNNER_ORRA_PROJECTS_OWN_NAME=$GATE_PROJECTS_OWN_NAME)
+      [[ -n ${GATE_CLEANUP_MODEL_DIR:-} ]] && env+=(TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=$GATE_CLEANUP_MODEL_DIR)
+      test_id=OrraTests/RetrievalEvaluationTests ;;
   esac
   # Waits for the lock with no Orra running, so neither starts while the other waits.
   while true; do
@@ -134,6 +145,7 @@ for suite in $suites; do
   release_lock
   expected=$out/raw/$suite.json
   [[ $suite == sets ]] && expected=$out/raw/sets-raw.json
+  [[ $suite == retrieval ]] && expected=$out/raw/retrieval.jsonl
   # The whole set in one part, see ProjectsGateEvaluationTests.
   [[ $suite == projects ]] && expected=($out/raw/projects-001-*.json(N[1]))
   if [[ ! -s $expected ]]; then

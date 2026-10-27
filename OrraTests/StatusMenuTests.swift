@@ -7,7 +7,8 @@ import Testing
 /// The menu bar menu, read from the menu SwiftUI makes of StatusMenu: Live Captions under
 /// a Meeting Interpretation heading, when the copy items and Speak Translations to Others
 /// show, what the Talk Key submenu holds, and Open Projects Window with its icon only while
-/// Projects is on, in the menu bar menu and the Dock menu.
+/// Projects is on, in the menu bar menu and the Dock menu, with Set Up Projects… in its
+/// place while Projects is off.
 @MainActor
 struct StatusMenuTests {
     let mic = FakeMicrophone()
@@ -78,7 +79,8 @@ struct StatusMenuTests {
 
     /// Open Projects Window shows with the icon of Projects below Meeting Interpretation,
     /// only while Projects is on, with the count of mail waiting for a reply. The Dock menu
-    /// offers the same item at the same times.
+    /// offers the same item at the same times. While Projects is off, Set Up Projects…
+    /// stands in its place with the same icon, on a Mac where Projects can be turned on.
     @Test func projectsShowsOnlyWhileItIsOnWithTheMailWaitingForAReply() async throws {
         let suite = "io.github.db-ol.OrraTests.status-menu-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -91,7 +93,12 @@ struct StatusMenuTests {
         let projects = ProjectsSwitch(defaults: defaults, isVisible: true, physicalMemory: 32 << 30, storage: storage)
         let runtime = Self.projects(projects, storage: storage, defaults: defaults)
         runtime.follow()
-        #expect(!Self.lines(of: menu(translationOn: false, speakingOn: false, projects: runtime)).contains { $0.contains("Projects") })
+        #expect(StatusMenu.offersProjectsSetup(projects))
+        var lines = Self.lines(of: menu(translationOn: false, speakingOn: false, projects: runtime))
+        let setUp = try #require(lines.firstIndex(of: "Set Up Projects…"))
+        #expect(Array(lines[(setUp - 3)...(setUp + 2)]) == ["# Meeting Interpretation", "Live Captions", "---", "Set Up Projects…", "---", "Talk Key >"])
+        #expect(!lines.contains { $0.hasPrefix("Open Projects Window") })
+        #expect(menu(translationOn: false, speakingOn: false, projects: runtime).items.first { $0.title == "Set Up Projects…" }?.image != nil)
         let target = DockTarget()
         #expect(StatusMenu.dockMenu(projects: runtime, target: target, action: #selector(DockTarget.open)) == nil)
 
@@ -99,9 +106,11 @@ struct StatusMenuTests {
         for _ in 0..<2_000 where runtime.phase != .on {
             try await Task.sleep(for: .milliseconds(5))
         }
-        var lines = Self.lines(of: menu(translationOn: false, speakingOn: false, projects: runtime))
+        #expect(!StatusMenu.offersProjectsSetup(projects))
+        lines = Self.lines(of: menu(translationOn: false, speakingOn: false, projects: runtime))
         let item = try #require(lines.firstIndex(of: "Open Projects Window"))
         #expect(Array(lines[(item - 3)...(item + 2)]) == ["# Meeting Interpretation", "Live Captions", "---", "Open Projects Window", "---", "Talk Key >"])
+        #expect(!lines.contains("Set Up Projects…"))
         #expect(!zip(lines, lines.dropFirst()).contains { $0 == "---" && $1 == "---" })
         // It carries an icon, so it stands out.
         let items = menu(translationOn: false, speakingOn: false, projects: runtime).items
@@ -133,9 +142,16 @@ struct StatusMenuTests {
             try await Task.sleep(for: .milliseconds(5))
         }
         lines = Self.lines(of: menu(translationOn: false, speakingOn: false, projects: runtime))
-        #expect(!lines.contains { $0.contains("Projects") })
+        #expect(lines.filter { $0.contains("Projects") } == ["Set Up Projects…"])
         #expect(!zip(lines, lines.dropFirst()).contains { $0 == "---" && $1 == "---" })
         #expect(StatusMenu.dockMenu(projects: runtime, target: target, action: #selector(DockTarget.open)) == nil)
+
+        // A Mac without the memory Projects needs offers neither.
+        let small = ProjectsSwitch(defaults: defaults, isVisible: true, physicalMemory: 8 << 30, storage: storage)
+        #expect(!StatusMenu.offersProjectsSetup(small))
+        let smallRuntime = Self.projects(small, storage: storage, defaults: defaults)
+        #expect(!Self.lines(of: menu(translationOn: false, speakingOn: false, projects: smallRuntime)).contains { $0.contains("Projects") })
+        #expect(StatusMenu.dockMenu(projects: smallRuntime, target: target, action: #selector(DockTarget.open)) == nil)
     }
 
     /// Stands in for AppDelegate as the target of the Dock menu's item.
@@ -193,6 +209,7 @@ struct StatusMenuTests {
             handoff: ReplyHandoff(copy: { _ in true }, mail: mail, isOrraActive: { true }, bringMailToFront: {}),
             watchesMemoryPressure: false,
             watchFolders: { _, _, _ in {} },
+            recognizeText: RecognitionTestFiles.findsNothing,
             sleep: { _ in try await Task.sleep(for: .seconds(3_600)) }
         ))
     }

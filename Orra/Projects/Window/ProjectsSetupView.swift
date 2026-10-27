@@ -323,9 +323,11 @@ struct ProjectsSetupView: View {
 
     /// Each row binds to its person by ID, not by position. A field of a removed row can still
     /// read and write its text after the removal, and by position that would read past the end
-    /// of the list or change the person who took its place.
+    /// of the list or change the person who took its place. The footer says what the people
+    /// do, as the one of Domains does: a person among an email's other side names the project
+    /// in sorting, and the draft check counts a reply to the project's people as inside it.
     private var peopleSection: some View {
-        Section("People") {
+        Section {
             ForEach(draft.people) { person in
                 let row = Binding(get: { draft.person(person.id) ?? person }, set: { draft.update($0) })
                 HStack(alignment: .firstTextBaseline) {
@@ -352,6 +354,13 @@ struct ProjectsSetupView: View {
             Button("Add Person") {
                 draft.people.append(Draft.Person())
             }
+        } header: {
+            Text("People")
+        } footer: {
+            Text("Add the people you exchange mail with on this project. Their mail goes to the project, and a reply to them counts as staying inside the project.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -401,18 +410,19 @@ struct ProjectsSetupView: View {
     // MARK: Actions
 
     /// Adds folders the index can read. A folder it refuses, such as the home folder, is
-    /// not added, and the line under the folders says why.
+    /// not added, and the line under the folders says why. The sheet that chooses files for
+    /// an email checks a folder the same way, see ProjectsRuntime.folderBookmark(_:).
     private func add(_ urls: [URL]) {
         folderProblem = nil
         Task {
             for url in urls {
-                if let refusal = await FolderWalk().refusal(for: url) {
+                let bookmark: Data
+                switch await ProjectsRuntime.folderBookmark(url) {
+                case .failure(let refusal):
                     folderProblem = ProjectsWindowText.refusal(refusal)
                     continue
-                }
-                guard let bookmark = try? Project.bookmark(of: url) else {
-                    folderProblem = ProjectsWindowText.refusal(.notAFolder)
-                    continue
+                case .success(let made):
+                    bookmark = made
                 }
                 guard !draft.folders.contains(where: { $0.url?.standardizedFileURL == url.standardizedFileURL }) else { continue }
                 draft.folders.append(Draft.Folder(bookmark: bookmark, url: url, isResolved: true))

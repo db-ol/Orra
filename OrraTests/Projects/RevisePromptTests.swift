@@ -60,6 +60,22 @@ struct RevisePromptTests {
         #expect(prompt.text.hasSuffix(RewritePrompt.noThinking + "修改后的草稿：\n"))
     }
 
+    /// An instruction that names a file by its path and its name stays the user's words as
+    /// written, and the prompt holds nothing of that file, which is there.
+    @Test func anInstructionThatNamesAFileOpensNoFile() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("RevisePromptTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("plan-v3.pdf")
+        try "The deposit is ¥8,400, code QK-2210.".write(to: file, atomically: true, encoding: .utf8)
+        let words = "Use \(file.path) and plan-v3.pdf for the deposit"
+        let prompt = try #require(revision(.instruction(words)))
+        #expect(prompt.text.contains("<instruction>\n\(words)\n</instruction>"))
+        #expect(!prompt.text.contains("8,400") && !prompt.text.contains("QK-2210"))
+        let plain = try #require(revision(.instruction("Use it for the deposit")))
+        #expect(prompt.text.replacingOccurrences(of: words, with: "Use it for the deposit") == plain.text)
+    }
+
     /// The email is data. A passage that addresses an assistant never reaches the model,
     /// only the marker in its place, and the user's instruction is the only one.
     @Test func linesOfTheEmailThatAddressAnAssistantStayOut() throws {

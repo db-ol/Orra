@@ -80,7 +80,7 @@ Novedad de la versión 0.4.0.
 
 ### Proyectos (vista previa)
 
-Opcional, para una Mac con 16 GB de memoria o más, y una vista previa que todavía puede cambiar. Elige los buzones de Mail que lee Orra y agrega tus proyectos con sus carpetas y personas, o empieza con los proyectos que Orra sugiere, y Orra clasifica cada correo nuevo en su proyecto. Haz clic en Explicar, y el modelo local enumera lo que dice el correo, con sus fuentes en los archivos del proyecto, sus adjuntos y correos anteriores, y las preguntas que solo tú puedes decidir. La explicación aparece en inglés. Cuando el correo necesita respuesta, sigue un borrador en el idioma del correo, chino o inglés. Un correo que Proyectos detecta en otro idioma, como el japonés, no recibe borrador. El borrador lo cambias escribiendo o con la tecla para hablar, y lo pegas en la ventana de respuesta de Mail. Orra nunca envía, mueve ni elimina correos, y nada de lo que lee sale de tu Mac.
+Opcional, para una Mac con 16 GB de memoria o más, y una vista previa que todavía puede cambiar. Elige los buzones de Mail que lee Orra y agrega tus proyectos con sus carpetas y personas, o empieza con los proyectos que Orra sugiere, y Orra clasifica cada correo nuevo en su proyecto. Haz clic en Explicar, y el modelo local enumera lo que dice el correo, con sus fuentes en los archivos de su proyecto, y de tus otros proyectos cuando coinciden, en sus adjuntos y en correos anteriores, y las preguntas que solo tú puedes decidir. La explicación aparece en inglés. Cuando el correo necesita respuesta, sigue un borrador en el idioma del correo, chino o inglés. Un correo que Proyectos detecta en otro idioma, como el japonés, no recibe borrador. El borrador lo cambias escribiendo o con la tecla para hablar, y lo pegas en la ventana de respuesta de Mail. Orra nunca envía, mueve ni elimina correos, y nada de lo que lee sale de tu Mac.
 
 </td>
 </tr>
@@ -110,7 +110,7 @@ Al abrir Orra, una ventana de bienvenida te guía para descargar los modelos, pe
 
 Orra convierte tu voz en texto en tu Mac y nunca envía tus grabaciones ni su texto a ningún lado. No tiene cuentas, ni estadísticas de uso, ni servidor propio. Solo se conecta a Internet para descargar los modelos que pides y, una vez que lo permites, para buscar actualizaciones. Las funciones que guardan algo, como Aprender de mis correcciones, Recordar mi voz y Proyectos, están desactivadas hasta que las activas.
 
-Proyectos lee el correo a través de la app Mail de tu Mac y los archivos de las carpetas que agregas, y solo los procesa con el modelo de tu Mac. Orra nunca se conecta por su cuenta a un servidor de correo. La app Mail sigue recibiendo tu correo como siempre.
+Proyectos lee el correo a través de la app Mail de tu Mac y los archivos de las carpetas que agregas, y solo los procesa en tu Mac, con el modelo de tu Mac y, para las imágenes y las páginas escaneadas, con el reconocimiento de texto de macOS. Orra nunca se conecta por su cuenta a un servidor de correo. La app Mail sigue recibiendo tu correo como siempre.
 
 [docs/privacy.es.md](docs/privacy.es.md) detalla qué guardan Orra y Proyectos, cuándo se conecta Orra a Internet y cómo eliminar los modelos.
 

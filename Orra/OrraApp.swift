@@ -25,6 +25,8 @@ import SwiftUI
                 appDelegate.projectsWindow.show()
             }, editProject: { project in
                 appDelegate.projectsWindow.edit(project)
+            }, openMail: {
+                MailApp.open()
             })
         }
         .windowResizability(.contentMinSize)

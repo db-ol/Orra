@@ -24,12 +24,14 @@ struct DraftCheckTests {
         sources: [String] = [],
         questions: [String] = [],
         imitating: [String] = [],
-        asksForData: Bool = false
+        asksForData: Bool = false,
+        others: [String]? = nil,
+        otherNames: [String]? = nil
     ) async -> DraftCheck.Result {
         await DraftCheck.check(DraftCheckInput(
             draft: draft, language: language, recipients: recipients, projectPeople: Self.projectPeople, own: Self.own,
             incomingText: incoming, sourceTexts: sources, questionsForUser: questions, today: Self.today,
-            imitatingDomains: imitating, asksForData: asksForData
+            imitatingDomains: imitating, asksForData: asksForData, otherProjectTexts: others, otherProjectNames: otherNames
         ))
     }
 
@@ -446,5 +448,156 @@ struct DraftCheckTests {
     @Test func invisibleCharactersAreDropped() async {
         let result = await check("Hi Owen, see ht\u{200B}tps://x.example/a now.", to: [Self.owen])
         #expect(result.draft == "Hi Owen, see [link removed] now.")
+    }
+
+    // MARK: Other projects' files
+
+    /// An excerpt of another project's file, with a value, a code, a person, an address and
+    /// a year of its own.
+    static let kilnQuote = "窑工坊报价：定金 ¥8,400，订单 KS-55210，联系人：韩书言 <han.shuyan@kiln.example>，2023 年的批次。"
+
+    /// What only another project's excerpts hold leaves every draft, whoever it reaches,
+    /// also one to the project's own people.
+    @Test func anotherProjectsValuesNamesAndAddressesLeaveEveryDraft() async {
+        let draft = "Hi Owen,\n\nThe deposit is ¥8,400 under KS-55210. 韩书言 will call, or write to han.shuyan@kiln.example about the 2023 batch.\n\nBest,\nBai Lu"
+        let gone = "[another project's data removed]"
+        for recipients in [[Self.owen], [Self.nadia]] {
+            let result = await check(draft, to: recipients, others: [Self.kilnQuote])
+            #expect(result.draft == "Hi Owen,\n\nThe deposit is \(gone) under \(gone). \(gone) will call, or write to \(gone) about the \(gone) batch.\n\nBest,\nBai Lu")
+            #expect(removed(result) == [
+                "otherProjectData: ¥8,400", "otherProjectData: KS-55210", "otherProjectData: 韩书言",
+                "otherProjectData: han.shuyan@kiln.example", "otherProjectData: 2023",
+            ])
+        }
+        let chinese = await check("宋老师好，定金是 8,400 元。\n\n白露", language: .zh, to: [Self.yutong], others: [Self.kilnQuote])
+        #expect(chinese.draft == "宋老师好，定金是 [已删去其他项目的资料]。\n\n白露")
+        // Without other projects' excerpts, as from an earlier build, nothing changes.
+        let earlier = await check(draft, to: [Self.owen])
+        #expect(earlier.draft == draft)
+    }
+
+    /// What the email, the email's own project or a recipient holds too may stay.
+    @Test func whatTheEmailOrTheProjectsSourcesHoldStays() async {
+        let draft = "Hi Owen,\n\nThe deposit is ¥8,400 under KS-55210, and 韩书言 will call from han.shuyan@kiln.example.\n\nBai Lu"
+        let fromEmail = await check(draft, to: [Self.owen], incoming: "Is the deposit ¥8,400 under KS-55210? 韩书言 (han.shuyan@kiln.example) will call.", others: [Self.kilnQuote])
+        #expect(fromEmail.draft == draft)
+        let fromSources = await check(draft, to: [Self.owen], sources: ["Deposit ¥8,400, order KS-55210, contact 韩书言 <han.shuyan@kiln.example>."], others: [Self.kilnQuote])
+        #expect(fromSources.draft == draft)
+        let han = Person(name: "韩书言", address: "han.shuyan@kiln.example")
+        let toThem = await check(draft, to: [han], incoming: "Is the deposit ¥8,400 under KS-55210?", others: [Self.kilnQuote])
+        #expect(toThem.draft == draft)
+    }
+
+    /// The names of the other projects, of their people and of what their domains spell
+    /// leave every draft too, in any case and in pinyin, unless the email or the project's
+    /// own sources hold them.
+    @Test func otherProjectsNamesLeaveEveryDraft() async {
+        let names = ["Kiln studio", "窑工坊", "何立伟", "bridgeway talent"]
+        let others = ["Lobby plan, revision C."]
+        let draft = "Hi Owen,\n\nAs with Kiln Studio and 窑工坊, He Liwei of Bridgeway Talent will help.\n\nBai Lu"
+        let gone = "[another project's data removed]"
+        let result = await check(draft, to: [Self.owen], others: others, otherNames: names)
+        #expect(result.draft == "Hi Owen,\n\nAs with \(gone) and \(gone), \(gone) of \(gone) will help.\n\nBai Lu")
+        #expect(removed(result) == [
+            "otherProjectData: Kiln Studio", "otherProjectData: 窑工坊", "otherProjectData: He Liwei", "otherProjectData: Bridgeway Talent",
+        ])
+        let fromEmail = await check(draft, to: [Self.owen], incoming: "Kiln Studio, 窑工坊, He Liwei and Bridgeway Talent are on it.", others: others, otherNames: names)
+        #expect(fromEmail.draft == draft)
+        let fromSources = await check(draft, to: [Self.owen], sources: ["Kiln Studio and 窑工坊 work with He Liwei of Bridgeway Talent."], others: others, otherNames: names)
+        #expect(fromSources.draft == draft)
+        // Without other projects' excerpts, as from an earlier build, nothing changes.
+        #expect(await check(draft, to: [Self.owen], otherNames: names).draft == draft)
+    }
+
+    /// A sentence that copies a run of 8 words, or of 12 Chinese characters, from another
+    /// project's excerpt goes whole, since a retold fact keeps few of its words.
+    @Test func aSentenceCopiedFromAnotherProjectsFileGoesWhole() async {
+        let others = ["The lamps hang along the north wall of the lobby next to the reception desk.", "灯具沿着大堂北墙安装在接待台旁边，每盏间隔一米。"]
+        let english = await check("Hi Owen,\n\nThanks. The lamps hang along the north wall of the lobby next to the desk. See you soon.\n\nBai Lu", to: [Self.owen], others: others)
+        #expect(english.draft == "Hi Owen,\n\nThanks. [sentence removed: it is from another project's file] See you soon.\n\nBai Lu")
+        #expect(removed(english) == ["otherProjectText: The lamps hang along the north wall of the lobby next to the desk."])
+        let chinese = await check("宋老师好，\n\n灯具沿着大堂北墙安装在接待台旁边。谢谢。\n\n白露", language: .zh, to: [Self.yutong], others: others)
+        #expect(chinese.draft == "宋老师好，\n\n[已删去一句：出自其他项目的文件]谢谢。\n\n白露")
+        #expect(removed(chinese) == ["otherProjectText: 灯具沿着大堂北墙安装在接待台旁边。"])
+    }
+
+    /// A short run, or a run the email's own project holds too, stays.
+    @Test func aShortSharedPhraseStays() async {
+        let others = ["The lamps hang along the north wall of the lobby next to the reception desk.", "灯具沿着大堂北墙安装在接待台旁边。"]
+        let short = "Hi Owen,\n\nThe lamps hang along the north side, as we said.\n\nBai Lu"
+        #expect(await check(short, to: [Self.owen], others: others).draft == short)
+        let shortChinese = "宋老师好，灯具沿着大堂北墙走线。\n\n白露"
+        #expect(await check(shortChinese, language: .zh, to: [Self.yutong], others: others).draft == shortChinese)
+        let shared = "Hi Owen,\n\nThe lamps hang along the north wall of the lobby next to the reception desk.\n\nBai Lu"
+        #expect(await check(shared, to: [Self.owen], sources: [others[0]], others: others).draft == shared)
+    }
+
+    /// A file of another project that the user chose for the email is among the email's own
+    /// sources, see ExplainService.sourceTexts: what it holds, a copied sentence too, stays in
+    /// a draft to the project's people, while a value only another passage of that project
+    /// holds still goes. To someone outside the project its data goes as any project data.
+    @Test func aChosenFileOfAnotherProjectCountsAmongTheEmailsSources() async {
+        let chosen = "The lamps hang along the north wall of the lobby next to the reception desk. Deposit ¥8,400 to 韩书言."
+        let others = ["Kiln hall plan, deposit ¥9,100, order KS-55210."]
+        let draft = "Hi Owen,\n\nThe lamps hang along the north wall of the lobby next to the reception desk. The deposit is ¥8,400 to 韩书言, and KS-55210 is another order.\n\nBai Lu"
+        let inside = await check(draft, to: [Self.owen], sources: [chosen], others: others, otherNames: ["Kiln studio", "韩书言"])
+        #expect(inside.draft == "Hi Owen,\n\nThe lamps hang along the north wall of the lobby next to the reception desk. The deposit is ¥8,400 to 韩书言, and [another project's data removed] is another order.\n\nBai Lu")
+        #expect(removed(inside) == ["otherProjectData: KS-55210"])
+        let outside = await check("Hi Nadia, the deposit is ¥8,400.", sources: [chosen])
+        #expect(removed(outside) == ["projectData: ¥8,400"])
+    }
+
+    /// Another project's data goes before the rule for people outside the project, so the
+    /// window names the more exact reason.
+    @Test func otherProjectsDataGoesBeforeTheOutsideRule() async {
+        let result = await check("Hi Nadia, the deposit is ¥8,400 and the total is ¥64,000.", sources: ["Total ¥64,000."], others: ["Deposit ¥8,400."])
+        #expect(result.draft == "Hi Nadia, the deposit is [another project's data removed] and the total is [project data removed].")
+        #expect(removed(result) == ["otherProjectData: ¥8,400", "projectData: ¥64,000"])
+    }
+
+    /// A check saved by 0.6.0 has no other projects' texts and reads with nil. A result
+    /// with a removal of a kind a later Orra adds still reads, without that removal.
+    @Test func aCheckSavedByAnEarlierBuildReads() throws {
+        let input = DraftCheckInput(draft: "", language: .en, recipients: [Self.owen], projectPeople: Self.projectPeople, incomingText: "Hello Bai Lu.", today: Self.today)
+        let json = String(decoding: try JSONEncoder().encode(input), as: UTF8.self)
+        #expect(!json.contains("otherProjectTexts"))
+        #expect(!json.contains("otherProjectNames"))
+        let read = try JSONDecoder().decode(DraftCheckInput.self, from: Data(json.utf8))
+        #expect(read == input)
+        #expect(read.otherProjectTexts == nil)
+        #expect(read.otherProjectNames == nil)
+        var withOthers = input
+        withOthers.otherProjectTexts = [Self.kilnQuote]
+        withOthers.otherProjectNames = ["Kiln studio", "韩书言"]
+        #expect(try JSONDecoder().decode(DraftCheckInput.self, from: JSONEncoder().encode(withOthers)) == withOthers)
+
+        let later = #"{"draft":"Hi Owen, [file removed]","language":"en","removals":[{"kind":"link","text":"x.example"},{"kind":"attachmentClaim","text":"Attached is the plan."}],"flags":[],"outsideRecipients":[]}"#
+        let result = try JSONDecoder().decode(DraftCheck.Result.self, from: Data(later.utf8))
+        #expect(result.removals == [DraftCheck.Removal(kind: .link, text: "x.example")])
+        #expect(result.draft == "Hi Owen, [file removed]")
+        let new = DraftCheck.Result(
+            draft: "Hi", language: .en,
+            removals: [DraftCheck.Removal(kind: .otherProjectData, text: "¥8,400"), DraftCheck.Removal(kind: .otherProjectText, text: "A sentence.")],
+            flags: [.decidesQuestion(placeholders: 0, questions: 1)], outsideRecipients: ["nadia@frostline.example"])
+        #expect(try JSONDecoder().decode(DraftCheck.Result.self, from: JSONEncoder().encode(new)) == new)
+        // A result without its draft, as when it was held back.
+        let held = DraftCheck.Result(draft: nil, language: .zh)
+        #expect(try JSONDecoder().decode(DraftCheck.Result.self, from: JSONEncoder().encode(held)) == held)
+    }
+
+    /// The new placeholders count for no rule, so a revision that keeps them changes
+    /// nothing.
+    @Test func theNewPlaceholdersCountForNoRule() async {
+        let others = ["another project's data removed, sentence removed: it is from another project's file", "已删去其他项目的资料，已删去一句：出自其他项目的文件"]
+        let english = "Hi Owen,\n\nThe deposit is [another project's data removed]. [sentence removed: it is from another project's file] The rest is as planned.\n\nBai Lu"
+        let result = await check(english, to: [Self.nadia], others: others)
+        #expect(result.draft == english)
+        #expect(result.removals.isEmpty)
+        let chinese = "宋老师好，定金是[已删去其他项目的资料]。[已删去一句：出自其他项目的文件]其余照旧。\n\n白露"
+        let zh = await check(chinese, language: .zh, to: [Self.nadia], others: others)
+        #expect(zh.draft == chinese)
+        #expect(zh.removals.isEmpty)
+        #expect(DraftCheck.placeholder(.otherProjectData, .en) == "[another project's data removed]")
+        #expect(DraftCheck.placeholder(.otherProjectText, .zh) == "[已删去一句：出自其他项目的文件]")
     }
 }

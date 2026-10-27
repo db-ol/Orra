@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// A project's page in the third column of the Projects window, while no email is selected:
-/// its description, folders and the state of their index, such as "Files with text: 312"
-/// and "Skipped: 4" with why, the files that hide text, its people, domains, rules with
-/// Remove Rule and linked mailbox, and Edit and Forget Project.
+/// its description, folders and the state of their index, such as "Files with text: 312",
+/// "Files found by name only: 57" and "Skipped: 4" with why, the files that hide text, its
+/// people, domains, rules with Remove Rule and linked mailbox, and Edit and Forget Project.
 struct ProjectsProjectPage: View {
     let runtime: ProjectsRuntime
     let project: Project
@@ -68,7 +68,7 @@ struct ProjectsProjectPage: View {
                 }
             }
             Section("Index") {
-                indexState(report)
+                IndexState(report: report, skipped: skipped)
             }
             if !hiddenText.isEmpty {
                 Section("Files with Hidden Text") {
@@ -151,51 +151,90 @@ struct ProjectsProjectPage: View {
         }
     }
 
-    @ViewBuilder
-    private func indexState(_ report: FolderIndex.Report?) -> some View {
-        if let report {
-            if report.isIndexing {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Indexing…")
-                }
-            }
-            LabeledContent("Files with text") {
-                Text(report.indexed, format: .number)
-            }
-            let skippedCount = report.skipped.values.reduce(0, +)
-            LabeledContent("Skipped") {
-                Text(skippedCount, format: .number)
-            }
-            if report.reachedFileLimit {
-                Text("This project holds more files than Projects reads. The others are left out.")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if report.reachedTextLimit {
-                Text("Projects reached the most text it keeps for a project. Newer files are left out.")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if !skipped.isEmpty {
-                DisclosureGroup("Why Files Were Skipped") {
-                    ForEach(skipped, id: \.url) { file in
-                        LabeledContent {
-                            Text(verbatim: ProjectsWindowText.skipReason(file.reason))
-                                .foregroundStyle(.secondary)
-                        } label: {
-                            Text(verbatim: file.url.lastPathComponent)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
+    /// The rows of the Index section: whether the index works, how many files wait for text
+    /// recognition or why it waits, its counts, the limits it reached, and the files skipped
+    /// with why. Each line wraps rather than being cut, also in the narrow column of the
+    /// smallest window.
+    struct IndexState: View {
+        let report: FolderIndex.Report?
+        let skipped: [FolderIndex.SkippedFile]
+        @State private var showsSkipped: Bool
+
+        init(report: FolderIndex.Report?, skipped: [FolderIndex.SkippedFile], showsSkipped: Bool = false) {
+            self.report = report
+            self.skipped = skipped
+            _showsSkipped = State(initialValue: showsSkipped)
+        }
+
+        var body: some View {
+            if let report {
+                if report.isIndexing {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Indexing…")
                     }
                 }
-                .disclosureGroupStyle(RowDisclosureStyle())
+                if report.recognitionLeft > 0 {
+                    if let pause = report.recognitionPause.flatMap(ProjectsWindowText.recognitionPause) {
+                        Text(verbatim: pause)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        // One element for VoiceOver, which reads the line once.
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Recognizing text in images and scans… \(report.recognitionLeft) left")
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                LabeledContent("Files with text") {
+                    Text(report.indexed, format: .number)
+                }
+                LabeledContent("Files found by name only") {
+                    Text(report.nameOnly, format: .number)
+                }
+                let skippedCount = report.skipped.values.reduce(0, +)
+                LabeledContent("Skipped") {
+                    Text(skippedCount, format: .number)
+                }
+                if report.reachedFileLimit {
+                    Text("This project holds more files than Projects reads. It knows the others by name only.")
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if report.reachedNameLimit {
+                    Text("This project holds more files than Projects lists. The others are left out.")
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if report.reachedTextLimit {
+                    Text("Projects reached the most text it keeps for a project. It knows newer files by name only.")
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !skipped.isEmpty {
+                    DisclosureGroup("Why Files Were Skipped", isExpanded: $showsSkipped) {
+                        ForEach(skipped, id: \.url) { file in
+                            LabeledContent {
+                                Text(verbatim: ProjectsWindowText.skipReason(file.reason))
+                                    .foregroundStyle(.secondary)
+                            } label: {
+                                Text(verbatim: file.url.lastPathComponent)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                        }
+                    }
+                    .disclosureGroupStyle(RowDisclosureStyle())
+                }
+            } else {
+                Text("Not indexed yet.")
+                    .foregroundStyle(.secondary)
             }
-        } else {
-            Text("Not indexed yet.")
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -204,9 +243,12 @@ struct ProjectsProjectPage: View {
         guard let report else { return -1 }
         var hasher = Hasher()
         hasher.combine(report.indexed)
+        hasher.combine(report.nameOnly)
         hasher.combine(report.hiddenText)
         hasher.combine(report.isIndexing)
         hasher.combine(report.skipped.values.reduce(0, +))
+        hasher.combine(report.recognitionLeft)
+        hasher.combine(report.recognitionPause)
         return hasher.finalize()
     }
 }

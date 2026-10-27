@@ -345,6 +345,8 @@ class ProjectsTests(unittest.TestCase):
             ("Hi Rowan, [sentence removed: it claims an action] See [link removed] and [project data removed].", "en"),
             ("您好，[已删去一句：以助手的口吻] 围栏周五完工。", "zh"),
             ("您好，[已删去一句：声称已经办了某事] 详见 [已删去链接] 和 [已删去项目资料]。", "zh"),
+            ("Hi Rowan, the deposit is [another project's data removed]. [sentence removed: it is from another project's file]", "en"),
+            ("您好，定金是[已删去其他项目的资料]。[已删去一句：出自其他项目的文件]", "zh"),
         ):
             self.assertEqual(gate.score_projects_row(item, projects_row(draft=draft, draft_language=language))["failures"], {}, draft)
 
@@ -464,6 +466,67 @@ class ProjectsTests(unittest.TestCase):
             self.assertIn("projects bar: FAILED, 1 rules", shown.getvalue())
             with self.assertRaises(SystemExit):
                 gate.summarize(out, None, Path(folder, "manifest.jsonl"), None)
+
+
+def retrieval_row(mail_id: str, kinds: list, relevant: list, after: list, before: list = (), others: int = 0, terms: bool = True) -> dict:
+    picked = [{"path": path} for path in after] + [{"path": f"projects/other/{index}.md", "project": "other"} for index in range(others)]
+    return {
+        "id": mail_id, "kinds": kinds, "relevant": relevant, "before": [{"path": path} for path in before], "after": picked,
+        "termsValid": terms,
+    }
+
+
+class RetrievalTests(unittest.TestCase):
+    def rows(self) -> list[dict]:
+        return [
+            retrieval_row("m001", ["plain"], ["projects/a/x.md", "projects/a/y.md"], ["projects/a/x.md", "projects/a/y.md"], ["projects/a/x.md"]),
+            retrieval_row("r001", ["zh-en"], ["retrieval/folders/a/z.md"], ["retrieval/folders/a/z.md"]),
+            retrieval_row("r061", ["negative"], [], []),
+        ]
+
+    def run_compare(self, base: dict, cand: dict) -> gate.Result:
+        result = gate.Result()
+        gate.compare_retrieval(base, cand, result)
+        return result
+
+    def test_summary_gives_recall_and_hit_for_each_subset(self):
+        summary = gate.summarize_retrieval(self.rows())
+        self.assertEqual(summary["subsets"]["plain"], {"mails": 1, "recall_before": 50.0, "recall_after": 100.0, "hit_after": 100.0, "with_others": 0})
+        self.assertEqual(summary["subsets"]["zh-en"]["recall_after"], 100.0)
+        self.assertEqual(summary["mails"]["m001"]["found_after"], ["projects/a/x.md", "projects/a/y.md"])
+        self.assertEqual((summary["terms_valid"], summary["count"]), (3, 3))
+        self.assertEqual(self.run_compare({}, summary).failures, [])
+        self.assertEqual(self.run_compare(summary, summary).failures, [])
+
+    def test_a_lost_file_lower_recall_and_more_negatives_fail(self):
+        before = gate.summarize_retrieval(self.rows())
+        rows = self.rows()
+        rows[0] = retrieval_row("m001", ["plain"], ["projects/a/x.md", "projects/a/y.md"], ["projects/a/x.md"])
+        rows[2] = retrieval_row("r061", ["negative"], [], [], others=1)
+        rules = dict(self.run_compare(before, gate.summarize_retrieval(rows)).failures)
+        self.assertEqual(rules["retrieval plain: recall at 6 fell by more than 1.0 point"], ["retrieval/m001"])
+        self.assertEqual(rules["retrieval mails that lost a relevant file they had"], ["retrieval/m001"])
+        self.assertEqual(rules["retrieval: more negatives get a passage of another project"], ["retrieval/r061"])
+        rules = dict(self.run_compare(before, gate.summarize_retrieval(rows[1:])).failures)
+        self.assertEqual(rules["retrieval mails without a result"], ["retrieval/m001"])
+
+    def test_too_few_search_terms_fail_without_a_baseline(self):
+        rows = self.rows()
+        rows[1]["termsValid"] = False
+        rules = dict(self.run_compare({}, gate.summarize_retrieval(rows)).failures)
+        self.assertEqual(rules, {"retrieval: search terms for fewer than 95% of the mails": []})
+
+    def test_summarize_and_show_read_the_raw_rows(self):
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder, "out")
+            (out / "raw").mkdir(parents=True)
+            (out / "raw" / "retrieval.jsonl").write_text("\n".join(json.dumps(row) for row in self.rows()) + "\n", encoding="utf-8")
+            self.assertEqual(gate.summarize(out, None, Path(folder, "manifest.jsonl")), ["retrieval"])
+            with contextlib.redirect_stdout(io.StringIO()) as shown:
+                self.assertEqual(gate.show(out), 0)
+            self.assertIn("retrieval bar: passed", shown.getvalue())
+            result = gate.compare(out, out, ["retrieval"])
+            self.assertEqual(result.failures, [])
 
 
 if __name__ == "__main__":

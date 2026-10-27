@@ -24,6 +24,7 @@ struct ProjectsRuntimeTests {
     let mail = FakeMail()
     let model = FakeModel()
     let tokenizer = TokenizerLoads()
+    let machine = Machine()
 
     init() throws {
         defaults = try #require(UserDefaults(suiteName: suite))
@@ -41,9 +42,11 @@ struct ProjectsRuntimeTests {
     /// The runtime with fakes, and its switch and mailbox choice. `installed` says whether
     /// the cleanup model is on this Mac, `countsTokens` gives the explain service a
     /// tokenizer, `openFails` makes the start fail at the database, `folders` stands in for
-    /// how the index reaches project folders, `keyDown` for the presses of the talk key, and
-    /// `retryLoading` for Try Loading Again.
-    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+    /// how the index reaches project folders, `keyDown` for the presses of the talk key,
+    /// `retryLoading` for Try Loading Again, `download` for where the model's download
+    /// stands, and `recognize` for text recognition, which by default finds no text. The
+    /// dictation, Low Power Mode and heat come from `machine`.
+    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, download: Download = Download(), recognize: FolderIndex.Recognize? = nil) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
         let projects = ProjectsSwitch(defaults: defaults, isVisible: isVisible, physicalMemory: 32 << 30, storage: storage)
         if isOn {
             projects.turnOn()
@@ -65,16 +68,19 @@ struct ProjectsRuntimeTests {
             choice: choice,
             ownerOverride: { SortingService.Owner(addresses: [Self.own], name: "Me") },
             language: .en,
-            isDictating: { false },
+            isDictating: { [machine] in machine.isDictating },
             whenDictationStarts: { [keyDown] handler in keyDown?.handlers.append(handler) },
             modelEnvironment: { _ in model.environment },
             modelIsInstalled: { installed.value },
+            modelDownloadStatus: { download.status },
             retryLoadingModel: retryLoading,
             loadTokenCounter: { [tokenizer] in try await tokenizer.load(counter) },
             handoff: ReplyHandoff(copy: { _ in true }, mail: mail.bridge, isOrraActive: { true }, bringMailToFront: {}),
             watchesMemoryPressure: false,
             watchFolders: watchFolders,
             readText: readText,
+            recognizeText: recognize ?? RecognitionTestFiles.findsNothing,
+            power: { [machine] in machine.power },
             resolveFolders: resolveFolders,
             openDatabase: { storage in
                 opens?.add()
@@ -90,8 +96,8 @@ struct ProjectsRuntimeTests {
         return (runtime, projects, choice)
     }
 
-    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, sourceLocation: SourceLocation = #_sourceLocation) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
-        let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown, retryLoading: retryLoading)
+    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, download: Download = Download(), recognize: FolderIndex.Recognize? = nil, sourceLocation: SourceLocation = #_sourceLocation) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+        let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown, retryLoading: retryLoading, download: download, recognize: recognize)
         made.0.follow()
         try await waitUntil({ made.0.phase == .on }, sourceLocation: sourceLocation)
         return made
@@ -980,6 +986,29 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// While the cleanup model is not on this Mac, a line under the list says so: its
+    /// download with a spinner, the check of its files, or Settings… while it is missing,
+    /// where it downloads. Nothing once it is on this Mac, or while Projects is off.
+    @Test func theWindowSaysWhileTheModelIsNotOnThisMac() async throws {
+        defer { cleanUp() }
+        let download = Download()
+        let (runtime, projects, _) = try await started(download: download)
+        #expect(Lines.modelLine(runtime: runtime) == nil)
+        download.status = .downloading(bytes: 1_525_000_000, total: 3_050_000_000)
+        let downloading = try #require(Lines.modelLine(runtime: runtime))
+        #expect(downloading.text == CleanupLabels.progress(bytes: 1_525_000_000, total: 3_050_000_000))
+        #expect(downloading.text.hasPrefix("Downloading the cleanup model: 50% of "))
+        #expect(downloading.isActivity)
+        #expect(downloading.action == nil)
+        download.status = .verifying
+        #expect(Lines.modelLine(runtime: runtime) == Line(text: "Checking the downloaded files…", isActivity: true))
+        download.status = .missing
+        #expect(Lines.modelLine(runtime: runtime) == Line(text: "The cleanup model is not on this Mac yet. Download it in Projects Settings to explain mail.", action: .settings))
+        await projects.turnOff(keepingData: false)
+        try await waitUntil { runtime.phase == .off }
+        #expect(Lines.modelLine(runtime: runtime) == nil)
+    }
+
     /// The window says why no mail comes in: no mailbox chosen, Mail not open, or Orra not
     /// allowed to control Mail, each with its way out. A notice of Explain Message Selected
     /// in Mail that says the same shows once.
@@ -989,7 +1018,7 @@ struct ProjectsRuntimeTests {
         #expect(problems(runtime) == [Line(text: "Projects reads no mail yet. Choose its mailboxes in Settings.", action: .settings)])
         choice.choose([.inbox])
         choice.confirm()
-        #expect(problems(runtime) == [Line(text: "Mail is not open. Projects reads new mail while Mail runs.")])
+        #expect(problems(runtime) == [Line(text: "Mail is not open. Projects reads new mail while Mail runs.", action: .openMail)])
 
         mail.update {
             $0.isRunning = true
@@ -1377,6 +1406,185 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// The email view reads where a project's folders are now: their real paths, as the
+    /// index keeps its files. A project the list does not hold has none, and nothing is read
+    /// while Projects is off.
+    @Test func theFoldersOfAProjectResolveToTheirRealPaths() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let alpha = try folder("Alpha", holding: "alpha.txt")
+        let project = Project(name: "Harbor", folders: [try Project.bookmark(of: alpha)])
+        try await runtime.add(project)
+        let real = URL(fileURLWithPath: try #require(FolderWalk.realPath(alpha.path)), isDirectory: true)
+        let roots = try #require(await runtime.folderRoots(of: project.id))
+        #expect(roots == ProjectsEmailFiles.Roots(folders: [real]))
+        #expect(ProjectsEmailFiles.place(of: real.appending(path: "Drawings/plan.pdf"), in: roots) == .inFolder(name: "Alpha", path: ["Drawings"]))
+        #expect(await runtime.folderRoots(of: UUID()) == ProjectsEmailFiles.Roots())
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+        #expect(await runtime.folderRoots(of: project.id) == nil)
+    }
+
+    /// A folder whose bookmark finds nothing, such as one on a disk that is not connected,
+    /// is not available, by the path its bookmark keeps, next to the folders that are there.
+    /// So its files are not taken for files that left the project.
+    @Test func aFolderWhoseBookmarkFindsNothingIsNotAvailable() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let alpha = try folder("Alpha", holding: "alpha.txt")
+        let gone = try folder("Gone", holding: "gone.txt")
+        let goneBookmark = try Project.bookmark(of: gone)
+        let goneReal = URL(fileURLWithPath: try #require(FolderWalk.realPath(gone.path)), isDirectory: true)
+        try FileManager.default.removeItem(at: gone)
+        let project = Project(name: "Harbor", folders: [goneBookmark, try Project.bookmark(of: alpha)])
+        try await runtime.add(project)
+        let roots = try #require(await runtime.folderRoots(of: project.id))
+        let alphaReal = URL(fileURLWithPath: try #require(FolderWalk.realPath(alpha.path)), isDirectory: true)
+        #expect(roots == ProjectsEmailFiles.Roots(folders: [alphaReal], unavailable: [goneReal]))
+        #expect(ProjectsEmailFiles.place(of: goneReal.appending(path: "Plans/plan.pdf"), in: roots) == .unavailable(name: "Gone", path: ["Plans"]))
+        #expect(ProjectsEmailFiles.place(of: alphaReal.appending(path: "alpha.txt"), in: roots) == .inFolder(name: "Alpha", path: []))
+
+        let only = Project(name: "Kiln", folders: [goneBookmark])
+        try await runtime.add(only)
+        #expect(await runtime.folderRoots(of: only.id) == ProjectsEmailFiles.Roots(unavailable: [goneReal]))
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Projects turns off while the email view waits for a project's folder to resolve, such
+    /// as on a share that hangs. Once it resolves, nothing reads the folder.
+    @Test(.timeLimit(.minutes(1))) func aFolderIsNotReadOnceProjectsTurnedOffDuringItsResolve() async throws {
+        defer { cleanUp() }
+        let folders = StallingFolders()
+        let (runtime, projects, _) = try await started(folders: folders)
+        var project = Project(name: "Harbor")
+        try await runtime.add(project)
+        try await waitUntil { runtime.indexReport(project.id)?.isIndexing == false }
+        project.folders = [try Project.bookmark(of: folder("Alpha", holding: "alpha.txt"))]
+        try await runtime.update(project)
+        try await waitUntil { folders.isHolding }
+        let reads = HeldReads(holds: false)
+        runtime.readRealPath = { await reads.read($0) }
+
+        let roots = Task { await runtime.folderRoots(of: project.id) }
+        try await Task.sleep(for: .milliseconds(100))
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+        folders.letGo()
+        #expect(await roots.value == nil)
+        #expect(reads.started.isEmpty)
+    }
+
+    /// The email view reads the real path of a project's folders one at a time. When the
+    /// first takes long, as on a share that hangs, and Projects turns off or the user takes
+    /// the second folder out of the project meanwhile, the second is never read.
+    @Test(.timeLimit(.minutes(1)), arguments: [false, true])
+    func theNextFolderIsNotReadOnceProjectsChangedDuringARead(_ removesFolder: Bool) async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let alpha = try Project.bookmark(of: folder("Alpha", holding: "alpha.txt"))
+        var project = Project(name: "Harbor", folders: [alpha, try Project.bookmark(of: folder("Beta", holding: "beta.txt"))])
+        try await runtime.add(project)
+        let reads = HeldReads()
+        runtime.readRealPath = { await reads.read($0) }
+
+        let roots = Task { await runtime.folderRoots(of: project.id) }
+        try await waitUntil { reads.isHolding }
+        if removesFolder {
+            project.folders = [alpha]
+            try await runtime.update(project)
+        } else {
+            await projects.turnOff(keepingData: true)
+            try await waitUntil { runtime.phase == .off }
+        }
+        reads.letGo()
+        #expect(await roots.value == nil)
+        #expect(reads.started == ["Alpha"])
+        if removesFolder {
+            await projects.turnOff(keepingData: true)
+            try await waitUntil { runtime.phase == .off }
+        }
+    }
+
+    /// The list closes while the email view reads the real path of a project's first
+    /// folder, as on a share that hangs, so the task that asked is cancelled. The second
+    /// folder is never read.
+    @Test(.timeLimit(.minutes(1))) func theNextFolderIsNotReadOnceTheListCloses() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let project = Project(name: "Harbor", folders: [
+            try Project.bookmark(of: folder("Alpha", holding: "alpha.txt")),
+            try Project.bookmark(of: folder("Beta", holding: "beta.txt")),
+        ])
+        try await runtime.add(project)
+        let reads = HeldReads()
+        runtime.readRealPath = { await reads.read($0) }
+
+        let roots = Task { await runtime.folderRoots(of: project.id) }
+        try await waitUntil { reads.isHolding }
+        roots.cancel()
+        reads.letGo()
+        #expect(await roots.value == nil)
+        #expect(reads.started == ["Alpha"])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A folder the user renamed, then took out of reach, is not available under the name
+    /// it had when Orra last found it too, not only under the one it had when the user added
+    /// it.
+    @Test func aRenamedFolderThatIsGoneIsNotAvailableUnderItsLastName() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let old = try folder("Old lobby", holding: "plan.txt")
+        let bookmark = try Project.bookmark(of: old)
+        let added = URL(fileURLWithPath: try #require(FolderWalk.realPath(old.path)), isDirectory: true)
+        let renamed = root.appendingPathComponent("Harbor lobby", isDirectory: true)
+        try FileManager.default.moveItem(at: old, to: renamed)
+        let project = Project(name: "Harbor", folders: [bookmark])
+        try await runtime.add(project)
+        let real = URL(fileURLWithPath: try #require(FolderWalk.realPath(renamed.path)), isDirectory: true)
+        #expect(await runtime.folderRoots(of: project.id) == ProjectsEmailFiles.Roots(folders: [real]))
+
+        try FileManager.default.removeItem(at: renamed)
+        let roots = try #require(await runtime.folderRoots(of: project.id))
+        #expect(roots.folders.isEmpty)
+        #expect(roots.unavailable.map(\.path) == [real.path, added.path])
+        #expect(ProjectsEmailFiles.place(of: real.appending(path: "Drawings/plan.pdf"), in: roots) == .unavailable(name: "Harbor lobby", path: ["Drawings"]))
+        #expect(ProjectsEmailFiles.place(of: added.appending(path: "plan.txt"), in: roots) == .unavailable(name: "Old lobby", path: []))
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// The user takes the folder out of the project while the email view waits for it to
+    /// resolve. Once it resolves, nothing reads it, and the view gets the folders as they
+    /// are now when it asks again.
+    @Test(.timeLimit(.minutes(1))) func aFolderTheProjectNoLongerHoldsIsNotReadOnceItResolves() async throws {
+        defer { cleanUp() }
+        let folders = StallingFolders()
+        let (runtime, projects, _) = try await started(folders: folders)
+        var project = Project(name: "Harbor")
+        try await runtime.add(project)
+        try await waitUntil { runtime.indexReport(project.id)?.isIndexing == false }
+        project.folders = [try Project.bookmark(of: folder("Alpha", holding: "alpha.txt"))]
+        try await runtime.update(project)
+        try await waitUntil { folders.isHolding }
+        let reads = HeldReads(holds: false)
+        runtime.readRealPath = { await reads.read($0) }
+
+        let roots = Task { await runtime.folderRoots(of: project.id) }
+        try await Task.sleep(for: .milliseconds(100))
+        project.folders = []
+        try await runtime.update(project)
+        folders.letGo()
+        #expect(await roots.value == nil)
+        #expect(reads.started.isEmpty)
+        #expect(await runtime.folderRoots(of: project.id) == ProjectsEmailFiles.Roots())
+        #expect(reads.started.isEmpty)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     // MARK: The model
 
     @Test func sortingAsksTheModelOnlyWhileTheWindowHoldsIt() async throws {
@@ -1460,6 +1668,67 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// Text recognition waits for a dictation, Live Captions, a request of the user, memory
+    /// pressure, Low Power Mode and heat, and says the first that holds, so a pause that
+    /// passes soon is never hidden behind a lasting one.
+    @Test func recognitionWaitsForEachPauseInItsOrder() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        #expect(runtime.recognitionPause() == nil)
+        machine.isDictating = true
+        model.captionsOn.withLock { $0 = true }
+        #expect(runtime.recognitionPause() == .dictation)
+        machine.isDictating = false
+        #expect(runtime.recognitionPause() == .captions)
+        model.captionsOn.withLock { $0 = false }
+
+        let request = Task { try await runtime.userRequest { try await Task.sleep(for: .seconds(3_600)) } }
+        try await waitUntil { runtime.userRequestCount == 1 }
+        #expect(runtime.recognitionPause() == .request)
+        request.cancel()
+        try await waitUntil { runtime.userRequestCount == 0 }
+
+        let memory = try #require(runtime.running?.memory)
+        memory.update(.warning)
+        #expect(runtime.recognitionPause() == .memory)
+        memory.update(.normal)
+        machine.power = ProjectsRuntime.PowerState(isLowPowerModeOn: true, isHot: true)
+        #expect(runtime.recognitionPause() == .lowPower)
+        machine.power = ProjectsRuntime.PowerState(isLowPowerModeOn: false, isHot: true)
+        #expect(runtime.recognitionPause() == .heat)
+        machine.power = ProjectsRuntime.PowerState()
+        #expect(runtime.recognitionPause() == nil)
+        #expect(FolderIndex.RecognitionPause.allCases.filter(\.isLasting) == [.memory, .lowPower, .heat])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// The press of a key and the start of a request of the user stop the page recognition
+    /// reads at once, so it never runs beside them.
+    @Test func theKeyDownAndARequestStopThePageUnderWay() async throws {
+        defer { cleanUp() }
+        let hold = TextRecognitionTests.Hold()
+        let keyDown = KeyDown()
+        let (runtime, projects, _) = try await started(keyDown: keyDown, recognize: { _, _ in
+            await hold.untilCancelled()
+            return .success(RecognitionResult())
+        })
+        let folder = root.appendingPathComponent("Harbor", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("picture".utf8).write(to: folder.appendingPathComponent("sign.png"))
+        try await runtime.add(Project(name: "Harbor", folders: [try Project.bookmark(of: folder)]))
+        await hold.untilBegun()
+        keyDown.press()
+        #expect(hold.cancelled == 1)
+        // Without a dictation under way the page is read again at once.
+        await hold.untilBegun(2)
+        let request = Task { try await runtime.userRequest { try await Task.sleep(for: .seconds(3_600)) } }
+        try await waitUntil { hold.cancelled == 2 }
+        request.cancel()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     /// Turning Projects off ends an explanation under way, and waits for it before the
     /// files close. Without that the fake model's job would wait for an hour.
     @Test(.timeLimit(.minutes(1))) func turningOffEndsARequestOfTheUser() async throws {
@@ -1486,6 +1755,215 @@ struct ProjectsRuntimeTests {
         #expect(model.ended.value == 1)
         #expect(runtime.userRequestCount == 0)
         #expect(model.holds.value == 0)
+    }
+
+    // MARK: Search terms
+
+    /// The first Explain of an email asks the model for search terms, a request of the user
+    /// before the explanation's own, and saves them with the explanation. Explain Again
+    /// searches with the saved ones and asks the model for the explanation only.
+    @Test(.timeLimit(.minutes(1))) func explainAsksForTermsOnceAndThenUsesTheSavedOnes() async throws {
+        defer { cleanUp() }
+        model.isThere.withLock { $0 = true }
+        let (runtime, projects, _) = try await started(installed: Installed(true), countsTokens: true)
+        let harbor = Project(name: "Harbor", people: [Project.Person(name: "Mei Tan", address: "mei@harbor.example")])
+        try await runtime.add(harbor)
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("e@harbor.example", from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("e@harbor.example", in: .project(harbor.id), runtime) { $0.level == .sure }
+        runtime.windowOpened()
+        let before = model.jobs.value
+        let first = try await runtime.explain("e@harbor.example")
+        #expect(first.searchTerms == ["lamp", "fixture"])
+        #expect(model.termsJobs.value == 1)
+        #expect(model.jobs.value == before + 2)
+        #expect(await runtime.explanation(for: "e@harbor.example")?.searchTerms == ["lamp", "fixture"])
+
+        let again = try await runtime.explain("e@harbor.example")
+        #expect(again.searchTerms == ["lamp", "fixture"])
+        #expect(model.termsJobs.value == 1)
+        #expect(model.jobs.value == before + 3)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// An answer without terms leaves the explanation as before terms: nothing is saved, so
+    /// the next Explain asks again.
+    @Test(.timeLimit(.minutes(1))) func anAnswerWithoutTermsLeavesTheExplanationAsBefore() async throws {
+        defer { cleanUp() }
+        model.isThere.withLock { $0 = true }
+        model.terms.withLock { $0 = "I cannot find any terms." }
+        let (runtime, projects, _) = try await started(installed: Installed(true), countsTokens: true)
+        let harbor = Project(name: "Harbor", people: [Project.Person(name: "Mei Tan", address: "mei@harbor.example")])
+        try await runtime.add(harbor)
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("e@harbor.example", from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("e@harbor.example", in: .project(harbor.id), runtime) { $0.level == .sure }
+        runtime.windowOpened()
+        let first = try await runtime.explain("e@harbor.example")
+        #expect(first.searchTerms == nil)
+        #expect(model.termsJobs.value == 1)
+        _ = try await runtime.explain("e@harbor.example")
+        #expect(model.termsJobs.value == 2)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Forget Project ends the explanations under way, since one may hold excerpts of the
+    /// project's files, and the store saves nothing of them.
+    @Test(.timeLimit(.minutes(1))) func forgetProjectEndsAnExplanationUnderWay() async throws {
+        defer { cleanUp() }
+        model.isThere.withLock { $0 = true }
+        let (runtime, projects, _) = try await started(installed: Installed(true), countsTokens: true)
+        let harbor = Project(name: "Harbor", people: [Project.Person(name: "Mei Tan", address: "mei@harbor.example")])
+        let maple = Project(name: "Maple")
+        try await runtime.add(harbor)
+        try await runtime.add(maple)
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("e@harbor.example", from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("e@harbor.example", in: .project(harbor.id), runtime) { $0.level == .sure }
+        runtime.windowOpened()
+        model.blocks.withLock { $0 = true }
+        let jobs = model.jobs.value
+        let explaining = Task { try await runtime.explain("e@harbor.example") }
+        try await waitUntil { model.jobs.value == jobs + 1 }
+        #expect(runtime.userRequestCount == 1)
+        try await runtime.forget(maple.id)
+        await #expect(throws: CancellationError.self) {
+            _ = try await explaining.value
+        }
+        #expect(model.ended.value == 1)
+        #expect(runtime.userRequestCount == 0)
+        #expect(await runtime.explanation(for: "e@harbor.example") == nil)
+        #expect(runtime.projectList.map(\.id) == [harbor.id])
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    // MARK: The draft apart from other projects' passages
+
+    /// An email of Harbor, whose folders hold nothing, while the folder of Kiln holds a file
+    /// about the lamps that the model's search terms name, so its prompt shows that file of
+    /// Kiln.
+    private func harborEmailWithKilnLamps() async throws -> (ProjectsRuntime, ProjectsSwitch, Project) {
+        model.isThere.withLock { $0 = true }
+        let (runtime, projects, _) = try await started(installed: Installed(true), countsTokens: true)
+        let harbor = Project(name: "Harbor", people: [Project.Person(name: "Mei Tan", address: "mei@harbor.example")])
+        let folder = root.appendingPathComponent("Kiln", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try "A lamp fixture for the studio lobby, hung along the north wall.".write(to: folder.appendingPathComponent("lamps.txt"), atomically: true, encoding: .utf8)
+        let kiln = Project(name: "Kiln", folders: [try Project.bookmark(of: folder)])
+        try await runtime.add(harbor)
+        try await runtime.add(kiln)
+        try await waitUntil { runtime.indexReport(kiln.id)?.indexed == 1 }
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("e@harbor.example", from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("e@harbor.example", in: .project(harbor.id), runtime) { $0.level == .sure }
+        runtime.windowOpened()
+        return (runtime, projects, kiln)
+    }
+
+    /// The explanation's prompt shows the file of Kiln and asks for no draft, and a second
+    /// request of the user, whose prompt holds nothing of Kiln, writes the draft.
+    @Test(.timeLimit(.minutes(1))) func anotherProjectsPassageGetsTheDraftFromASecondRequest() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, kiln) = try await harborEmailWithKilnLamps()
+        let jobs = model.jobs.value
+        let explanation = try await runtime.explain("e@harbor.example")
+        #expect(model.jobs.value == jobs + 3)
+        let prompts = model.prompts.withLock { Array($0.suffix(3)) }
+        #expect(prompts[0].hasSuffix(SearchTermsPrompt.prefill))
+        #expect(prompts[1].contains("<other_files>") && prompts[1].contains("north wall") && prompts[1].contains("its draft is written apart"))
+        #expect(!prompts[2].contains("other_files") && !prompts[2].contains("north wall") && !prompts[2].contains("Kiln"))
+        #expect(explanation.sourceProjects.contains(kiln.id))
+        #expect(await runtime.explanation(for: "e@harbor.example") == explanation)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Forget Project ends both requests of an explanation that shows a file of the
+    /// project: while the first one runs, the draft's request is never sent, and while the
+    /// draft's request runs, it ends. Nothing is saved.
+    @Test(.timeLimit(.minutes(1)), arguments: [false, true])
+    func forgetProjectEndsBothRequestsOfAnExplanation(duringTheDraft: Bool) async throws {
+        defer { cleanUp() }
+        let (runtime, projects, kiln) = try await harborEmailWithKilnLamps()
+        model.blocksWhen.withLock {
+            $0 = { prompt in !prompt.hasSuffix(SearchTermsPrompt.prefill) && prompt.contains("<other_files>") != duringTheDraft }
+        }
+        let jobs = model.jobs.value
+        let explaining = Task { try await runtime.explain("e@harbor.example") }
+        let started = jobs + (duringTheDraft ? 3 : 2)
+        try await waitUntil { model.jobs.value == started }
+        #expect(runtime.userRequestCount == 1)
+        try await runtime.forget(kiln.id)
+        await #expect(throws: CancellationError.self) {
+            _ = try await explaining.value
+        }
+        #expect(model.ended.value == 1)
+        #expect(model.jobs.value == started)
+        #expect(runtime.userRequestCount == 0)
+        #expect(await runtime.explanation(for: "e@harbor.example") == nil)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A dictation that starts as the first request ends holds the draft's request, which
+    /// waits in the queue and runs once the dictation is over.
+    @Test(.timeLimit(.minutes(1))) func aDictationHoldsTheDraftsRequestUntilItEnds() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await harborEmailWithKilnLamps()
+        model.dictatesAfter.withLock { $0 = { $0.contains("<other_files>") } }
+        let queue = try #require(runtime.running?.queue)
+        let jobs = model.jobs.value
+        let explaining = Task { try await runtime.explain("e@harbor.example") }
+        try await waitUntil { queue.pause == .dictation }
+        #expect(model.jobs.value == jobs + 2)
+        model.dictating.withLock { $0 = false }
+        let explanation = try await explaining.value
+        #expect(model.jobs.value == jobs + 3)
+        #expect(explanation.sources.keys.contains(where: ExplainPrompt.isOtherFileSource))
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Closing the window while an explanation waits lets it go on, and the explanation
+    /// holds the model from start to end, so the last holder does not let go between the
+    /// request of the explanation and the draft's, which would unload the model and load it
+    /// again.
+    @Test(.timeLimit(.minutes(1))) func anExplanationHoldsTheModelBetweenItsRequestsAfterTheWindowCloses() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, kiln) = try await harborEmailWithKilnLamps()
+        // A dictation starts as the terms job ends, so the explanation's request waits.
+        model.dictatesAfter.withLock { $0 = { $0.hasSuffix(SearchTermsPrompt.prefill) } }
+        let queue = try #require(runtime.running?.queue)
+        let jobs = model.jobs.value
+        let explaining = Task { try await runtime.explain("e@harbor.example") }
+        try await waitUntil { queue.pause == .dictation }
+        #expect(model.jobs.value == jobs + 1)
+        runtime.windowClosed()
+        let emptied = model.emptied.value
+        #expect(model.holds.value > 0)
+        model.dictatesAfter.withLock { $0 = nil }
+        model.dictating.withLock { $0 = false }
+        let explanation = try await explaining.value
+        #expect(model.jobs.value == jobs + 3)
+        #expect(explanation.sourceProjects.contains(kiln.id))
+        #expect(model.emptied.value == emptied + 1)
+        #expect(model.holds.value == 0)
+        #expect(await runtime.explanation(for: "e@harbor.example") == explanation)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
     }
 
     // MARK: Explain Message Selected in Mail
@@ -2843,6 +3321,23 @@ struct ProjectsRuntimeTests {
         }
     }
 
+    /// Whether a dictation is under way, and Low Power Mode and the heat of the Mac, which a
+    /// test changes.
+    final class Machine: Sendable {
+        private let dictating = Mutex(false)
+        private let state = Mutex(ProjectsRuntime.PowerState())
+
+        var isDictating: Bool {
+            get { dictating.withLock { $0 } }
+            set { dictating.withLock { $0 = newValue } }
+        }
+
+        var power: ProjectsRuntime.PowerState {
+            get { state.withLock { $0 } }
+            set { state.withLock { $0 = newValue } }
+        }
+    }
+
     /// The presses of the talk key, as EngineTurns.whenDictationStarts hands them on.
     final class KeyDown {
         var handlers: [() -> Void] = []
@@ -2862,6 +3357,12 @@ struct ProjectsRuntimeTests {
         init(_ value: Bool = false) {
             self.value = value
         }
+    }
+
+    /// Where the cleanup model's download stands, as the app maps it from the installer,
+    /// which a test changes.
+    @Observable final class Download {
+        var status = ProjectsRuntime.ModelDownloadStatus.none
     }
 
     /// How the index reaches project folders, recorded by name: resolves bookmarks with
@@ -2950,23 +3451,101 @@ struct ProjectsRuntimeTests {
         }
     }
 
+    /// Reads the real path of a folder as the email view does, but holds the first read
+    /// until the test lets it go, as a folder on a share that hangs would, and records the
+    /// names of the folders it was asked for, in order. With `holds` false it only records
+    /// them.
+    final class HeldReads: Sendable {
+        private nonisolated struct State: Sendable {
+            var started: [String] = []
+            var held: CheckedContinuation<Void, Never>?
+            var letGo = false
+        }
+
+        private let state: Mutex<State>
+
+        nonisolated init(holds: Bool = true) {
+            state = Mutex(State(letGo: !holds))
+        }
+
+        nonisolated var isHolding: Bool {
+            state.withLock { $0.held != nil }
+        }
+
+        nonisolated var started: [String] {
+            state.withLock { $0.started }
+        }
+
+        nonisolated func letGo() {
+            let held = state.withLock { state in
+                state.letGo = true
+                defer { state.held = nil }
+                return state.held
+            }
+            held?.resume()
+        }
+
+        nonisolated func read(_ folder: URL) async -> URL? {
+            let first = state.withLock { state in
+                state.started.append(folder.lastPathComponent)
+                return state.started.count == 1
+            }
+            if first {
+                await withCheckedContinuation { continuation in
+                    let goes = state.withLock { state in
+                        if !state.letGo {
+                            state.held = continuation
+                        }
+                        return state.letGo
+                    }
+                    if goes {
+                        continuation.resume()
+                    }
+                }
+            }
+            return await FolderWalk.realPath(of: folder)
+        }
+    }
+
     /// The model, missing until a test puts it there. A job answers the first candidate of
-    /// a sorting prompt at once, or with `blocks` waits until it is cancelled. Counts the
-    /// jobs, those ended by a cancel, and the holders the window and the requests of the
-    /// user take.
+    /// a sorting prompt at once, and the terms of `terms` to a prompt for search terms, or
+    /// with `blocks` waits until it is cancelled. Counts the jobs, those ended by a cancel,
+    /// those for search terms, the holders the window and the requests of the user take, and
+    /// the times the last of them let go.
     final class FakeModel: Sendable {
         let holds = Count()
         let releases = Count()
+        let emptied = Count()
         let jobs = Count()
         let ended = Count()
+        let termsJobs = Count()
         let isThere = Mutex(false)
         let blocks = Mutex(false)
+        let captionsOn = Mutex(false)
+        /// Blocks, as `blocks` does, each job whose prompt it holds true for.
+        let blocksWhen = Mutex<(@Sendable (String) -> Bool)?>(nil)
+        /// Whether a dictation is under way, which pauses every job.
+        let dictating = Mutex(false)
+        /// Starts a dictation as a job whose prompt it holds true for ends.
+        let dictatesAfter = Mutex<(@Sendable (String) -> Bool)?>(nil)
+        /// The prompt of every job, in order.
+        let prompts = Mutex<[String]>([])
+        /// What the model writes after the prefill of the search terms prompt.
+        let terms = Mutex(#"lamp", "fixture"]}"#)
+        /// Whether the job under way is for search terms. One job runs at a time.
+        private let asksForTerms = Mutex(false)
 
         @MainActor var environment: ProjectsModelEnvironment {
             ProjectsModelEnvironment(
-                startJob: { [self] _, _ in
+                startJob: { [self] prompt, _ in
                     jobs.add()
-                    if blocks.withLock({ $0 }) {
+                    prompts.withLock { $0.append(prompt) }
+                    let forTerms = prompt.hasSuffix(SearchTermsPrompt.prefill)
+                    asksForTerms.withLock { $0 = forTerms }
+                    if forTerms {
+                        termsJobs.add()
+                    }
+                    if blocks.withLock({ $0 }) || blocksWhen.withLock({ $0 })?(prompt) == true {
                         do {
                             try await Task.sleep(for: .seconds(3_600))
                         } catch {
@@ -2978,17 +3557,25 @@ struct ProjectsRuntimeTests {
                 },
                 readSlice: { _, _ in RewriteEngine.SliceRun(read: 10, remaining: 0, ran: .zero) },
                 writeBurst: { _, _ in RewriteEngine.BurstRun(written: 4, finished: true, ran: .zero) },
-                endJob: { _ in #"P1", "reason": "fits"}"# },
-                isDictating: { false },
-                captionsOn: { false },
+                endJob: { [self] _ in
+                    if let prompt = prompts.withLock({ $0.last }), dictatesAfter.withLock({ $0 })?(prompt) == true {
+                        dictating.withLock { $0 = true }
+                    }
+                    return asksForTerms.withLock { $0 } ? terms.withLock { $0 } : #"P1", "reason": "fits"}"#
+                },
+                isDictating: { [self] in dictating.withLock { $0 } },
+                captionsOn: { [self] in captionsOn.withLock { $0 } },
                 memoryPressure: { .normal },
                 voiceLoaded: { false },
                 physicalMemory: 32 << 30,
                 waitUntilLoaded: { [self] in isThere.withLock { $0 } },
                 holdModel: { [holds] in holds.add() },
-                releaseModel: { [holds, releases] in
+                releaseModel: { [holds, releases, emptied] in
                     holds.add(-1)
                     releases.add()
+                    if holds.value == 0 {
+                        emptied.add()
+                    }
                 },
                 sleep: { try await Task.sleep(for: $0) }
             )

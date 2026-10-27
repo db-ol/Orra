@@ -98,6 +98,29 @@ struct RetentionTests {
         await store.close()
     }
 
+    /// The files the user chose for an email go with its text, 90 days after the read, and not
+    /// before.
+    @Test func theChoiceOfFilesGoesWithTheEmailsText() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([Self.message("old@test.example", day: -60)], ownAddresses: [Self.work], at: Self.start)
+        try await store.save([Self.message("new@test.example", day: 0)], ownAddresses: [Self.work], at: Self.date(30))
+        let files = [
+            MailStore.ChosenFile(project: Self.harbor, path: "/Projects/Harbor/signs.pdf"),
+            MailStore.ChosenFile(project: Self.harbor, path: "/Projects/Harbor/sizes.md"),
+        ]
+        #expect(try await store.saveChosenFiles(files, for: "old@test.example"))
+        #expect(try await store.saveChosenFiles(Array(files.prefix(1)), for: "new@test.example"))
+        #expect(try await Retention.apply(to: store, now: Self.date(89)).isEmpty)
+        #expect(try await store.chosenFiles(of: "old@test.example").count == 2)
+
+        let removed = try await Retention.apply(to: store, now: Self.date(91))
+        #expect(removed == Retention.Removed(texts: 1, chosenFiles: 2))
+        #expect(try await store.chosenFiles(of: "old@test.example").isEmpty)
+        #expect(try await store.chosenFiles(of: "new@test.example").count == 1)
+        await store.close()
+    }
+
     /// The 180 days count from the read of the thread's newest message, so mail the user
     /// chose to read from further back stays as long as new mail.
     @Test func anEmailGoesWithItsThread180DaysAfterOrraReadTheThreadsNewestMessage() async throws {

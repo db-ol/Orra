@@ -26,6 +26,18 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
+    /// The line under the mail list while the cleanup model is not on this Mac: how far its
+    /// download is, with the words of Settings, that Orra checks its files, or that it is
+    /// missing. Nil once it is on this Mac.
+    static func modelLine(_ status: ProjectsRuntime.ModelDownloadStatus) -> String? {
+        switch status {
+        case .none: nil
+        case .downloading(let bytes, let total): CleanupLabels.progress(bytes: bytes, total: total)
+        case .verifying: String(localized: "Checking the downloaded files…")
+        case .missing: String(localized: "The cleanup model is not on this Mac yet. Download it in Projects Settings to explain mail.")
+        }
+    }
+
     /// What the scan does, or what ended its last pass.
     static func scan(_ state: ProjectsRuntime.ScanState) -> String {
         switch state {
@@ -103,7 +115,8 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
-    /// Why a file gives no text, for the project page.
+    /// Why a file gives no text, for the project page. The page only counts the files of
+    /// some reasons, see `FolderWalk.countedSkips` and `FolderIndex.countedSkips`.
     static func skipReason(_ reason: FileSkipReason) -> String {
         switch reason {
         case .hidden: String(localized: "Hidden")
@@ -117,13 +130,26 @@ nonisolated enum ProjectsWindowText {
         case .tooLarge: String(localized: "Too large")
         case .dataless, .notDownloaded: String(localized: "Not downloaded to this Mac")
         case .unsupportedFormat: String(localized: "A format Projects does not read")
-        case .spreadsheetOrSlides: String(localized: "Excel and PowerPoint files are not read yet")
         case .noAccess: String(localized: "Orra is not allowed to read it")
         case .unreadable: String(localized: "Could not be read")
         case .locked: String(localized: "Locked with a password")
         case .tooSlow: String(localized: "Took too long to read")
         case .noText: String(localized: "Holds no text")
         case .cancelled: String(localized: "Not read yet")
+        case .waitsForRecognition: String(localized: "Waiting for text recognition")
+        case .imageWithoutText: String(localized: "An image without text")
+        case .overFileLimit: String(localized: "Past the number of files Projects reads")
+        }
+    }
+
+    /// Why text recognition waits, for the project page, nil for the pauses that pass soon,
+    /// a dictation, Live Captions and a request of the user, which the page does not show.
+    static func recognitionPause(_ pause: FolderIndex.RecognitionPause) -> String? {
+        switch pause {
+        case .dictation, .captions, .request: nil
+        case .memory: String(localized: "Text recognition waits while this Mac is low on memory.")
+        case .lowPower: String(localized: "Text recognition waits while Low Power Mode is on.")
+        case .heat: String(localized: "Text recognition waits until this Mac cools down.")
         }
     }
 
@@ -229,7 +255,20 @@ nonisolated enum ProjectsWindowText {
         case .actionClaim: String(localized: "A sentence that claims something was done was taken out. Orra does nothing in Mail for you.")
         case .assistantVoice: String(localized: "A sentence that speaks as an assistant was taken out.")
         case .projectData: String(localized: "Project data was taken out, since the reply reaches someone outside the project.")
+        case .otherProjectData: String(localized: "Data from another project's files was taken out.")
+        case .otherProjectText: String(localized: "A sentence from another project's file was taken out.")
         }
+    }
+
+    /// The line under the points when one cites an excerpt of another project's file. It says
+    /// that a request without those excerpts wrote the draft, see ExplainService.explain(_:),
+    /// only when the explanation has a draft: none is written when no reply is due or the
+    /// email is in another language, and the draft's request may fail.
+    static func otherProjectsNote(_ explanation: Explanation) -> String {
+        if case .checked = explanation.draft {
+            return String(localized: "Some sources are files of other projects. They are only for you, and the draft was written without them.")
+        }
+        return String(localized: "Some sources are files of other projects. They are only for you.")
     }
 
     /// Why the explanation holds no draft to change.
@@ -419,19 +458,189 @@ nonisolated enum ProjectsWindowText {
         case .mail:
             return String(localized: "An earlier email")
         case .file(let chunk):
-            let name = chunk.file.lastPathComponent
-            guard let page = chunk.page else { return name }
-            return String(localized: "\(name), page \(page)")
+            return file(chunk.file.lastPathComponent, at: place(of: chunk))
+        case .otherProjectFile(let chunk, let project):
+            let file = Self.source(.file(chunk))
+            return String(
+                localized: "\(file) (\(project ?? String(localized: "another project")))",
+                comment: "A file of another project with that project, such as floor-plan.pdf, page 1 (Kiln studio)")
         case .attachment(let name, _):
             return name
         }
     }
 
-    /// What VoiceOver reads for a source's chip: its text, and for an attachment that it is
-    /// one, since its chip may show the name of a project file too.
+    /// The label of another project's file in two parts, the file and then the project in
+    /// its brackets, as `source(_:)` writes them, so the chip can shorten the file's name and
+    /// keep the project's. Nil for any other source, and when a translation puts the file
+    /// elsewhere than first.
+    static func sourceParts(_ source: ProjectsEmailModel.Source) -> (file: String, project: String)? {
+        guard case .otherProjectFile(let chunk, _) = source else { return nil }
+        let file = Self.source(.file(chunk))
+        let whole = Self.source(source)
+        guard whole.hasPrefix(file), whole.count > file.count else { return nil }
+        return (file, String(whole.dropFirst(file.count)))
+    }
+
+    /// Where an excerpt lies in its file: a page of a PDF, a slide of a deck or a sheet of a
+    /// workbook. Every label of an excerpt names its place through `place(of:)`, so a slide
+    /// or a sheet never reads as a page.
+    nonisolated enum Place: Hashable {
+        case page(Int)
+        case slide(Int)
+        case sheet(String)
+    }
+
+    /// The place of an excerpt, nil for a file without pages, such as a docx. A chunk's page
+    /// is a slide in a pptx or ppsx.
+    static func place(of chunk: TextChunker.Chunk) -> Place? {
+        if let sheet = chunk.sheet, !sheet.isEmpty { return .sheet(sheet) }
+        guard let page = chunk.page else { return nil }
+        return ["pptx", "ppsx"].contains(chunk.file.pathExtension.lowercased()) ? .slide(page) : .page(page)
+    }
+
+    /// A place on a line of its own, such as Page 2, Slide 3 or Sheet “Budget”.
+    static func place(_ place: Place) -> String {
+        switch place {
+        case .page(let page): String(localized: "Page \(page)")
+        case .slide(let slide): String(localized: "Slide \(slide)")
+        case .sheet(let sheet): String(localized: "Sheet “\(sheet)”")
+        }
+    }
+
+    /// A file's name with the place of an excerpt in it, such as schedule.pdf, page 2.
+    static func file(_ name: String, at place: Place?) -> String {
+        switch place {
+        case nil: name
+        case .page(let page)?: String(localized: "\(name), page \(page)")
+        case .slide(let slide)?: String(localized: "\(name), slide \(slide)")
+        case .sheet(let sheet)?: String(localized: "\(name), sheet “\(sheet)”")
+        }
+    }
+
+    /// The note under the place of an excerpt whose text was recognized in an image or on a
+    /// scanned page, nil for any other.
+    static func recognized(_ chunk: TextChunker.Chunk) -> String? {
+        chunk.recognized == true ? String(localized: "Recognized from an image, so words and numbers may be wrong.") : nil
+    }
+
+    /// What VoiceOver reads for a source's chip: its text, for an attachment that it is
+    /// one, since its chip may show the name of a project file too, and for another
+    /// project's file the project it is from.
     static func sourceLabel(_ source: ProjectsEmailModel.Source) -> String {
-        guard case .attachment(let name, _) = source else { return Self.source(source) }
-        return String(localized: "Attachment \(name)")
+        switch source {
+        case .attachment(let name, _):
+            return String(localized: "Attachment \(name)")
+        case .otherProjectFile(let chunk, let project?):
+            return String(localized: "\(sourceLabel(.file(chunk))), from the project \(project)")
+        case .otherProjectFile(let chunk, nil):
+            return String(localized: "\(sourceLabel(.file(chunk))), from another project")
+        case .thisEmail, .mail, .file:
+            return Self.source(source)
+        }
+    }
+
+    /// The line under a file's name in the popover of its excerpt, with its page, slide or
+    /// sheet. The explanation keeps the excerpt as the index had it, with any lines that the
+    /// hygiene took out before the model read it, so the popover calls it saved.
+    static func savedExcerpt(_ chunk: TextChunker.Chunk) -> String {
+        switch place(of: chunk) {
+        case nil: String(localized: "Saved excerpt")
+        case .page(let page)?: String(localized: "Saved excerpt, page \(page)")
+        case .slide(let slide)?: String(localized: "Saved excerpt, slide \(slide)")
+        case .sheet(let sheet)?: String(localized: "Saved excerpt, sheet “\(sheet)”")
+        }
+    }
+
+    // MARK: The project files of an explanation
+
+    /// The heading of the folded list of the project files an explanation gave the model,
+    /// with their count.
+    static func projectFiles(_ count: Int) -> String {
+        String(localized: "Project Files for This Explanation (\(count))")
+    }
+
+    /// What the list says when the explanation gave the model no excerpt of a project file,
+    /// for an email in a project or in none. Assigning an email in no project takes its
+    /// explanation away, see MailStore.move(_:to:), and the window then shows the next email
+    /// of its list, see ProjectsWindowModel.move(_:to:), so the line says to explain the
+    /// email in its project's list.
+    static func noProjectFiles(inProject: Bool) -> String {
+        inProject
+            ? String(localized: "No project file excerpts were included in this explanation. The project's folders may hold no file Projects reads yet, or a long email or thread left no room for them.")
+            : String(localized: "No project file excerpts were included in this explanation. Assign the email to a project, then click Explain in that project's list to include the project's files.")
+    }
+
+    /// Whether a point under What it says names one of a file's excerpts as its source. The
+    /// words say cited, never used, since a citation does not prove what the model relied on.
+    static func citation(_ isCited: Bool) -> String {
+        isCited ? String(localized: "Cited in explanation") : String(localized: "Not cited in explanation")
+    }
+
+    /// Why a file was in the prompt. Nil for an explanation saved before Orra 0.6.1, and for
+    /// a reason this Orra does not know.
+    static func fileReason(_ reason: ExplainPrompt.FileOrigin.Reason?) -> String? {
+        switch reason {
+        case .match: return String(localized: "Found by search")
+        case .newest: return String(localized: "One of the project's newest files, added because search found few matches")
+        case .chosen: return String(localized: "Chosen by you")
+        case nil: return nil
+        }
+    }
+
+    /// The line of a file from the folders of another project than the email's: that
+    /// project's name, or that it is another project once the project is gone.
+    static func otherProject(_ name: String?) -> String {
+        guard let name else { return String(localized: "From the folders of another project") }
+        return String(localized: "From the folders of \(name)")
+    }
+
+    /// A file's folder: the project folder that holds it and the folders inside it down to
+    /// the file, joined with "/", or for a file in none of them, the folder it is in with ~
+    /// for the home folder.
+    static func folder(_ place: ProjectsEmailFiles.Place) -> String {
+        switch place {
+        case .inFolder(let name, let path), .unavailable(let name, let path):
+            ([name] + path).joined(separator: "/")
+        case .outside(let folder):
+            (folder.path as NSString).abbreviatingWithTildeInPath
+        }
+    }
+
+    /// The line under a file's folder when the file is not in an available folder of its
+    /// project now. A folder that is not available, such as one on a disk that is not
+    /// connected, is still the project's.
+    static func placeNote(_ place: ProjectsEmailFiles.Place) -> String? {
+        switch place {
+        case .inFolder: nil
+        case .unavailable: String(localized: "Its project folder is not available now")
+        case .outside: String(localized: "Not in the project's folders now")
+        }
+    }
+
+    /// The chip of a saved excerpt in the list of an explanation's files: its page, slide or
+    /// sheet, as `place(_:)` names it, or Saved Excerpt for a file without them. With its
+    /// number when the file has several excerpts of that place, or several without one, see
+    /// ProjectsEmailFiles.File.chipNumbers, such as Page 4, Saved Excerpt 2.
+    static func excerptChip(_ chunk: TextChunker.Chunk, number: Int?) -> String {
+        guard let place = Self.place(of: chunk) else { return savedExcerptChip(number) }
+        let name = Self.place(place)
+        guard number != nil else { return name }
+        return String(localized: "\(name), \(savedExcerptChip(number))")
+    }
+
+    /// What VoiceOver reads for the chip of a saved excerpt: the file with its page, slide or
+    /// sheet, as for the file's chip under a point, and the excerpt when the chip names it.
+    static func excerptChipLabel(_ chunk: TextChunker.Chunk, number: Int?) -> String {
+        let file = sourceLabel(.file(chunk))
+        guard place(of: chunk) == nil || number != nil else { return file }
+        return String(localized: "\(file), \(savedExcerptChip(number))")
+    }
+
+    /// Saved Excerpt, with its number among the excerpts whose chips would read the same
+    /// without it.
+    private static func savedExcerptChip(_ number: Int?) -> String {
+        guard let number else { return String(localized: "Saved Excerpt") }
+        return String(localized: "Saved Excerpt \(number)")
     }
 
     /// An attachment's kind as Finder names it, such as PDF document, and its size, in the
@@ -490,6 +699,125 @@ nonisolated enum ProjectsWindowText {
         case .home: String(localized: "Projects never reads your home folder.")
         case .volumeRoot: String(localized: "Projects never reads a whole disk.")
         case .mailData: String(localized: "Projects never reads Mail's local data files.")
+        }
+    }
+
+    // MARK: Choosing files for an email
+
+    /// The line under Explain or Explain Again about what the next explanation uses.
+    static func choiceNote(_ note: ProjectsEmailModel.ChoiceNote) -> String {
+        switch note {
+        case .explainUses(1): String(localized: "Explain uses the file you chose.")
+        case .explainUses(let count): String(localized: "Explain uses the \(count) files you chose.")
+        case .explainAgainUses(1): String(localized: "Explain Again uses the file you chose.")
+        case .explainAgainUses(let count): String(localized: "Explain Again uses the \(count) files you chose.")
+        case .explainAgainGoesBack: String(localized: "Explain Again goes back to the automatic selection.")
+        }
+    }
+
+    /// Why a chosen file gave the explanation nothing, for its row in the list of the
+    /// explanation's files.
+    static func chosenMissing(_ missing: Explanation.ChosenFile.Missing) -> String {
+        switch missing {
+        case .notInIndex: String(localized: "Projects had not read it, so the model did not get it.")
+        case .leftOut: String(localized: "Left out, as the email and its sources were too long")
+        }
+    }
+
+    /// How many files the sheet has ticked.
+    static func chosenCount(_ count: Int) -> String {
+        count == 0
+            ? String(localized: "None chosen. Orra finds the files itself.")
+            : String(localized: "\(count) chosen, up to \(ExplainPrompt.chosenFileLimit)")
+    }
+
+    /// What a file of the index gives an explanation.
+    static func reading(_ reading: FolderIndex.ListedFile.Reading) -> String {
+        switch reading {
+        case .text: String(localized: "With text")
+        case .recognizedText: String(localized: "Recognized text")
+        case .waitsForRecognition: String(localized: "Waiting for text recognition")
+        case .nameOnly: String(localized: "Name only")
+        }
+    }
+
+    /// A file's kind as Finder names it, such as PDF document, with a capital first letter
+    /// where macOS gives a lowercase one, such as text, or its extension in capitals when
+    /// macOS has no name for it.
+    static func fileKind(_ file: URL) -> String {
+        let fileExtension = file.pathExtension
+        if let type = UTType(filenameExtension: fileExtension), !type.isDynamic, let name = type.localizedDescription, let first = name.first {
+            return first.uppercased() + name.dropFirst()
+        }
+        return fileExtension.uppercased()
+    }
+
+    /// The third line of a file in the sheet: its kind, what it gives an explanation, when
+    /// it changed, and whether the saved explanation holds it.
+    static func listedFile(kind: String, reading: FolderIndex.ListedFile.Reading?, modified: Date?, inExplanation: Bool) -> String {
+        var parts = [kind].filter { !$0.isEmpty }
+        if let reading {
+            parts.append(Self.reading(reading))
+        }
+        if let modified {
+            let day = modified.formatted(.dateTime.year().month(.abbreviated).day().locale(.interface))
+            parts.append(String(localized: "Changed \(day)"))
+        }
+        if inExplanation {
+            parts.append(String(localized: "In this explanation"))
+        }
+        guard let first = parts.first else { return "" }
+        return parts.dropFirst().reduce(first) { line, part in String(localized: "\(line), \(part)") }
+    }
+
+    /// The line under a section that shows only its newest files.
+    static func moreFiles(shown: Int, total: Int, searching: Bool) -> String {
+        searching
+            ? String(localized: "Showing the newest \(shown) of \(total) files that match.")
+            : String(localized: "Showing the newest \(shown) of \(total) files. Search by name to find the others.")
+    }
+
+    /// The title of the section of the email's project in the sheet.
+    static func emailsProject(_ name: String) -> String {
+        String(localized: "\(name) (This Email's Project)")
+    }
+
+    /// What VoiceOver reads at the end of a file's row: the project whose folders hold it.
+    static func inProject(_ name: String) -> String {
+        String(localized: "In \(name)")
+    }
+
+    /// The line of the sheet's search when no file name matches.
+    static func noFileNameMatches(_ text: String) -> String {
+        String(localized: "No file name matches “\(text)”.")
+    }
+
+    static func addFolder(to project: String) -> String {
+        String(localized: "Add a Folder to “\(project)”…")
+    }
+
+    static func addItsFolder(to project: String) -> String {
+        String(localized: "Add Its Folder to “\(project)”…")
+    }
+
+    /// The message of the open panel that adds a folder to a project from the sheet.
+    static func folderPanelMessage(_ project: String) -> String {
+        String(localized: "Projects reads the files in the folder you choose for all mail of “\(project)”, and never changes them.")
+    }
+
+    /// A line of the sheet after a tick, a drop, an added folder or a save.
+    static func choiceNotice(_ line: ProjectsFileChoice.Notice) -> String {
+        switch line {
+        case .limit: String(localized: "You can choose up to \(ExplainPrompt.chosenFileLimit) files for an email.")
+        case .chosen(let name): String(localized: "“\(name)” is chosen.")
+        case .notRead(let name): String(localized: "Projects has not read “\(name)”. It may be new, too large or not on this Mac. The project's page lists the files it skipped.")
+        case .folder(let name): String(localized: "“\(name)” is a folder. Drag the files you want from it, not the folder.")
+        case .outside(let file): String(localized: "“\(file.lastPathComponent)” is not in a folder of your projects. Projects reads only the folders you add.")
+        case .reading(let name): String(localized: "Projects is reading the folder. “\(name)” is chosen once it is read.")
+        case .notInFolder(let name): String(localized: "The folder you added does not hold “\(name)”.")
+        case .refused(let found): refusal(found)
+        case .projectNotSaved: notice(.projectNotSaved)
+        case .notSaved: String(localized: "The choice could not be saved. Try again.")
         }
     }
 }

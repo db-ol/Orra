@@ -26,6 +26,9 @@ extension ProjectsEmailArea {
         let explanation: Explanation
         /// Whether the email is explained again, which replaces the draft.
         let isExplaining: Bool
+        /// Opens Choose Files for This Email, for the hint under the change box, nil where
+        /// the view is shown without it.
+        var chooseFiles: (() -> Void)? = nil
         /// The width of the draft's column, for putting the translation beside the editor or
         /// under it.
         @State private var width: CGFloat = 0
@@ -119,7 +122,7 @@ extension ProjectsEmailArea {
             answers
             handoff
             // One box for each email, so the focus of one never passes to the next.
-            ChangeBox(runtime: runtime, emailModel: emailModel)
+            ChangeBox(runtime: runtime, emailModel: emailModel, chooseFiles: chooseFiles)
                 .id(ObjectIdentifier(emailModel))
             if let change = emailModel.lastChange {
                 changes(change.segments, version: change.version)
@@ -278,6 +281,7 @@ extension ProjectsEmailArea {
         private struct ChangeBox: View {
             let runtime: ProjectsRuntime
             let emailModel: ProjectsEmailModel
+            var chooseFiles: (() -> Void)? = nil
             @FocusState private var isFocused: Bool
             /// The width of the box, for putting Change Draft beside the field or under it.
             @State private var width: CGFloat = 0
@@ -329,12 +333,46 @@ extension ProjectsEmailArea {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    if namesAFile {
+                        filesHint
+                    }
                 }
                 .onChange(of: isFocused, initial: true) { _, focused in
                     emailModel.changeBoxHasFocus = focused
                 }
                 .onDisappear {
                     emailModel.changeBoxHasFocus = false
+                }
+            }
+
+            /// Whether the words in the box, or those of the newest change, name a file, see
+            /// ProjectsEmailModel.namesAFile(_:). Only a pattern on the words, so no file is
+            /// looked up.
+            private var namesAFile: Bool {
+                if ProjectsEmailModel.namesAFile(emailModel.instruction) {
+                    return true
+                }
+                guard emailModel.changing == nil, case .instruction(let words)? = emailModel.lastChange?.version.version.change else { return false }
+                return ProjectsEmailModel.namesAFile(words)
+            }
+
+            /// The box changes the draft only and opens no file, so a file the words name
+            /// reaches the draft only when the user chooses it for the email, with Choose
+            /// Files for This Email…, which opens the sheet as it is.
+            @ViewBuilder
+            private var filesHint: some View {
+                Text("Changing the draft opens no files. To use a file, choose it for this email and click Explain Again.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let chooseFiles {
+                    // Its title wraps to two lines in a column too narrow for it.
+                    Button(action: chooseFiles) {
+                        Text("Choose Files for This Email…")
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .disabled(runtime.phase != .on)
                 }
             }
         }

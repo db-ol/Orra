@@ -8,7 +8,10 @@ nonisolated enum SortingLevel: String, Sendable, Codable, CaseIterable {
     /// Filed with a "suggested" mark: the model chose the project, and agreed with the
     /// rules when they pointed to one.
     case likely
-    /// In Needs a Project. No project files are used for it until the user picks one.
+    /// In Needs a Project. Its explanation may cite passages of the user's projects that
+    /// its search terms match, each named with its project, and its draft takes nothing
+    /// from them, see ExplainService. Once the user picks a project, that project's files
+    /// are its own.
     case unsure
     /// In Set Aside: list mail with no project people. Only the rules set mail aside.
     case setAside

@@ -3,8 +3,9 @@ import Foundation
 import os
 
 /// The mail Projects read, where sorting filed it, its reply mark, its latest explanation,
-/// the versions of its draft, the text the user typed into the draft and the counts of the
-/// user's moves, in the Projects database (plan section 5, projects-store).
+/// the versions of its draft, the text the user typed into the draft, the files the user chose
+/// for it and the counts of the user's moves, in the Projects database (plan section 5,
+/// projects-store).
 ///
 /// - Its tables come with `migration`, the second step of ProjectsDatabase. Every call runs
 ///   its statements and reads or writes their JSON on the database's actor, never on the
@@ -21,11 +22,18 @@ import os
 ///   mail_projects, so Forget Project removes them all in one write, and nothing can be
 ///   filed in the project after it. `add(project:)` registers a new project.
 /// - An explanation belongs to the project it was made for. When an email changes project,
-///   its explanation and draft go, so no text of the project before stays with it.
+///   its explanation and draft go, so no text of the project before stays with it. An
+///   explanation may hold excerpts of other projects' files too, so it is saved only while
+///   every project it names exists, and Forget Project removes it with its draft, as it
+///   removes the project's own mail.
 /// - The text the user typed into a draft is kept apart from the versions the model made,
 ///   with the key of the draft it was typed into, see `draftKey(_:version:explained:)`. A
 ///   new explanation or a new version takes its place. A version keeps the text it was made
 ///   from, for Undo, see ReviseService.Version.madeFrom.
+/// - The files the user chose for an email are kept by their place only, the project whose
+///   folder held each and its real path, never their text, see `ChosenFile`. The choice stays
+///   when the email moves to another project, goes with the email's text, and loses the files
+///   of a project the user forgets, see `chosenFilesMigration`.
 /// - The thread of each email is worked out when it is saved, see MailThreads, and joined
 ///   again when an earlier message of the thread comes later.
 /// - Text goes into the file only for the time Retention allows. What a delete removes is
@@ -145,6 +153,13 @@ nonisolated struct MailStore: Sendable {
         var editedFrom: String
     }
 
+    /// A file the user chose for an email: the project whose folder held it when it was
+    /// chosen, and its real path, as `index_files.path` holds it. Never its text.
+    nonisolated struct ChosenFile: Sendable, Hashable, Codable {
+        var project: UUID
+        var path: String
+    }
+
     /// The tables of the store, the second step of ProjectsDatabase.migrations.
     ///
     /// - mail_projects: the projects the list holds, which every row of a project hangs on.
@@ -163,8 +178,9 @@ nonisolated struct MailStore: Sendable {
     ///   until the scan can no longer reach it, see `goneKey(_:)` and `Retention.goneIDs`.
     ///
     /// `attachmentTextMigration` adds the text of the attachments, the third step,
-    /// `tooLargeMigration` whether an email was too large to read, the fourth, and
-    /// `editedDraftMigration` the text the user typed into drafts, the fifth.
+    /// `tooLargeMigration` whether an email was too large to read, the fourth,
+    /// `editedDraftMigration` the text the user typed into drafts, the fifth, and
+    /// `chosenFilesMigration` the files the user chose for an email, the seventh.
     static let migration = ProjectsDatabase.Migration(version: 2, sql: """
         CREATE TABLE mail_projects (
             id TEXT PRIMARY KEY
@@ -267,6 +283,22 @@ nonisolated struct MailStore: Sendable {
         );
         """)
 
+    /// The seventh step of ProjectsDatabase.migrations, after the index's sixth: the files the
+    /// user chose for each email, by the project whose folder held each and its real path, at
+    /// most `ExplainPrompt.chosenFileLimit` an email, never their text. A row goes with its
+    /// email and with its project, ON DELETE CASCADE, so Forget Project takes its files out of
+    /// every email's choice, and Retention removes the choice with the email's text. The index
+    /// on `project` serves the cascade from mail_projects.
+    static let chosenFilesMigration = ProjectsDatabase.Migration(version: 7, sql: """
+        CREATE TABLE mail_chosen_files (
+            message INTEGER NOT NULL REFERENCES mail_messages (id) ON DELETE CASCADE,
+            project TEXT NOT NULL REFERENCES mail_projects (id) ON DELETE CASCADE,
+            path TEXT NOT NULL,
+            PRIMARY KEY (message, path)
+        ) WITHOUT ROWID;
+        CREATE INDEX mail_chosen_files_by_project ON mail_chosen_files (project);
+        """)
+
     /// The most messages of a subject looked at to join a reply to its thread by subject.
     static let maximumSubjectMatches = 200
     /// The most messages of a thread the explanation gets, those nearest the email. The
@@ -301,21 +333,49 @@ nonisolated struct MailStore: Sendable {
     }
 
     /// Forget Project, for the store: removes the project with its emails, their drafts and
-    /// the counts of moves to it, in one write. Mail filed in it after this is not saved,
-    /// and the scan never reads its emails again. The project's index of files is
-    /// FolderIndex's, see `FolderIndex.forget`.
+    /// the counts of moves to it, and the explanations and drafts of other emails that hold
+    /// excerpts of its files, in one write. Its files leave the choice of every other email
+    /// with the row of the project, ON DELETE CASCADE, see `chosenFilesMigration`. Mail filed
+    /// in it after this is not saved, the scan never reads its emails again, and no
+    /// explanation that names it is saved. The project's index of files is FolderIndex's, see
+    /// `FolderIndex.forget`.
     func forget(project: UUID) async throws {
         let id = project.uuidString
-        let emails = try await database.transaction { database in
+        let (emails, explanations) = try await database.transaction { database in
+            let explanations = try Self.dropExplanations(holdingFilesOf: project, in: database)
             let emails = try Self.deleteGone(where: "project = ?", [.text(id)], in: database)
             try database.run("DELETE FROM mail_projects WHERE id = ?", [.text(id)])
-            return emails
+            return (emails, explanations)
         }
         try await database.compactAfterDeletes()
-        Logger.projects.notice("Mail store: forgot a project with \(emails, privacy: .public) emails")
+        Logger.projects.notice("Mail store: forgot a project with \(emails, privacy: .public) emails, and the explanations of \(explanations, privacy: .public) other emails that held its files")
+    }
+
+    /// Removes the explanation, the draft versions and the text typed into the draft of
+    /// every email whose explanation holds an excerpt of a file of `project`, since its
+    /// points may repeat that file too. The rows are found by the project's ID in the JSON,
+    /// and each is read to check, so no other explanation goes. One that does not read, as
+    /// from a later Orra, goes too, since it names the project. Returns how many went.
+    private static func dropExplanations(holdingFilesOf project: UUID, in database: isolated ProjectsDatabase) throws -> Int {
+        let rows = try database.run(
+            "SELECT id, explanation FROM mail_messages WHERE explanation IS NOT NULL AND instr(CAST(explanation AS TEXT), ?) > 0",
+            [.text(project.uuidString)])
+        var dropped = 0
+        for row in rows where row.count == 2 {
+            guard let id = row[0].integer else { continue }
+            if let explanation = decoded(Explanation.self, row[1]), !explanation.holdsFiles(of: project) { continue }
+            try database.run(
+                "UPDATE mail_messages SET explanation = NULL, explained = NULL, explanation_draft = 0, draft_changed = NULL WHERE id = ?",
+                [.integer(id)])
+            try database.run("DELETE FROM mail_draft_versions WHERE message = ?", [.integer(id)])
+            try database.run("DELETE FROM mail_edited_drafts WHERE message = ?", [.integer(id)])
+            dropped += 1
+        }
+        return dropped
     }
 
     /// Registers the projects of the list, and removes the store's data of every other
+    /// project, the files of its folders in the choices of emails too, with the row of the
     /// project. Returns the IDs of the projects the database held data for, its index
     /// included, that the list does not hold, so the caller can forget their index too.
     /// The user never forgot these projects, such as after a failed write of projects.json,
@@ -334,6 +394,9 @@ nonisolated struct MailStore: Sendable {
                 """).compactMap { $0.first?.text }
             let gone = Set(known).subtracting(kept)
             for id in gone {
+                if let project = UUID(uuidString: id) {
+                    _ = try Self.dropExplanations(holdingFilesOf: project, in: database)
+                }
                 try database.run("DELETE FROM mail_projects WHERE id = ?", [.text(id)])
             }
             return gone
@@ -813,14 +876,19 @@ nonisolated struct MailStore: Sendable {
     /// Saves the email's latest explanation in place of the one before, and adds its
     /// warnings to the email's. A new explanation starts the draft again, so the versions of
     /// the draft before and the text the user typed into it go. Says whether it saved:
-    /// nothing is saved for an email the store does not hold, or one that moved to another
-    /// project while it was explained.
+    /// nothing is saved for an email the store does not hold, one that moved to another
+    /// project while it was explained, or one whose explanation holds excerpts of a project
+    /// that was forgotten meanwhile, see `Explanation.sourceProjects`.
     @discardableResult
     func save(_ explanation: Explanation, at now: Date) async throws -> Bool {
         let data = try JSONEncoder().encode(explanation)
+        let projects = explanation.sourceProjects.map(\.uuidString)
+        let named = try Self.json(projects)
         return try await database.transaction { database in
             let hasDraft: Bool = if case .checked = explanation.draft { true } else { false }
             let kinds = explanation.warningKinds
+            let held = try database.run("SELECT count(*) FROM mail_projects WHERE id IN (SELECT value FROM json_each(?))", [.text(named)])
+            guard held.first?.first?.integer == Int64(projects.count) else { return false }
             guard let row = try database.run(
                 "SELECT id, warnings FROM mail_messages WHERE message_id = ? AND project IS ?",
                 [.text(explanation.messageID), Self.value(explanation.project?.uuidString)]).first,
@@ -940,6 +1008,42 @@ nonisolated struct MailStore: Sendable {
             """, [.text(messageID)])
         guard let row = rows.first, row.count == 2, let text = row[0].text, let editedFrom = row[1].text else { return nil }
         return EditedDraft(text: text, editedFrom: editedFrom)
+    }
+
+    // MARK: Chosen files
+
+    /// The files the user chose for the email, by project and path, empty when there are
+    /// none or the store does not hold the email.
+    func chosenFiles(of messageID: String) async throws -> [ChosenFile] {
+        try await database.run("""
+            SELECT c.project, c.path FROM mail_chosen_files c JOIN mail_messages m ON m.id = c.message
+            WHERE m.message_id = ? ORDER BY c.project, c.path
+            """, [.text(messageID)]).compactMap { row in
+            guard row.count == 2, let project = row[0].text.flatMap(UUID.init(uuidString:)), let path = row[1].text else { return nil }
+            return ChosenFile(project: project, path: path)
+        }
+    }
+
+    /// Saves the user's choice of files for the email in place of the one before, and says
+    /// whether it did: false when the store does not hold the email. An empty choice is
+    /// Return to Automatic Selection. A path comes once, at most
+    /// `ExplainPrompt.chosenFileLimit` files are kept, and a file of a project the store no
+    /// longer holds is left out, all in one write.
+    @discardableResult
+    func saveChosenFiles(_ files: [ChosenFile], for messageID: String) async throws -> Bool {
+        var seen = Set<String>()
+        let kept = Array(files.filter { seen.insert($0.path).inserted }.prefix(ExplainPrompt.chosenFileLimit))
+        return try await database.transaction { database in
+            guard let id = try database.run("SELECT id FROM mail_messages WHERE message_id = ?", [.text(messageID)]).first?.first?.integer else { return false }
+            try database.run("DELETE FROM mail_chosen_files WHERE message = ?", [.integer(id)])
+            for file in kept {
+                try database.run("""
+                    INSERT INTO mail_chosen_files (message, project, path)
+                    SELECT ?1, ?2, ?3 WHERE ?2 IN (SELECT id FROM mail_projects)
+                    """, [.integer(id), .text(file.project.uuidString), .text(file.path)])
+            }
+            return true
+        }
     }
 
     /// The key of a draft the model made, which the text the user typed into it is kept
@@ -1185,7 +1289,8 @@ nonisolated struct MailStore: Sendable {
                 messageID: messageID, date: date, sender: MailStore.promptPerson(sender),
                 replyTo: replyTo.map(MailStore.promptPerson), to: to.map(MailStore.promptPerson), cc: cc.map(MailStore.promptPerson),
                 subject: subject, attachments: attachments,
-                text: text ?? "", visibleText: visibleText ?? "", hiddenText: hiddenText, list: list, project: project)
+                text: text ?? "", visibleText: visibleText ?? "", hiddenText: hiddenText, list: list, project: project,
+                isSetAside: project == nil && level == .setAside)
         }
 
         var promptMail: ExplainPrompt.Mail {

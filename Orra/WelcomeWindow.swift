@@ -82,6 +82,8 @@ nonisolated struct SetupChecklist: Equatable, Sendable {
 final class WelcomeWindow {
     private let pushToTalk: PushToTalkController
     private let setup: SetupDownload
+    /// The Projects switch, for its row in Try next.
+    private let projects: ProjectsSwitch
     /// Called before the window shows, see DockIcon.willShowWindow().
     private let willShow: () -> Void
     private var window: NSWindow?
@@ -100,9 +102,10 @@ final class WelcomeWindow {
         window?.isVisible ?? false
     }
 
-    init(pushToTalk: PushToTalkController, setup: SetupDownload, willShow: @escaping () -> Void) {
+    init(pushToTalk: PushToTalkController, setup: SetupDownload, projects: ProjectsSwitch, willShow: @escaping () -> Void) {
         self.pushToTalk = pushToTalk
         self.setup = setup
+        self.projects = projects
         self.willShow = willShow
     }
 
@@ -121,7 +124,7 @@ final class WelcomeWindow {
 
     private func makeWindow() -> NSWindow {
         let language = AppLanguage.load()
-        let view = WelcomeView(pushToTalk: pushToTalk, setup: setup, language: language) { [weak self] in
+        let view = WelcomeView(pushToTalk: pushToTalk, setup: setup, language: language, projects: projects) { [weak self] in
             self?.window?.close()
         } localizationChanged: { [weak self] localization in
             self?.window?.title = Self.title(in: localization)

@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import Orra
 
@@ -63,12 +64,14 @@ struct MailStoreTests {
     // MARK: Saving
 
     /// The tables are the second step, the text of attachments the third, whether an email
-    /// was too large to read the fourth, and the text the user typed into drafts the fifth.
+    /// was too large to read the fourth, the text the user typed into drafts the fifth, and the
+    /// files the user chose for an email the seventh, after the index's sixth.
     @Test func theTablesAreTheSecondStepOfTheSchemaAndTheLaterStepsFollowInOrder() async throws {
         defer { cleanUp() }
         let store = try await openStore()
-        #expect(ProjectsDatabase.migrations.map(\.version) == [1, 2, 3, 4, 5])
-        #expect(try await store.database.run("PRAGMA user_version").first == [.integer(5)])
+        #expect(ProjectsDatabase.migrations.map(\.version) == [1, 2, 3, 4, 5, 6, 7])
+        #expect(ProjectsDatabase.migrations.last?.sql == MailStore.chosenFilesMigration.sql)
+        #expect(try await store.database.run("PRAGMA user_version").first == [.integer(7)])
         await store.close()
     }
 
@@ -1227,4 +1230,328 @@ struct MailStoreTests {
             try await store.counts()
         }
     }
+
+    // MARK: Chosen files
+
+    @Test func aChoiceOfFilesIsKeptForItsEmailUntilItIsReplacedOrCleared() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([
+            Self.message("a@test.example", from: "kim@quay.example"),
+            Self.message("b@test.example", from: "kim@quay.example", day: 1),
+        ], ownAddresses: [Self.work], at: Self.date(2))
+        let plan = MailStore.ChosenFile(project: Self.harbor, path: "/Projects/Harbor/plan's \"final\".pdf")
+        let budget = MailStore.ChosenFile(project: Self.maple, path: "/Projects/Maple/budget\\2026.xlsx")
+        #expect(try await store.saveChosenFiles([plan, budget], for: "a@test.example"))
+        #expect(Set(try await store.chosenFiles(of: "a@test.example")) == [plan, budget])
+        #expect(try await store.chosenFiles(of: "b@test.example").isEmpty)
+        // A new choice takes the place of the one before.
+        #expect(try await store.saveChosenFiles([budget], for: "a@test.example"))
+        #expect(try await store.chosenFiles(of: "a@test.example") == [budget])
+        // At most six files, each path once, and none of a project the store does not hold.
+        let many = (1...8).map { MailStore.ChosenFile(project: Self.harbor, path: "/Projects/Harbor/file-\($0).md") }
+        let gone = MailStore.ChosenFile(project: UUID(), path: "/Projects/Gone/notes.md")
+        #expect(try await store.saveChosenFiles([gone, many[0], many[0]] + many, for: "b@test.example"))
+        #expect(try await store.chosenFiles(of: "b@test.example").map(\.path) == many.prefix(5).map(\.path))
+        // An empty choice is Return to Automatic Selection.
+        #expect(try await store.saveChosenFiles([], for: "a@test.example"))
+        #expect(try await store.chosenFiles(of: "a@test.example").isEmpty)
+        // An email the store does not hold keeps nothing.
+        #expect(try await store.saveChosenFiles([plan], for: "unknown@test.example") == false)
+        #expect(try await store.database.run("SELECT count(*) FROM mail_chosen_files") == [[.integer(5)]])
+        await store.close()
+    }
+
+    /// Forget Project takes the files of its folders out of every email's choice, and goes
+    /// with the email's own rows when it forgets the email's project. A move keeps the choice.
+    @Test func forgettingAProjectTakesItsFilesOutOfEveryChoiceAndAMoveKeepsIt() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([
+            Self.message("harbor@test.example", from: "song.yutong@harborlights.example"),
+            Self.message("maple@test.example", from: "owen@pike-build.example", day: 1),
+        ], ownAddresses: [Self.work], at: Self.date(2))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]), for: "harbor@test.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.maple, level: .sure, reasons: [.person]), for: "maple@test.example"))
+        let plan = MailStore.ChosenFile(project: Self.harbor, path: "/Projects/Harbor/plan.pdf")
+        let tiles = MailStore.ChosenFile(project: Self.maple, path: "/Projects/Maple/tiles.md")
+        #expect(try await store.saveChosenFiles([plan, tiles], for: "harbor@test.example"))
+        #expect(try await store.saveChosenFiles([tiles], for: "maple@test.example"))
+        #expect(try await store.move("harbor@test.example", to: nil))
+        #expect(Set(try await store.chosenFiles(of: "harbor@test.example")) == [plan, tiles])
+        #expect(try await store.move("harbor@test.example", to: Self.maple))
+        #expect(Set(try await store.chosenFiles(of: "harbor@test.example")) == [plan, tiles])
+
+        try await store.forget(project: Self.harbor)
+        #expect(try await store.chosenFiles(of: "harbor@test.example") == [tiles])
+        try await store.forget(project: Self.maple)
+        #expect(try await store.database.run("SELECT count(*) FROM mail_chosen_files") == [[.integer(0)]])
+        await store.close()
+    }
+
+    /// An explanation 0.6.0 wrote reads without a record of chosen files, and writes back
+    /// without one. A record of chosen files reads back as it was saved, and a reason a later
+    /// Orra gives for a file that gave nothing reads as none, so the explanation still reads.
+    @Test func anExplanationOf060ReadsWithoutChosenFilesAndARecordRoundTrips() throws {
+        let old = Data("""
+            {"messageID":"a@test.example","language":"en","today":783000000,"reply":{"reply":{"_0":"en"}},"warnings":[],"modelWarnings":[],\
+            "points":[{"text":"The sizes need a confirmation.","sources":["this email"],"flags":[]}],"questions":[],"draft":{"missing":{}},\
+            "sources":{"this email":{"message":{"_0":"a@test.example"}}},"removed":[],"problems":[],"unknownSources":[]}
+            """.utf8)
+        let read = try JSONDecoder().decode(Explanation.self, from: old)
+        #expect(read.chosenFiles == nil && read.searchTerms == nil)
+        #expect(read.points.map(\.text) == ["The sizes need a confirmation."])
+        #expect(!String(decoding: try JSONEncoder().encode(read), as: UTF8.self).contains("chosenFiles"))
+
+        var chosen = Self.explanation("a@test.example", project: Self.harbor)
+        chosen.chosenFiles = [
+            Explanation.ChosenFile(path: "/Projects/Harbor/plan.pdf", project: Self.harbor, sources: ["F1", "F2"]),
+            Explanation.ChosenFile(path: "/Projects/Harbor/moved.md", project: Self.harbor, sources: [], missing: .notInIndex),
+            Explanation.ChosenFile(path: "/Projects/Maple/long.md", project: Self.maple, sources: [], missing: .leftOut),
+        ]
+        #expect(try JSONDecoder().decode(Explanation.self, from: JSONEncoder().encode(chosen)) == chosen)
+        let later = Data(#"{"path":"/Projects/Harbor/plan.pdf","project":"8B1C2D3E-4F50-4617-8A9B-0C1D2E3F4A5B","sources":[],"missing":"encrypted"}"#.utf8)
+        let file = try JSONDecoder().decode(Explanation.ChosenFile.self, from: later)
+        #expect(file.missing == nil && file.path == "/Projects/Harbor/plan.pdf")
+    }
+
+    /// An explanation is saved only while the project of each file chosen for it exists, so
+    /// Forget Project during an Explain leaves no record of its files.
+    @Test func anExplanationIsNotSavedOnceTheProjectOfAChosenFileIsGone() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([Self.message("a@test.example", from: "kim@quay.example")], ownAddresses: [Self.work], at: Self.date(1))
+        var explanation = Self.explanation("a@test.example", project: nil)
+        explanation.chosenFiles = [Explanation.ChosenFile(path: "/Projects/Maple/tiles.md", project: Self.maple, sources: [], missing: .notInIndex)]
+        #expect(explanation.sourceProjects == [Self.maple])
+        #expect(explanation.holdsFiles(of: Self.maple))
+        try await store.forget(project: Self.maple)
+        #expect(try await store.save(explanation, at: Self.date(2)) == false)
+        #expect(try await store.explanation(for: "a@test.example") == nil)
+        explanation.chosenFiles = nil
+        #expect(try await store.save(explanation, at: Self.date(2)))
+        await store.close()
+    }
+
+    @Test func keepTakesTheFilesOfAProjectTheListDoesNotHoldOutOfTheChoices() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([Self.message("a@test.example", from: "kim@quay.example")], ownAddresses: [Self.work], at: Self.date(1))
+        let plan = MailStore.ChosenFile(project: Self.harbor, path: "/Projects/Harbor/plan.pdf")
+        #expect(try await store.saveChosenFiles([plan, MailStore.ChosenFile(project: Self.maple, path: "/Projects/Maple/tiles.md")], for: "a@test.example"))
+        #expect(try await store.keep(projects: [Self.harbor]) == [Self.maple])
+        #expect(try await store.chosenFiles(of: "a@test.example") == [plan])
+        await store.close()
+    }
+
+    // MARK: Other projects' files
+
+    /// An explanation for `id` in `project` that holds an excerpt of a file of `other`.
+    static func explanation(_ id: String, project: UUID?, citing other: UUID, secret: String = "tealkettle") -> Explanation {
+        var explanation = explanation(id, project: project)
+        let chunk = TextChunker.Chunk(file: URL(fileURLWithPath: "/tmp/other/plan.pdf"), page: 1, modified: date(-2), heading: nil, text: "The \(secret) plan.")
+        explanation.sources["O1"] = .file(chunk, origin: ExplainPrompt.FileOrigin(reason: .match, project: other))
+        explanation.points.append(Explanation.Point(text: "The \(secret) plan.", sources: ["O1"], flags: []))
+        explanation.searchTerms = ["plan", "平面图"]
+        return explanation
+    }
+
+    /// Forget Project also takes away the explanation, the draft versions and the typed draft
+    /// of every other email whose explanation holds an excerpt of the project's files, in the
+    /// same write, and no other explanation.
+    @Test func forgettingAProjectDropsTheExplanationsThatUsedItsFiles() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        let secret = "tealkettle"
+        try await store.save([
+            Self.message("cites@test.example", from: "song.yutong@harborlights.example"),
+            Self.message("alone@test.example", from: "kim@quay.example", day: 1),
+            Self.message("plain@test.example", from: "song.yutong@harborlights.example", day: 2),
+        ], ownAddresses: [Self.work], at: Self.date(3))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]), for: "cites@test.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]), for: "plain@test.example"))
+        #expect(try await store.save(Self.explanation("cites@test.example", project: Self.harbor, citing: Self.maple), at: Self.date(4)))
+        #expect(try await store.save(Self.explanation("alone@test.example", project: nil, citing: Self.maple), at: Self.date(4)))
+        #expect(try await store.save(Self.explanation("plain@test.example", project: Self.harbor), at: Self.date(4)))
+        for id in ["cites@test.example", "plain@test.example"] {
+            #expect(try await store.save(ReviseService.Version(messageID: id, change: .tone(.warm), check: DraftCheck.Result(draft: "\(secret) draft", language: .en)), startedAt: Self.date(4), at: Self.date(4)) == 1)
+            let key = MailStore.draftKey("\(secret) draft", version: 1, explained: Self.date(1))
+            #expect(try await store.save(MailStore.EditedDraft(text: "\(secret) typed", editedFrom: key), for: id, at: Self.date(4)))
+        }
+
+        try await store.forget(project: Self.maple)
+        for id in ["cites@test.example", "alone@test.example"] {
+            #expect(try await store.explanation(for: id) == nil)
+            #expect(try await store.versions(of: id).isEmpty)
+            #expect(try await store.editedDraft(of: id) == nil)
+        }
+        #expect(try await store.list(.project(Self.harbor)).first { $0.messageID == "cites@test.example" }?.isExplained == false)
+        // The emails stay, and so does an explanation that holds nothing of the project.
+        #expect(try await store.sortingEmail("cites@test.example") != nil)
+        #expect(try await store.explanation(for: "plain@test.example") == Self.explanation("plain@test.example", project: Self.harbor))
+        #expect(try await store.versions(of: "plain@test.example").count == 1)
+        #expect(try await store.editedDraft(of: "plain@test.example") != nil)
+        try await store.database.run("PRAGMA wal_checkpoint(TRUNCATE)")
+        #expect(bytesOnDisk(store.database).range(of: Data("The \(secret) plan".utf8)) == nil)
+        await store.close()
+    }
+
+    /// The projects a list no longer holds go the same way.
+    @Test func keepDropsTheExplanationsThatUsedTheFilesOfAProjectTheListLost() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([Self.message("cites@test.example", from: "kim@quay.example")], ownAddresses: [Self.work], at: Self.date(1))
+        #expect(try await store.save(Self.explanation("cites@test.example", project: nil, citing: Self.maple), at: Self.date(2)))
+        #expect(try await store.keep(projects: [Self.harbor]) == [Self.maple])
+        #expect(try await store.explanation(for: "cites@test.example") == nil)
+        await store.close()
+    }
+
+    /// An explanation is saved only while every project it names exists, so an explanation
+    /// that ends after its excerpts' project was forgotten never brings them back.
+    @Test func anExplanationThatNamesAForgottenProjectIsNotSaved() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([Self.message("a@test.example", from: "kim@quay.example")], ownAddresses: [Self.work], at: Self.date(1))
+        let explanation = Self.explanation("a@test.example", project: nil, citing: Self.maple)
+        #expect(explanation.sourceProjects == [Self.maple])
+        try await store.forget(project: Self.maple)
+        #expect(try await store.save(explanation, at: Self.date(2)) == false)
+        #expect(try await store.explanation(for: "a@test.example") == nil)
+        // A project that never existed is no better.
+        #expect(try await store.save(Self.explanation("a@test.example", project: nil, citing: UUID()), at: Self.date(2)) == false)
+        #expect(try await store.save(Self.explanation("a@test.example", project: nil, citing: Self.harbor), at: Self.date(2)))
+        await store.close()
+    }
+
+    /// An explanation that holds a passage of another project ends after that project was
+    /// forgotten: the store refuses it, so none of the project's text comes back.
+    @Test func forgettingAProjectDuringAnExplanationThatHoldsItsPassageSavesNothing() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        let id = "plan@test.example"
+        try await store.save([Self.message(id, from: "kim@quay.example", text: "Could you send the floor plan?")], ownAddresses: [Self.work], at: Self.date(1))
+        let plan = ChunkSearch.Hit(
+            chunk: 7, project: Self.maple, file: URL(fileURLWithPath: "/tmp/maple/floor-plan.pdf"), page: 1, heading: nil,
+            modified: Self.date(-1), text: "The tealkettle floor plan.", fileHiddenRuns: 0, score: 1, matchedTerm: true,
+            matchedTerms: ["floor plan", "tealkettle", "lobby"])
+        let model = HeldAnswer()
+        let known = ExplainService.Known(ownName: "Bai Lu", ownAddresses: [Self.work], projects: [
+            ExplainService.Project(id: Self.harbor, name: "Harbor"), ExplainService.Project(id: Self.maple, name: "Maple"),
+        ])
+        let explained = Self.date(2)
+        let service = ExplainService(
+            lookups: ExplainService.Lookups(
+                known: { _ in known },
+                thread: { _ in [] },
+                projectMail: { _ in [] },
+                search: { query in query.termsOnly ? [plan] : [] },
+                newest: { _, _ in [] },
+                files: { _ in [] },
+                terms: { _ in ["floor plan", "tealkettle", "lobby"] }
+            ),
+            run: { request in try await model.answer(request) },
+            loadTokenCounter: { { $0.count / 3 } },
+            save: store.explanationSave(now: { explained }),
+            language: .en
+        )
+        let email = try #require(try await store.explainEmail(id))
+        let explaining = Task { try await service.explain(email) }
+        try await waitUntil { model.isAsked }
+        try await store.forget(project: Self.maple)
+        model.letGo("- None\n\nPoints:\n- The floor plan is in Maple's folder. [O1]\n\nBefore you reply:\n- None\n\nDraft reply:\nHi Kim,\n\nI will check.\n\nBai Lu")
+        let explanation = try await explaining.value
+        #expect(explanation.sources["O1"] != nil)
+        #expect(try await store.explanation(for: id) == nil)
+        try await store.database.run("PRAGMA wal_checkpoint(TRUNCATE)")
+        #expect(bytesOnDisk(store.database).range(of: Data("tealkettle".utf8)) == nil)
+        await store.close()
+    }
+
+    @Test func anExplanationKeepsItsSearchTerms() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([Self.message("a@test.example", from: "kim@quay.example")], ownAddresses: [Self.work], at: Self.date(1))
+        let explanation = Self.explanation("a@test.example", project: nil, citing: Self.harbor)
+        #expect(try await store.save(explanation, at: Self.date(2)))
+        let read = try await store.explanation(for: "a@test.example")
+        #expect(read == explanation)
+        #expect(read?.searchTerms == ["plan", "平面图"])
+        #expect(read?.citesOtherProjectFile == true)
+        await store.close()
+    }
+
+    /// An explanation saved by 0.6.0 has no search terms and no origin of its file
+    /// excerpts. It reads as before, with nil for both, and writes back the same.
+    @Test func anExplanationOf060Reads() throws {
+        let old = Data("""
+            {"file":{"_0":{"file":"file:///tmp/plan.pdf","page":2,"modified":783000000,"heading":"Sizes","text":"Sign A is 60 by 90 cm."}}}
+            """.utf8)
+        let source = try JSONDecoder().decode(ExplainPrompt.Source.self, from: old)
+        let chunk = TextChunker.Chunk(file: URL(string: "file:///tmp/plan.pdf")!, page: 2, modified: Date(timeIntervalSinceReferenceDate: 783_000_000), heading: "Sizes", text: "Sign A is 60 by 90 cm.")
+        #expect(source == .file(chunk))
+        #expect(String(decoding: try JSONEncoder().encode(source), as: UTF8.self).contains("origin") == false)
+        // A whole explanation, as 0.6.0 wrote it.
+        let explanation = Self.explanation("a@test.example")
+        let json = String(decoding: try JSONEncoder().encode(explanation), as: UTF8.self)
+        #expect(!json.contains("searchTerms") && !json.contains("origin") && !json.contains("otherProjectTexts"))
+        let read = try JSONDecoder().decode(Explanation.self, from: Data(json.utf8))
+        #expect(read == explanation)
+        #expect(read.searchTerms == nil)
+        #expect(read.draftCheck?.otherProjectTexts == nil)
+        // A reason from a later Orra reads as none, with its project kept.
+        let later = Data(#"{"file":{"_0":{"file":"file:///tmp/plan.pdf","modified":783000000,"text":"x"},"origin":{"reason":"requested","project":"8B1C2D3E-4F50-4617-8A9B-0C1D2E3F4A5B"}}}"#.utf8)
+        guard case .file(_, let origin) = try JSONDecoder().decode(ExplainPrompt.Source.self, from: later) else {
+            Issue.record("not a file source")
+            return
+        }
+        #expect(origin == ExplainPrompt.FileOrigin(reason: nil, project: UUID(uuidString: "8B1C2D3E-4F50-4617-8A9B-0C1D2E3F4A5B")))
+    }
+
+    @Test func aSetAsideEmailSaysSo() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([
+            Self.message("news@test.example", from: "news@quay.example"),
+            Self.message("ask@test.example", from: "kim@quay.example", day: 1),
+            Self.message("filed@test.example", from: "kim@quay.example", day: 2),
+        ], ownAddresses: [Self.work], at: Self.date(3))
+        #expect(try await store.saveDecision(SortingDecision(project: nil, level: .setAside, reasons: [.listMail]), for: "news@test.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: nil, level: .unsure, reasons: [.noSignal]), for: "ask@test.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]), for: "filed@test.example"))
+        #expect(try await store.explainEmail("news@test.example")?.isSetAside == true)
+        #expect(try await store.explainEmail("ask@test.example")?.isSetAside == false)
+        #expect(try await store.explainEmail("filed@test.example")?.isSetAside == false)
+        await store.close()
+    }
+}
+
+/// A model whose answer waits until the test gives it, or ends when its task is cancelled.
+private final class HeldAnswer: Sendable {
+    private let state = Mutex<(asked: Bool, answer: String?, waiting: CheckedContinuation<String, any Error>?)>((false, nil, nil))
+
+    func answer(_ request: ProjectsModelRequest) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            let ready: String? = state.withLock { state in
+                state.asked = true
+                if let answer = state.answer { return answer }
+                state.waiting = continuation
+                return nil
+            }
+            if let ready {
+                continuation.resume(returning: ready)
+            }
+        }
+    }
+
+    func letGo(_ answer: String) {
+        let waiting = state.withLock { state in
+            state.answer = answer
+            defer { state.waiting = nil }
+            return state.waiting
+        }
+        waiting?.resume(returning: answer)
+    }
+
+    var isAsked: Bool { state.withLock { $0.asked } }
 }

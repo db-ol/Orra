@@ -8,9 +8,10 @@ import Foundation
 ///   MIMEMessage. Nothing sends another Apple Event for them, and nothing reads
 ///   ~/Library/Mail. A part that holds nothing, as one Mail has not downloaded may, keeps
 ///   its name only and says so.
-/// - PDF, docx, doc, rtf, odt, md and txt go through FileTextExtractor, with the limits and
-///   checks of the files in project folders: hidden text is dropped and counted, nothing
-///   goes online, and no script runs. csv and ics are plain text, so they are read as txt.
+/// - PDF, docx, doc, rtf, odt, xlsx, pptx, md and txt go through FileTextExtractor, with
+///   the limits and checks of the files in project folders: hidden text is dropped and
+///   counted, nothing goes online, and no script or macro runs. csv and ics are plain text,
+///   so they are read as txt. No text is recognized in an image or a scanned PDF.
 ///   A text file is read in the charset its part names. Every other type keeps its name,
 ///   type and size only.
 /// - Reading waits while the user dictates, as the folder index does, since dictation
@@ -92,8 +93,9 @@ nonisolated struct MailAttachment: Sendable, Equatable, Codable {
     /// The most attachments read in one email. The rest keep their names.
     static let maximumRead = 10
     /// The time the attachments of one email may take together (a guess), not counting the
-    /// waits while the user dictates. Office files are read in one call, which cannot stop,
-    /// so the time is checked between attachments and after each page of a PDF.
+    /// waits while the user dictates. Word, RTF and OpenDocument files are read in one call,
+    /// which cannot stop, so the time is checked between attachments, after each page of a
+    /// PDF and as an xlsx or pptx is read.
     static let maximumTime: Duration = .seconds(20)
     /// The pages read from a PDF. 64 KB of text rarely needs more.
     static let pdfPages = 100
@@ -101,6 +103,7 @@ nonisolated struct MailAttachment: Sendable, Equatable, Codable {
     /// The formats of FileTextExtractor by file name extension, csv and ics as text.
     private static let formatsByExtension: [String: FileTextExtractor.Format] = [
         "pdf": .pdf, "docx": .docx, "doc": .doc, "rtf": .rtf, "odt": .odt,
+        "xlsx": .xlsx, "xlsm": .xlsx, "pptx": .pptx, "ppsx": .pptx,
         "md": .text, "txt": .text, "csv": .text, "ics": .text,
     ]
 
@@ -112,6 +115,10 @@ nonisolated struct MailAttachment: Sendable, Equatable, Codable {
         "application/rtf": .rtf,
         "text/rtf": .rtf,
         "application/vnd.oasis.opendocument.text": .odt,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": .xlsx,
+        "application/vnd.ms-excel.sheet.macroenabled.12": .xlsx,
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": .pptx,
+        "application/vnd.openxmlformats-officedocument.presentationml.slideshow": .pptx,
         "text/markdown": .text,
         "text/x-markdown": .text,
         "text/plain": .text,
@@ -186,6 +193,7 @@ nonisolated struct MailAttachment: Sendable, Equatable, Codable {
                 var limits = FileTextExtractor.Limits()
                 limits.pdfPages = pdfPages
                 limits.pdfTime = min(limits.pdfTime, maximumTime - spent)
+                limits.officeTime = min(limits.officeTime, maximumTime - spent)
                 let extractor = FileTextExtractor(limits: limits, now: now)
                 let bytes = readAs == .text ? Self.utf8(data, charset: part.charset) : data
                 attachment.take(await extractor.text(of: bytes, format: readAs, modified: modified))
