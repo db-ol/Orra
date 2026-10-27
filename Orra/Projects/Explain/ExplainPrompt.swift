@@ -9,7 +9,9 @@ import Foundation
 /// - excerpts of the project's files in <files>, in this order: the excerpts of the files
 ///   the user chose for the email, marked chosen="yes", see `Input.chosenChunks`, then the
 ///   chosen files without text by name and date, marked text="none" as well, then what
-///   search found, best first, up to `chunkLimit` excerpts with the chosen ones. When fewer
+///   search found, best first, up to `chunkLimit` excerpts with the chosen ones. Another
+///   excerpt of a chosen file that search found is marked chosen="yes" in search's place,
+///   since every excerpt of a chosen file is. When fewer
 ///   than 3 excerpts are there, the newest files of the project fill up to 3 (code step 7). A
 ///   file a newer one replaced says so, and so does a file that is only earlier than a newer
 ///   one of its kind (code step 3). The source of each excerpt keeps why it is in the prompt

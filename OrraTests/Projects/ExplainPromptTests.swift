@@ -1522,6 +1522,16 @@ struct ExplainPromptTests {
         #expect(user(prompt(bothChinese)).hasPrefix("<project>\n项目：未确定。这封邮件还没有归到任何项目。<files> 里是Bai Lu为它选的文件。<other_files> 里是Bai Lu各个项目中与它相关的文件片段，只作背景。\n</project>"))
     }
 
+    /// Search may find another excerpt of a chosen file than its share took. It keeps
+    /// search's place and is marked chosen="yes", as every excerpt of a chosen file is.
+    @Test func anotherExcerptOfAChosenFileKeepsSearchsPlaceMarkedChosen() {
+        let brief = [chunk("brief.md", page: 1, text: "Brief, page one."), chunk("brief.md", page: 3, text: "Brief, page three.")]
+        let text = user(prompt(choosing(input(chunks: [chunk("notes.md", text: "Notes."), brief[1]]), chunks: [brief[0]])))
+        #expect(text.contains(#"<file id="F1" name="brief.md" page="1" modified="2026-10-01" chosen="yes">"#))
+        #expect(text.contains(#"<file id="F2" name="notes.md" modified="2026-10-01">"#))
+        #expect(text.contains(#"<file id="F3" name="brief.md" page="3" modified="2026-10-01" chosen="yes">"#))
+    }
+
     /// An email in Needs a Project may have six excerpts of other projects. Its chosen
     /// excerpts come first, and other projects keep the places they leave of `excerptLimit`.
     @Test func chosenExcerptsLeaveOtherProjectsThePlacesUpToEight() {

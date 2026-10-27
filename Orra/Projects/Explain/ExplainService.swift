@@ -879,7 +879,9 @@ final class ExplainService {
             input.project = ExplainPrompt.Project(name: project.name, description: project.description, people: project.people)
         }
         // The chosen files' excerpts go first, and search's hits and the newest files do not
-        // repeat them.
+        // repeat them. Search may still find other passages of a chosen file than its share
+        // took. They keep search's place, and as their file is chosen they are marked chosen
+        // too, so the budget keeps them with the chosen excerpts.
         let chosen = chosenExcerpts(gathered.chosen)
         let chosenChunks = Set(chosen.map(\.chunk))
         input.chosenChunks = chosen.map(chunk)
