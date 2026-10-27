@@ -35,10 +35,11 @@ extension Logger {
 ///   every page it waits while a dictation is under way, while Live Captions run, while a
 ///   request of the user runs, and it ends its pass while memory runs low, in Low Power Mode
 ///   and while the Mac is hot, see `RecognitionPause`. A key press or a request of the user
-///   stops the page under way at once, and any other pause within `pollInterval`. Each page
-///   tried is kept with the file's size and date and how it went, so blank, timed out and
-///   failed pages are not tried again, a restart goes on where it stopped, and a changed
-///   file starts over. Recognized text is kept like any text, marked as recognized.
+///   stops the page under way at once, and any other pause within `pollInterval`, or once
+///   the page's drawing ends when it is being drawn, see TextRecognizer. Each page tried is
+///   kept with the file's size and date and how it went, so blank, timed out and failed
+///   pages are not tried again, a restart goes on where it stopped, and a changed file
+///   starts over. Recognized text is kept like any text, marked as recognized.
 /// - A project lists at most 5,000 documents and 20,000 other files, which are the documents
 ///   past the 5,000, the images and the files known by name. Images take the room the
 ///   documents leave of the 5,000, those the index holds first, then new ones newest first,
@@ -357,8 +358,9 @@ final class FolderIndex {
     }
 
     /// Stops the page recognition reads now, at the press of the talk key or the translation
-    /// key and when a request of the user starts, so recognition never runs beside them. The
-    /// page is read again once the pause ends.
+    /// key and when a request of the user starts, so recognition never runs beside them. A
+    /// page being drawn stops once its drawing ends. The page is read again once the pause
+    /// ends.
     func interruptRecognition() {
         guard recognition != nil else { return }
         recognition?.wasInterrupted = true

@@ -3842,6 +3842,10 @@ build with Projects on and the index watched with the log stream above.
 - [ ] While "Recognizing text in images and scans…" shows, dictate ten times. Each paste is as
   fast as with recognition done, and the log shows that a job of recognition stopped at
   each key press.
+- [ ] Put the PDF plot of a large drawing whose text was drawn as lines, so it has no text
+  layer, into the folder, and dictate while its page is recognized. Each paste is as fast
+  as with recognition done. A page whose drawing takes longer than 20 s shows in the log as
+  timed out, once, and is not drawn again.
 - [ ] Turn on Live Captions and click Explain while recognition runs. The log shows no page
   recognized until captions end and the explanation is done.
 - [ ] Turn on Low Power Mode in System Settings, Battery. Within a minute the page says "Text

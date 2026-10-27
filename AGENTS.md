@@ -124,10 +124,12 @@ trusted once in Xcode. docs/dependencies.md has the details.
   runs, and stops while memory pressure is not normal, in Low Power Mode and while the Mac's
   thermal state is serious or critical. The press of either key and the start of a request
   stop the page under way at once, any other pause within 0.1 s, and that page is recognized
-  again later. No model whose trace calls another compiled function, such as a mixture of
-  experts model, may join the shared group of ModelGate, see docs/dependencies.md. Projects
-  code must load the cleanup model only while the Projects window is open or a Projects
-  request runs.
+  again later. A page that is being drawn stops once its drawing ends, which cannot be
+  stopped, and a page whose drawing alone takes the 20 s a page may take counts as timed out
+  and is not drawn again. No model whose trace calls another compiled function, such as a
+  mixture of experts model, may join the shared group of ModelGate, see docs/dependencies.md.
+  Projects code must load the cleanup model only while the Projects window is open or a
+  Projects request runs.
 - Orra never writes audio to disk or to the log. The one exception, approved by the maintainer
   on 2026-10-15, is Remember my voice in Settings, off until the user turns it on. It keeps
   the voice sample's audio, never what is said in it, in

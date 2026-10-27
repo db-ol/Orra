@@ -72,9 +72,13 @@ nonisolated struct RecognitionResult: Sendable, Equatable {
 /// - At most `pagesPerFile` pages a file are tried, the first ones, and at most the job's
 ///   pages in one job. Before every page the job asks `mayGoOn`, so it stops between pages
 ///   for a dictation, Live Captions, a request of the user or a sweep. Cancelling the job's
-///   task stops the page under way, which then counts as not tried.
-/// - A page that takes longer than `pageTime` is stopped and counts as timed out. A job
-///   whose every page timed out ends the file as `tooSlow`.
+///   task stops the read of the page under way at once, and a page being drawn once its
+///   drawing ends, since drawing cannot be stopped. That page counts as not tried.
+/// - A page's time, `pageTime`, runs from the start of its drawing. A read still under way
+///   when it ends is stopped, and the page counts as timed out. A page whose drawing alone
+///   took that long is not read and counts as timed out, also when the job was stopped
+///   meanwhile, so a page too slow to draw is not drawn again and again. A job whose every
+///   page timed out ends the file as `tooSlow`.
 /// - The lines Vision finds are put in reading order, also on a scan turned a little, and
 ///   text that shows no ink on the image Vision read is dropped and counted as hidden, as on
 ///   a PDF page. A page that gives fewer than two letters or digits counts as blank.
@@ -97,7 +101,7 @@ nonisolated struct TextRecognizer: Sendable {
         var dotsPerInch: CGFloat = 300
         /// The pages tried in one file, the first ones.
         var pagesPerFile = 100
-        /// The time one page may take.
+        /// The time one page may take, its drawing and its read.
         var pageTime: Duration = .seconds(20)
         /// Vision's minimum height of text, relative to the height of the image. 0 reads the
         /// image at its full size, see VNRecognizeTextRequest.h.
@@ -351,11 +355,25 @@ nonisolated struct TextRecognizer: Sendable {
                 stopped = true
                 break
             }
+            // The page's time runs from the start of its drawing, which cannot be stopped.
+            // A page whose drawing took all of it is not read, and counts as timed out also
+            // when the job was stopped meanwhile, so it is not drawn again and again.
+            let started = ContinuousClock.now
             guard let drawing = draw(page) else {
                 result.tried[page] = .failed
                 continue
             }
-            switch await readPage(drawing.image) {
+            let left = limits.pageTime - started.duration(to: .now)
+            if left <= .zero {
+                result.tried[page] = .timedOut
+            }
+            // A stop that came while the page was drawn ends the job before Vision starts.
+            if Task.isCancelled {
+                stopped = true
+                break
+            }
+            guard left > .zero else { continue }
+            switch await readPage(drawing.image, within: left) {
             case .read(.observations(let observations)):
                 let read = Self.text(of: observations, ink: drawing.ink)
                 result.hiddenRuns += read.hiddenRuns
@@ -388,20 +406,19 @@ nonisolated struct TextRecognizer: Sendable {
         return .success(result)
     }
 
-    /// Reads one image, stopped once `pageTime` passed. The read under way ends before this
-    /// returns, also when the time ran out or the task was cancelled, so no page runs on
-    /// behind the next one.
-    private func readPage(_ image: CGImage) async -> PageEnd {
+    /// Reads one image, stopped once `time` passed, what is left of the page's time. The
+    /// read under way ends before this returns, also when the time ran out or the task was
+    /// cancelled, so no page runs on behind the next one.
+    private func readPage(_ image: CGImage, within time: Duration) async -> PageEnd {
         let read = self.read
         let sleep = self.sleep
-        let pageTime = limits.pageTime
         return await withTaskGroup(of: PageEnd?.self) { group in
             group.addTask {
                 .read(await read(image))
             }
             group.addTask {
                 do {
-                    try await sleep(pageTime)
+                    try await sleep(time)
                 } catch {
                     return nil
                 }

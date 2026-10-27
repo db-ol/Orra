@@ -509,6 +509,20 @@ struct TextRecognitionTests {
         #expect(await recognizer(slow, clock: PageClock(slow, runsOut: true)).recognize(image, mayGoOn: { true }) == .failure(.tooSlow))
     }
 
+    /// A page's time runs from the start of its drawing, which cannot be stopped, so a page
+    /// whose drawing takes all of it is never read and times out. Here every drawing takes
+    /// longer than the page's time of a nanosecond.
+    @Test func theDrawingCountsTowardThePageTime() async throws {
+        let folder = try Folder()
+        defer { folder.remove() }
+        let standIn = StandIn()
+        var limits = TextRecognizer.Limits()
+        limits.pageTime = .nanoseconds(1)
+        let image = try folder.job("sign.png", try RecognitionTestFiles.data([try RecognitionTestFiles.image(["Lamps"])], type: .png))
+        #expect(await recognizer(standIn, limits: limits).recognize(image, mayGoOn: { true }) == .failure(.tooSlow))
+        #expect(standIn.sizes.isEmpty)
+    }
+
     /// A page Vision cannot read fails, and so does one that Vision reports cancelled when
     /// nobody cancelled the job, so such a page is not tried again and again.
     @Test func aPageVisionCannotReadFails() async throws {
