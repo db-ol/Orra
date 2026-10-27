@@ -578,16 +578,21 @@ struct FolderIndexTests {
             }
             await fixture.deliverAndTick(FolderEvents.Changes(changed: [fixture.folder + "/a.txt", fixture.folder + "/c.txt", fixture.folder + "/d.txt"]))
             // 20 bytes stay with b.txt and a.txt brings 20 again, so c.txt still fits and
-            // passes the limit, and d.txt waits.
+            // passes the limit, and d.txt is known by name only.
             #expect(fixture.reads.all == ["a.txt", "b.txt", "a.txt", "c.txt"])
             let report = try #require(fixture.index.reports[fixture.alpha])
             #expect(report.indexed == 3)
             #expect(report.textBytes == 60)
             #expect(report.reachedTextLimit)
+            #expect(report.nameOnly == 1)
+            #expect(try await fixture.rows()["d.txt"]?.skip == "overFileLimit")
+            let rowIDs = try await fixture.database.run("SELECT id FROM index_files ORDER BY id")
 
-            // A later sweep reads nothing more.
+            // A later sweep reads nothing more and writes nothing again.
             await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
             #expect(fixture.reads.all.count == 4)
+            #expect(try await fixture.database.run("SELECT id FROM index_files ORDER BY id") == rowIDs)
+            try await fixture.expectTablesAgree()
         }
     }
 

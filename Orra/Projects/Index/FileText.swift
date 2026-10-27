@@ -66,8 +66,9 @@ nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable 
     case waitsForRecognition
     /// An image in which recognition found no text.
     case imageWithoutText
-    /// A document or an image past the number of files the index reads for a project,
-    /// known by its name only, see FolderIndex.Limits.
+    /// A document or an image past the number of files the index reads for a project, or a
+    /// document past the text it keeps for one, known by its name only, see
+    /// FolderIndex.Limits.
     case overFileLimit
 }
 

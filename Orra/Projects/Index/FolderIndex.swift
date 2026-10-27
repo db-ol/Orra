@@ -32,9 +32,10 @@ extension Logger {
 /// - A project holds at most 5,000 documents and images, documents first, and 20,000 more
 ///   files by name, and about 200 MB of text. Images the index holds keep their place, and
 ///   new ones take the room the documents leave, newest first. The rest are known by name.
-///   The new document that passes the text limit is the last new one read. A file the index
-///   holds is read again when it changes, even past the limit, so its old text never stays,
-///   and a file with text never loses it for room.
+///   The document that passes the text limit is the last one read whose text the index did
+///   not hold, and the ones after it are known by name. A file with text in the index is
+///   read again when it changes, even past the limit, so its old text never stays, and it
+///   never loses its text for room.
 /// - A file that gives no text is kept with why and with its size and modification date,
 ///   so a file that took too long is not read again until it changes. Reasons that can pass
 ///   without a change, such as no access, are tried again at each sweep.
@@ -563,10 +564,14 @@ final class FolderIndex {
         var gone: [String] = []
         /// The rows to write without reading their files.
         var unread: [Unread] = []
-        /// The documents to read: first those the database holds, then new ones.
+        /// The documents to read: first those with text in the database, then those it
+        /// holds without text, then new ones.
         var changed: [FolderWalk.File] = []
-        /// The text bytes the database holds for the changed files it holds, by path.
+        /// The text bytes the database holds for the changed files with text, by path.
         var storedBytes: [String: Int64] = [:]
+        /// The documents the database holds by name as past the limit, unchanged, which the
+        /// text limit may hold back again without writing them again.
+        var namedPastLimit: Set<String> = []
         /// The text bytes of the files the database holds that stay as they are.
         var keptBytes: Int64 = 0
         /// The real paths of the added folders, which give the folders of the names.
@@ -601,35 +606,27 @@ final class FolderIndex {
             }
         }
 
-        // The rows without a read go first, in batches, so every file can be found by its
-        // name while the documents are read.
-        var written = 0
-        var waiting = 0
-        for start in stride(from: 0, to: survey.unread.count, by: Self.rowsPerWrite) {
-            let batch = Array(survey.unread[start..<min(start + Self.rowsPerWrite, survey.unread.count)])
-            await waitWhileDictating()
-            guard isCurrent(id, generation) else { break }
-            let rows = await Self.prepare(batch, project: id)
-            await waitWhileDictating()
-            guard isCurrent(id, generation) else { break }
-            let removed = try await database.transaction { database in
-                try rows.reduce(false) { removed, row in try Self.store(row, in: database) || removed }
-            }
-            removedText = removedText || removed
-            written += batch.count
-            waiting += batch.count { $0.skip == .waitsForRecognition }
-            await refreshReport(id, generation: generation, isIndexing: true)
-        }
+        // The rows without a read go first, so every file can be found by its name while the
+        // documents are read.
+        let unread = try await writeUnread(survey.unread, project: id, generation: generation)
+        var written = unread.written
+        var waiting = unread.waiting
+        removedText = removedText || unread.removed
 
         var textBytes = survey.keptBytes
         var read = 0
         var skipped = 0
-        for file in survey.changed {
+        var heldBack: [Unread] = []
+        for (offset, file) in survey.changed.enumerated() {
             guard isCurrent(id, generation) else { break }
-            let isNew = survey.storedBytes[file.url.path] == nil
-            // The limit holds back new files only, so a changed file never keeps its old text.
-            if isNew, textBytes >= limits.textBytes {
+            let holdsText = survey.storedBytes[file.url.path] != nil
+            // The limit holds back the documents whose text the index does not hold, so a
+            // changed file never keeps its old text. Those after it come last in the list,
+            // and are known by name.
+            if !holdsText, textBytes >= limits.textBytes {
                 facts.reachedTextLimit = true
+                heldBack = survey.changed[offset...].filter { !survey.namedPastLimit.contains($0.url.path) }
+                    .map { Unread(file: $0, skip: .overFileLimit) }
                 break
             }
             await waitWhileDictating()
@@ -666,6 +663,11 @@ final class FolderIndex {
                 await refreshReport(id, generation: generation, isIndexing: true)
             }
         }
+        if !heldBack.isEmpty, isCurrent(id, generation) {
+            let (count, _, removed) = try await writeUnread(heldBack, project: id, generation: generation)
+            written += count
+            removedText = removedText || removed
+        }
         var named = 0
         if isCurrent(id, generation) {
             named = try await writeMissingNames(id, roots: survey.roots, generation: generation)
@@ -677,6 +679,31 @@ final class FolderIndex {
         Logger.projectsIndex.notice(
             "Index sweep: \(survey.listed, privacy: .public) files listed, \(read, privacy: .public) read, \(skipped, privacy: .public) without text, \(written, privacy: .public) written without a read, \(waiting, privacy: .public) wait for recognition, \(named, privacy: .public) names added, \(survey.gone.count, privacy: .public) removed, in \(Int(milliseconds), privacy: .public) ms")
         return removedText
+    }
+
+    /// Writes rows without reading their files, in transactions of `rowsPerWrite`, and
+    /// returns how many it wrote, how many of them wait for recognition, and whether text
+    /// was removed.
+    private func writeUnread(_ unread: [Unread], project id: UUID, generation: Int) async throws -> (written: Int, waiting: Int, removed: Bool) {
+        var written = 0
+        var waiting = 0
+        var removedText = false
+        for start in stride(from: 0, to: unread.count, by: Self.rowsPerWrite) {
+            let batch = Array(unread[start..<min(start + Self.rowsPerWrite, unread.count)])
+            await waitWhileDictating()
+            guard isCurrent(id, generation) else { break }
+            let rows = await Self.prepare(batch, project: id)
+            await waitWhileDictating()
+            guard isCurrent(id, generation) else { break }
+            let removed = try await database.transaction { database in
+                try rows.reduce(false) { removed, row in try Self.store(row, in: database) || removed }
+            }
+            removedText = removedText || removed
+            written += batch.count
+            waiting += batch.count { $0.skip == .waitsForRecognition }
+            await refreshReport(id, generation: generation, isIndexing: true)
+        }
+        return (written, waiting, removedText)
     }
 
     /// Walks the folders and compares what they hold with what the database holds. Nil when
@@ -741,6 +768,7 @@ final class FolderIndex {
         }
         survey.gone.sort()
 
+        var withoutText: [FolderWalk.File] = []
         var new: [FolderWalk.File] = []
         var images: [(path: String, file: FolderWalk.File)] = []
         func document(_ path: String, _ file: FolderWalk.File) {
@@ -750,9 +778,14 @@ final class FolderIndex {
             }
             if row.matches(file), !row.mustBeWritten {
                 survey.keptBytes += row.textBytes
-            } else {
+            } else if row.skip == nil {
                 survey.changed.append(file)
                 survey.storedBytes[path] = row.textBytes
+            } else {
+                withoutText.append(file)
+                if row.matches(file), row.skip == FileSkipReason.overFileLimit.rawValue {
+                    survey.namedPastLimit.insert(path)
+                }
             }
         }
         func name(_ path: String, _ file: FolderWalk.File, _ reason: FileSkipReason) {
@@ -802,7 +835,7 @@ final class FolderIndex {
                 name(path, file, .overFileLimit)
             }
         }
-        survey.changed += new
+        survey.changed += withoutText + new
         return survey
     }
 
