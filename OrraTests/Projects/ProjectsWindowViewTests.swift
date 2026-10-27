@@ -319,6 +319,43 @@ struct ProjectsWindowViewTests {
         #expect(!window.isVisible)
     }
 
+    /// The lines above and under the mail list wrap at the list's width. SwiftUI measures a
+    /// column at no width for its minimum size, where a line that wraps would take a line for
+    /// each letter, and every column would grow taller than the window, with its top and
+    /// bottom cut off. Each case builds the window as `show()` does and never shows it.
+    @Test func theLinesOfTheListKeepTheColumnsInTheWindow() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let project = try #require(fixture.runtime.projectList.first)
+        func columns(in view: NSView) -> [NSScrollView] {
+            if let scroll = view as? NSScrollView {
+                return [scroll]
+            }
+            return view.subviews.flatMap { columns(in: $0) }
+        }
+        let cases: [(name: String, prepare: (ProjectsWindowModel) -> Void)] = [
+            ("nothing under the list", { _ in }),
+            ("a long notice", { $0.notice = .selection(.otherEmail) }),
+            ("the offer of a rule", { $0.ruleOffer = SortingService.RuleOffer(project: project.id, rule: .sender("mei@harbor.example")) }),
+        ]
+        for (name, prepare) in cases {
+            let model = ProjectsWindowModel(runtime: fixture.runtime)
+            prepare(model)
+            let window = ProjectsWindow.window(hosting: ProjectsWindowView(runtime: fixture.runtime, model: model, openSettings: {}, openMail: {}))
+            try await layOut(window)
+            let content = try #require(window.contentView)
+            let found = columns(in: try #require(content.superview))
+            #expect(found.count == 3, "\(name)")
+            for column in found {
+                let frame = column.convert(column.bounds, to: nil)
+                #expect(content.bounds.contains(frame), "\(name): \(frame)")
+            }
+            #expect(!window.isVisible)
+            window.close()
+        }
+        await fixture.stop()
+    }
+
     // MARK: The talk key
 
     /// Decision 13: the talk key's words go into the change box of the selected email only

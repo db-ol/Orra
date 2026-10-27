@@ -281,6 +281,13 @@ struct ProjectsWindowView: View {
 // MARK: Rows and lines
 
 extension ProjectsWindowView {
+    /// The narrowest the lines above and under the mail list get: the narrowest mail column,
+    /// 280 points, less their padding. A line there that wraps is at least this wide. SwiftUI
+    /// measures a column at no width for its minimum size, where such a line would take a
+    /// line for each letter, and every column would grow taller than the window, with its
+    /// top and bottom cut off.
+    static let narrowestLineWidth: CGFloat = 260
+
     /// One email in the list: its sender, date, subject, the line under the subject and its
     /// marks.
     struct MailRow: View {
@@ -415,7 +422,7 @@ extension ProjectsWindowView {
                     Button("Not Now", action: decline)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: ProjectsWindowView.narrowestLineWidth, maxWidth: .infinity, alignment: .leading)
             .padding(10)
         }
     }
@@ -436,7 +443,7 @@ extension ProjectsWindowView {
             }
             .font(.callout)
             .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: ProjectsWindowView.narrowestLineWidth, maxWidth: .infinity, alignment: .leading)
             .padding([.horizontal, .bottom], 10)
         }
     }
@@ -582,7 +589,7 @@ extension ProjectsWindowView {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minWidth: ProjectsWindowView.narrowestLineWidth, maxWidth: .infinity, alignment: .leading)
                 .padding([.horizontal, .bottom], 10)
             }
         }
