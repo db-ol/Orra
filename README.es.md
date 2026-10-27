@@ -110,7 +110,7 @@ Al abrir Orra, una ventana de bienvenida te guía para descargar los modelos, pe
 
 Orra convierte tu voz en texto en tu Mac y nunca envía tus grabaciones ni su texto a ningún lado. No tiene cuentas, ni estadísticas de uso, ni servidor propio. Solo se conecta a Internet para descargar los modelos que pides y, una vez que lo permites, para buscar actualizaciones. Las funciones que guardan algo, como Aprender de mis correcciones, Recordar mi voz y Proyectos, están desactivadas hasta que las activas.
 
-Proyectos lee el correo a través de la app Mail de tu Mac y los archivos de las carpetas que agregas, y solo los procesa con el modelo de tu Mac. Orra nunca se conecta por su cuenta a un servidor de correo. La app Mail sigue recibiendo tu correo como siempre.
+Proyectos lee el correo a través de la app Mail de tu Mac y los archivos de las carpetas que agregas, y solo los procesa en tu Mac, con el modelo de tu Mac y, para las imágenes y las páginas escaneadas, con el reconocimiento de texto de macOS. Orra nunca se conecta por su cuenta a un servidor de correo. La app Mail sigue recibiendo tu correo como siempre.
 
 [docs/privacy.es.md](docs/privacy.es.md) detalla qué guardan Orra y Proyectos, cuándo se conecta Orra a Internet y cómo eliminar los modelos.
 

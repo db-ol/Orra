@@ -101,7 +101,8 @@ the Chinese prompt. The set and its README stay outside the repository, in
 with today pinned to 2026-10-18:
 
 - FolderIndex indexes the five project folders of the set, where the five injected
-  documents already sit.
+  documents already sit, and recognizes the text of their images and scanned pages with
+  Vision before the run.
 - SortingService files the item's last message with the set's 105 mails filed as labeled,
   and asks the model as with the Projects window open. ExplainService explains it in the
   project sorting chose, sure or likely, and without one otherwise, set aside when sorting

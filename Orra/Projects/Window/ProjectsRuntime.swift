@@ -80,6 +80,11 @@ final class ProjectsRuntime {
         var watchFolders: FolderIndex.Watch
         /// Reads one file of a project folder, FileTextExtractor in the app.
         var readText: @Sendable (URL) async -> Result<FileTextResult, FileSkipReason>
+        /// Recognizes the text of an image or of scanned PDF pages in a project folder,
+        /// TextRecognizer in the app.
+        var recognizeText: FolderIndex.Recognize
+        /// Whether Low Power Mode is on and whether this Mac is hot, ProcessInfo's in the app.
+        var power: @Sendable () -> PowerState
         /// Where a project's folders are now, Project.resolve in the app.
         var resolveFolders: @Sendable ([Data]) async -> [URL]
         /// Opens the database, ProjectsDatabase.open in the app.
@@ -106,6 +111,8 @@ final class ProjectsRuntime {
             watchesMemoryPressure: Bool = true,
             watchFolders: @escaping FolderIndex.Watch = FolderIndex.watchWithFolderEvents,
             readText: @escaping @Sendable (URL) async -> Result<FileTextResult, FileSkipReason> = ProjectsRuntime.readFile,
+            recognizeText: @escaping FolderIndex.Recognize = ProjectsRuntime.recognize,
+            power: @escaping @Sendable () -> PowerState = ProjectsRuntime.power,
             resolveFolders: @escaping @Sendable ([Data]) async -> [URL] = ProjectsRuntime.resolveFolders,
             openDatabase: @escaping @Sendable (ProjectsStorage) async throws -> ProjectsDatabase = ProjectsRuntime.openDatabase,
             now: @escaping @Sendable () -> Date = Date.init,
@@ -127,6 +134,8 @@ final class ProjectsRuntime {
             self.watchesMemoryPressure = watchesMemoryPressure
             self.watchFolders = watchFolders
             self.readText = readText
+            self.recognizeText = recognizeText
+            self.power = power
             self.resolveFolders = resolveFolders
             self.openDatabase = openDatabase
             self.now = now
@@ -138,6 +147,27 @@ final class ProjectsRuntime {
     @concurrent
     nonisolated static func readFile(_ url: URL) async -> Result<FileTextResult, FileSkipReason> {
         await FileTextExtractor().text(of: url)
+    }
+
+    /// Recognizes the text of a job's pages with TextRecognizer.
+    @concurrent
+    nonisolated static func recognize(_ job: RecognitionJob, mayGoOn: @escaping @Sendable () async -> Bool) async -> Result<RecognitionResult, FileSkipReason> {
+        await TextRecognizer().recognize(job, mayGoOn: mayGoOn)
+    }
+
+    /// The states of the Mac that make text recognition wait.
+    nonisolated struct PowerState: Sendable, Equatable {
+        var isLowPowerModeOn = false
+        /// The thermal state is serious or critical.
+        var isHot = false
+    }
+
+    /// Low Power Mode and the thermal state, as ProcessInfo says now.
+    nonisolated static func power() -> PowerState {
+        let info = ProcessInfo.processInfo
+        return PowerState(
+            isLowPowerModeOn: info.isLowPowerModeEnabled,
+            isHot: info.thermalState == .serious || info.thermalState == .critical)
     }
 
     /// Where a project's folders are now, with Project.resolve.
@@ -444,9 +474,11 @@ final class ProjectsRuntime {
         }
         modelWasInstalled = dependencies.modelIsInstalled()
         // The model work gives way at the press of a key, before the dictation reserves the
-        // model gate, see ProjectsModelQueue.dictationStarted.
+        // model gate, see ProjectsModelQueue.dictationStarted, and so does the page text
+        // recognition reads.
         dependencies.whenDictationStarts { [weak self] in
             self?.running?.queue.dictationStarted()
+            self?.running?.index.interruptRecognition()
         }
         followSwitch()
         followChoice()
@@ -585,10 +617,15 @@ final class ProjectsRuntime {
         }
         let store = MailStore(database: database)
         let list = ProjectList(storage: dependencies.storage)
+        // Before the index, whose text recognition waits while memory runs low. It starts
+        // watching below, once Projects runs.
+        let memory = ProjectsMemoryPressure()
         let index = FolderIndex(
             database: database,
             isDictating: dependencies.isDictating,
             readText: dependencies.readText,
+            recognize: dependencies.recognizeText,
+            recognitionPause: { [weak self] in self?.recognitionPause() },
             sleep: dependencies.sleep,
             watch: dependencies.watchFolders
         )
@@ -608,7 +645,6 @@ final class ProjectsRuntime {
             phase = .off
             return
         }
-        let memory = ProjectsMemoryPressure()
         if dependencies.watchesMemoryPressure {
             memory.start()
         }
@@ -1662,6 +1698,9 @@ final class ProjectsRuntime {
         let id = UUID()
         userRequests[id] = UserRequest(cancel: { task.cancel() }, ended: Task { _ = await task.result }, readsFiles: readsFiles)
         defer { userRequests[id] = nil }
+        // Text recognition waits while a request of the user runs, and the page it reads
+        // gives way now.
+        running?.index.interruptRecognition()
         do {
             return try await withTaskCancellationHandler {
                 try await task.value
@@ -1676,6 +1715,22 @@ final class ProjectsRuntime {
     /// Whether a request of the user runs, for tests.
     var userRequestCount: Int {
         userRequests.count
+    }
+
+    /// Why the text recognition of the folder index waits now, nil when it may run: a
+    /// dictation, Live Captions, a request of the user, memory pressure that is not normal,
+    /// Low Power Mode, or a thermal state of serious or critical, in that order. Asked
+    /// before every page, see FolderIndex.
+    func recognitionPause() -> FolderIndex.RecognitionPause? {
+        if dependencies.isDictating() { return .dictation }
+        guard let running else { return nil }
+        if running.model.captionsOn() { return .captions }
+        if !userRequests.isEmpty { return .request }
+        if running.memory.level != .normal { return .memory }
+        let power = dependencies.power()
+        if power.isLowPowerModeOn { return .lowPower }
+        if power.isHot { return .heat }
+        return nil
     }
 
     /// The email's latest explanation, nil when there is none.

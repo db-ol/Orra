@@ -209,6 +209,7 @@ struct StatusMenuTests {
             handoff: ReplyHandoff(copy: { _ in true }, mail: mail, isOrraActive: { true }, bringMailToFront: {}),
             watchesMemoryPressure: false,
             watchFolders: { _, _, _ in {} },
+            recognizeText: RecognitionTestFiles.findsNothing,
             sleep: { _ in try await Task.sleep(for: .seconds(3_600)) }
         ))
     }

@@ -110,7 +110,7 @@ When you open Orra, a welcome window walks you through downloading the models, a
 
 Orra turns your speech into text on your Mac and never sends your recordings or their text anywhere. It has no account, no analytics and no server of its own. It goes online only to download the models you ask for and, once you allow it, to check for updates. Features that keep anything, such as Learn from my corrections, Remember my voice and Projects, are off until you turn them on.
 
-Projects reads mail through the Mail app on your Mac and the files in the folders you add, and works on them only with the model on your Mac. Orra itself never connects to a mail server. The Mail app keeps fetching your mail as it always does.
+Projects reads mail through the Mail app on your Mac and the files in the folders you add, and works on them only on your Mac, with the model on your Mac and, for images and scanned pages, the text recognition of macOS. Orra itself never connects to a mail server. The Mail app keeps fetching your mail as it always does.
 
 [docs/privacy.md](docs/privacy.md) lists what Orra and Projects keep, when Orra goes online and how to remove the models.
 
