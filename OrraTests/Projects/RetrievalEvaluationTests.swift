@@ -4,10 +4,12 @@ import Testing
 @testable import Orra
 
 /// Measures which passages of project files Explain gives the model for the labeled mails of
-/// the synthetic Projects set and its retrieval supplement, before search terms, as 0.6.0
-/// chose them, and after, with the terms of the real cleanup model and the files of other
-/// projects, see ExplainService.files(for:project:known:query:warnings:lookups:). Only when
-/// asked for, never in CI, and in a Release build:
+/// the synthetic Projects set and its retrieval supplement, before, as 0.6.0 chose them
+/// without terms and with every passage of a file, and after, with the terms of the real
+/// cleanup model, at most `ExplainService.perFileChunks` passages of a file and the files of
+/// other projects, see ExplainService.files(for:project:known:query:warnings:lookups:). It
+/// also picks with each of the two changes alone. Only when asked for, never in CI, and in a
+/// Release build:
 ///
 ///     TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL=~/projects/orra-project/bench/projects-testset \
 ///     TEST_RUNNER_ORRA_PROJECTS_OWN_ADDRESSES=<work address>,<home address> \
@@ -190,8 +192,10 @@ struct RetrievalEvaluationTests {
             let query = await ExplainService.searchText(email)
             let projectValue = projects.first { $0.id == project }
             searchTimes.reset()
-            let before = try await ExplainService.files(for: email, project: projectValue, known: known, query: query, warnings: warnings, lookups: lookups(nil))
+            // 0.6.0's selection: no terms, and every passage of a file.
+            let before = try await ExplainService.files(for: email, project: projectValue, known: known, query: query, warnings: warnings, lookups: lookups(nil), perFileChunks: nil)
             let beforeSearches = searchTimes.take()
+            let beforeCapped = try await ExplainService.files(for: email, project: projectValue, known: known, query: query, warnings: warnings, lookups: lookups(nil))
             var run: TermsRun
             if let saved = savedTerms[label.id] {
                 run = saved
@@ -202,8 +206,10 @@ struct RetrievalEvaluationTests {
             }
             run.id = label.id
             termRuns.append(run)
+            searchTimes.reset()
             let after = try await ExplainService.files(for: email, project: projectValue, known: known, query: query, warnings: warnings, lookups: lookups(run.terms))
             let afterSearches = searchTimes.take()
+            let afterUncapped = try await ExplainService.files(for: email, project: projectValue, known: known, query: query, warnings: warnings, lookups: lookups(run.terms), perFileChunks: nil)
             for threshold in thresholds {
                 let swept = try await ExplainService.files(for: email, project: projectValue, known: known, query: query, warnings: warnings, lookups: lookups(run.terms), ownTermMatches: threshold)
                 sweeps[threshold, default: [:]][label.id] = picked(swept)
@@ -211,7 +217,7 @@ struct RetrievalEvaluationTests {
             _ = searchTimes.take()
             rows.append(Row(
                 id: label.id, kinds: label.kind, project: mail.labels.project ?? "none", relevant: label.relevant,
-                before: picked(before), after: picked(after),
+                before: picked(before), after: picked(after), beforeCapped: picked(beforeCapped), afterUncapped: picked(afterUncapped),
                 otherProjectsBefore: before.otherProjects.rawValue, otherProjectsAfter: after.otherProjects.rawValue,
                 warnings: ProjectsWarning.allCases.filter(warnings.contains).map(\.rawValue),
                 terms: run.terms?.count ?? 0, termsValid: run.terms != nil, termsSeconds: run.seconds, termsFallback: run.fallback,
@@ -355,8 +361,14 @@ struct RetrievalEvaluationTests {
         var kinds: [String]
         var project: String
         var relevant: [String]
+        /// 0.6.0's selection: without terms, and with every passage of a file.
         var before: [Picked]
+        /// With the terms and at most `ExplainService.perFileChunks` passages of a file.
         var after: [Picked]
+        /// Without terms, with the cap of a file's passages.
+        var beforeCapped: [Picked]
+        /// With the terms, without the cap.
+        var afterUncapped: [Picked]
         var otherProjectsBefore: String
         var otherProjectsAfter: String
         var warnings: [String]
@@ -515,8 +527,27 @@ struct RetrievalEvaluationTests {
         let known = ([check.incomingText] + check.sourceTexts).joined(separator: "\n\n").precomposedStringWithCompatibilityMapping
         let text = draft.precomposedStringWithCompatibilityMapping
         var found: [String] = []
+        // The user, the recipients and the project's people are no leak, nor is the user's
+        // name as the user's addresses spell it, such as Lin Zhou for lin.zhou@.
+        let people = check.own + check.recipients + check.projectPeople
+        let allowedForms = Set(people.flatMap { SenderChecks.nameForms($0.name) })
+        let allowedAddresses = Set(people.map { $0.address.lowercased() })
+        let localParts = check.own.compactMap { person in
+            person.address.lowercased().split(separator: "@").first.map { Set($0.split(whereSeparator: { ".-_".contains($0) }).map(String.init)) }
+        }
+        func isAllowed(_ name: String) -> Bool {
+            if SenderChecks.nameForms(name).contains(where: allowedForms.contains) { return true }
+            let words = Set(name.lowercased().split(separator: " ").map(String.init))
+            return words.count >= 2 && localParts.contains { words.isSubset(of: $0) }
+        }
+        /// A number that only numbers a line of a list, such as 2. or 3、
+        func isListMarker(_ range: Range<String.Index>) -> Bool {
+            let lineStart = text[..<range.lowerBound].lastIndex(of: "\n").map { text.index(after: $0) } ?? text.startIndex
+            guard text[lineStart..<range.lowerBound].allSatisfy(\.isWhitespace), range.upperBound < text.endIndex else { return false }
+            return ".、)）".contains(text[range.upperBound])
+        }
         let values = { (text: String) in Set(OutputChecks.numbers(in: text, skippingDatesAndCodes: false).filter { $0.isAmount || $0.isScore }.map(\.value)) }
-        for number in OutputChecks.numbers(in: text) where values(other).contains(number.value) && !values(known).contains(number.value) {
+        for number in OutputChecks.numbers(in: text) where values(other).contains(number.value) && !values(known).contains(number.value) && !isListMarker(number.range) {
             found.append("value " + String(text[number.range]))
         }
         let codes = { (text: String) in Set(OutputChecks.codes(in: text).map { OutputChecks.codeValue(text[$0]) }) }
@@ -526,10 +557,10 @@ struct RetrievalEvaluationTests {
         let addresses = { (text: String) in
             Set(OutputChecks.mailAddress.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { Range($0.range, in: text).map { text[$0].lowercased() } })
         }
-        for address in addresses(text) where addresses(other).contains(address) && !addresses(known).contains(address) {
+        for address in addresses(text) where addresses(other).contains(address) && !addresses(known).contains(address) && !allowedAddresses.contains(address) {
             found.append("address " + address)
         }
-        for name in names(in: other) where text.contains(name) && !known.contains(name) {
+        for name in names(in: other) where text.contains(name) && !known.contains(name) && !isAllowed(name) {
             found.append("name " + name)
         }
         let shared = runs(in: other).subtracting(runs(in: known))
@@ -596,12 +627,13 @@ struct RetrievalEvaluationTests {
         func mean(_ values: [Double]) -> Double { values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count) }
         func subset(_ name: String) -> [Row] { rows.filter { $0.kinds.contains(name) } }
         var text = "# Retrieval with search terms\n\n\(rows.count) labeled mails, \(files) files in \(chunks) chunks, indexed in \(seconds(indexTime)). Recall at 6 is the share of a mail's relevant files among the passages a prompt holds before its budget, at most 6. Hit at 6 says that one of them is there.\n\n"
-        text += "| Subset | Mails | Recall before | Recall after | Hit before | Hit after | First relevant rank after, median | Other projects' passages a mail |\n|---|---|---|---|---|---|---|---|\n"
+        text += "Before is the selection of 0.6.0, without terms and with every passage of a file. After has the terms and at most \(ExplainService.perFileChunks) passages of a file. The two columns between take one of the changes alone.\n\n"
+        text += "| Subset | Mails | Recall before | Recall, cap alone | Recall, terms alone | Recall after | Hit before | Hit after | First relevant rank after, median | Other projects' passages a mail |\n|---|---|---|---|---|---|---|---|---|---|\n"
         for name in subsets + ["zh-en or en-zh"] {
             let chosen = name == "zh-en or en-zh" ? rows.filter { !Set($0.kinds).isDisjoint(with: ["zh-en", "en-zh"]) } : subset(name)
             guard !chosen.isEmpty else { continue }
             let ranks = chosen.compactMap { $0.firstRank($0.after) }.sorted()
-            text += "| \(name) | \(chosen.count) | \(percent(mean(chosen.map { $0.recall($0.before) }))) | \(percent(mean(chosen.map { $0.recall($0.after) }))) | \(percent(mean(chosen.map { $0.hit($0.before) ? 1 : 0 }))) | \(percent(mean(chosen.map { $0.hit($0.after) ? 1 : 0 }))) | \(ranks.isEmpty ? "-" : String(ranks[ranks.count / 2])) | \(String(format: "%.2f", mean(chosen.map { Double($0.after.filter { $0.project != nil }.count) }))) |\n"
+            text += "| \(name) | \(chosen.count) | \(percent(mean(chosen.map { $0.recall($0.before) }))) | \(percent(mean(chosen.map { $0.recall($0.beforeCapped) }))) | \(percent(mean(chosen.map { $0.recall($0.afterUncapped) }))) | \(percent(mean(chosen.map { $0.recall($0.after) }))) | \(percent(mean(chosen.map { $0.hit($0.before) ? 1 : 0 }))) | \(percent(mean(chosen.map { $0.hit($0.after) ? 1 : 0 }))) | \(ranks.isEmpty ? "-" : String(ranks[ranks.count / 2])) | \(String(format: "%.2f", mean(chosen.map { Double($0.after.filter { $0.project != nil }.count) }))) |\n"
         }
         let lost = subset("plain").filter { row in
             let before = Set(row.before.map(\.path)).intersection(row.relevant)

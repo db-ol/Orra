@@ -108,8 +108,8 @@ with today pinned to 2026-10-18:
   set it aside. It searches with the search terms the model gives for the email, asked
   once and used in both languages, as Explain Again uses the saved ones, and with other
   projects' files where the app reads them.
-  `TEST_RUNNER_ORRA_PROJECTS_GATE_TERMS=off` searches with the email's words alone, as
-  before search terms, for a baseline from the same build.
+  `TEST_RUNNER_ORRA_PROJECTS_GATE_TERMS=off` searches with the email's words alone, for a
+  comparison from the same build.
 - A message with an HTML part reads as VisibleText reads it, as Mail shows that part.
 - An attachment with text in the set becomes a file of its type, made by the test: a PDF
   or a docx with the text, white where the set marks white text, or the text itself for
@@ -173,9 +173,10 @@ a random third of the new labels. The projects suite and ExplainEvaluationTests 
 index the supplement, so their baselines stay valid.
 
 RetrievalEvaluationTests indexes each project with its folder of the set and its folder of
-the supplement, and for each labeled mail picks the passages without terms, as 0.6.0 did,
-and with the terms of the cleanup model, through ProjectsModelQueue as a request of the
-user. It writes `retrieval.jsonl`, one row a mail, `retrieval-terms.jsonl` with the terms,
+the supplement, and for each labeled mail picks the passages as 0.6.0 did, without terms
+and with every passage of a file, and as Explain now does, with the terms of the cleanup
+model, through ProjectsModelQueue as a request of the user, and at most two passages of a
+file. It also picks with each of the two changes alone. It writes `retrieval.jsonl`, one row a mail, `retrieval-terms.jsonl` with the terms,
 and `retrieval.md` with the tables, the time of the terms jobs and the bar to merge of pull
 request E. `TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_TERMS` takes the terms of an earlier run
 without the model, `TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_THRESHOLDS=1,2,3` picks again with

@@ -37,8 +37,7 @@ import Testing
 ///
 /// It searches with search terms from the model and with other projects' files where the
 /// app reads them, see ExplainService. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_TERMS=off searches
-/// with each mail's words alone, as before search terms, for a run without them from the
-/// same build. The terms job does not count toward the prompt tokens of a row. The runner
+/// with each mail's words alone, for a run without them from the same build. The terms job does not count toward the prompt tokens of a row. The runner
 /// does not sort, so no mail is set aside.
 @Suite(.serialized, .enabled(if: ExplainEvaluationSet.folder != nil && !ExplainEvaluationSet.ownAddresses.isEmpty && RewriteTestModel.folder != nil))
 @MainActor

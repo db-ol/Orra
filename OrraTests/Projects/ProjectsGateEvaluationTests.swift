@@ -44,8 +44,8 @@ import Testing
 ///   recipients of earlier mail. It searches with search terms from the model, asked once
 ///   for an email and used in both languages, as Explain Again uses the saved ones, and with
 ///   other projects' files where the app reads them. TEST_RUNNER_ORRA_PROJECTS_GATE_TERMS=off
-///   searches with the email's words alone, as before search terms. The terms job does not
-///   count toward the prompt tokens of the row.
+///   searches with the email's words alone. The terms job does not count toward the prompt
+///   tokens of the row.
 ///
 /// It writes projects-<first>-<last>.json into the gate folder, one row per item and
 /// language, again after each item, so a run cut short keeps what it did. The rows hold
