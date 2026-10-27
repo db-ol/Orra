@@ -224,8 +224,9 @@ nonisolated enum DocumentKind: String, CaseIterable, Sendable {
 /// confidentiality, between the frame and the verb, and the head of what it asks for names a
 /// kind of document or a file name. The sender's own attachments, promises and offers, a
 /// question about what arrived or what the reader did to a document, and a request for
-/// comments on a document are no request. Every pattern is bounded, so a hostile text cannot
-/// make it slow. Its limit is wording it does not know.
+/// comments on a document are no request. Every pattern is bounded, a sentence reads at most
+/// `mostFrames` matches of each, and what one asks for is read only as far as it is kept, so
+/// a hostile text cannot make it slow. Its limit is wording it does not know.
 ///
 /// Pure: it reads only the text it is given, and logs nothing.
 nonisolated enum FileRequests {
@@ -237,6 +238,9 @@ nonisolated enum FileRequests {
     static let mostRequests = 3
     static let sentenceKept = 200
     static let objectKept = 80
+    /// The most matches of one pattern read in a sentence, so a sentence that repeats a frame
+    /// costs no more than a few.
+    static let mostFrames = 4
 
     /// The files the email asks for, at most `mostRequests`, in the order of the text.
     /// `words` are the sender's own words, without quoted history, forwarded messages, the
@@ -318,14 +322,17 @@ nonisolated enum FileRequests {
         var objects: [String] = []
         var kinds: [DocumentKind] = []
         var fileNames: [String] = []
-        for item in asked where !objects.contains(item.object) {
-            let itemKinds = self.kinds(in: item.object)
-            let itemNames = self.fileNames(in: item.object)
+        for item in asked {
+            // What is kept of the object is what names its kinds.
+            let object = clipped(item.object, to: objectKept)
+            guard !objects.contains(object) else { continue }
+            let itemKinds = self.kinds(in: object)
+            let itemNames = self.fileNames(in: object)
             if item.needsWhich, !itemKinds.contains(where: { !$0.isGeneric }), itemNames.isEmpty {
                 continue
             }
             guard !itemKinds.isEmpty || !itemNames.isEmpty else { continue }
-            objects.append(item.object)
+            objects.append(object)
             kinds += itemKinds.filter { !kinds.contains($0) }
             fileNames += itemNames.filter { !fileNames.contains($0) }
         }
@@ -341,7 +348,7 @@ nonisolated enum FileRequests {
     /// The request of a sentence that ends in a colon, with the items of the list under it
     /// as what it asks for.
     private static func listRequest(_ original: String, items: [String]) -> FileRequest? {
-        let object = items.joined(separator: ", ")
+        let object = items.map { clipped($0, to: objectKept) }.joined(separator: ", ")
         let kinds = self.kinds(in: object)
         let names = fileNames(in: object)
         guard !items.isEmpty, !kinds.isEmpty || !names.isEmpty else { return nil }
@@ -404,7 +411,7 @@ nonisolated enum FileRequests {
             let object = latinObject(after: start, in: sentence, lead: englishLead, cut: englishCut, keepGoing: englishKeepGoing)
             asked.append(Asked(position: match.range.location, object: object, needsWhich: needsWhich))
         }
-        for match in matches(englishAsk, sentence) {
+        for match in frames(englishAsk, sentence) {
             guard let whole = Range(match.range, in: sentence),
                   let gap = Range(match.range(at: 1), in: sentence),
                   let verb = Range(match.range(at: 2), in: sentence) else { continue }
@@ -415,16 +422,16 @@ nonisolated enum FileRequests {
             }
             add(match, verb: verb, objectFrom: verb.upperBound, frame: whole.lowerBound, needsWhich: false)
         }
-        for match in matches(englishSendMe, sentence) {
+        for match in frames(englishSendMe, sentence) {
             guard let whole = Range(match.range, in: sentence), let verb = Range(match.range(at: 1), in: sentence) else { continue }
             add(match, verb: verb, objectFrom: whole.upperBound, needsWhich: false)
         }
-        for match in matches(englishNeed, sentence) {
+        for match in frames(englishNeed, sentence) {
             guard let verb = Range(match.range(at: 1), in: sentence) else { continue }
             add(match, verb: verb, objectFrom: verb.upperBound, needsWhich: true)
         }
         if sentence.hasSuffix("?") {
-            for match in matches(englishHave, sentence) {
+            for match in frames(englishHave, sentence) {
                 guard let verb = Range(match.range(at: 1), in: sentence) else { continue }
                 add(match, verb: verb, objectFrom: verb.upperBound, needsWhich: true)
             }
@@ -462,7 +469,7 @@ nonisolated enum FileRequests {
             let object = latinObject(after: verb.upperBound, in: sentence, lead: spanishLead, cut: spanishCut, keepGoing: spanishKeepGoing)
             asked.append(Asked(position: match.range.location, object: object, needsWhich: needsWhich))
         }
-        for match in matches(spanishAsk, sentence) {
+        for match in frames(spanishAsk, sentence) {
             guard let whole = Range(match.range, in: sentence), let verb = Range(match.range(at: 2), in: sentence) else { continue }
             // "que te envíe" with a verb not of tú: the sender sends to the reader.
             if !sentence[verb].lowercased().hasSuffix("s"), ContentChecks.matches([spanishSender], String(sentence[whole.lowerBound..<verb.lowerBound])) {
@@ -470,12 +477,12 @@ nonisolated enum FileRequests {
             }
             add(match, verb: verb, frame: whole.lowerBound, needsWhich: false)
         }
-        for match in matches(spanishImperative, sentence) {
+        for match in frames(spanishImperative, sentence) {
             let group = match.range(at: 1).location != NSNotFound ? 1 : 2
             guard let verb = Range(match.range(at: group), in: sentence) else { continue }
             add(match, verb: verb, needsWhich: false)
         }
-        for match in matches(spanishNeed, sentence) {
+        for match in frames(spanishNeed, sentence) {
             guard let verb = Range(match.range(at: 1), in: sentence) else { continue }
             add(match, verb: verb, needsWhich: true)
         }
@@ -499,6 +506,9 @@ nonisolated enum FileRequests {
             .map(NSRegularExpression.escapedPattern(for:))
             .joined(separator: "|")
     }()
+    /// A verb of sending anywhere, which the patterns of 把 and of the object after the verb
+    /// need, so a sentence without one costs them nothing.
+    private static let chineseVerb = regex(chineseVerbs)
     /// A character of a clause: no punctuation that ends one, but the dot of a file name.
     private static let chineseClause = #"(?:[^,.!?;:。，！？；：、\n]|\.(?=[A-Za-z0-9]))"#
     /// 把 or 将 with the object before the verb, as in 请把平面图发给我.
@@ -547,8 +557,10 @@ nonisolated enum FileRequests {
             let nextEnd = sentence[next...].firstIndex(where: { boundaries.contains($0) }) ?? sentence.endIndex
             return ContentChecks.matches([chineseOwnClause], String(sentence[next..<nextEnd]))
         }
-        for (pattern, objectGroup, verbGroup) in [(chineseBa, 3, 4), (chineseAsk, 4, 3)] {
-            for match in matches(pattern, sentence) {
+        // The patterns run only when the words they need stand in the sentence.
+        let sends = ContentChecks.matches([chineseVerb], sentence)
+        for (pattern, objectGroup, verbGroup) in [(chineseBa, 3, 4), (chineseAsk, 4, 3)] where sends {
+            for match in frames(pattern, sentence) {
                 guard !own(match),
                       let frame = Range(match.range(at: 1), in: sentence),
                       let gap = Range(match.range(at: 2), in: sentence),
@@ -572,8 +584,8 @@ nonisolated enum FileRequests {
                 asked.append(Asked(position: match.range.location, object: hanObject(text), needsWhich: false))
             }
         }
-        for pattern in [chineseNeed, chineseHave] {
-            for match in matches(pattern, sentence) {
+        for pattern in [chineseNeed, chineseHave] where sentence.contains(pattern === chineseNeed ? "要" : "有") {
+            for match in frames(pattern, sentence) {
                 let group = (1..<match.numberOfRanges).first { match.range(at: $0).location != NSNotFound } ?? 1
                 guard !own(match), let object = Range(match.range(at: group), in: sentence) else { continue }
                 if pattern === chineseHave, ContentChecks.matches([chineseHaveVerb], String(sentence[object])) { continue }
@@ -592,6 +604,10 @@ nonisolated enum FileRequests {
 
     private static let japaneseClause = #"(?:[^,.!?;:。、，！？；：\n]|\.(?=[A-Za-z0-9]))"#
     private static let japaneseEndings = #"ください|下さい|くださいませ|いただけますか|いただけませんか|いただけますでしょうか|いただけないでしょうか|頂けますか|頂けませんか|頂けますでしょうか|もらえますか|もらえませんか|お願いします|お願いいたします|お願い致します|お願いできますか|いただければ|頂ければ|いただけると|頂けると|いただきたく|いただきたいです|頂きたく|願います|ほしいです|欲しいです"#
+    /// A polite request anywhere, which the first three patterns need.
+    private static let japaneseEnding = regex(japaneseEndings + "|お願い")
+    /// A verb of sending anywhere, which the first two patterns need.
+    private static let japaneseSend = regex(#"送って|送付して|共有して|添付して|送信して|転送して|お送り|ご送付|ご共有|ご提供|ご送信|ご転送"#)
     /// The object before を or も, a verb of sending, and a polite request.
     private static let japaneseAsk = regex("(" + japaneseClause + "{1,30}?)(?:を|も)(?:至急|早めに|早急に|改めて|再度|もう一度|今一度|一度|すぐに|先に)?(?:送って|送付して|共有して|添付して|送信して|転送して|お送り|ご送付|ご共有|ご提供|ご送信|ご転送)(?:して|を)?(?:" + japaneseEndings + ")")
     /// The object before の and a noun of sending, as in 契約書のご提供をお願いいたします.
@@ -605,10 +621,19 @@ nonisolated enum FileRequests {
     private static let japaneseLead = regex(#"^(?:また|あと|それと|それから|さらに|念のため|ついでに|恐れ入りますが|お手数ですが|お手数をおかけしますが|すみませんが|申し訳ありませんが|至急)+"#)
 
     private static func japanese(_ sentence: String) -> [Asked] {
-        guard sentence.contains(where: { $0.isHan || $0.isKana }) else { return [] }
+        // Every pattern needs kana, which Chinese has none of.
+        guard sentence.contains(where: \.isKana) else { return [] }
         var asked: [Asked] = []
-        for (pattern, needsWhich) in [(japaneseAsk, false), (japaneseNoun, false), (japaneseGive, false), (japaneseForget, false), (japaneseNeed, true)] {
-            for match in matches(pattern, sentence) {
+        // The patterns run only when the words they need stand in the sentence: the first
+        // three end in a polite request, and the first two hold a verb of sending.
+        let asks = ContentChecks.matches([japaneseEnding], sentence)
+        let sends = asks && ContentChecks.matches([japaneseSend], sentence)
+        let needs: [(NSRegularExpression, Bool, Bool)] = [
+            (japaneseAsk, false, sends), (japaneseNoun, false, sends), (japaneseGive, false, asks),
+            (japaneseForget, false, sentence.contains("忘れないで")), (japaneseNeed, true, sentence.contains("が")),
+        ]
+        for (pattern, needsWhich, mayMatch) in needs where mayMatch {
+            for match in frames(pattern, sentence) {
                 guard let object = Range(match.range(at: 1), in: sentence) else { continue }
                 var text = String(sentence[object])
                 if let lead = japaneseLead.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)), let range = Range(lead.range, in: text) {
@@ -627,12 +652,13 @@ nonisolated enum FileRequests {
     /// floor plan for the lobby", where "for the lobby" goes. After copy, version, scan and
     /// their like the object goes on, as in "una copia de la factura".
     private static func latinObject(after start: String.Index, in sentence: String, lead: NSRegularExpression, cut: NSRegularExpression, keepGoing: Set<String>) -> String {
-        var rest = String(sentence[start...])
+        var rest = String(sentence[start...].prefix(objectKept * 3))
         if let match = lead.firstMatch(in: rest, range: NSRange(rest.startIndex..., in: rest)), let range = Range(match.range, in: rest) {
-            rest = String(rest[range.upperBound...])
+            rest = String(rest[range.upperBound...].prefix(objectKept * 2))
         }
         // A word of the glossary stays whole, as "hoja de cálculo" or "price list".
-        let phrases = phraseTerms.flatMap { term in ranges(of: term, in: rest) }
+        let searched = rest as NSString
+        let phrases = phraseTerms.flatMap { term in ranges(of: term, in: rest, searched) }
         var end = rest.endIndex
         for match in matches(cut, rest) {
             guard let range = Range(match.range, in: rest) else { continue }
@@ -656,17 +682,21 @@ nonisolated enum FileRequests {
         return DocumentKind.allCases.flatMap(\.terms.all).filter { $0.contains(" ") && seen.insert($0).inserted }
     }()
 
-    /// Where a term stands in a text as whole words, ignoring case and accents.
-    private static func ranges(of term: String, in text: String) -> [Range<String.Index>] {
+    /// Where a term stands in a text as whole words, ignoring case and accents. `searched` is
+    /// the text as an NSString, made once for all the terms.
+    private static func ranges(of term: String, in text: String, _ searched: NSString) -> [Range<String.Index>] {
         var found: [Range<String.Index>] = []
-        var start = text.startIndex
-        while let range = text.range(of: term, options: [.caseInsensitive, .diacriticInsensitive], range: start..<text.endIndex) {
+        var start = 0
+        while start < searched.length {
+            let match = searched.range(of: term, options: [.caseInsensitive, .diacriticInsensitive], range: NSRange(location: start, length: searched.length - start))
+            guard match.location != NSNotFound else { break }
+            start = match.location + max(match.length, 1)
+            guard let range = Range(match, in: text) else { continue }
             let before = range.lowerBound == text.startIndex ? nil : text[text.index(before: range.lowerBound)]
             let after = range.upperBound == text.endIndex ? nil : text[range.upperBound]
             if !(before?.isLetter ?? false), !(after?.isLetter ?? false) {
                 found.append(range)
             }
-            start = range.upperBound
         }
         return found
     }
@@ -708,9 +738,10 @@ nonisolated enum FileRequests {
     /// The kinds a text names, each once, in the order the text names them.
     static func kinds(in text: String) -> [DocumentKind] {
         let folded = matchingText(text)
+        let searched = folded as NSString
         var found: [(position: Int, kind: DocumentKind)] = []
         for (kind, terms) in matchingTerms {
-            let first = terms.compactMap { position(of: $0, in: folded) }.min()
+            let first = terms.compactMap { position(of: $0, in: folded, searched) }.min()
             if let first {
                 found.append((first, kind))
             }
@@ -831,19 +862,27 @@ nonisolated enum FileRequests {
         return folded
     }
 
-    /// Where a term first stands in a text, as a whole word when it is Latin, and anywhere
-    /// when it is Chinese or Japanese, which write no spaces.
-    private static func position(of term: String, in text: String) -> Int? {
-        var start = text.startIndex
-        while let range = text.range(of: term, range: start..<text.endIndex) {
-            let latin = term.first.map { !$0.isHan && !$0.isKana } ?? true
-            let before = range.lowerBound == text.startIndex ? nil : text[text.index(before: range.lowerBound)]
-            let after = range.upperBound == text.endIndex ? nil : text[range.upperBound]
-            let isWord: (Character?) -> Bool = { $0.map { $0.isLetter || $0.isNumber } ?? false }
-            if !latin || (!isWord(before) && !isWord(after)) {
-                return text.distance(from: text.startIndex, to: range.lowerBound)
+    /// Where a term first stands in a text, in UTF-16 units, as a whole word when it is
+    /// Latin, and anywhere when it is Chinese or Japanese, which write no spaces. `searched`
+    /// is the text as an NSString, made once for all the terms, since a search of a Swift
+    /// string makes one for each term. Both are in the matching form, so a literal search
+    /// finds what a search of their characters would.
+    private static func position(of term: String, in text: String, _ searched: NSString) -> Int? {
+        let latin = term.first.map { !$0.isHan && !$0.isKana } ?? true
+        var start = 0
+        while start < searched.length {
+            let found = searched.range(of: term, options: .literal, range: NSRange(location: start, length: searched.length - start))
+            guard found.location != NSNotFound else { return nil }
+            guard latin else { return found.location }
+            if let range = Range(found, in: text) {
+                let before = range.lowerBound == text.startIndex ? nil : text[text.index(before: range.lowerBound)]
+                let after = range.upperBound == text.endIndex ? nil : text[range.upperBound]
+                let isWord: (Character?) -> Bool = { $0.map { $0.isLetter || $0.isNumber } ?? false }
+                if !isWord(before), !isWord(after) {
+                    return found.location
+                }
             }
-            start = text.index(after: range.lowerBound)
+            start = found.location + 1
         }
         return nil
     }
@@ -928,6 +967,21 @@ nonisolated enum FileRequests {
 
     private static func matches(_ pattern: NSRegularExpression, _ text: String) -> [NSTextCheckingResult] {
         pattern.matches(in: text, range: NSRange(text.startIndex..., in: text))
+    }
+
+    /// The first matches of a frame in a sentence, at most `mostFrames`. The search stops
+    /// there, so a sentence that repeats a frame costs no more than a few.
+    private static func frames(_ pattern: NSRegularExpression, _ text: String) -> [NSTextCheckingResult] {
+        var found: [NSTextCheckingResult] = []
+        pattern.enumerateMatches(in: text, range: NSRange(text.startIndex..., in: text)) { match, _, stop in
+            if let match {
+                found.append(match)
+            }
+            if found.count >= mostFrames {
+                stop.pointee = true
+            }
+        }
+        return found
     }
 
     /// The text of the last match of a pattern.

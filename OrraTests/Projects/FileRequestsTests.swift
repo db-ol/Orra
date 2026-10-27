@@ -392,6 +392,34 @@ struct FileRequestsTests {
         #expect(ContinuousClock.now - started < .seconds(10))
     }
 
+    /// Every sentence of the part read repeats a frame, which once made each match read the
+    /// rest of its sentence, for seconds an email. Each text ends well within a second.
+    @Test(.timeLimit(.minutes(1)))
+    func aFrameInEverySentenceEndsQuickly() {
+        func sentences(_ unit: String, length: Int, count: Int, end: String) -> String {
+            let body = String(String(repeating: unit, count: length / unit.count + 1).prefix(length - 1))
+            return String(repeating: body + end, count: count)
+        }
+        let texts = [
+            sentences("we need we need ", length: 133, count: 60, end: ". "),
+            sentences("we need the floor plan and ", length: 400, count: 20, end: ". "),
+            sentences("please send please send ", length: 400, count: 20, end: ". "),
+            sentences("necesito necesito ", length: 400, count: 20, end: ". "),
+            sentences("por favor envía por favor envía ", length: 400, count: 20, end: ". "),
+            sentences("我们需要我们需要", length: 400, count: 20, end: "。"),
+            sentences("请发送请发送", length: 400, count: 20, end: "。"),
+            sentences("请把把把把把把把把把把", length: 400, count: 20, end: "。"),
+            sentences("有没有你们有", length: 400, count: 20, end: "。"),
+            sentences("資料をください資料をください", length: 400, count: 20, end: "。"),
+            sentences("をもをも送って", length: 400, count: 20, end: "。"),
+        ]
+        for text in texts {
+            let started = ContinuousClock.now
+            #expect(Self.found(text, subject: String(text.prefix(FileRequests.sentenceLength))).count <= FileRequests.mostRequests)
+            #expect(ContinuousClock.now - started < .seconds(1), "\(text.prefix(30))")
+        }
+    }
+
     // MARK: Kinds and search terms
 
     @Test func everyKindHasTermsInFourLanguages() {
