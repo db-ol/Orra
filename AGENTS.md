@@ -111,8 +111,8 @@ trusted once in Xcode. docs/dependencies.md has the details.
   end of that reply's content once for each file the user ticked for it, only while the Mail
   that made the reply runs. Every value goes in as an Apple Event parameter, never inside
   script text, and a file goes in as a file URL that Mail reads itself. Projects code gives
-  Mail only files in the folders the user added to a project, checked again right before the
-  reply, only on the user's click on Open Reply in Mail or Reply All, and never ticks a file
+  Mail only files in the folders the user added to a project, each checked again right before
+  its event, only on the user's click on Open Reply in Mail or Reply All, and never ticks a file
   by itself. Tools/ci/check_rules.py checks these rules.
 - Dictation goes first. Projects code must have the model read a long prompt in slices, and
   must start no model call from the press of the talk key or the translation key until the
