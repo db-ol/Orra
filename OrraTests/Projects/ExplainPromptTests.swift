@@ -1291,6 +1291,67 @@ struct ExplainPromptTests {
         }
     }
 
+    // MARK: Prompts without a choice
+
+    /// Fixed inputs whose prompts ExplainPromptGolden keeps word for word as main rendered
+    /// them before files could be chosen for an email: a project with found files, a replaced
+    /// one and the newest fill, other mail, a thread and a warning, then a forward with the text
+    /// of attachments, a prompt the budget trims, an email without a project, and other
+    /// projects' files with a project and without one, in both languages.
+    private func keptInputs() -> [(name: String, input: ExplainPrompt.Input, budget: Int)] {
+        let found = [
+            chunk("spec.md", page: 2, heading: "Paper", text: "Paper: 200 g matte. Cover: 300 g."),
+            chunk("plan-v1.md", text: "Delivery on 20 November, 500 copies.", day: "2026-09-12"),
+        ]
+        let newest = [chunk("plan-v2.md", text: "Delivery on 27 November, 550 copies.", day: "2026-10-11"), chunk("notes.md", text: "Call notes: Iris asks for the proof by Wednesday.")]
+        let projectMail = [mail("quote@printworks.example", "2026-10-02T10:00:00+08:00", subject: "Quote", text: "The quote is ¥12,400 for 500 calendars.")]
+        let thread = [mail("proof-2@printworks.example", "2026-10-12T09:00:00+08:00", subject: "Second proof", text: "The second proof goes out on Monday.")]
+        func project(_ language: ProjectsLanguage) -> ExplainPrompt.Input {
+            input(reply: .reply(language), language: language, chunks: found, newest: newest, projectMail: projectMail, thread: thread, warnings: [.link])
+        }
+        func forward(_ language: ProjectsLanguage) -> ExplainPrompt.Input {
+            var given = input(email: Self.forwarded, reply: .reply(language), language: language, chunks: Array(found.prefix(1)))
+            given.attachments = [attachment("terms.txt", "Delivery on 20 November, 500 copies."), attachment("rates.csv", "item,price\ncalendar,24.80"), attachment("photo.png", nil)]
+            return given
+        }
+        let plan = other("floor-plan.pdf", page: 1, text: "Lobby floor plan, revision C. Deposit ¥8,400.")
+        var others = input(chunks: Array(found.prefix(1)))
+        others.otherChunks = [plan]
+        var othersAlone = input(reply: .reply(.zh), language: .zh, project: nil)
+        othersAlone.otherChunks = [plan, other("lamps.md", text: "Twelve brass lamps.")]
+        return [
+            ("project-en", project(.en), ExplainPrompt.tokenBudget),
+            ("project-zh", project(.zh), ExplainPrompt.tokenBudget),
+            ("forward-attachments-en", forward(.en), ExplainPrompt.tokenBudget),
+            ("forward-attachments-zh", forward(.zh), ExplainPrompt.tokenBudget),
+            ("trimmed-en", fullInput(), 10_800),
+            ("no-project-zh", input(reply: .noReply(.listMail), language: .zh, project: nil), ExplainPrompt.tokenBudget),
+            ("other-projects-en", others, ExplainPrompt.tokenBudget),
+            ("other-projects-no-project-zh", othersAlone, ExplainPrompt.tokenBudget),
+        ]
+    }
+
+    /// A prompt without a chosen file reads exactly as main rendered it, so the projects
+    /// suite of every email without a choice does not change. With
+    /// TEST_RUNNER_ORRA_KEPT_PROMPTS_OUT set to a folder it writes the prompts there, to
+    /// renew ExplainPromptGolden after a change of the prompt on purpose.
+    @Test func promptWithoutAChoiceReadsAsBefore() throws {
+        let out = ProcessInfo.processInfo.environment["ORRA_KEPT_PROMPTS_OUT"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+        let inputs = keptInputs()
+        for (name, input, budget) in inputs {
+            let result = prompt(input, budget: budget)
+            if let out {
+                try result.text.write(to: out.appending(path: name + ".txt"), atomically: true, encoding: .utf8)
+            }
+            #expect(result.text == ExplainPromptGolden.texts[name], "\(name)")
+            #expect(result.tokens == result.text.count, "\(name)")
+        }
+        #expect(ExplainPromptGolden.texts.count == inputs.count)
+        // The trimmed prompt lost parts, and kept the email.
+        let trimmed = try #require(inputs.first { $0.name == "trimmed-en" })
+        #expect(prompt(trimmed.input, budget: trimmed.budget).sources.count < prompt(trimmed.input, budget: 100_000).sources.count)
+    }
+
     /// A file of another project is marked by the versions of its own project.
     @Test func anotherProjectsReplacedFileIsMarkedByItsOwnProject() {
         let older = other("plan-v1.md", text: "Delivery 11-20.", day: "2026-09-12")
