@@ -10,7 +10,8 @@ import os
 /// - **Mail text, 90 days:** the email's own text, its visible text, the text of its
 ///   attachments, the words that find it, and its latest explanation, draft versions and
 ///   the text the user typed into the draft, which hold the text, go 90 days after Orra
-///   read the email.
+///   read the email, and so does the user's choice of files for it, which serves only an
+///   explanation of that text.
 /// - **The rest of an email, 180 days:** its headers, people, project, marks, warnings and
 ///   attachment names, types and sizes go with its whole thread, 180 days after Orra read
 ///   the thread's newest message.
@@ -39,6 +40,8 @@ nonisolated enum Retention {
         var draftVersions = 0
         /// Texts the user typed into drafts.
         var editedDrafts = 0
+        /// Files the user chose for emails whose text went.
+        var chosenFiles = 0
         var tallies = 0
         /// Hashes of Message-IDs of removed mail that no scan can reach any more.
         var goneIDs = 0
@@ -129,6 +132,10 @@ nonisolated enum Retention {
                 WHERE saved < ? AND (text IS NOT NULL OR visible_text IS NOT NULL OR words IS NOT NULL OR attachment_text IS NOT NULL)
                 RETURNING id
                 """, [cutoffs.text]).count
+            removed.chosenFiles = try database.run("""
+                DELETE FROM mail_chosen_files WHERE message IN (SELECT id FROM mail_messages WHERE saved < ?)
+                RETURNING message
+                """, [cutoffs.text]).count
             // Whole threads, by the newest message read. Their people and drafts go with them.
             removed.emails = try MailStore.deleteGone(
                 where: "thread_root IN (SELECT thread_root FROM mail_messages GROUP BY thread_root HAVING MAX(saved) < ?)",
@@ -141,7 +148,7 @@ nonisolated enum Retention {
             try await store.database.compactAfterDeletes()
         }
         let seconds = started.duration(to: .now) / .seconds(1)
-        Logger.projects.notice("Retention removed the text of \(removed.texts, privacy: .public) emails, \(removed.explanations, privacy: .public) explanations, \(removed.drafts, privacy: .public) first drafts, \(removed.emails, privacy: .public) emails, \(removed.draftVersions, privacy: .public) draft versions, \(removed.editedDrafts, privacy: .public) texts typed into drafts, \(removed.tallies, privacy: .public) counts of moves and \(removed.goneIDs, privacy: .public) gone Message-IDs in \(String(format: "%.3f s", seconds), privacy: .public)")
+        Logger.projects.notice("Retention removed the text of \(removed.texts, privacy: .public) emails, \(removed.explanations, privacy: .public) explanations, \(removed.drafts, privacy: .public) first drafts, \(removed.emails, privacy: .public) emails, \(removed.draftVersions, privacy: .public) draft versions, \(removed.editedDrafts, privacy: .public) texts typed into drafts, \(removed.chosenFiles, privacy: .public) chosen files, \(removed.tallies, privacy: .public) counts of moves and \(removed.goneIDs, privacy: .public) gone Message-IDs in \(String(format: "%.3f s", seconds), privacy: .public)")
         return removed
     }
 

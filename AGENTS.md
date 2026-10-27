@@ -103,6 +103,11 @@ trusted once in Xcode. docs/dependencies.md has the details.
   added to any project, and nothing at all while Projects is off. An explanation may use
   passages of other projects' folders, labeled with their project. A draft's text never
   carries another project's passages or facts unless the user chose that file for the email.
+  A file the user chooses for an email comes from the index of those folders only. Projects
+  code never reads, opens or looks up a file the user drops or names outside them. It only
+  offers to add the file's folder to a project, which the user picks in an open panel and
+  which then counts for all the project's mail. Words the user types or says into the change
+  box never choose, open or look up a file.
   Orra opens Mail only when the user clicks Open Mail, through MailApp.open() in
   Orra/MailApp.swift, which code in Orra/Projects gets as a closure. Nothing else launches
   Mail. Projects code must never read ~/Library/Mail or ask for Full Disk Access. It must

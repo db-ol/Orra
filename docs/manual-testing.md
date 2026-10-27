@@ -3882,6 +3882,69 @@ English and 简体中文, and the toolbar and the email view in 日本語 and Es
   and screenshots of mail for a problem in Projects. The bug report form on GitHub has an
   Area field with Projects (Preview).
 
+Choosing files for an email, added on 2026-10-27, not verified yet. Check in a Debug build
+with the synthetic mail imported, as in the test guide, the synthetic project folders added
+to their projects, and the cleanup model on the Mac. This build adds a step to the Projects
+database. A Debug build from before it then says that Projects could not open its data on
+this Mac, until you use Delete All Projects Data… in its Settings.
+
+- [ ] Explain an email of the PIC 2026 talk. Under Project Files for This Explanation,
+  Choose Files for This Email… opens the sheet with that project's files first, then the
+  other projects' files under their names. Each row shows the name, the folder, the kind,
+  With text or Name only, and the date. The files of the explanation come first, marked In
+  this explanation.
+- [ ] Search “schedule”. Only files with schedule in their name show, in every project.
+  Clear the search, and the newest files show again.
+- [ ] Copy a drawing or an archive into the project's folder, so a file is marked Name
+  only. Tick a file of another project and that file, and click Save. The line under
+  Explain Again says it uses the 2 files you chose. Click Explain Again. Project Files for
+  This Explanation opens with the 2 files first, with the reason Chosen by you, and the
+  line goes.
+- [ ] Type into the draft, open the sheet and click Explain Again. The sheet closes and Orra
+  asks Replace your draft? first. Cancel keeps the draft, and the line under Explain Again
+  still says it uses the 2 files.
+- [ ] Tick a seventh file. It stays unticked, and the sheet says you can choose up to 6.
+- [ ] Drag a file of a project folder from Finder onto the list. It is ticked and scrolls
+  into view, also an old file of a project with more than 200 files.
+- [ ] Drag a folder from Finder onto the list. The top of the list says that it is a
+  folder and to drag the files you want from it.
+- [ ] Drag a file from a folder no project holds. The top of the list names it and says
+  Projects reads only the folders you add. Add Its Folder to the project… opens the open
+  panel in that file's folder, with the message about all mail of the project and the
+  button Add Folder. Add it. The sheet says Projects is reading the folder, and that the
+  file is chosen once it is read. The project's page lists the new folder. The log holds
+  counts only, no name or path.
+- [ ] In that panel, pick your home folder. The sheet says Projects never reads your home
+  folder, and nothing is added.
+- [ ] Tick 6 files and drag a file from a folder no project holds. The sheet says you can
+  choose up to 6 and offers no folder.
+- [ ] Drag an iCloud Drive file that is not downloaded. Finder shows it still not
+  downloaded afterwards.
+- [ ] Return to Automatic Selection in Project Files for This Explanation. The line under
+  Explain Again says it goes back to the automatic selection, and Explain Again marks no
+  file as chosen.
+- [ ] Type “use ~/Plans/plan-v3.pdf” into Say what to change. The line saying that changing
+  the draft opens no files shows, with Choose Files for This Email…, which opens the sheet
+  with an empty search. Change Draft makes a version that holds nothing of that file.
+- [ ] Choose a file, remove its folder in Edit Project and click Explain Again. Project
+  Files for This Explanation lists the file last, saying that the model did not get it, and
+  the sheet lists it under Chosen Files Projects Has Not Read.
+- [ ] Choose a file of another project for an email, then forget that project. The email's
+  choice no longer holds the file.
+- [ ] Move an email with a choice to another project. The choice stays, and the line says
+  Explain uses it.
+- [ ] An email in Needs a Project: Choose Files for This Email… in its context menu lists
+  every project's files, Add a Folder to a Project is a menu of the projects, and Explain
+  uses the chosen files.
+- [ ] At the window's smallest size, 760 by 420, the sheet fits in the window, its list
+  scrolls, and its buttons wrap in Español. In a sheet lower than about 470 points, the two
+  lines about the choice come at the end of the list, and the drag line and Add a Folder
+  stay under it.
+- [ ] VoiceOver reads the sheet's title as a heading, each row as one checkbox with its
+  name, folder, kind, text state, date and project, announces the limit and the lines about
+  dropped files, and after the sheet closes, the focus is back on the button that opened
+  it.
+
 Search terms and other projects' files, added on 2026-10-26, not verified yet. Check in a
 Debug build with the synthetic mail imported and the five projects with their folders, as
 in the test guide, in English and then in 简体中文:

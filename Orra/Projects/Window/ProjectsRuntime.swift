@@ -1413,6 +1413,75 @@ final class ProjectsRuntime {
         return folders
     }
 
+    // MARK: Chosen files
+
+    /// The files the user chose for the email, empty when there are none or the store could
+    /// not read them.
+    func chosenFiles(of messageID: String) async -> [MailStore.ChosenFile] {
+        (try? await running?.store.chosenFiles(of: messageID)) ?? []
+    }
+
+    /// Saves the user's choice of files for the email in place of the one before, and says
+    /// whether it did. A failed write is logged with its code.
+    func saveChosenFiles(_ files: [MailStore.ChosenFile], for messageID: String) async -> Bool {
+        guard let store = running?.store else { return false }
+        do {
+            return try await store.saveChosenFiles(files, for: messageID)
+        } catch {
+            MailStore.log(error, "saving the files chosen for an email")
+            return false
+        }
+    }
+
+    /// Every file the index lists in the user's projects, for the sheet that chooses files
+    /// for an email, see FolderIndex.listFiles(projects:). Empty while Projects does not run.
+    func projectFiles() async -> [FolderIndex.ListedFile] {
+        guard let index = running?.index else { return [] }
+        return (try? await index.listFiles(projects: projectList.map(\.id))) ?? []
+    }
+
+    /// What adding a folder to a project from the sheet that chooses files did.
+    nonisolated enum AddedFolder: Equatable, Sendable {
+        /// The index refuses the folder, such as the home folder, so it was not added.
+        case refused(FolderWalk.Refusal)
+        /// The project holds the folder now, which its index reads.
+        case saved
+        /// The project could not be saved, or it is gone.
+        case failed
+    }
+
+    /// Adds a folder the user picked to a project's folders, for all the project's mail, as
+    /// Edit Project does: checked as Add Folder… checks it, see `folderBookmark(_:)`, and
+    /// saved through `update(_:)`, which starts the project's index. A folder the project holds
+    /// already changes nothing.
+    func addFolder(_ url: URL, to projectID: UUID) async -> AddedFolder {
+        let bookmark: Data
+        switch await Self.folderBookmark(url) {
+        case .failure(let refusal): return .refused(refusal)
+        case .success(let made): bookmark = made
+        }
+        guard var project = running?.list.project(projectID) else { return .failed }
+        let held = await folders(of: project)
+        guard !held.contains(where: { $0.standardizedFileURL == url.standardizedFileURL }) else { return .saved }
+        project.folders.append(bookmark)
+        do {
+            try await update(project)
+            return .saved
+        } catch {
+            return .failed
+        }
+    }
+
+    /// A folder the index may read, as its bookmark, or why it may not: the check of Add
+    /// Folder… in Edit Project and of the sheet that chooses files.
+    nonisolated static func folderBookmark(_ url: URL) async -> Result<Data, FolderWalk.Refusal> {
+        if let refusal = await FolderWalk().refusal(for: url) {
+            return .failure(refusal)
+        }
+        guard let bookmark = try? Project.bookmark(of: url) else { return .failure(.notAFolder) }
+        return .success(bookmark)
+    }
+
     /// Starts indexing a project's folders as they are now. With `resortAfter`, the mail the
     /// project reaches is sorted again once the sweep that starts here ends. A folder can
     /// take long to resolve, such as on a share that hangs, so no start or stop of Projects
@@ -1851,7 +1920,9 @@ final class ProjectsRuntime {
             search: { query in try await search.search(query) },
             newest: { project, limit in try await search.newest(project, limit: limit) },
             files: { project in try await index.versionFiles(project: project) },
-            terms: { email in try await Self.searchTerms(for: email, store: store, queue: queue, sleep: sleep) }
+            terms: { email in try await Self.searchTerms(for: email, store: store, queue: queue, sleep: sleep) },
+            chosenFiles: { messageID in try await store.chosenFiles(of: messageID) },
+            passages: { query, files, perFile in try await search.passages(query, in: files, perFile: perFile) }
         )
     }
 

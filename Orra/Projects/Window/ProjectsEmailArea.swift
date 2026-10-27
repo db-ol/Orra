@@ -98,7 +98,8 @@ struct ProjectsEmailArea: View {
                         }
                         DraftSection(
                             runtime: runtime, emailModel: emailModel, explanation: explanation,
-                            isExplaining: model.explaining[email.messageID] == .explaining, openMail: openMail)
+                            isExplaining: model.explaining[email.messageID] == .explaining, openMail: openMail,
+                            chooseFiles: { model.chooseFiles(for: email) })
                         if model.showsExplanation {
                             Divider()
                             Text("Original Email")
@@ -196,6 +197,13 @@ struct ProjectsEmailArea: View {
             VStack(alignment: .leading, spacing: 8) {
                 explainButtons(state: state, isChanging: isChanging, noText: noText)
             }
+        }
+        // What the next explanation uses of the files the user chose.
+        if let note = model.emailModel(for: email.messageID).choiceNote {
+            Text(verbatim: ProjectsWindowText.choiceNote(note))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         if case .failed(let failure)? = state {
             HStack(alignment: .firstTextBaseline, spacing: 10) {

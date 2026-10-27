@@ -532,6 +532,21 @@ struct DraftCheckTests {
         #expect(await check(shared, to: [Self.owen], sources: [others[0]], others: others).draft == shared)
     }
 
+    /// A file of another project that the user chose for the email is among the email's own
+    /// sources, see ExplainService.sourceTexts: what it holds, a copied sentence too, stays in
+    /// a draft to the project's people, while a value only another passage of that project
+    /// holds still goes. To someone outside the project its data goes as any project data.
+    @Test func aChosenFileOfAnotherProjectCountsAmongTheEmailsSources() async {
+        let chosen = "The lamps hang along the north wall of the lobby next to the reception desk. Deposit ¥8,400 to 韩书言."
+        let others = ["Kiln hall plan, deposit ¥9,100, order KS-55210."]
+        let draft = "Hi Owen,\n\nThe lamps hang along the north wall of the lobby next to the reception desk. The deposit is ¥8,400 to 韩书言, and KS-55210 is another order.\n\nBai Lu"
+        let inside = await check(draft, to: [Self.owen], sources: [chosen], others: others, otherNames: ["Kiln studio", "韩书言"])
+        #expect(inside.draft == "Hi Owen,\n\nThe lamps hang along the north wall of the lobby next to the reception desk. The deposit is ¥8,400 to 韩书言, and [another project's data removed] is another order.\n\nBai Lu")
+        #expect(removed(inside) == ["otherProjectData: KS-55210"])
+        let outside = await check("Hi Nadia, the deposit is ¥8,400.", sources: [chosen])
+        #expect(removed(outside) == ["projectData: ¥8,400"])
+    }
+
     /// Another project's data goes before the rule for people outside the project, so the
     /// window names the more exact reason.
     @Test func otherProjectsDataGoesBeforeTheOutsideRule() async {

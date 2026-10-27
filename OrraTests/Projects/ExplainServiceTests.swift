@@ -1551,6 +1551,164 @@ struct ExplainServiceTests {
         #expect(!check.sourceTexts.contains(six[5].text))
         #expect(check.otherProjectTexts == [Fixture.plan.text])
     }
+
+    // MARK: Chosen files
+
+    /// A file the user chose, with what the index gives of it: these passages, or with none
+    /// its name, or with `indexed` false nothing.
+    private static func chosen(_ hits: [ChunkSearch.Hit], path: String? = nil, project: UUID = Fixture.projectID, indexed: Bool = true) -> (file: MailStore.ChosenFile, passages: ChunkSearch.FilePassages) {
+        let path = path ?? hits.first?.file.path ?? "/Projects/Harbor/none.md"
+        let file = MailStore.ChosenFile(project: project, path: path)
+        var passages = ChunkSearch.FilePassages(key: ChunkSearch.FileKey(project: project, path: path), hits: hits)
+        if hits.isEmpty, indexed {
+            passages.name = .init(project: project, file: URL(fileURLWithPath: path), modified: Fixture.date("2026-10-12T10:00:00+08:00"))
+        }
+        return (file, passages)
+    }
+
+    /// The choice is read for the email, its files' passages are asked for with the query of
+    /// the email's project and its terms, three of a file at most, and they come first in the
+    /// prompt, marked as chosen, while search's hit of a chosen passage is not repeated. The
+    /// explanation records the ids of each chosen file.
+    @Test func theChosenFilesComeFirstAndSearchRepeatsNoneOfThem() async throws {
+        let schedule = [Fixture.hit("schedule.pdf", "The lobby lamps arrive on 22 November."), Fixture.hit("schedule.pdf", "Hall C at 10:00.")].enumerated().map { index, hit in
+            var hit = hit
+            hit.chunk = 900 + Int64(index)
+            hit.page = index + 1
+            return hit
+        }
+        let picks = [Self.chosen(schedule), Self.chosen([Fixture.quote])]
+        let fakes = Fakes(terms: ["proof", "灯具"], chosen: picks.map(\.file), passages: picks.map(\.passages), answer: .success(Fixture.englishAnswer))
+        let email = Fixture.email()
+        let explanation = try await fakes.service().explain(email)
+        #expect(fakes.chosenAsked.withLock { $0 } == ["proof-2@printworks.example"])
+        let asked = try #require(fakes.passageQueries.withLock { $0 }.first)
+        #expect(asked.query.text == (await ExplainService.searchText(email)))
+        #expect(asked.query.terms == ["proof", "灯具"])
+        #expect(asked.files == picks.map(\.passages.key))
+        #expect(asked.perFile == ExplainPrompt.chosenChunksPerFile)
+        let prompt = try #require(fakes.requestList.first?.prompt)
+        #expect(prompt.contains(#"<file id="F1" name="schedule.pdf" page="1" modified="2026-10-10" chosen="yes">"#))
+        #expect(prompt.contains(#"<file id="F2" name="quote-v2.md" modified="2026-10-10" chosen="yes">"#))
+        #expect(prompt.contains(#"<file id="F3" name="schedule.pdf" page="2" modified="2026-10-10" chosen="yes">"#))
+        #expect(prompt.components(separatedBy: "Quote v2: 500 calendars").count == 2)
+        #expect(prompt.contains("A file marked chosen=\"yes\" is one Bai Lu chose for this email."))
+        #expect(explanation.sources["F1"] == .file(
+            TextChunker.Chunk(file: schedule[0].file, page: 1, modified: schedule[0].modified, heading: nil, text: schedule[0].text),
+            origin: ExplainPrompt.FileOrigin(reason: .chosen, project: Fixture.projectID)))
+        #expect(explanation.chosenFiles == [
+            Explanation.ChosenFile(path: schedule[0].file.path, project: Fixture.projectID, sources: ["F1", "F3"]),
+            Explanation.ChosenFile(path: Fixture.quote.file.path, project: Fixture.projectID, sources: ["F2"]),
+        ])
+        // The hidden runs of a chosen file are a warning at its excerpt.
+        #expect(explanation.warnings.contains(.init(warning: .hiddenText, place: .file("F2"))))
+        // Without a choice nothing is asked for, and the explanation records none.
+        let plain = Fakes(answer: .success(Fixture.englishAnswer))
+        let without = try await plain.service().explain(email)
+        #expect(plain.passageQueries.withLock { $0 }.isEmpty)
+        #expect(without.chosenFiles == nil)
+    }
+
+    /// An email in Needs a Project explains with the files chosen for it, and says so. Search
+    /// finds nothing for it, so the hidden runs of its chosen file are a warning by the
+    /// chosen file alone.
+    @Test func anEmailWithoutAProjectExplainsWithItsChosenFiles() async throws {
+        let pick = Self.chosen([Fixture.quote])
+        let fakes = Fakes(hits: [], chosen: [pick.file], passages: [pick.passages], answer: .success(Fixture.englishAnswer))
+        let explanation = try await fakes.service().explain(Fixture.email(project: nil))
+        let prompt = try #require(fakes.requestList.first?.prompt)
+        #expect(prompt.contains("Project: none yet. The email is in no project. The files below are ones Bai Lu chose for it."))
+        #expect(prompt.contains("Quote v2: 500 calendars"))
+        #expect(explanation.project == nil)
+        #expect(explanation.chosenFiles?.map(\.sources) == [["F1"]])
+        #expect(explanation.sourceProjects == [Fixture.projectID])
+        #expect(explanation.warnings.contains(.init(warning: .hiddenText, place: .file("F1"))))
+    }
+
+    /// A chosen file the index does not hold gives nothing and is recorded as not in the
+    /// index, one without text gives its name, and one the budget left out is recorded so.
+    @Test func whatEachChosenFileGaveIsRecorded() async throws {
+        let gone = Self.chosen([], path: "/Projects/Harbor/moved.md", indexed: false)
+        let drawing = Self.chosen([], path: "/Projects/Harbor/floor-plan-v3.dwg")
+        let fakes = Fakes(chosen: [gone.file, drawing.file], passages: [gone.passages, drawing.passages], answer: .success(Fixture.englishAnswer))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(explanation.chosenFiles == [
+            Explanation.ChosenFile(path: "/Projects/Harbor/moved.md", project: Fixture.projectID, sources: [], missing: .notInIndex),
+            Explanation.ChosenFile(path: "/Projects/Harbor/floor-plan-v3.dwg", project: Fixture.projectID, sources: ["F1"]),
+        ])
+        let prompt = try #require(fakes.requestList.first?.prompt)
+        #expect(prompt.contains("<file id=\"F1\" name=\"floor-plan-v3.dwg\" modified=\"2026-10-12\" chosen=\"yes\" text=\"none\">\n</file>"))
+        #expect(prompt.contains("Use only its name and date, and never say what it holds."))
+        #expect(!prompt.contains("moved.md"))
+        // A long passage the budget cannot hold beside a long email is left out.
+        var long = Fixture.hit("long.md", String(repeating: "Lamps and brackets. ", count: 100))
+        long.chunk = 777
+        let pick = Self.chosen([long])
+        let tight = Fakes(hits: [], chosen: [pick.file], passages: [pick.passages], answer: .success(Fixture.englishAnswer), tokens: { $0.count })
+        let trimmed = try await tight.service().explain(Fixture.email(String(repeating: "Please check the lamps. ", count: 400)))
+        #expect(trimmed.chosenFiles?.first?.missing == .leftOut)
+        #expect(trimmed.chosenFiles?.first?.sources == [])
+    }
+
+    /// A file of another project that the user chose counts as the email's own: its
+    /// passages of other projects' search give way to it, the draft's request reads it, the
+    /// draft check counts it among the email's sources, and its project's names stay allowed
+    /// where it holds them.
+    @Test func aChosenFileOfAnotherProjectFeedsTheDraftAsTheEmailsOwn() async throws {
+        // The plan is chosen, so its passage of other projects' search goes.
+        let plan = Self.chosen([Fixture.plan], project: Fixture.otherProjectID)
+        let alone = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], chosen: [plan.file], passages: [plan.passages], answer: .success(Fixture.answerCitingThePlan))
+        let explanation = try await alone.service().explain(Fixture.email())
+        #expect(alone.requestList.count == 1)
+        let prompt = try #require(alone.requestList.first?.prompt)
+        #expect(!prompt.contains("<other_files>"))
+        #expect(prompt.contains(#"<file id="F1" project="Studio move" name="floor-plan.pdf" modified="2026-10-10" chosen="yes">"#))
+        #expect(prompt.contains("and nothing from other projects, except from the files marked chosen=\"yes\"."))
+        #expect(explanation.sources["F1"]?.isOtherProjectFile(emailProject: Fixture.projectID) == false)
+        #expect(!explanation.citesOtherProjectFile)
+        guard case .checked(let result) = explanation.draft else {
+            Issue.record("the draft is \(explanation.draft)")
+            return
+        }
+        // The draft keeps what the chosen file says.
+        #expect(result.removals.isEmpty)
+        #expect(result.draft?.contains("¥8,400") == true)
+        let check = try #require(explanation.draftCheck)
+        #expect(check.sourceTexts.contains(Fixture.plan.text))
+        #expect(check.otherProjectTexts == nil)
+
+        // Beside a passage of another file of that project, which the draft's request leaves
+        // out, the chosen file stays in both requests.
+        let hall = Fixture.otherHit("hall.pdf", "The hall plan of the studio, code HP-77.")
+        let both = Fakes(terms: ["floor plan", "lobby"], otherHits: [hall], chosen: [plan.file], passages: [plan.passages], answer: .success(Fixture.explanationCitingThePlan), .success(Fixture.draftWithoutThePlan))
+        let apart = try await both.service().explain(Fixture.email())
+        #expect(both.requestList.count == 2)
+        let first = try #require(both.requestList.first?.prompt)
+        let second = try #require(both.requestList.last?.prompt)
+        #expect(first.contains("north wall") && second.contains("north wall"))
+        #expect(first.contains("HP-77") && !second.contains("HP-77"))
+        let apartCheck = try #require(apart.draftCheck)
+        #expect(apartCheck.sourceTexts.contains(Fixture.plan.text))
+        #expect(apartCheck.otherProjectTexts == [hall.text])
+        #expect(apart.sourceProjects == [Fixture.projectID, Fixture.otherProjectID])
+        #expect(apart.holdsFiles(of: Fixture.otherProjectID))
+    }
+
+    /// The log line of an explanation with a choice holds counts only, never a path, a name
+    /// or text.
+    @Test func theLogOfAChoiceHoldsCountsOnly() async throws {
+        let gone = Self.chosen([], path: "/Projects/Harbor/moved-secret.md", indexed: false)
+        let pick = Self.chosen([Fixture.quote])
+        let fakes = Fakes(chosen: [gone.file, pick.file], passages: [gone.passages, pick.passages], answer: .success(Fixture.englishAnswer))
+        let email = Fixture.email()
+        let explanation = try await fakes.service().explain(email)
+        var gathered = ExplainService.Gathered(email: email, known: Fixture.known, project: Fixture.project, thread: [], today: Fixture.today)
+        gathered.choose([gone.file, pick.file], passages: [gone.passages, pick.passages])
+        let prepared = await ExplainService.prepare(gathered, language: .en, timeZone: Fixture.shanghai, countTokens: { $0.count / 3 })
+        let line = ExplainService.summary(prepared.prompt, explanation, gathered, draft: nil)
+        #expect(line.contains("2 chosen files, which gave 1 excerpts and 0 names, 1 not in the index and 0 left out"))
+        #expect(!line.contains("moved-secret") && !line.contains("quote-v2") && !line.contains("Quote v2") && !line.contains("Harbor"))
+    }
 }
 
 nonisolated private enum ExplainServiceFixture {
@@ -1888,6 +2046,13 @@ private final class Fakes: Sendable {
     /// What the ranking of all projects for an email in a project gives, nil for
     /// `otherHits` before `hits`, so other projects' passages rank above the project's own.
     let ranking: [ChunkSearch.Hit]?
+    /// The files the user chose for the email, and what the index gives of each.
+    let chosen: [MailStore.ChosenFile]
+    let passages: [ChunkSearch.FilePassages]
+    /// The emails whose chosen files were asked for, and what their passages were asked
+    /// for, apart from `calls`, whose order the tests before chosen files check.
+    let chosenAsked = Mutex<[String]>([])
+    let passageQueries = Mutex<[(query: ChunkSearch.Query, files: [ChunkSearch.FileKey], perFile: Int)]>([])
     let answers: [Result<String, any Error>]
     let counts: Bool
     let tokens: @Sendable (String) -> Int
@@ -1901,6 +2066,8 @@ private final class Fakes: Sendable {
         terms: [String]? = nil,
         otherHits: [ChunkSearch.Hit] = [],
         ranking: [ChunkSearch.Hit]? = nil,
+        chosen: [MailStore.ChosenFile] = [],
+        passages: [ChunkSearch.FilePassages] = [],
         answer answers: Result<String, any Error>...,
         counts: Bool = true,
         tokens: @escaping @Sendable (String) -> Int = { $0.count / 3 }
@@ -1913,6 +2080,8 @@ private final class Fakes: Sendable {
         self.terms = terms
         self.otherHits = otherHits
         self.ranking = ranking
+        self.chosen = chosen
+        self.passages = passages
         self.answers = answers
         self.counts = counts
         self.tokens = tokens
@@ -1976,7 +2145,15 @@ private final class Fakes: Sendable {
                 note("files")
                 return (hits + newest + otherHits).filter { $0.project == project }.map { FileVersions.File(url: $0.file, modified: $0.modified) }
             },
-            terms: { [self] _ in note("terms"); return terms }
+            terms: { [self] _ in note("terms"); return terms },
+            chosenFiles: { [self] messageID in
+                chosenAsked.withLock { $0.append(messageID) }
+                return chosen
+            },
+            passages: { [self] query, files, perFile in
+                passageQueries.withLock { $0.append((query, files, perFile)) }
+                return passages.filter { passages in files.contains(passages.key) }
+            }
         )
     }
 

@@ -420,4 +420,79 @@ struct ChunkSearchTests {
         #expect(try await found([UUID()]).isEmpty)
         await database.close()
     }
+
+    // MARK: Chosen files
+
+    /// A row for a file the index knows by its name only, as FolderIndex writes it.
+    private func addName(_ file: String, project: UUID, modified: Double = 1_760_000_000, skip: String = "unsupportedFormat", to database: ProjectsDatabase) async throws {
+        try await database.run(
+            "INSERT INTO index_files (project, path, size, modified, skip) VALUES (?, ?, 1, ?, ?)",
+            [.text(project.uuidString), .text("/Projects/\(file)"), .real(modified), .text(skip)])
+    }
+
+    private func key(_ file: String, _ project: UUID) -> ChunkSearch.FileKey {
+        ChunkSearch.FileKey(project: project, path: "/Projects/\(file)")
+    }
+
+    /// The passages of chosen files come from those files only, best first, at most
+    /// `perFile` of each, in the order of the files. A file that nothing matches gives its
+    /// first chunk, a file without text its name and date, and a file the index does not hold
+    /// nothing.
+    @Test func passagesComeFromTheChosenFilesOnly() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        let plan = try await add(
+            ["Lobby floor plan, revision C.", "The lamps hang along the north wall.", "The lobby lamps arrive on 22 November.", "Brass lamps for the lobby, twelve of them."],
+            file: "Harbor/plan.md", project: alpha, to: database)
+        let notes = try await add(["Call notes about paint.", "More notes about tiles."], file: "Harbor/notes.md", project: alpha, to: database)
+        let other = try await add(["The lobby lamps of another studio."], file: "Kiln/lamps.md", project: beta, to: database)
+        let unchosen = try await add(["Lobby lamps, the best match of all: lobby lamps arrive."], file: "Harbor/unchosen.md", project: alpha, to: database)
+        try await addName("Harbor/drawing.dwg", project: alpha, modified: 1_761_000_000, to: database)
+        let search = ChunkSearch(database: database)
+        let files = [key("Harbor/plan.md", alpha), key("Harbor/notes.md", alpha), key("Kiln/lamps.md", beta), key("Harbor/drawing.dwg", alpha), key("Harbor/gone.md", alpha)]
+        let found = try await search.passages(ChunkSearch.Query(text: "When do the lobby lamps arrive?", projects: [beta], termsOnly: true, limit: 1), in: files, perFile: 2)
+        #expect(found.map(\.key) == files)
+        #expect(found[0].hits.map(\.chunk) == [plan[2], plan[3]])
+        #expect(found[0].hits.allSatisfy { $0.project == alpha && $0.score > 0 })
+        #expect(found[1].hits.map(\.chunk) == [notes[0]])
+        #expect(found[1].hits.first?.score == 0)
+        #expect(found[2].hits.map(\.chunk) == other)
+        #expect(found[3].hits.isEmpty)
+        #expect(found[3].name == ChunkSearch.FilePassages.Name(project: alpha, file: URL(fileURLWithPath: "/Projects/Harbor/drawing.dwg"), modified: Date(timeIntervalSince1970: 1_761_000_000)))
+        #expect(found[4].hits.isEmpty && found[4].name == nil && !found[4].isIndexed)
+        #expect(found.prefix(4).allSatisfy { $0.isIndexed })
+        #expect(!found.flatMap(\.hits).contains { unchosen.contains($0.chunk) })
+        await database.close()
+    }
+
+    /// Terms reach the chosen files as they reach search, and each passage says which matched.
+    @Test func theTermsFindPassagesOfAChosenFileInTheOtherLanguage() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        let plan = try await add(["Paint for the walls.", "The lobby lamps arrive on 22 November."], file: "Harbor/plan.md", project: alpha, to: database)
+        let found = try await ChunkSearch(database: database).passages(
+            ChunkSearch.Query(text: "灯具什么时候到？", terms: ["lobby lamps", "灯具"]), in: [key("Harbor/plan.md", alpha)], perFile: 3)
+        #expect(found.first?.hits.map(\.chunk) == [plan[1]])
+        #expect(found.first?.hits.first?.matchedTerms == ["lobby lamps"])
+        #expect(found.first?.hits.first?.matchedTerm == true)
+        await database.close()
+    }
+
+    /// A file whose project no longer holds its path is found by its path in any project, as
+    /// after its folder moved to another project. A path with quotes, a backslash or SQL in it
+    /// binds as it is, and FTS5 syntax in the query stays plain words.
+    @Test func aChosenFileIsFoundByItsPathAndNothingInItReadsAsSQLOrSyntax() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        let odd = #"Harbor/plan's "final" \ v2'); DROP TABLE index_files; --.md"#
+        let moved = try await add(["The lobby lamps arrive on 22 November."], file: odd, project: beta, to: database)
+        let search = ChunkSearch(database: database)
+        let found = try await search.passages(ChunkSearch.Query(text: #"lamps* OR "lobby" NEAR(arrive) name:plan"#), in: [key(odd, alpha)], perFile: 3)
+        #expect(found.first?.hits.map(\.chunk) == moved)
+        #expect(found.first?.hits.first?.project == beta)
+        #expect(found.first?.hits.first?.file.path == "/Projects/" + odd)
+        #expect(try await database.run("SELECT count(*) FROM index_files") == [[.integer(1)]])
+        #expect(try await search.passages(ChunkSearch.Query(text: "lamps"), in: [], perFile: 3).isEmpty)
+        await database.close()
+    }
 }
