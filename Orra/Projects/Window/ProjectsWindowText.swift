@@ -234,9 +234,10 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
-    /// The line under the points when one cites an excerpt of another project's file.
+    /// The line under the points when one cites an excerpt of another project's file, whose
+    /// draft a request without those excerpts wrote, see ExplainService.explain(_:).
     static var otherProjectsNote: String {
-        String(localized: "Some sources are files of other projects. They are for you only, so check that the draft holds nothing from them.")
+        String(localized: "Some sources are files of other projects. They are only for you, and the draft was written without them.")
     }
 
     /// Why the explanation holds no draft to change.

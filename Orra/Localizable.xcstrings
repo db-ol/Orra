@@ -14439,24 +14439,24 @@
         }
       }
     },
-    "Some sources are files of other projects. They are for you only, so check that the draft holds nothing from them." : {
+    "Some sources are files of other projects. They are only for you, and the draft was written without them." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Algunas fuentes son archivos de otros proyectos. Son solo para ti, así que revisa que el borrador no incluya nada de ellas."
+            "value" : "Algunas fuentes son archivos de otros proyectos. Son solo para ti, y el borrador se escribió sin ellos."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "一部の情報源は別のプロジェクトのファイルです。あなたが読むためだけのものなので、下書きにその内容が含まれていないか確認してください。"
+            "value" : "一部の情報源は別のプロジェクトのファイルです。あなたが読むためだけのもので、下書きはそれらを使わずに作成されています。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "部分来源是其他项目的文件，仅供你参考。请确认草稿里没有其中的内容。"
+            "value" : "部分来源是其他项目的文件，只给你参考，草稿没有用到它们。"
           }
         }
       }

@@ -518,7 +518,7 @@ struct ProjectsWindowViewTests {
         explanation.project = nil
         explanation.points[0].sources = ["F1"]
         #expect(explanation.citesOtherProjectFile)
-        #expect(ProjectsWindowText.otherProjectsNote == "Some sources are files of other projects. They are for you only, so check that the draft holds nothing from them.")
+        #expect(ProjectsWindowText.otherProjectsNote == "Some sources are files of other projects. They are only for you, and the draft was written without them.")
     }
 
     /// The email view says why an email has no text to explain: Projects removed it after
