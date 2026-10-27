@@ -18,7 +18,8 @@ import os
 /// Between the reply and the second copy, Mail adds the files the user ticked for the
 /// reply, one event a file in their order, each at the end of that reply, see
 /// `attach(_:to:)`. Each file is checked again right before its event, so what Mail reads is
-/// still the file the user ticked, in a folder a project holds at that moment. An email
+/// still the file the user ticked, in a folder a project holds at that moment, and still
+/// ticked at that moment. An email
 /// Projects wrote no draft for gets the reply and its files without the clipboard: with no
 /// draft, no step of a handoff, the failed ones included, puts anything on the clipboard.
 /// The draft and the files go to Mail only on the user's click.
@@ -84,6 +85,10 @@ struct ReplyHandoff {
         /// projects hold now, or not on this Mac, so Mail was not asked for it. The next
         /// file still goes.
         case notChecked(ReplyFileProblem)
+        /// It was no longer ticked when its turn came, as when a warning that the sender may
+        /// not be who they claim arrived while earlier files went, so Mail was not asked for
+        /// it. The next file still goes.
+        case unticked
         /// Mail's answer to the reply named no outgoing message of its own, or Mail started
         /// again while it made the reply, so Orra cannot say where the files go.
         case noReplyNamed
@@ -105,13 +110,22 @@ struct ReplyHandoff {
     /// The files the user ticked for a reply, in their order, with the check each passes
     /// again right before Mail is asked to add it, such as ReplyFiles.recheck with the
     /// folders the projects hold at that moment. The check gives the file as it is then, at
-    /// its new place after a rename, and the event takes that place.
+    /// its new place after a rename, and the event takes that place. `isTicked` says whether
+    /// the user still has the file ticked, asked before its check and again right before its
+    /// event, so a file that went off the reply meanwhile, as every file does once the sender
+    /// looks spoofed, is not given to Mail.
     nonisolated struct Files: Sendable {
         var files: [ReplyFile]
+        var isTicked: @Sendable (ReplyFile) async -> Bool
         var check: @Sendable (ReplyFile) async -> Result<ReplyFile, ReplyFileProblem>
 
-        init(_ files: [ReplyFile], check: @escaping @Sendable (ReplyFile) async -> Result<ReplyFile, ReplyFileProblem>) {
+        init(
+            _ files: [ReplyFile],
+            isTicked: @escaping @Sendable (ReplyFile) async -> Bool = { _ in true },
+            check: @escaping @Sendable (ReplyFile) async -> Result<ReplyFile, ReplyFileProblem>
+        ) {
             self.files = files
+            self.isTicked = isTicked
             self.check = check
         }
 
@@ -208,11 +222,12 @@ struct ReplyHandoff {
 
     /// Adds the files to the reply Mail made, one event a file, in order, each at the end of
     /// the reply. Without a reply Mail named, none goes. Each file is checked again right
-    /// before its event, and one that fails the check is left out, with the reason. A closed
-    /// reply window, a refused permission, Mail quitting and a timeout stop the files after
-    /// it: a timeout since a slow Mail would hold the send thread for each file in turn. Any
-    /// other error skips its file only. A cancelled task ends the loop, and the files after
-    /// it are left out of the results, since Mail was never asked for them.
+    /// before its event, and one that fails the check, or is no longer ticked before or after
+    /// it, is left out, with the reason. A closed reply window, a refused permission, Mail
+    /// quitting and a timeout stop the files after it: a timeout since a slow Mail would hold
+    /// the send thread for each file in turn. Any other error skips its file only. A
+    /// cancelled task ends the loop, and the files after it are left out of the results,
+    /// since Mail was never asked for them.
     private func attach(_ files: Files, to reply: MailReplyRef?) async -> [FileResult] {
         guard let reply else {
             return files.files.map { _ in .notAttached(.noReplyNamed) }
@@ -225,6 +240,10 @@ struct ReplyHandoff {
                 continue
             }
             guard !Task.isCancelled else { break }
+            guard await files.isTicked(file) else {
+                results.append(.notAttached(.unticked))
+                continue
+            }
             let current: ReplyFile
             switch await files.check(file) {
             case .success(let checked):
@@ -234,6 +253,11 @@ struct ReplyHandoff {
                 continue
             }
             guard !Task.isCancelled else { break }
+            // The check can take a while, on a folder of a share for one.
+            guard await files.isTicked(file) else {
+                results.append(.notAttached(.unticked))
+                continue
+            }
             do {
                 try await mail.attach(current.url, reply)
                 results.append(.attached)
@@ -247,7 +271,7 @@ struct ReplyHandoff {
                     stopped = problem
                 case .timedOut:
                     stopped = .afterTimeOut
-                case .noReplyNamed, .refused, .afterTimeOut, .notChecked:
+                case .noReplyNamed, .refused, .afterTimeOut, .notChecked, .unticked:
                     break
                 }
             }

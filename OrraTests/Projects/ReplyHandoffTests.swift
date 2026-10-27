@@ -311,6 +311,30 @@ struct ReplyHandoffTests {
         ])
     }
 
+    /// A file that is no longer ticked when its turn comes, before its check or right after
+    /// it, is not asked for, and the next one still goes.
+    @Test func aFileNoLongerTickedIsNotAskedFor() async {
+        let fixture = Fixture()
+        let (plan, quote) = (Self.plan, Self.quote)
+        // The sketch went off the reply before its turn, and the quote while it was checked.
+        let asked = Mutex<[URL: Int]>([:])
+        let checked = Mutex<[URL]>([])
+        let files = ReplyHandoff.Files([Self.plan, Self.quote, Self.sketch].map(Self.ticked), isTicked: { file in
+            let times = asked.withLock { asked in
+                asked[file.url, default: 0] += 1
+                return asked[file.url, default: 0]
+            }
+            return file.url == plan || (file.url == quote && times == 1)
+        }, check: { file in
+            checked.withLock { $0.append(file.url) }
+            return .success(file)
+        })
+        let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: false, files: files)
+        #expect(outcome == .replyOpened(files: [.attached, .notAttached(.unticked), .notAttached(.unticked)]))
+        #expect(fixture.steps.filter(\.isAttach) == [Self.attach(Self.plan)])
+        #expect(checked.withLock { $0 } == [Self.plan, Self.quote])
+    }
+
     /// No file is checked when Mail named no reply or a stop came first, since none goes.
     @Test func noCheckRunsForAFileThatCannotGo() async {
         let fixture = Fixture()

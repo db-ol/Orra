@@ -54,11 +54,25 @@ struct ProjectsReplyFilesTests {
             replyFacts: facts)
     }
 
-    /// A file as the checks give it, with an identity of its own.
-    static func file(_ url: URL, projects: [UUID] = [harbor], size: Int64 = 1_000, number: UInt64 = 7) -> ReplyFile {
+    /// A file as the checks give it, with an identity of its own: its number on the volume
+    /// comes from its path, so two files are two files.
+    static func file(_ url: URL, projects: [UUID] = [harbor], size: Int64 = 1_000, number: UInt64? = nil) -> ReplyFile {
         ReplyFile(url: url, projects: projects, identity: ReplyFile.Identity(
-            device: 16_777_231, fileSystem: 26, number: number,
+            device: 16_777_231, fileSystem: 26, number: number ?? Self.number(of: url),
             made: Date(timeIntervalSince1970: 1_760_000_000), size: size, modified: Date(timeIntervalSince1970: 1_761_000_000)))
+    }
+
+    /// The file at a path after a rename to another name, the same file with the same
+    /// identity, as ReplyFiles.recheck gives it.
+    static func renamed(_ url: URL, to name: URL) -> ReplyFile {
+        var moved = file(url)
+        moved.url = name
+        return moved
+    }
+
+    /// A number for a path, one of its own for each path in these tests.
+    nonisolated static func number(of url: URL) -> UInt64 {
+        url.path.utf8.reduce(14_695_981_039_346_656_037) { ($0 ^ UInt64($1)) &* 1_099_511_628_211 }
     }
 
     /// The runtime's lookups, the clipboard and Mail, all fakes, which record what happened.
@@ -84,6 +98,11 @@ struct ProjectsReplyFilesTests {
             /// takes it.
             var attachFailures: [URL: Int] = [:]
             var listed: MailStore.Listed?
+            /// What happens while a file is checked, as the user or a warning changing the
+            /// ticks while a handoff runs.
+            var whileChecking: (@Sendable (URL) async -> Void)?
+            /// The paths checked again, in order.
+            var rechecked: [String] = []
         }
 
         let state = Mutex(State())
@@ -107,7 +126,11 @@ struct ProjectsReplyFilesTests {
                     value.ticks[url.path] ?? .success(ProjectsReplyFilesTests.file(url))
                 },
                 recheck: { [self] file in
-                    value.checks[file.url.path] ?? .success(file)
+                    update { $0.rechecked.append(file.url.path) }
+                    if let whileChecking = value.whileChecking {
+                        await whileChecking(file.url)
+                    }
+                    return value.checks[file.url.path] ?? .success(file)
                 },
                 replyProjects: { ProjectsReplyFilesTests.projects },
                 defaultFolder: { _ in ProjectsReplyFilesTests.drawings },
@@ -360,7 +383,7 @@ struct ProjectsReplyFilesTests {
     /// ticked there.
     @Test func aRenamedFileIsAttachedFromItsNewPlace() async throws {
         let renamed = Self.drawings.appending(path: "floor-plan-v3-final.pdf")
-        fakes.update { $0.checks[Self.plan.path] = .success(Self.file(renamed)) }
+        fakes.update { $0.checks[Self.plan.path] = .success(Self.renamed(Self.plan, to: renamed)) }
         let model = model()
         try await loaded(model)
         await model.replyFiles.setTicked(Self.plan, true)
@@ -398,6 +421,55 @@ struct ProjectsReplyFilesTests {
         #expect(lines.first == "Mail opened the reply with 1 file attached, and the draft is on the clipboard. Press ⌘V in the reply window.")
         #expect(lines.contains("These files are not attached. Drag them from Attachments for the Reply into the reply window:"))
         #expect(lines.last == "平面图草图.png: Mail did not take it.")
+    }
+
+    /// A file that goes off the reply while the handoff runs is not given to Mail, and the
+    /// note leaves it out. The window turns the ticks off meanwhile, so here the sketch goes
+    /// while the plan is checked, as a warning would take it.
+    @Test func aFileTakenOffTheReplyWhileTheHandoffRunsIsNotGiven() async throws {
+        let model = model()
+        try await loaded(model)
+        await model.replyFiles.setTicked(Self.plan, true)
+        await model.replyFiles.setTicked(Self.sketch, true)
+        let (plan, sketch) = (Self.plan, Self.sketch)
+        fakes.update { state in
+            state.whileChecking = { url in
+                guard url == plan else { return }
+                await MainActor.run {
+                    if let ticked = model.replyFiles.ticked.first(where: { $0.url == sketch }) {
+                        model.replyFiles.remove(ticked)
+                    }
+                }
+            }
+        }
+        await model.openReply(all: false)
+        #expect(fakes.value.steps == [.copy(Self.draft), .reply(all: false), .attach(Self.plan), .copy(Self.draft), .front])
+        #expect(model.handoffNote == .outcome(.replyOpened(files: [.attached, .notAttached(.unticked)])))
+        #expect(model.handoffFiles == ProjectsEmailModel.HandoffFiles(withDraft: true, given: 2, attached: 1, notAttached: []))
+    }
+
+    /// A warning that the sender may not be who they claim, which arrives while the handoff
+    /// checks a file, takes every file off the reply, and Mail is asked for none of them,
+    /// the file under its check included.
+    @Test func aSpoofWarningDuringTheHandoffStopsEveryFileNotYetGiven() async throws {
+        let model = model()
+        try await loaded(model)
+        await model.replyFiles.setTicked(Self.plan, true)
+        await model.replyFiles.setTicked(Self.sketch, true)
+        let (plan, fakes) = (Self.plan, fakes)
+        let spoofed = Self.listed(warnings: [.lookalikeDomain])
+        fakes.update { state in
+            state.whileChecking = { url in
+                guard url == plan else { return }
+                fakes.update { $0.listed = spoofed }
+                await model.load()
+            }
+        }
+        await model.openReply(all: false)
+        #expect(!fakes.value.steps.contains { if case .attach = $0 { true } else { false } })
+        #expect(model.handoffNote == .outcome(.replyOpened(files: [.notAttached(.unticked), .notAttached(.unticked)])))
+        #expect(model.replyFiles.ticked.isEmpty)
+        #expect(model.replyFiles.senderLooksSpoofed)
     }
 
     /// Where the files are looked for follows the warnings about the email itself and its
@@ -563,7 +635,7 @@ struct ProjectsReplyFilesTests {
     @Test func everyValueOfTheReplyFilesHasWords() {
         let problems: [ReplyFileProblem] = [.notInAddedFolder, .moved, .changed, .notDownloaded, .package]
         #expect(Set(problems.map(ProjectsWindowText.replyFileProblem)).count == problems.count)
-        let attach: [ReplyHandoff.AttachProblem] = [.noReplyNamed, .replyClosed, .refused(code: -1), .timedOut, .afterTimeOut, .notAllowed, .mailQuit]
+        let attach: [ReplyHandoff.AttachProblem] = [.unticked, .noReplyNamed, .replyClosed, .refused(code: -1), .timedOut, .afterTimeOut, .notAllowed, .mailQuit]
         let reasons = attach.map(ProjectsWindowText.attachProblem) + problems.map { ProjectsWindowText.attachProblem(.notChecked($0)) }
         #expect(Set(reasons).count == reasons.count)
         #expect(!reasons.contains(""))

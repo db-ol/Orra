@@ -4155,6 +4155,9 @@ PY
   Tick it again.
 - [ ] Tick a file, run `chmod 000` on it, and click Open Reply in Mail. Note what Mail does and
   what the note says. Run `chmod 644` on it after.
+- [ ] Tick two files and click Open Reply in Mail. While Attaching files in Mail… shows,
+  Attach to Reply, Remove and Add File… are dimmed, and a file dropped from Finder onto the
+  area is not taken.
 - [ ] Tick three files with big-test.bin last, click Open Reply in Mail and close the reply
   window at once. The note names the files not attached with The reply window closed
   first, or every file is attached when Mail was faster. Note which.

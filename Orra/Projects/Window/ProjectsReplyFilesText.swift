@@ -40,6 +40,7 @@ extension ProjectsWindowText {
     static func attachProblem(_ problem: ReplyHandoff.AttachProblem) -> String {
         switch problem {
         case .notChecked(let problem): replyFileProblem(problem)
+        case .unticked: String(localized: "It was taken off the reply before Mail was asked for it.")
         case .noReplyNamed: String(localized: "Mail did not say which reply it opened.")
         case .replyClosed: String(localized: "The reply window closed first.")
         case .refused: String(localized: "Mail did not take it.")

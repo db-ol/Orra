@@ -7101,6 +7101,28 @@
         }
       }
     },
+    "It was taken off the reply before Mail was asked for it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se quitó de la respuesta antes de que Orra se lo pidiera a Mail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”に添付を依頼する前に、返信から外されました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在请求“邮件”附加之前，它已从回复中移除。"
+          }
+        }
+      }
+    },
     "Its project folder is not available now" : {
       "localizations" : {
         "es-419" : {

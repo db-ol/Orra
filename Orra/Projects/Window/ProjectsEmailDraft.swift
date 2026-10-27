@@ -22,8 +22,9 @@ extension ProjectsEmailArea {
     /// Without a draft it says why: no reply is due, the language gets no draft, or the model
     /// wrote none. When a reply is due all the same, Attachments for the Reply follows, and
     /// once a file is ticked, Open Reply in Mail and Reply All, which open the reply with the
-    /// files and put nothing on the clipboard. The requests run through
-    /// `ProjectsEmailModel.perform(_:)`, so closing the window ends them.
+    /// files and put nothing on the clipboard. The note after a handoff stays when the
+    /// files go meanwhile. The requests run through `ProjectsEmailModel.perform(_:)`, so
+    /// closing the window ends them.
     struct DraftSection: View {
         let runtime: ProjectsRuntime
         let emailModel: ProjectsEmailModel
@@ -54,9 +55,10 @@ extension ProjectsEmailArea {
                     // files go into the reply all the same.
                     if emailModel.replyFiles.replyIsDue, explanation.replyFacts != nil {
                         ReplyAttachments(emailModel: emailModel)
-                        if !emailModel.replyFiles.handoffFiles.isEmpty {
-                            handoff
+                        if !emailModel.replyFiles.handoffFiles.isEmpty || emailModel.isAttaching {
+                            handoffControls
                         }
+                        handoffNote
                     }
                 }
             }
@@ -132,7 +134,8 @@ extension ProjectsEmailArea {
             checks
             answers
             ReplyAttachments(emailModel: emailModel)
-            handoff
+            handoffControls
+            handoffNote
             // One box for each email, so the focus of one never passes to the next.
             ChangeBox(runtime: runtime, emailModel: emailModel)
                 .id(ObjectIdentifier(emailModel))
@@ -419,8 +422,9 @@ extension ProjectsEmailArea {
 
         // MARK: The handoff
 
+        /// The line above the buttons and the buttons.
         @ViewBuilder
-        private var handoff: some View {
+        private var handoffControls: some View {
             // Said before the click, since Mail comes to the front then and the line after
             // the handoff may go unseen.
             Text(verbatim: ProjectsWindowText.handoffLine(hasDraft: emailModel.hasDraft, hasFiles: !emailModel.replyFiles.handoffFiles.isEmpty))
@@ -436,6 +440,13 @@ extension ProjectsEmailArea {
                     handoffButtons
                 }
             }
+        }
+
+        /// The note after the last handoff, with Open Mail beside a note that Mail is not open.
+        /// A file the user took off the reply since leaves it, see
+        /// ProjectsEmailModel.shownHandoffFiles.
+        @ViewBuilder
+        private var handoffNote: some View {
             if let note = emailModel.handoffNote {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(ProjectsWindowText.handoffLines(note, files: emailModel.handoffFiles).enumerated()), id: \.offset) { _, line in

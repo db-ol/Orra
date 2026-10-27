@@ -216,6 +216,13 @@ final class ProjectsReplyFiles {
         senderLooksSpoofed ? [] : ticked
     }
 
+    /// Whether a file a handoff took at the click is still among `handoffFiles`, by what
+    /// makes it that file, so a file a check followed to its new name counts too. One the
+    /// user took off the reply, and every file once the sender looks spoofed, does not.
+    func isStillTicked(_ file: ReplyFile) -> Bool {
+        handoffFiles.contains { $0.identity == file.identity }
+    }
+
     /// The people a reply to all reaches who are neither people of any project whose
     /// folders hold the file nor at their domains, see ReplyFiles.outside.
     func outside(of file: ReplyFile) -> [String] {

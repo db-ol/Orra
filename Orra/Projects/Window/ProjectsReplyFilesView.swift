@@ -167,7 +167,8 @@ extension ProjectsEmailArea {
     /// Attach to Reply, the checkbox of a file in Files This Email Asks For and in Project
     /// Files for This Explanation, with the reason when the file cannot go. Ticking it ticks
     /// the file everywhere it shows. It shows only while files can be ticked, so never for a
-    /// sender that looks spoofed.
+    /// sender that looks spoofed, and waits while a handoff runs, which takes the files as
+    /// they are ticked at its click.
     struct AttachToggle: View {
         let url: URL
         let emailModel: ProjectsEmailModel
@@ -183,6 +184,7 @@ extension ProjectsEmailArea {
                         Text("Attach to Reply")
                     }
                     .toggleStyle(.checkbox)
+                    .disabled(emailModel.isHandingOff)
                     .accessibilityLabel(Text(verbatim: ProjectsWindowText.attachLabel(url.lastPathComponent)))
                     .accessibilityHint(Text("Attaches the file when you open the reply in Mail."))
                     if let problem = files.problem(at: url) {
@@ -201,8 +203,9 @@ extension ProjectsEmailArea {
     /// outside its project in orange and why it cannot go when a check found it, then the
     /// footer, the total size when it is large, the cap, and Add File… with what it refused.
     /// Files dropped on it from Finder go through the same check as Add File…, and a row can
-    /// be dragged out as its file, such as into the reply window. A sender that looks spoofed
-    /// gets only the line that Orra attaches no files.
+    /// be dragged out as its file, such as into the reply window. Remove, Add File… and
+    /// dropping wait while a handoff runs. A sender that looks spoofed gets only the line
+    /// that Orra attaches no files.
     struct ReplyAttachments: View {
         let emailModel: ProjectsEmailModel
         @State private var isChoosing = false
@@ -249,6 +252,7 @@ extension ProjectsEmailArea {
                     Button("Add File…") {
                         isChoosing = true
                     }
+                    .disabled(emailModel.isHandingOff)
                     .fileImporter(isPresented: $isChoosing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
                         guard case .success(let urls) = result else { return }
                         Task { await files.add(urls) }
@@ -259,7 +263,7 @@ extension ProjectsEmailArea {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .dropDestination(for: URL.self) { urls, _ in
-                guard files.offersFiles, !urls.isEmpty else { return false }
+                guard files.offersFiles, !emailModel.isHandingOff, !urls.isEmpty else { return false }
                 Task { await files.add(urls) }
                 return true
             }
@@ -353,6 +357,7 @@ extension ProjectsEmailArea {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            .disabled(emailModel.isHandingOff)
             .accessibilityLabel(Text(verbatim: ProjectsWindowText.removeLabel(file.url.lastPathComponent)))
         }
     }

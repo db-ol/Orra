@@ -883,9 +883,12 @@ final class ProjectsEmailModel {
     /// the clipboard, see ReplyHandoff. Each file is checked again right before its attach
     /// event, see ProjectsReplyFiles.checked(_:_:), and a sender that looks spoofed gets none.
     ///
-    /// The draft and the files are those of the click. When the explanation goes while Mail
-    /// answers, as after a move to another project, the handoff still takes them, so the
-    /// note never says that a draft is on the clipboard when none was copied.
+    /// The draft is that of the click. When the explanation goes while Mail answers, as after
+    /// a move to another project, the handoff still takes it, so the note never says that a
+    /// draft is on the clipboard when none was copied. The files are those of the click that
+    /// are still ticked when each one's turn comes: the window turns the ticks off while a
+    /// handoff runs, and a file that goes off the reply all the same, as every file does when
+    /// a warning that the sender may not be who they claim arrives, is not given to Mail.
     func openReply(all: Bool) async {
         guard !handoffs.isRunning else { return }
         handoffs.isRunning = true
@@ -922,11 +925,13 @@ final class ProjectsEmailModel {
             handoffFiles = Self.filesNote(withDraft: draft != nil, files: files, outcome: nil)
             return
         }
-        let checked = ReplyHandoff.Files(files) { [replyFiles, recheck = actions.replyFiles.recheck] file in
+        let checked = ReplyHandoff.Files(files, isTicked: { [replyFiles] file in
+            await replyFiles.isStillTicked(file)
+        }, check: { [replyFiles, recheck = actions.replyFiles.recheck] file in
             let result = await recheck(file)
             await replyFiles.checked(file, result)
             return result
-        }
+        })
         isAttaching = !files.isEmpty
         let outcome = await actions.handoff.openReply(draft, to: reference, all: all, files: checked)
         isAttaching = false
@@ -947,7 +952,8 @@ final class ProjectsEmailModel {
 
     /// What became of the files of a handoff, by their order, nil for a handoff with a draft
     /// and no file, whose note is as before. A reply that did not open took no file, and the
-    /// files after a cancel are left out, since Mail was never asked for them.
+    /// files after a cancel are left out, since Mail was never asked for them. So is a file
+    /// that went off the reply while the handoff ran, which the area no longer shows.
     nonisolated static func filesNote(withDraft: Bool, files: [ReplyFile], outcome: ReplyHandoff.Outcome?) -> HandoffFiles? {
         guard !files.isEmpty || !withDraft else { return nil }
         var results: [ReplyHandoff.FileResult] = []
@@ -960,6 +966,8 @@ final class ProjectsEmailModel {
             switch result {
             case .attached:
                 attached += 1
+            case .notAttached(.unticked):
+                continue
             case .notAttached(let problem):
                 notAttached.append(HandoffFiles.NotAttached(name: file.url.lastPathComponent, problem: problem))
             }
