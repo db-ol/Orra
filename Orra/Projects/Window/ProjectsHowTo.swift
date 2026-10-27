@@ -25,6 +25,12 @@ struct ProjectsHowTo: View {
     /// Opens the Mail app on the user's click. Nil leaves out Open Mail.
     var openMail: (() -> Void)? = nil
 
+    /// Whether the step about Settings offers Open Mail: while Mail is closed, where the
+    /// window can open it.
+    var offersOpenMail: Bool {
+        openMail != nil && !mailIsRunning
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -69,7 +75,7 @@ struct ProjectsHowTo: View {
     /// names in a row while they fit, then the short Settings… of the lines under the list,
     /// and in the third column of a narrow window one under the other.
     @ViewBuilder private var setupButtons: some View {
-        if let openMail, !mailIsRunning {
+        if let openMail, offersOpenMail {
             ViewThatFits(in: .horizontal) {
                 HStack {
                     Button("Open Mail", action: openMail)

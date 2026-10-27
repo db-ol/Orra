@@ -270,12 +270,22 @@ struct ProjectsWindowView: View {
             // away with its project rather than act on the next one.
             .id(project.id)
         } else {
-            ProjectsHowTo(
-                showsSetup: !runtime.choice.isConfirmed, canCreate: runtime.phase == .on,
-                openSettings: openSettings, newProject: { setup = ProjectsSetupView.Draft() },
-                hasSuggestions: !model.suggestions.suggestions.isEmpty || model.suggestions.isNaming,
-                mailIsRunning: runtime.mailIsRunning, openMail: openMail)
+            Self.howTo(runtime: runtime, model: model, openSettings: openSettings, openMail: openMail) {
+                setup = ProjectsSetupView.Draft()
+            }
         }
+    }
+
+    /// How to Use as the window shows it: the step about Settings until Start Reading Mail
+    /// confirmed the mailboxes, with Open Mail while Mail is closed, and the step about
+    /// projects, which names Suggested Projects only while the sidebar shows them, with a
+    /// suggestion or while the model names one, as ProjectsSuggestedSection does.
+    static func howTo(runtime: ProjectsRuntime, model: ProjectsWindowModel, openSettings: @escaping () -> Void, openMail: (() -> Void)?, newProject: @escaping () -> Void) -> ProjectsHowTo {
+        ProjectsHowTo(
+            showsSetup: !runtime.choice.isConfirmed, canCreate: runtime.phase == .on,
+            openSettings: openSettings, newProject: newProject,
+            hasSuggestions: !model.suggestions.suggestions.isEmpty || model.suggestions.isNaming,
+            mailIsRunning: runtime.mailIsRunning, openMail: openMail)
     }
 }
 

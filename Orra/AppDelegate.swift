@@ -230,12 +230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if case .installed = cleanup.models.state { true } else { false }
             },
             modelDownloadStatus: { [cleanup] in
-                switch cleanup.models.state {
-                case .installed, .checking: .none
-                case .downloading(let bytes, _): .downloading(bytes: bytes, total: cleanup.models.manifest.totalBytes)
-                case .verifying: .verifying
-                case .missing, .failed: .missing
-                }
+                Self.modelDownloadStatus(cleanup.models.state, total: cleanup.models.manifest.totalBytes)
             },
             retryLoadingModel: { [cleanup] in await cleanup.retryLoading() },
             loadTokenCounter: { try await ProjectsTokenCounter.installed(in: folders)?.count },
@@ -545,6 +540,19 @@ extension AppDelegate {
                 return .pasted
             }
             return await paste(text)
+        }
+    }
+
+    /// Where the cleanup model's download stands for the line under the Projects window's
+    /// list, from the state of its installer and the model's size: nothing while the model
+    /// is on this Mac or Orra looks at its files, the bytes of a download, the check of the
+    /// downloaded files, and missing while no download runs, also after one failed.
+    static func modelDownloadStatus(_ state: ModelInstaller.State, total: Int64) -> ProjectsRuntime.ModelDownloadStatus {
+        switch state {
+        case .installed, .checking: .none
+        case .downloading(let bytes, _): .downloading(bytes: bytes, total: total)
+        case .verifying: .verifying
+        case .missing, .failed: .missing
         }
     }
 

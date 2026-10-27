@@ -885,11 +885,86 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsWindowText.modelLine(.missing) == "The cleanup model is not on this Mac yet. Download it in Projects Settings to explain mail.")
     }
 
+    /// The app reads where the download stands from the state of the cleanup model's
+    /// installer: no line while the model is on this Mac or Orra looks at its files at
+    /// launch, the bytes with the model's size while it downloads, the check of the files,
+    /// and missing while no download runs, also after one stopped or failed.
+    @Test func eachStateOfTheInstallerGivesItsModelLine() {
+        let total: Int64 = 3_050_000_000
+        let cases: [(ModelInstaller.State, ProjectsRuntime.ModelDownloadStatus)] = [
+            (.installed(FileManager.default.temporaryDirectory), .none),
+            (.checking, .none),
+            (.downloading(bytes: 0, source: nil), .downloading(bytes: 0, total: total)),
+            (.downloading(bytes: 1_525_000_000, source: nil), .downloading(bytes: 1_525_000_000, total: total)),
+            (.verifying, .verifying),
+            (.missing(bytesPresent: 0), .missing),
+            (.missing(bytesPresent: 1_525_000_000), .missing),
+            (.failed(.offline), .missing),
+            (.failed(.notEnoughSpace(needed: total, available: 0)), .missing),
+        ]
+        for (state, status) in cases {
+            #expect(AppDelegate.modelDownloadStatus(state, total: total) == status, "\(state)")
+        }
+        #expect(ProjectsWindowText.modelLine(AppDelegate.modelDownloadStatus(.checking, total: total)) == nil)
+        #expect(ProjectsWindowText.modelLine(AppDelegate.modelDownloadStatus(.failed(.unreachable), total: total)) == "The cleanup model is not on this Mac yet. Download it in Projects Settings to explain mail.")
+    }
+
     /// The step of How to Use about projects names Suggested Projects only while the
     /// sidebar shows them.
     @Test func howToUseNamesSuggestedProjectsOnlyOnceTheyShow() {
         #expect(ProjectsHowTo.projectStep(hasSuggestions: true) == "Make a project from a suggestion under Suggested Projects, or with New Project…, and add its folders. Explanations use the files in them.")
         #expect(ProjectsHowTo.projectStep(hasSuggestions: false) == "Make a project with New Project…, and add its folders and the people you exchange mail with. Explanations use the files in its folders. Once Projects has read your mail, it may also suggest projects in the sidebar.")
+    }
+
+    /// How to Use as the window builds it from the runtime and the sidebar's suggestions.
+    /// Before Start Reading Mail with Mail closed and no suggestion, the step about Settings
+    /// offers Open Mail and the step about projects does not name Suggested Projects. Open
+    /// Mail goes while Mail runs, and where the window cannot open Mail. The step names
+    /// Suggested Projects once the sidebar shows one, and the step about Settings goes once
+    /// the mailboxes are confirmed.
+    @Test func theWindowsHowToUseFollowsMailAndTheSuggestions() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        // Before Start Reading Mail.
+        runtime.choice.forget()
+        let model = ProjectsWindowModel(runtime: runtime)
+        func howTo(openMail: (() -> Void)? = {}) -> ProjectsHowTo {
+            ProjectsWindowView.howTo(runtime: runtime, model: model, openSettings: {}, openMail: openMail, newProject: {})
+        }
+        func projectStep() -> LocalizedStringKey {
+            ProjectsHowTo.projectStep(hasSuggestions: howTo().hasSuggestions)
+        }
+        #expect(howTo().showsSetup)
+        #expect(howTo().offersOpenMail)
+        #expect(!howTo(openMail: nil).offersOpenMail)
+        #expect(projectStep() == "Make a project with New Project…, and add its folders and the people you exchange mail with. Explanations use the files in its folders. Once Projects has read your mail, it may also suggest projects in the sidebar.")
+
+        fixture.mailRuns.isOn = true
+        runtime.mailRunningChanged()
+        #expect(!howTo().offersOpenMail)
+        fixture.mailRuns.isOn = false
+        runtime.mailRunningChanged()
+        #expect(howTo().offersOpenMail)
+
+        // Three emails from a domain that no project holds, which the sidebar suggests once
+        // the window is open. The model is not on this Mac, so the suggestion shows with
+        // its name in code.
+        let store = try #require(runtime.running?.store)
+        let mail = (1...3).map { day in
+            ProjectsSuggestedSectionTests.message("t\(day)@tide.example", from: "survey@tide.example", name: "", subject: "Pier survey \(day)", day: -Double(day))
+        }
+        try await store.save(mail, ownAddresses: ["me@studio.example"], at: Self.today)
+        runtime.windowOpened()
+        await model.suggestions.refresh()
+        await model.suggestions.untilNamed()
+        #expect(model.suggestions.suggestions.map(\.name) == ["tide.example"])
+        #expect(projectStep() == "Make a project from a suggestion under Suggested Projects, or with New Project…, and add its folders. Explanations use the files in them.")
+
+        runtime.choice.confirm()
+        #expect(!howTo().showsSetup)
+        runtime.windowClosed()
+        await fixture.stop()
     }
 
     // MARK: Render
@@ -1180,11 +1255,23 @@ struct ProjectsWindowViewTests {
         try png.write(to: file)
     }
 
-    /// Projects on with one indexed project, a Mail that never runs and no model.
+    /// Projects on with one indexed project, a Mail that is closed unless a test starts it,
+    /// and no model.
     @MainActor final class Fixture {
         /// Whether a dictation is under way, as EngineTurns says. Off unless a test turns it
         /// on, since the index waits while it is on.
         final class Dictation: Sendable {
+            private let value = Mutex(false)
+
+            var isOn: Bool {
+                get { value.withLock { $0 } }
+                set { value.withLock { $0 = newValue } }
+            }
+        }
+
+        /// Whether Mail runs, as the bridge reads it. Off unless a test starts it, and even
+        /// then every other call to Mail fails as with Mail closed.
+        final class MailRuns: Sendable {
             private let value = Mutex(false)
 
             var isOn: Bool {
@@ -1203,18 +1290,21 @@ struct ProjectsWindowViewTests {
         let defaults: UserDefaults
         let projects: ProjectsSwitch
         let dictation: Dictation
+        let mailRuns: MailRuns
         let download: Download
         let runtime: ProjectsRuntime
 
         init() async throws {
             let dictation = Dictation()
             self.dictation = dictation
+            let mailRuns = MailRuns()
+            self.mailRuns = mailRuns
             defaults = try #require(UserDefaults(suiteName: suite))
             let storage = ProjectsStorage(root: root.appendingPathComponent("Support", isDirectory: true))
             projects = ProjectsSwitch(defaults: defaults, isVisible: true, physicalMemory: 32 << 30, storage: storage)
             projects.turnOn()
             let mail = MailBridge(
-                isRunning: { false },
+                isRunning: { mailRuns.isOn },
                 permission: { _ in .mailNotRunning },
                 lastPermission: { nil },
                 accounts: { throw MailBridgeError.mailNotRunning },
