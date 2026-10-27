@@ -3955,10 +3955,11 @@ Projects in a Debug build in docs/development.md.
 
 Text recognition in images and scanned PDF pages, added on 2026-10-26, not verified yet.
 TextRecognitionTests and FolderIndexTests check the pages read, the caps, the order, the
-hidden text, the page time, the pauses before every page and during a page, and the pages
-kept across a restart, with a stand in for Vision. VisionTextRecognitionTests reads one image
-with Vision, and TextRecognitionMeasurementTests measures Vision on synthetic scans and
-images. No scan from a scanner app or photo from an iPhone is among them. Check in a Debug
+hidden text, the page time, the pauses before every page and during a page, the pages
+kept across a restart, and a file given up after two jobs that never ended, which is read
+again once it changes, with a stand in for Vision. VisionTextRecognitionTests reads one
+image with Vision, and TextRecognitionMeasurementTests measures Vision on synthetic scans
+and images. No scan from a scanner app or photo from an iPhone is among them. Check in a Debug
 build with Projects on and the index watched with the log stream above.
 
 - [ ] Put a scanned PDF from a scanner app or Notes, a PDF with text and one scanned page, an

@@ -1583,7 +1583,8 @@ struct FolderIndexTests {
     /// never ends, as when reading the file ends Orra, leaves its mark. A file with such a
     /// mark is read once more, marked again, and one whose last two jobs did not end is given
     /// up as unreadable without being read, so a file that ends Orra is not read at every
-    /// launch. The marks of the jobs that ended are gone.
+    /// launch. It stays unreadable through the sweeps that follow, until it changes, and its
+    /// new version is read like any file. The marks of the jobs that ended are gone.
     @Test func aFileWhoseJobsDidNotEndIsReadOnceMoreAndThenGivenUp() async throws {
         let database = Mutex<ProjectsDatabase?>(nil)
         let marks = Mutex<[String: [String]]>([:])
@@ -1623,6 +1624,22 @@ struct FolderIndexTests {
             // Only the mark of the file given up stays.
             #expect(try await fixture.count("SELECT count(*) FROM index_recognition_pages WHERE page < 0") == 1)
             #expect(try await fixture.index.skippedFiles(project: fixture.alpha).map(\.reason) == [.unreadable])
+            try await fixture.expectTablesAgree()
+
+            // A sweep leaves the file given up as it is.
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(fixture.jobs.names == ["scan.pdf", "sign.png"])
+            #expect(try await fixture.rows()["photo.jpg"].map { $0.skip == "unreadable" && $0.recognize == 0 } == true)
+
+            // Once it changes, its new version is read, and its old mark no longer counts.
+            try fixture.write("photo.jpg", "a new photo")
+            await fixture.deliverAndTick(FolderEvents.Changes(changed: [fixture.folder + "/photo.jpg"]))
+            #expect(fixture.jobs.names == ["scan.pdf", "sign.png", "photo.jpg"])
+            #expect(marks.withLock { $0["photo.jpg"] } == [FolderIndex.JobMark.underWay.rawValue])
+            #expect(try await fixture.rows()["photo.jpg"].map { $0.skip == nil && $0.recognize == 0 } == true)
+            #expect(try await triedPages("photo.jpg", fixture) == [0: "text"])
+            #expect(try await fixture.count("SELECT count(*) FROM index_recognition_pages WHERE page < 0") == 0)
+            #expect(try await fixture.index.skippedFiles(project: fixture.alpha).isEmpty)
             try await fixture.expectTablesAgree()
         }
     }
