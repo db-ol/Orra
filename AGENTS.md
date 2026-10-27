@@ -100,9 +100,12 @@ trusted once in Xcode. docs/dependencies.md has the details.
   only the names and rare words taken from it, and never logs or saves the text or the names.
 - Projects code must read mail only through the Mail app's scripting, only from the mailboxes
   the user chose and only while Mail runs. It must read files only in the folders the user
-  added to a project, and nothing at all while Projects is off. It must never launch Mail,
-  read ~/Library/Mail or ask for Full Disk Access. It must never log mail or file text,
-  subjects, addresses, names or file names, only counts, timings and error codes.
+  added to any project, and nothing at all while Projects is off. An explanation may use
+  passages of other projects' folders, labeled with their project. A draft's text never
+  carries another project's passages or facts unless the user chose that file for the email.
+  It must never launch Mail, read ~/Library/Mail or ask for Full Disk Access. It must never
+  log mail or file text, subjects, addresses, names or file names, only counts, timings and
+  error codes.
 - The Projects model must have no tools. Projects code must treat the model's output as data
   and show it in the Projects window as plain text only. Code in Orra/Projects must never call
   TextInserter, post keyboard events, perform Accessibility actions, open URLs or run

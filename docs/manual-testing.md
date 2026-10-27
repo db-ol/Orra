@@ -113,6 +113,24 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS. The opt in ExplainEvaluationTests takes
     TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_IDS for a few mails and
     TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_TEXT=own for each mail's own text as the app keeps it.
+  - SearchTermsTests, ChunkSearchTests, ExplainServiceTests, ExplainPromptTests,
+    ExplainAnswerTests, DraftCheckTests, MailStoreTests, ProjectsRuntimeTests,
+    ProjectsEmailModelTests and ProjectsWindowViewTests, since 2026-10-26, cover search
+    terms and the files of other projects with made up mail and a fake model: the terms
+    prompt and its parser, the time limit that lets Explain go on at once while the job
+    ends later, the term lists of the search and their fusion, which mail searches other
+    projects and which never does, hostile mail through the real checks, <other_files>
+    with its ids, rules and trimming, the draft check's two rules for other projects' data
+    and copied sentences, a saved check of 0.6.0, an explanation that names a forgotten
+    project, Forget Project during an explanation, and the chip, the note and the excerpt
+    of another project's file. ProjectsWindowViewTests renders
+    projects-email-other-projects, projects-email-other-projects-200 and
+    projects-excerpt-other-project with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS. The opt
+    in RetrievalEvaluationTests measures the passages Explain picks for the labeled mails of
+    the synthetic set and its retrieval supplement, without and with the model's search
+    terms, see docs/release-gate.md. ExplainEvaluationTests and ProjectsGateEvaluationTests
+    search with the terms too, and TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_TERMS=off or
+    TEST_RUNNER_ORRA_PROJECTS_GATE_TERMS=off run them without, from the same build.
   - LiveCaptionsShortcutTests, added on 2026-10-19, covers the Live Captions shortcut with
     a fake in place of the hot key API, so no real shortcut is registered: which
     combinations it can be (a key with Control or Command, or F1 to F20 alone or with
@@ -3783,6 +3801,34 @@ English and 简体中文, and the toolbar and the email view in 日本語 and Es
 - [ ] Report a Problem asks, above the title, to leave out mail text, names, email addresses
   and screenshots of mail for a problem in Projects. The bug report form on GitHub has an
   Area field with Projects (Preview).
+
+Search terms and other projects' files, added on 2026-10-26, not verified yet. Check in a
+Debug build with the synthetic mail imported and the five projects with their folders, as
+in the test guide, in English and then in 简体中文:
+
+- [ ] Add an English file about lamps to a project's folder, then explain a Chinese email
+  about them. A point cites the English file.
+- [ ] Explain an email in Needs a Project about a document of a project. Its chip names the
+  project in brackets, the line under the points says that such files are for you only,
+  and the excerpt says From the folders of with the project's name. The draft, if any,
+  holds none of that file's amounts, codes or names.
+- [ ] Assign that email to the project and click Explain Again. The chip has no brackets
+  now, and the draft may use the file.
+- [ ] An email in Needs a Project with a warning about its sender, or with a line to an
+  assistant, gets no file chips.
+- [ ] Explain Again on an explained email starts the explanation without asking the model
+  for terms, also after closing the window and after quitting Orra. The log says "Search
+  terms: … saved with the email's explanation".
+- [ ] Dictate while Explain asks for terms. The line under the mail list says that Projects
+  is paused, and the dictation pastes as fast as usual. With a dictation longer than 15
+  seconds, Explain goes on without terms, and the log says so.
+- [ ] Forget a project whose file an email of another project cited. The alert names the
+  explanations of other emails, and that email's explanation and draft are gone. Forget a
+  project while another email is explained: the explanation stops, and Explain shows again.
+- [ ] At 760 points wide, a chip of another project's file stands on its own line and keeps
+  the project's name at its end. With VoiceOver it reads "…, from the project …".
+- [ ] Turn the cleanup model off in Settings while Explain asks for terms. The line says the
+  model is missing, as for Explain without terms.
 
 ## Not implemented
 
