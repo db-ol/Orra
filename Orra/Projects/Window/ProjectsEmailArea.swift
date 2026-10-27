@@ -37,7 +37,7 @@ import SwiftUI
 /// own. They stand side by side where the view is wide enough, see Panes, and one above the
 /// other where it is not. Another email chosen in the list shows the same way. The draft
 /// keeps its editor through every switch, since the pane that holds it is the same view in
-/// every layout.
+/// every layout. The This email chip shows the whole email too, see Excerpt.
 ///
 /// A section the model's answer does not hold says so, rather than that the model found
 /// nothing, see ProjectsWindowText.noQuestions(_:).
@@ -709,10 +709,10 @@ extension ProjectsEmailArea {
 extension ProjectsEmailArea {
     /// The chips of a point's sources. A file's chip shows its saved excerpt with its page,
     /// slide or sheet in a popover, an attachment's chip the excerpt the model read, this
-    /// email's chip its text, and an earlier email's chip shows that email in the window
-    /// (decision 20). The chips go one under another in a column too narrow for a row. A chip
-    /// keeps one line and is cut in the middle, and the chip of another project's file cuts
-    /// only the file's name, so the project's stays whole.
+    /// email's chip the whole email, and an earlier email's chip shows that email in the
+    /// window (decision 20). The chips go one under another in a column too narrow for a
+    /// row. A chip keeps one line and is cut in the middle, and the chip of another project's
+    /// file cuts only the file's name, so the project's stays whole.
     struct SourceChips: View {
         let ids: [String]
         let model: ProjectsWindowModel
@@ -732,7 +732,11 @@ extension ProjectsEmailArea {
         private var chips: some View {
             ForEach(ids, id: \.self) { id in
                 if let source = emailModel.sources[id] {
-                    SourceChip(source: source, emailText: emailModel.emailText, takenOut: emailModel.explanation?.removed[.file(id)] != nil) { messageID in
+                    SourceChip(
+                        source: source, emailText: emailModel.emailText, original: emailModel.original,
+                        attachments: model.listed(emailModel.messageID)?.attachments ?? [],
+                        takenOut: emailModel.explanation?.removed[.file(id)] != nil
+                    ) { messageID in
                         Task { await model.show(messageID) }
                     }
                 }
@@ -743,6 +747,10 @@ extension ProjectsEmailArea {
     struct SourceChip: View {
         let source: ProjectsEmailModel.Source
         let emailText: String
+        /// This email as Original Email shows it, and its attachments, for the chip of this
+        /// email.
+        var original: ProjectsEmailOriginal.Content? = nil
+        var attachments: [MailAttachment] = []
         /// Whether the hygiene took lines out of a file's excerpt before the model read it.
         var takenOut = false
         let show: (String) -> Void
@@ -782,7 +790,7 @@ extension ProjectsEmailArea {
             .accessibilityLabel(Text(verbatim: ProjectsWindowText.sourceLabel(source)))
             .disabled(Self.isGone(source))
             .popover(isPresented: $showsExcerpt, arrowEdge: .bottom) {
-                Excerpt(source: source, emailText: emailText, takenOut: takenOut)
+                Excerpt(source: source, emailText: emailText, original: original, attachments: attachments, takenOut: takenOut)
             }
         }
 
@@ -804,12 +812,17 @@ extension ProjectsEmailArea {
 
     /// The text behind a chip: a file's excerpt as the explanation saved it, with its page,
     /// slide or sheet and heading, whether its text was recognized, and the project of
-    /// another project's file, the excerpt of an attachment the model read, or the email's
-    /// own text. A file's saved excerpt keeps the lines the hygiene took out before the model
-    /// read it, so it says so when it holds any.
+    /// another project's file, the excerpt of an attachment the model read, or the whole
+    /// email in the order of Original Email while comparing, its own text when the store
+    /// keeps none of it. A file's saved excerpt keeps the lines the hygiene took out before
+    /// the model read it, so it says so when it holds any.
     struct Excerpt: View {
         let source: ProjectsEmailModel.Source
         let emailText: String
+        /// This email as Original Email shows it, nil when the store keeps none of its text,
+        /// and its attachments with their states.
+        var original: ProjectsEmailOriginal.Content? = nil
+        var attachments: [MailAttachment] = []
         /// Whether the hygiene took lines out of a file's excerpt before the model read it.
         var takenOut = false
 
@@ -864,9 +877,13 @@ extension ProjectsEmailArea {
                         Text("This email")
                             .font(.headline)
                         Divider()
-                        Text(verbatim: emailText)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if let original {
+                            ProjectsEmailOriginal(content: original, attachments: attachments, wordsFirst: true)
+                        } else {
+                            Text(verbatim: emailText)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     case .mail:
                         // An earlier email's chip shows that email in the window, or is off.
                         EmptyView()

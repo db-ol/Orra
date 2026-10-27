@@ -795,6 +795,15 @@ struct ProjectsWindowViewTests {
         return .other("original \(left), explanation \(right)")
     }
 
+    /// The text a view shows that the user can select, such as mail text, each with its top
+    /// in the window, whose y grows upward. SwiftUI puts such text in a text field of its
+    /// own, and draws the rest.
+    private static func selectableTexts(in view: NSView) -> [(text: String, top: CGFloat)] {
+        descendants(of: view).compactMap { $0 as? NSTextField }.map { field in
+            (field.stringValue, field.convert(field.bounds, to: nil).maxY)
+        }
+    }
+
     /// Compare with Original asks the split view for the list and the email view in the
     /// window as the app makes it, never for the detail column alone, and Exit Comparison
     /// asks for the columns from before. The window is never ordered front, as in
@@ -971,6 +980,46 @@ struct ProjectsWindowViewTests {
             #expect(pane.frame.height >= Panes.lowerPaneMinimumHeight, "\(size)")
         }
         await fixture.stop()
+    }
+
+    /// The This email chip shows the whole email in the order of Original Email while
+    /// comparing: the sender's words, then the forwarded message, with To and Cc and the
+    /// attachments folded under them, so their rows hold nothing to read until opened.
+    /// Without the email's text in the store, it shows the email's own text, as before. The
+    /// email view in its usual order keeps To and Cc, then the attachments, above the words.
+    /// The folded rows' names, Recipients and Attachments with their counts, are drawn
+    /// rather than held in a view, so the renders show them.
+    @Test func theThisEmailChipShowsTheWholeEmail() async throws {
+        func top(_ part: String, in texts: [(text: String, top: CGFloat)]) -> CGFloat? {
+            texts.first { $0.text.contains(part) }?.top
+        }
+        let whole = ProjectsEmailArea.Excerpt(source: .thisEmail, emailText: "Only the text", original: Self.forward, attachments: Self.attachments)
+        let (window, view) = try await host(whole, size: NSSize(width: 420, height: 420))
+        defer { window.close() }
+        let texts = Self.selectableTexts(in: view)
+        let note = try #require(top("see the note from the lamp maker", in: texts))
+        let forwarded = try #require(top("Twelve brass lamps are ready", in: texts))
+        #expect(note > forwarded)
+        // Folded: the recipients and the attachments.
+        #expect(top("me@studio.example", in: texts) == nil)
+        #expect(top("lamps.pdf", in: texts) == nil)
+        #expect(top("Only the text", in: texts) == nil)
+
+        let text = ProjectsEmailArea.Excerpt(source: .thisEmail, emailText: "Only the text", attachments: Self.attachments)
+        let (textWindow, textView) = try await host(text, size: NSSize(width: 420, height: 420))
+        defer { textWindow.close() }
+        let onlyText = Self.selectableTexts(in: textView)
+        #expect(top("Only the text", in: onlyText) != nil)
+        #expect(top("lamps.pdf", in: onlyText) == nil)
+
+        let usual = ProjectsEmailOriginal(content: Self.forward, attachments: Self.attachments)
+        let (usualWindow, usualView) = try await host(usual, size: NSSize(width: 520, height: 720))
+        defer { usualWindow.close() }
+        let usualTexts = Self.selectableTexts(in: usualView)
+        let to = try #require(top("me@studio.example", in: usualTexts))
+        let pdf = try #require(top("lamps.pdf", in: usualTexts))
+        let usualNote = try #require(top("see the note from the lamp maker", in: usualTexts))
+        #expect(to > pdf && pdf > usualNote)
     }
 
     // MARK: The talk key
