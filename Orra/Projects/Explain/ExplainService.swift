@@ -69,6 +69,46 @@ nonisolated struct Explanation: Sendable, Equatable, Codable {
     /// The search terms the model gave for the email, which the search used, so Explain
     /// Again searches with them too. Nil before 0.6.1, and when the model gave none.
     var searchTerms: [String]? = nil
+    /// The files the user chose for the email when it was explained, each with the source
+    /// ids of its excerpts or its name in the prompt, or why it gave the prompt nothing. Nil
+    /// for an explanation made without a choice, and for every one saved before 0.6.1.
+    var chosenFiles: [ChosenFile]? = nil
+
+    /// A file the user chose for the email, as the explanation used it.
+    nonisolated struct ChosenFile: Sendable, Equatable, Codable {
+        /// Why a chosen file gave the prompt nothing.
+        nonisolated enum Missing: String, Sendable, Codable {
+            /// The index did not hold it: it moved, left the folders, or was not read yet.
+            case notInIndex
+            /// The prompt's budget left it out.
+            case leftOut
+        }
+
+        /// Its real path, as the choice holds it.
+        var path: String
+        /// The project whose folder held it when it was chosen.
+        var project: UUID
+        /// The source ids of its excerpts or of its name in the prompt, such as F1.
+        var sources: [String]
+        /// Why it gave the prompt nothing, nil when it gave something. A reason from a later
+        /// Orra reads as nil, so the explanation still reads.
+        var missing: Missing?
+
+        init(path: String, project: UUID, sources: [String], missing: Missing? = nil) {
+            self.path = path
+            self.project = project
+            self.sources = sources
+            self.missing = missing
+        }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            path = try container.decode(String.self, forKey: .path)
+            project = try container.decode(UUID.self, forKey: .project)
+            sources = try container.decode([String].self, forKey: .sources)
+            missing = try? container.decodeIfPresent(Missing.self, forKey: .missing)
+        }
+    }
 
     /// The kinds of `warnings`, each once, in the order of `ProjectsWarning.allCases`.
     var warningKinds: [ProjectsWarning] {
@@ -76,25 +116,29 @@ nonisolated struct Explanation: Sendable, Equatable, Codable {
         return ProjectsWarning.allCases.filter(kinds.contains)
     }
 
-    /// The projects the explanation names: the email's, and the project of each file whose
-    /// excerpt it holds. MailStore saves it only while they all exist.
+    /// The projects the explanation names: the email's, the project of each file whose
+    /// excerpt it holds, and that of each file the user chose. MailStore saves it only while
+    /// they all exist.
     var sourceProjects: Set<UUID> {
         var projects = Set(sources.values.compactMap { source -> UUID? in
             guard case .file(_, let origin?) = source else { return nil }
             return origin.project
         })
+        projects.formUnion((chosenFiles ?? []).map(\.project))
         if let project {
             projects.insert(project)
         }
         return projects
     }
 
-    /// Whether it holds an excerpt of a file in the folders of `project`, for Forget Project.
+    /// Whether it holds an excerpt of a file in the folders of `project`, or a file of them
+    /// the user chose, for Forget Project.
     func holdsFiles(of project: UUID) -> Bool {
-        sources.values.contains { source in
+        let holdsExcerpt = sources.values.contains { source in
             guard case .file(_, let origin?) = source else { return false }
             return origin.project == project
         }
+        return holdsExcerpt || (chosenFiles ?? []).contains { $0.project == project }
     }
 
     /// Whether a point cites an excerpt of another project's file, see
@@ -140,6 +184,12 @@ nonisolated extension ExplainPrompt.Source {
 ///   <other_files>, for the warnings, points and questions only. Mail set aside gets no
 ///   files and asks for no terms. Without terms only the email's words search, and only its
 ///   project's folders.
+/// - reads the files the user chose for the email, see MailStore.chosenFiles(of:), in a
+///   project, in Needs a Project or set aside, whatever the warnings, and asks the index for
+///   their passages with the query of the email's project, see
+///   ChunkSearch.passages(_:in:perFile:). They go first in the prompt, on the own side of the
+///   email, so the draft's request reads them too, also those in another project's folders,
+///   which the draft check then counts as the email's own, see `chosenExcerpts(_:)`.
 /// - decides the reply with ReplyRule.
 /// - builds ExplainPrompt off the main actor, counting with the cleanup model's own
 ///   tokenizer, see ProjectsTokenCounter, and runs it through ProjectsModelQueue as a
@@ -260,6 +310,12 @@ final class ExplainService {
         /// model, see SearchTerms.ask. Nil when there are none, which searches with the
         /// email's words alone, as before search terms.
         var terms: @Sendable (Email) async throws -> [String]? = { _ in nil }
+        /// The files the user chose for the email, by its Message-ID, see
+        /// MailStore.chosenFiles(of:). None by default.
+        var chosenFiles: @Sendable (_ messageID: String) async throws -> [MailStore.ChosenFile] = { _ in [] }
+        /// The passages of chosen files for a query, at most the given number of each, see
+        /// ChunkSearch.passages(_:in:perFile:). Nothing by default.
+        var passages: @Sendable (ChunkSearch.Query, [ChunkSearch.FileKey], Int) async throws -> [ChunkSearch.FilePassages] = { _, _, _ in [] }
     }
 
     /// The chunks asked for to fill up the prompt. ChunkSearch.newest gives a file's
@@ -367,8 +423,17 @@ final class ExplainService {
             gathered.ruleWarnings = rules
             gathered.attachmentWarnings = attachments
             let warnings = await Self.retrievalWarnings(email, rules: rules, attachments: attachments)
+            let choice = try await lookups.chosenFiles(email.messageID)
             let query = await Self.searchText(email)
-            gathered.take(try await Self.files(for: email, project: project, known: known, query: query, warnings: warnings, lookups: lookups))
+            let found = try await Self.files(for: email, project: project, known: known, query: query, warnings: warnings, lookups: lookups)
+            gathered.take(found)
+            if !choice.isEmpty {
+                // The query of the email's own project, with its terms, so a Chinese email finds
+                // the passages of an English file too.
+                let keys = choice.map { ChunkSearch.FileKey(project: $0.project, path: $0.path) }
+                let passages = try await lookups.passages(ChunkSearch.Query(text: query, terms: found.terms ?? [], projects: nil), keys, ExplainPrompt.chosenChunksPerFile)
+                gathered.choose(choice, passages: passages)
+            }
             if let project {
                 let excluding = Set(thread.map(\.messageID) + [email.messageID])
                 gathered.projectMail = try await lookups.projectMail(MailQuery(project: project.id, text: query, excluding: excluding, limit: Self.projectMailLimit))
@@ -484,6 +549,19 @@ final class ExplainService {
         /// `explain` found them before the search, or nil, which has `prepare` find them.
         var ruleWarnings: [ProjectsWarning]? = nil
         var attachmentWarnings: [Int: [ProjectsWarning]]? = nil
+        /// The files the user chose for the email, and what the index gave of each, in the
+        /// same order. They are the email's own, so the draft's request keeps them.
+        var choice: [MailStore.ChosenFile] = []
+        var chosen: [ChunkSearch.FilePassages] = []
+
+        /// Takes the user's choice of files and their passages. A passage of another project
+        /// that search found in a chosen file goes, since the file's passages come as chosen.
+        mutating func choose(_ choice: [MailStore.ChosenFile], passages: [ChunkSearch.FilePassages]) {
+            self.choice = choice
+            chosen = passages
+            let paths = Set(choice.map(\.path))
+            others.removeAll { paths.contains($0.file.path) }
+        }
 
         /// Takes what the search gave.
         mutating func take(_ files: Files) {
@@ -497,7 +575,8 @@ final class ExplainService {
         }
 
         /// The same without the passages of other projects, so the project's own passages
-        /// take every place and the newest files fill them up as for any email.
+        /// take every place and the newest files fill them up as for any email. The chosen
+        /// files stay.
         var withoutOtherProjects: Gathered {
             var own = self
             own.others = []
@@ -723,6 +802,29 @@ final class ExplainService {
         return kept
     }
 
+    /// The excerpts of the chosen files a prompt takes, in its order: first each file's best,
+    /// in the order of their best scores, then each file's second, then each file's third,
+    /// until there are `min(chunkLimit, max(F, min(chosenChunkShare, 3F)))` for F chosen files
+    /// with text, or no file has more. So 1 file gives up to 3 excerpts, 2 to 4 files up to 4,
+    /// 5 files 5 and 6 files 6, and every chosen file with text gives one, its best or its
+    /// first chunk. Search fills the rest of `chunkLimit`.
+    nonisolated static func chosenExcerpts(_ files: [ChunkSearch.FilePassages]) -> [ChunkSearch.Hit] {
+        let withText = files.map(\.hits).filter { !$0.isEmpty }
+            .enumerated()
+            .sorted { ($0.element[0].score, -$0.offset) > ($1.element[0].score, -$1.offset) }
+            .map(\.element)
+        let share = min(ExplainPrompt.chunkLimit, max(withText.count, min(ExplainPrompt.chosenChunkShare, 3 * withText.count)))
+        var picked: [ChunkSearch.Hit] = []
+        var round = 0
+        while picked.count < share, withText.contains(where: { $0.count > round }) {
+            for hits in withText where hits.count > round && picked.count < share {
+                picked.append(hits[round])
+            }
+            round += 1
+        }
+        return picked
+    }
+
     /// The prompt and what the checks after the model need.
     nonisolated struct Prepared: Sendable {
         var gathered: Gathered
@@ -776,22 +878,41 @@ final class ExplainService {
         if let project = gathered.project {
             input.project = ExplainPrompt.Project(name: project.name, description: project.description, people: project.people)
         }
-        input.chunks = gathered.hits.map(chunk)
-        input.newestChunks = gathered.newest.map(chunk)
+        // The chosen files' excerpts go first, and search's hits and the newest files do not
+        // repeat them. Search may still find other passages of a chosen file than its share
+        // took. They keep search's place, and as their file is chosen they are marked chosen
+        // too, so the budget keeps them with the chosen excerpts.
+        let chosen = chosenExcerpts(gathered.chosen)
+        let chosenChunks = Set(chosen.map(\.chunk))
+        input.chosenChunks = chosen.map(chunk)
+        input.chosenNames = gathered.chosen.compactMap { passages in
+            passages.hits.isEmpty ? passages.name.map { ExplainPrompt.ChosenName(file: $0.file, modified: $0.modified) } : nil
+        }
+        input.chunks = gathered.hits.filter { !chosenChunks.contains($0.chunk) }.map(chunk)
+        input.newestChunks = gathered.newest.filter { !chosenChunks.contains($0.chunk) }.map(chunk)
         // Why each file is in the prompt. The fill leaves out every file search found, so a
-        // file has one reason, and a hit counts over the fill all the same.
+        // file has one reason, a hit counts over the fill all the same, and the user's choice
+        // over both.
         for hit in gathered.newest {
             input.fileOrigins[hit.file] = ExplainPrompt.FileOrigin(reason: .newest, project: hit.project)
         }
         for hit in gathered.hits {
             input.fileOrigins[hit.file] = ExplainPrompt.FileOrigin(reason: .match, project: hit.project)
         }
+        for passages in gathered.chosen {
+            guard let file = passages.hits.first?.file ?? passages.name?.file else { continue }
+            let project = passages.hits.first?.project ?? passages.name?.project ?? passages.key.project
+            input.fileOrigins[file] = ExplainPrompt.FileOrigin(reason: .chosen, project: project)
+            if project != gathered.project?.id, let name = known.projects.first(where: { $0.id == project })?.name {
+                input.chosenProjects[project] = name
+            }
+        }
         input.versions = FileVersions(gathered.files)
         input.otherChunks = gathered.others.map { hit in
             ExplainPrompt.OtherChunk(chunk: chunk(hit), project: hit.project, projectName: known.projects.first { $0.id == hit.project }?.name ?? "")
         }
         input.otherVersions = gathered.otherFiles.mapValues(FileVersions.init)
-        input.filesWithHiddenText = Set((gathered.hits + gathered.newest + gathered.others).filter { $0.fileHiddenRuns > 0 }.map(\.file))
+        input.filesWithHiddenText = Set((gathered.hits + gathered.newest + gathered.others + chosen).filter { $0.fileHiddenRuns > 0 }.map(\.file))
         input.projectMail = gathered.projectMail
         input.thread = gathered.thread
         input.attachments = email.attachments
@@ -1107,8 +1228,26 @@ final class ExplainService {
             removed: prompt.removed,
             problems: problems,
             unknownSources: answer.unknownSources,
-            searchTerms: gathered.terms
+            searchTerms: gathered.terms,
+            chosenFiles: chosenFiles(prepared)
         )
+    }
+
+    /// What became of each file the user chose, by the prompt that explained the email: the
+    /// ids of its excerpts or its name, or why it gave nothing. Nil without a choice.
+    nonisolated static func chosenFiles(_ prepared: Prepared) -> [Explanation.ChosenFile]? {
+        let gathered = prepared.gathered
+        guard !gathered.choice.isEmpty else { return nil }
+        var ids: [String: [String]] = [:]
+        for (id, source) in prepared.prompt.sources {
+            guard case .file(let chunk, let origin?) = source, origin.reason == .chosen else { continue }
+            ids[chunk.file.path, default: []].append(id)
+        }
+        return gathered.choice.map { file in
+            let sources = (ids[file.path] ?? []).sorted { (Int($0.dropFirst()) ?? .max, $0) < (Int($1.dropFirst()) ?? .max, $1) }
+            let indexed = gathered.chosen.first { $0.key.path == file.path }?.isIndexed == true
+            return Explanation.ChosenFile(path: file.path, project: file.project, sources: sources, missing: sources.isEmpty ? (indexed ? .leftOut : .notInIndex) : nil)
+        }
     }
 
     /// The texts of the prompt for the checks after the model. `incoming` is what the
@@ -1220,8 +1359,8 @@ final class ExplainService {
 
     // MARK: Log
 
-    /// Counts and kinds only.
-    private nonisolated static func summary(_ prompt: ExplainPrompt, _ explanation: Explanation, _ gathered: Gathered, draft apart: DraftApart?) -> String {
+    /// The log line of an explanation: counts and kinds only. Internal for tests.
+    nonisolated static func summary(_ prompt: ExplainPrompt, _ explanation: Explanation, _ gathered: Gathered, draft apart: DraftApart?) -> String {
         let files = prompt.sources.keys.filter { $0.hasPrefix("F") }.count
         let otherFiles = prompt.sources.keys.filter(ExplainPrompt.isOtherFileSource).count
         // The reasons of the project's own excerpts, the F ids.
@@ -1249,11 +1388,26 @@ final class ExplainService {
             draft += apart.written == nil ? ", its request without other projects' passages failed" : ", written by a request of \(apart.prepared.prompt.tokens) prompt tokens without other projects' passages"
         }
         let flagged = explanation.points.filter { !$0.flags.isEmpty }.count
-        return "\(terms), \(otherProjects), \(prompt.tokens) prompt tokens with \(files) excerpts (\(found) found by search, \(newest) of the newest files), \(otherFiles) excerpts of other projects, \(thread) thread messages, \(projectMail) project mails and \(attachments) attachments, \(explanation.points.count) points of which \(flagged) flagged, \(explanation.questions.count) questions, \(explanation.warnings.count) warnings in code and \(explanation.modelWarnings.count) from the model, draft \(draft), \(explanation.problems.count) problems of form"
+        var choice = ""
+        if let chosen = explanation.chosenFiles {
+            let names = chosen.filter { file in file.sources.contains { prompt.sources[$0].map(Self.isName) == true } }.count
+            let excerpts = prompt.sources.values.filter { source in
+                guard case .file(let chunk, let origin?) = source else { return false }
+                return origin.reason == .chosen && !chunk.text.isEmpty
+            }.count
+            choice = "\(chosen.count) chosen files, which gave \(excerpts) excerpts and \(names) names, \(chosen.count { $0.missing == .notInIndex }) not in the index and \(chosen.count { $0.missing == .leftOut }) left out, "
+        }
+        return "\(terms), \(otherProjects), \(choice)\(prompt.tokens) prompt tokens with \(files) excerpts (\(found) found by search, \(newest) of the newest files), \(otherFiles) excerpts of other projects, \(thread) thread messages, \(projectMail) project mails and \(attachments) attachments, \(explanation.points.count) points of which \(flagged) flagged, \(explanation.questions.count) questions, \(explanation.warnings.count) warnings in code and \(explanation.modelWarnings.count) from the model, draft \(draft), \(explanation.problems.count) problems of form"
     }
 
     private nonisolated static func seconds(_ duration: Duration) -> String {
         String(format: "%.2f s", duration / .seconds(1))
+    }
+
+    /// Whether a source is the name of a chosen file without text, whose saved chunk has no text.
+    private nonisolated static func isName(_ source: ExplainPrompt.Source) -> Bool {
+        guard case .file(let chunk, let origin?) = source else { return false }
+        return origin.reason == .chosen && chunk.text.isEmpty
     }
 
     /// The kind of error, never its description, which could hold text.

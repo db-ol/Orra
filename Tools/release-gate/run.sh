@@ -123,6 +123,8 @@ for suite in $suites; do
       env+=(TEST_RUNNER_ORRA_PROJECTS_GATE=$projects_set TEST_RUNNER_ORRA_PROJECTS_OWN_ADDRESSES=$GATE_PROJECTS_OWN_ADDRESSES
         TEST_RUNNER_ORRA_PROJECTS_OWN_NAME=$GATE_PROJECTS_OWN_NAME)
       [[ -n ${GATE_CLEANUP_MODEL_DIR:-} ]] && env+=(TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=$GATE_CLEANUP_MODEL_DIR)
+      # The choose mode, with the files of gate-choose.json chosen, see docs/release-gate.md.
+      [[ -n ${GATE_PROJECTS_CHOOSE:-} ]] && env+=(TEST_RUNNER_ORRA_PROJECTS_GATE_CHOOSE=$GATE_PROJECTS_CHOOSE)
       test_id=OrraTests/ProjectsGateEvaluationTests ;;
     retrieval)
       env+=(TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL=$projects_set TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_OUT=$out/raw

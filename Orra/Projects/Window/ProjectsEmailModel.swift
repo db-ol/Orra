@@ -75,6 +75,12 @@ final class ProjectsEmailModel {
         /// Where a project's folders are now, nil when Projects did not read them, see
         /// ProjectsRuntime.folderRoots(of:). None by default, for tests that never ask.
         var folderRoots: (UUID) async -> ProjectsEmailFiles.Roots? = { _ in nil }
+        /// The files the user chose for an email, see ProjectsRuntime.chosenFiles(of:). None
+        /// by default.
+        var chosenFiles: (_ messageID: String) async -> [MailStore.ChosenFile] = { _ in [] }
+        /// Saves the user's choice of files for an email, and says whether the store did, see
+        /// ProjectsRuntime.saveChosenFiles(_:for:). Nothing is saved by default.
+        var saveChosenFiles: (_ messageID: String, [MailStore.ChosenFile]) async -> Bool = { _, _ in false }
 
         /// The actions of the running app.
         static func live(_ runtime: ProjectsRuntime) -> Actions {
@@ -100,7 +106,9 @@ final class ProjectsEmailModel {
                 now: runtime.dependencies.now,
                 highlight: { await ProjectsDraftDiff.highlight(from: $0, to: $1) },
                 projectName: { [weak runtime] id in runtime?.projectList.first { $0.id == id }?.name },
-                folderRoots: { [weak runtime] id in await runtime?.folderRoots(of: id) }
+                folderRoots: { [weak runtime] id in await runtime?.folderRoots(of: id) },
+                chosenFiles: { [weak runtime] id in await runtime?.chosenFiles(of: id) ?? [] },
+                saveChosenFiles: { [weak runtime] id, files in await runtime?.saveChosenFiles(files, for: id) ?? false }
             )
         }
     }
@@ -212,6 +220,9 @@ final class ProjectsEmailModel {
     /// Where the folders of the projects of the explanation's files are now, by project, as
     /// last read while that list was open, see `loadFolderRoots(for:)`.
     private(set) var folderRoots: [UUID: ProjectsEmailFiles.Roots] = [:]
+    /// The files the user chose for the email, as the store keeps them, which the next
+    /// Explain or Explain Again uses, see `choiceNote`.
+    private(set) var chosenFiles: [MailStore.ChosenFile] = []
     /// The draft as the editor holds it. What the user types is saved once the user pauses
     /// typing, see `saveText()`.
     var text = "" {
@@ -455,6 +466,7 @@ final class ProjectsEmailModel {
             self.original = original
         }
         await readSources(email)
+        await loadChoice()
     }
 
     /// Reads what the source ids stand for, and the email's own text.
@@ -502,10 +514,14 @@ final class ProjectsEmailModel {
         }
     }
 
-    /// After a new explanation in this window: reads it, and runs the answer check of its
-    /// draft once (decision 9).
+    /// After a new explanation in this window: reads it, opens Project Files for This
+    /// Explanation when it was made with files the user chose, which the list shows first,
+    /// Chosen by you, and runs the answer check of its draft once (decision 9).
     func explained() async {
         await load()
+        if explanation?.chosenFiles?.isEmpty == false {
+            showsProjectFiles = true
+        }
         guard !isEdited else { return }
         await checkAnswers()
     }
@@ -968,4 +984,91 @@ extension ProjectsEmailModel {
         }
         return candidates.min { abs($0.timeIntervalSince(near)) < abs($1.timeIntervalSince(near)) }
     }
+}
+
+// MARK: Chosen files
+
+extension ProjectsEmailModel {
+    /// What the next explanation uses, said under Explain or Explain Again until an
+    /// explanation is made with the choice as it is.
+    nonisolated enum ChoiceNote: Equatable, Sendable {
+        /// The email has a choice and no explanation yet, with the number of files.
+        case explainUses(Int)
+        /// The saved explanation was not made with the choice as it is.
+        case explainAgainUses(Int)
+        /// The email has no choice, while the saved explanation was made with one.
+        case explainAgainGoesBack
+    }
+
+    /// The line under Explain or Explain Again: what the saved choice changes against the
+    /// choice the saved explanation records, see `choiceNote(chosen:explanation:)`.
+    var choiceNote: ChoiceNote? {
+        Self.choiceNote(chosen: chosenFiles, explanation: explanation)
+    }
+
+    /// What `chosen` changes against the choice `explanation` records, compared by path, so
+    /// the same files in another order count as the same. Nil when they agree.
+    nonisolated static func choiceNote(chosen files: [MailStore.ChosenFile], explanation: Explanation?) -> ChoiceNote? {
+        let chosen = Set(files.map(\.path))
+        guard let explanation else {
+            return chosen.isEmpty ? nil : .explainUses(chosen.count)
+        }
+        let used = Set((explanation.chosenFiles ?? []).map(\.path))
+        guard chosen != used else { return nil }
+        return chosen.isEmpty ? .explainAgainGoesBack : .explainAgainUses(chosen.count)
+    }
+
+    /// Reads the user's choice of files for the email again, as the sheet that chooses files
+    /// opens, also for an email whose view never showed.
+    func loadChoice() async {
+        let chosen = await actions.chosenFiles(messageID)
+        if chosen != chosenFiles {
+            chosenFiles = chosen
+        }
+    }
+
+    /// Saves the user's choice of files for the email, an empty one for Return to Automatic
+    /// Selection, and takes it as the email's choice once the store kept it. Says whether it
+    /// did.
+    @discardableResult
+    func saveChoice(_ files: [MailStore.ChosenFile]) async -> Bool {
+        guard await actions.saveChosenFiles(messageID, files) else { return false }
+        chosenFiles = await actions.chosenFiles(messageID)
+        return true
+    }
+
+    /// Whether the words of the change box name a file: a path that starts with a slash, ~/
+    /// or ./, or a word that ends in the extension of a file Projects knows, such as
+    /// plan-v3.dwg. Only a pattern on the words, so Orra never looks the file up, and a
+    /// version such as 2.0 or a size such as 1.5 m names none.
+    nonisolated static func namesAFile(_ words: String) -> Bool {
+        let range = NSRange(words.startIndex..., in: words)
+        if pathPattern.firstMatch(in: words, range: range) != nil {
+            return true
+        }
+        return namePattern.matches(in: words, range: range).contains { match in
+            guard let found = Range(match.range(at: 1), in: words) else { return false }
+            return knownExtensions.contains(words[found].lowercased())
+        }
+    }
+
+    /// A path: a slash, ~/, ./ or ../ that no letter, digit, slash or colon stands right
+    /// before, then a name. So 数量/单价, and/or and the slashes of a link name no file.
+    private nonisolated static let pathPattern = try! NSRegularExpression(
+        pattern: #"(?<![\p{L}\p{N}/:])(?:~|\.{1,2})?/[^\s/"'“”‘’<>|]*[\p{L}\p{N}][^\s"'“”‘’<>|]*"#)
+
+    /// A name with an extension of up to 8 letters or digits, which no Latin letter or digit
+    /// follows.
+    private nonisolated static let namePattern = try! NSRegularExpression(
+        pattern: #"[\p{L}\p{N}_\-]\.([A-Za-z0-9]{1,8})(?![A-Za-z0-9])"#)
+
+    /// The extensions of the files Projects reads or knows by name: documents, images and
+    /// archives, see FileTextExtractor.kind(ofExtension:), and the drawings, designs and media
+    /// project folders hold.
+    private nonisolated static let knownExtensions: Set<String> = [
+        "pdf", "docx", "doc", "rtf", "odt", "xlsx", "xlsm", "pptx", "ppsx", "md", "txt", "csv", "tsv",
+        "png", "jpg", "jpeg", "heic", "heif", "tif", "tiff", "gif", "bmp", "webp",
+        "zip", "rar", "7z", "tar", "gz", "tgz", "dmg",
+        "dwg", "dxf", "skp", "key", "numbers", "pages", "psd", "ai", "sketch", "fig", "mp4", "mov", "eml", "ics",
+    ]
 }

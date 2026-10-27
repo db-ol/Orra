@@ -420,6 +420,63 @@ final class FolderIndex {
         }
     }
 
+    /// A file the index lists, for the sheet that chooses files for an email.
+    nonisolated struct ListedFile: Sendable, Equatable {
+        /// What the index holds of the file.
+        nonisolated enum Reading: Sendable, Equatable {
+            /// Text read from the file, at least part of it from its text layer or its words.
+            case text
+            /// Text recognized in an image or on scanned pages only.
+            case recognizedText
+            /// Nothing yet, since its pages wait for text recognition.
+            case waitsForRecognition
+            /// Its name only, such as a drawing, an archive or a file whose text it could not
+            /// read.
+            case nameOnly
+        }
+
+        var project: UUID
+        /// Its real path, as the index keeps it.
+        var url: URL
+        var size: Int64
+        /// Its modification date when the index listed it.
+        var modified: Date
+        var reading: Reading
+    }
+
+    /// Every file the index lists in these projects, newest first, by path, size, date and
+    /// what the index holds of it, never its text. A file in the folders of two projects is
+    /// listed for each.
+    func listFiles(projects: [UUID]) async throws -> [ListedFile] {
+        try await Self.listedFiles(projects: projects, database: database)
+    }
+
+    /// The files of `listFiles(projects:)`, read and made off the main actor, since the
+    /// projects may hold thousands of files. Each path becomes a URL without a look at the
+    /// disk, also for a folder that hangs.
+    @concurrent
+    private nonisolated static func listedFiles(projects: [UUID], database: ProjectsDatabase) async throws -> [ListedFile] {
+        guard !projects.isEmpty else { return [] }
+        let rows = try await database.run("""
+            SELECT f.project, f.path, f.size, f.modified, f.skip,
+                EXISTS (SELECT 1 FROM index_chunks c WHERE c.file = f.id)
+                    AND NOT EXISTS (SELECT 1 FROM index_chunks c WHERE c.file = f.id AND c.recognized = 0)
+            FROM index_files f WHERE f.project IN (SELECT value FROM json_each(?)) ORDER BY f.modified DESC, f.path
+            """, [.text("[" + projects.map { "\"\($0.uuidString)\"" }.joined(separator: ",") + "]")])
+        return rows.compactMap { row in
+            guard row.count == 6, let project = row[0].text.flatMap(UUID.init(uuidString:)), let path = row[1].text,
+                  let size = row[2].integer, let modified = row[3].real else { return nil }
+            let reading: ListedFile.Reading = switch row[4].text {
+            case nil: row[5].integer == 1 ? .recognizedText : .text
+            case FileSkipReason.waitsForRecognition.rawValue?: .waitsForRecognition
+            default: .nameOnly
+            }
+            return ListedFile(
+                project: project, url: URL(filePath: path, directoryHint: .notDirectory), size: size, modified: Date(timeIntervalSince1970: modified),
+                reading: reading)
+        }
+    }
+
     /// A project's files with text in the index, each with its modification date and the
     /// start of its text, for FileVersions, see ExplainService.Lookups.files.
     func versionFiles(project id: UUID) async throws -> [FileVersions.File] {
@@ -1783,8 +1840,18 @@ final class FolderIndex {
     /// place held before is replaced. A renamed file's chunks get the words of its new name.
     /// The moved rows lose their name entries, which the next sweep writes again with their
     /// new names and folders. A rename whose old place holds nothing, such as one a sweep
-    /// already took in, changes nothing. Returns whether text was removed.
+    /// already took in, changes nothing in the index. Returns whether text was removed.
+    ///
+    /// The files of the project that the user chose for emails follow the rename too, also
+    /// when the index holds nothing at the old place, see `MailStore.chosenFilesMigration`.
+    /// An email that chose both the old and the new place keeps one of them.
     private static func applyRename(_ rename: FolderEvents.Rename, project: UUID, in database: isolated ProjectsDatabase) throws -> Bool {
+        let moving: [Value] = [.text(project.uuidString), .text(rename.to), .text(rename.from)]
+        try database.run("""
+            DELETE FROM mail_chosen_files WHERE project = ?1 AND \(atOrUnder("?3"))
+                AND EXISTS (SELECT 1 FROM mail_chosen_files o WHERE o.message = mail_chosen_files.message AND o.path = ?2 || substr(mail_chosen_files.path, length(?3) + 1))
+            """, moving)
+        try database.run("UPDATE mail_chosen_files SET path = ?2 || substr(path, length(?3) + 1) WHERE project = ?1 AND \(atOrUnder("?3"))", moving)
         let old: [Value] = [.text(project.uuidString), .text(rename.from)]
         guard try !database.run("SELECT 1 FROM index_files WHERE project = ?1 AND \(atOrUnder("?2")) LIMIT 1", old).isEmpty else { return false }
         // What the new place held goes. The moved rows lose their name entries, so text goes

@@ -123,6 +123,15 @@ with today pinned to 2026-10-18:
   Projects does not read would be judged on the mail alone.
   `TEST_RUNNER_ORRA_PROJECTS_GATE_ATTACHMENTS=names` reads attachments as names and types
   only, as Orra did before it read their text, for a baseline from the same build.
+- `TEST_RUNNER_ORRA_PROJECTS_GATE_CHOOSE` is the path of gate-choose.json, kept with the
+  set, which names files of the set's folders to choose for some items, as Choose Files for
+  This Email keeps them. It lists the five injected project documents for the items that
+  test them, a57 to a61, so the model gets each one's passages first, as a file the user
+  chose. The bar is the same. A chosen file is still data, and its hidden text and its lines
+  to an assistant are still taken out. Each row then says how many files its item chose.
+  run.sh passes it on from `GATE_PROJECTS_CHOOSE`, and its results go to an `--out` folder
+  of their own. Orra 0.6.1 changed the explanation prompt for chosen files, so the suite
+  runs again for it, with and without the choose mode.
 
 gate.py scores each item and language from the item's `expected` field. The bar is zero
 failures in both languages, and an item fails on any of these:
@@ -193,6 +202,15 @@ A pull request that changes which passages Explain picks, such as more file type
 the user chooses, runs the suite against a baseline of main. One that changes no selection
 needs no run.
 
+For files the user chooses, `explain-chosen.jsonl`, kept with the set, lists the files that
+answer each plain mail, from `labels.jsonl`, and for 12 mails that need a reply a wrong
+file of another project that holds amounts. ExplainEvaluationTests reads it from
+`TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_CHOSEN` and explains those mails in each language with
+no file chosen, with the right files chosen, and the 12 with their wrong file chosen, as
+`TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_CHOOSE` says. Each row says whether the prompt holds a
+passage of each file and whether a point cites it, and for the wrong files, how many
+amounts and codes of the draft only they hold. Its comment has the details.
+
 ## Variables
 
 | Variable | Default |
@@ -206,6 +224,7 @@ needs no run.
 | GATE_PROJECTS_SET | $ORRA_BENCH/projects-testset |
 | GATE_PROJECTS_OWN_ADDRESSES | none. The set owner's two addresses from the set's README, comma separated, needed by the projects and retrieval suites |
 | GATE_PROJECTS_OWN_NAME | none. The set owner's name from the set's README, needed by the projects and retrieval suites |
+| GATE_PROJECTS_CHOOSE | none. The path of gate-choose.json, which runs the projects suite in its choose mode. Give it an `--out` folder of its own |
 | GATE_DERIVED_DATA | build/DerivedDataRelease |
 | GATE_LOCK | none. A folder made with mkdir before each suite and removed after, for a Mac where other jobs share the GPU |
 

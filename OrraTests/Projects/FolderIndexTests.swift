@@ -495,6 +495,86 @@ struct FolderIndexTests {
         }
     }
 
+    /// The sheet that chooses files lists every file of the projects asked for, newest first,
+    /// with what the index holds of it and never its text: text, text recognized alone, pages
+    /// that wait for recognition, or a name only.
+    @Test func listFilesGivesEveryProjectsFilesWithWhatTheIndexHoldsOfThem() async throws {
+        try await withFixture(recognize: { job, _ in
+            job.file.lastPathComponent == "sign.jpg" ? Self.recognized([(0, "Brass lamps for the lobby")]) : .failure(.unreadable)
+        }) { fixture in
+            let old = Date(timeIntervalSince1970: 1_760_000_000)
+            try fixture.write("notes.txt", "The print run is 500 calendars.", modified: old)
+            try fixture.write("sign.jpg", "x", modified: old.addingTimeInterval(60))
+            try fixture.write("Drawings/plan.dwg", "x", modified: old.addingTimeInterval(120))
+            await fixture.start()
+            let beta = fixture.folderURL.deletingLastPathComponent().appendingPathComponent("Beta", isDirectory: true)
+            try FileManager.default.createDirectory(at: beta, withIntermediateDirectories: true)
+            try "Call notes.".write(to: beta.appendingPathComponent("call.md"), atomically: true, encoding: .utf8)
+            await fixture.start(fixture.beta, folders: [beta])
+
+            let listed = try await fixture.index.listFiles(projects: [fixture.alpha, fixture.beta])
+            #expect(listed.map(\.url.lastPathComponent) == ["call.md", "plan.dwg", "sign.jpg", "notes.txt"])
+            #expect(listed.map(\.reading) == [.text, .nameOnly, .recognizedText, .text])
+            #expect(listed.map(\.project) == [fixture.beta, fixture.alpha, fixture.alpha, fixture.alpha])
+            #expect(listed[1].url.path == fixture.folder + "/Drawings/plan.dwg")
+            #expect(listed[3].modified == old && listed[3].size == Int64("The print run is 500 calendars.".utf8.count))
+            #expect(try await fixture.index.listFiles(projects: [fixture.beta]).map(\.url.lastPathComponent) == ["call.md"])
+            #expect(try await fixture.index.listFiles(projects: []).isEmpty)
+        }
+        // Without recognition, an image waits for it.
+        try await withFixture { fixture in
+            try fixture.write("sign.jpg", "x")
+            await fixture.start()
+            #expect(try await fixture.index.listFiles(projects: [fixture.alpha]).map(\.reading) == [.waitsForRecognition])
+        }
+    }
+
+    /// The files the user chose for an email follow a rename of the file or of a folder above
+    /// it, in the project whose folders moved only. An email that chose both the old and the
+    /// new place keeps one of them.
+    @Test func aRenameMovesTheChosenFilesOfItsProjectOnly() async throws {
+        try await withFixture { fixture in
+            try fixture.write("notes.txt", "The print run is 500 calendars.")
+            try fixture.write("sub/plan.md", "灯具采购计划。")
+            await fixture.start()
+            let store = MailStore(database: fixture.database)
+            try await store.add(project: fixture.alpha)
+            try await store.add(project: fixture.beta)
+            try await store.save([
+                MailStore.Message(messageID: "a@test.example", date: .now, sender: MailStore.Person(address: "kim@quay.example"), text: "Plans", visibleText: "Plans"),
+                MailStore.Message(messageID: "b@test.example", date: .now, sender: MailStore.Person(address: "kim@quay.example"), text: "Notes", visibleText: "Notes"),
+            ], ownAddresses: [], at: .now)
+            let folder = fixture.folder
+            #expect(try await store.saveChosenFiles([
+                MailStore.ChosenFile(project: fixture.alpha, path: folder + "/notes.txt"),
+                MailStore.ChosenFile(project: fixture.alpha, path: folder + "/sub/plan.md"),
+                // The same folder in another project, which saw no rename.
+                MailStore.ChosenFile(project: fixture.beta, path: folder + "/sub/lamps.md"),
+            ], for: "a@test.example"))
+            #expect(try await store.saveChosenFiles([
+                MailStore.ChosenFile(project: fixture.alpha, path: folder + "/notes.txt"),
+                MailStore.ChosenFile(project: fixture.alpha, path: folder + "/Print notes.txt"),
+            ], for: "b@test.example"))
+
+            try FileManager.default.moveItem(atPath: folder + "/notes.txt", toPath: folder + "/Print notes.txt")
+            try FileManager.default.moveItem(atPath: folder + "/sub", toPath: folder + "/plans")
+            await fixture.deliver(FolderEvents.Changes(renamed: [
+                FolderEvents.Rename(from: folder + "/notes.txt", to: folder + "/Print notes.txt"),
+                FolderEvents.Rename(from: folder + "/sub", to: folder + "/plans"),
+            ]))
+            #expect(Set(try await store.chosenFiles(of: "a@test.example")) == [
+                MailStore.ChosenFile(project: fixture.alpha, path: folder + "/Print notes.txt"),
+                MailStore.ChosenFile(project: fixture.alpha, path: folder + "/plans/plan.md"),
+                MailStore.ChosenFile(project: fixture.beta, path: folder + "/sub/lamps.md"),
+            ])
+            #expect(try await store.chosenFiles(of: "b@test.example") == [MailStore.ChosenFile(project: fixture.alpha, path: folder + "/Print notes.txt")])
+            // A rename the index already took in still moves a choice left at the old place.
+            #expect(try await store.saveChosenFiles([MailStore.ChosenFile(project: fixture.alpha, path: folder + "/plans/old.md")], for: "b@test.example"))
+            await fixture.deliver(FolderEvents.Changes(renamed: [FolderEvents.Rename(from: folder + "/plans/old.md", to: folder + "/plans/new.md")]))
+            #expect(try await store.chosenFiles(of: "b@test.example") == [MailStore.ChosenFile(project: fixture.alpha, path: folder + "/plans/new.md")])
+        }
+    }
+
     /// A rename a sweep already took in, such as one replayed from the stored event, finds
     /// nothing at its old path and leaves the new path as it is.
     @Test func aRenameWhoseOldPathHoldsNothingChangesNothing() async throws {

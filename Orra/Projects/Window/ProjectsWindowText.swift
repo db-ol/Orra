@@ -701,4 +701,123 @@ nonisolated enum ProjectsWindowText {
         case .mailData: String(localized: "Projects never reads Mail's local data files.")
         }
     }
+
+    // MARK: Choosing files for an email
+
+    /// The line under Explain or Explain Again about what the next explanation uses.
+    static func choiceNote(_ note: ProjectsEmailModel.ChoiceNote) -> String {
+        switch note {
+        case .explainUses(1): String(localized: "Explain uses the file you chose.")
+        case .explainUses(let count): String(localized: "Explain uses the \(count) files you chose.")
+        case .explainAgainUses(1): String(localized: "Explain Again uses the file you chose.")
+        case .explainAgainUses(let count): String(localized: "Explain Again uses the \(count) files you chose.")
+        case .explainAgainGoesBack: String(localized: "Explain Again goes back to the automatic selection.")
+        }
+    }
+
+    /// Why a chosen file gave the explanation nothing, for its row in the list of the
+    /// explanation's files.
+    static func chosenMissing(_ missing: Explanation.ChosenFile.Missing) -> String {
+        switch missing {
+        case .notInIndex: String(localized: "Projects had not read it, so the model did not get it.")
+        case .leftOut: String(localized: "Left out, as the email and its sources were too long")
+        }
+    }
+
+    /// How many files the sheet has ticked.
+    static func chosenCount(_ count: Int) -> String {
+        count == 0
+            ? String(localized: "None chosen. Orra finds the files itself.")
+            : String(localized: "\(count) chosen, up to \(ExplainPrompt.chosenFileLimit)")
+    }
+
+    /// What a file of the index gives an explanation.
+    static func reading(_ reading: FolderIndex.ListedFile.Reading) -> String {
+        switch reading {
+        case .text: String(localized: "With text")
+        case .recognizedText: String(localized: "Recognized text")
+        case .waitsForRecognition: String(localized: "Waiting for text recognition")
+        case .nameOnly: String(localized: "Name only")
+        }
+    }
+
+    /// A file's kind as Finder names it, such as PDF document, with a capital first letter
+    /// where macOS gives a lowercase one, such as text, or its extension in capitals when
+    /// macOS has no name for it.
+    static func fileKind(_ file: URL) -> String {
+        let fileExtension = file.pathExtension
+        if let type = UTType(filenameExtension: fileExtension), !type.isDynamic, let name = type.localizedDescription, let first = name.first {
+            return first.uppercased() + name.dropFirst()
+        }
+        return fileExtension.uppercased()
+    }
+
+    /// The third line of a file in the sheet: its kind, what it gives an explanation, when
+    /// it changed, and whether the saved explanation holds it.
+    static func listedFile(kind: String, reading: FolderIndex.ListedFile.Reading?, modified: Date?, inExplanation: Bool) -> String {
+        var parts = [kind].filter { !$0.isEmpty }
+        if let reading {
+            parts.append(Self.reading(reading))
+        }
+        if let modified {
+            let day = modified.formatted(.dateTime.year().month(.abbreviated).day().locale(.interface))
+            parts.append(String(localized: "Changed \(day)"))
+        }
+        if inExplanation {
+            parts.append(String(localized: "In this explanation"))
+        }
+        guard let first = parts.first else { return "" }
+        return parts.dropFirst().reduce(first) { line, part in String(localized: "\(line), \(part)") }
+    }
+
+    /// The line under a section that shows only its newest files.
+    static func moreFiles(shown: Int, total: Int, searching: Bool) -> String {
+        searching
+            ? String(localized: "Showing the newest \(shown) of \(total) files that match.")
+            : String(localized: "Showing the newest \(shown) of \(total) files. Search by name to find the others.")
+    }
+
+    /// The title of the section of the email's project in the sheet.
+    static func emailsProject(_ name: String) -> String {
+        String(localized: "\(name) (This Email's Project)")
+    }
+
+    /// What VoiceOver reads at the end of a file's row: the project whose folders hold it.
+    static func inProject(_ name: String) -> String {
+        String(localized: "In \(name)")
+    }
+
+    /// The line of the sheet's search when no file name matches.
+    static func noFileNameMatches(_ text: String) -> String {
+        String(localized: "No file name matches “\(text)”.")
+    }
+
+    static func addFolder(to project: String) -> String {
+        String(localized: "Add a Folder to “\(project)”…")
+    }
+
+    static func addItsFolder(to project: String) -> String {
+        String(localized: "Add Its Folder to “\(project)”…")
+    }
+
+    /// The message of the open panel that adds a folder to a project from the sheet.
+    static func folderPanelMessage(_ project: String) -> String {
+        String(localized: "Projects reads the files in the folder you choose for all mail of “\(project)”, and never changes them.")
+    }
+
+    /// A line of the sheet after a tick, a drop, an added folder or a save.
+    static func choiceNotice(_ line: ProjectsFileChoice.Notice) -> String {
+        switch line {
+        case .limit: String(localized: "You can choose up to \(ExplainPrompt.chosenFileLimit) files for an email.")
+        case .chosen(let name): String(localized: "“\(name)” is chosen.")
+        case .notRead(let name): String(localized: "Projects has not read “\(name)”. It may be new, too large or not on this Mac. The project's page lists the files it skipped.")
+        case .folder(let name): String(localized: "“\(name)” is a folder. Drag the files you want from it, not the folder.")
+        case .outside(let file): String(localized: "“\(file.lastPathComponent)” is not in a folder of your projects. Projects reads only the folders you add.")
+        case .reading(let name): String(localized: "Projects is reading the folder. “\(name)” is chosen once it is read.")
+        case .notInFolder(let name): String(localized: "The folder you added does not hold “\(name)”.")
+        case .refused(let found): refusal(found)
+        case .projectNotSaved: notice(.projectNotSaved)
+        case .notSaved: String(localized: "The choice could not be saved. Try again.")
+        }
+    }
 }

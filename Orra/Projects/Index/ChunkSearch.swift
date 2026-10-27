@@ -16,6 +16,8 @@ import NaturalLanguage
 ///   join the fusion with those of the text, so a chunk both find ranks first. Each hit
 ///   says which terms match it, each term searched alone in the same way, so a caller can
 ///   ask a chunk of another project for more than one term.
+/// - The passages of the files the user chose for an email come from the same lists and the
+///   same fusion, among the chunks of those files only, see `passages(_:in:perFile:)`.
 /// - Every term goes into MATCH quoted, with its quotes doubled, so text from a mail or a
 ///   file never reads as FTS5 syntax. The query itself is a bound value, never SQL.
 ///
@@ -64,6 +66,39 @@ nonisolated struct ChunkSearch: Sendable {
         /// The query's terms that match the chunk, each searched alone as the lists of the
         /// terms search it, in the order of the query.
         var matchedTerms: [String] = []
+    }
+
+    /// A file the user chose for an email, by the project whose folder held it and its real
+    /// path, as `index_files.path` holds it.
+    nonisolated struct FileKey: Sendable, Hashable {
+        var project: UUID
+        var path: String
+    }
+
+    /// What a chosen file gives a prompt, see `passages(_:in:perFile:)`: its best passages, or
+    /// its first chunk when none matches, or for a file the index holds without text its name
+    /// and date, or nothing when the index does not hold it.
+    nonisolated struct FilePassages: Sendable, Equatable {
+        /// A file the index knows by its name only, or whose text it has not recognized yet.
+        nonisolated struct Name: Sendable, Equatable {
+            /// The project whose index holds the file now.
+            var project: UUID
+            var file: URL
+            /// The file's modification date when the index listed it.
+            var modified: Date
+        }
+
+        var key: FileKey
+        /// Its passages, best first. Empty for a file without text and for one the index
+        /// does not hold.
+        var hits: [Hit] = []
+        /// Its name and date, for a file the index holds without text.
+        var name: Name?
+
+        /// Whether the index holds the file, with text or by name.
+        var isIndexed: Bool {
+            !hits.isEmpty || name != nil
+        }
     }
 
     /// The constant of reciprocal rank fusion: a chunk at rank r of a list adds 1 / (60 + r).
@@ -134,6 +169,68 @@ nonisolated struct ChunkSearch: Sendable {
                 return hit
             }
         }
+    }
+
+    /// The passages of the files the user chose for an email, in their order: the best
+    /// `perFile` of each for the query's text and terms, ranked as `search(_:)` ranks them with
+    /// the same lists and the same fusion, but among the chunks of these files only. A file
+    /// with no chunk that matches gives its first chunk, a file the index holds without text
+    /// gives its name and date, and a file the index does not hold gives nothing. A file is
+    /// looked up in the project of its key, or else by its path in any project, as after its
+    /// folder moved to another project. The query's projects, limit and `termsOnly` do not
+    /// count. Every value is bound, and the paths only ever as parameters. Off the main actor,
+    /// since NLTokenizer and the full text queries take a while.
+    @concurrent
+    func passages(_ query: Query, in files: [FileKey], perFile: Int) async throws -> [FilePassages] {
+        var found = files.map { FilePassages(key: $0) }
+        // The row of each file, by its project and path, which the index holds once.
+        var rows: [String: (id: Int64, place: Int)] = [:]
+        for (place, key) in files.enumerated() {
+            let row = try await database.run(
+                "SELECT id, project, path, modified FROM index_files WHERE path = ?1 ORDER BY project = ?2 DESC, id LIMIT 1",
+                [.text(key.path), .text(key.project.uuidString)]).first
+            guard let row, row.count == 4, let id = row[0].integer, let project = row[1].text.flatMap(UUID.init(uuidString:)),
+                  let path = row[2].text, let modified = row[3].real else { continue }
+            rows[project.uuidString + "\u{0}" + path] = (id, place)
+            found[place].name = FilePassages.Name(project: project, file: URL(fileURLWithPath: path), modified: Date(timeIntervalSince1970: modified))
+        }
+        guard !rows.isEmpty else { return found }
+        let ids = Self.json(rows.values.map(\.id).sorted().map(String.init), quoted: false)
+        let terms = Array(query.terms.prefix(Self.maximumTerms))
+        var scores: [Int64: Double] = [:]
+        for (table, match) in Self.queries(for: query.text) + Self.termQueries(for: terms) {
+            let list = try await database.run(Self.fileMatchSQL(table), [.text(match), .text(ids)]).compactMap { $0.first?.integer }
+            for (rank, chunk) in list.enumerated() {
+                scores[chunk, default: 0] += 1 / (Self.fusionOffset + Double(rank))
+            }
+        }
+        var hits: [Int: [Hit]] = [:]
+        if !scores.isEmpty {
+            let matched = try await database.run(Self.hitSQL + " WHERE c.id IN (SELECT value FROM json_each(?))", [.text(Self.json(scores.keys.sorted().map(String.init), quoted: false))])
+            for row in matched {
+                guard var hit = Self.hit(row, score: 0), let place = rows[hit.project.uuidString + "\u{0}" + hit.file.path]?.place else { continue }
+                hit.score = scores[hit.chunk] ?? 0
+                hits[place, default: []].append(hit)
+            }
+        }
+        for (id, place) in rows.values {
+            var best = Array((hits[place] ?? []).sorted { ($0.score, -$0.chunk) > ($1.score, -$1.chunk) }.prefix(max(perFile, 1)))
+            if best.isEmpty {
+                // A file with text that nothing of the query matches gives its start.
+                best = try await database.run(Self.hitSQL + " WHERE c.file = ? ORDER BY c.id LIMIT 1", [.integer(id)]).compactMap { Self.hit($0, score: 0) }
+            } else {
+                let matches = try await termsMatching(terms, among: best.map(\.chunk))
+                for index in best.indices {
+                    best[index].matchedTerms = matches[best[index].chunk] ?? []
+                    best[index].matchedTerm = !best[index].matchedTerms.isEmpty
+                }
+            }
+            if !best.isEmpty {
+                found[place].hits = best
+                found[place].name = nil
+            }
+        }
+        return found
     }
 
     /// The terms that match each of `chunks`, each term alone as the lists of the terms
@@ -390,6 +487,13 @@ nonisolated struct ChunkSearch: Sendable {
     private static func matchSQL(_ table: String, filtered: Bool) -> String {
         "SELECT \(table).rowid FROM \(table) JOIN index_chunks c ON c.id = \(table).rowid WHERE \(table) MATCH ?1"
             + (filtered ? projectFilter : "") + " ORDER BY bm25(\(table)) LIMIT \(listLength)"
+    }
+
+    /// The MATCH query of a table among the chunks of the files whose rows ?2 lists, as a
+    /// JSON array of their ids.
+    private static func fileMatchSQL(_ table: String) -> String {
+        "SELECT \(table).rowid FROM \(table) JOIN index_chunks c ON c.id = \(table).rowid WHERE \(table) MATCH ?1"
+            + " AND c.file IN (SELECT value FROM json_each(?2)) ORDER BY bm25(\(table)) LIMIT \(listLength)"
     }
 
     private static let hitSQL = """

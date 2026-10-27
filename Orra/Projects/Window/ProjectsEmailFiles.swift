@@ -31,8 +31,16 @@ nonisolated enum ProjectsEmailFiles {
         /// What the checks found at its excerpts, each kind once, in the order of
         /// `ProjectsWarning.allCases`.
         var warnings: [ProjectsWarning]
+        /// Why a file the user chose gave the explanation nothing, see `chosenWithoutExcerpts(in:)`.
+        var missing: Explanation.ChosenFile.Missing? = nil
 
         var id: URL { url }
+
+        /// Whether the prompt gave the model the file's name only: a chosen file without
+        /// text, whose saved chunk has none.
+        var isNameOnly: Bool {
+            !excerpts.isEmpty && excerpts.allSatisfy { $0.chunk.text.isEmpty }
+        }
 
         /// The number on the chip of each of its excerpts, in their order: the excerpt's
         /// place among the excerpts of its page, slide or sheet, or among those of a file
@@ -88,6 +96,18 @@ nonisolated enum ProjectsEmailFiles {
             files[index].warnings = ProjectsWarning.allCases.filter(kinds.contains)
         }
         return files
+    }
+
+    /// The files the user chose for the email that gave its explanation nothing, which the
+    /// index did not hold or the budget left out, in the order of the choice, with no excerpt.
+    /// By their path alone, never looked up on the disk, since such a file may have left the
+    /// project folders.
+    static func chosenWithoutExcerpts(in explanation: Explanation) -> [File] {
+        (explanation.chosenFiles ?? []).filter { $0.sources.isEmpty }.map { chosen in
+            File(
+                url: URL(filePath: chosen.path, directoryHint: .notDirectory), excerpts: [], isCited: false, reason: .chosen, project: chosen.project,
+                warnings: [], missing: chosen.missing ?? .notInIndex)
+        }
     }
 
     /// The order of source ids: F first, then by letter, then by number.
@@ -160,10 +180,13 @@ nonisolated enum ProjectsEmailFiles {
 extension ProjectsEmailArea {
     /// Project Files for This Explanation, folded after What it says. Open, it lists each
     /// project file whose excerpts the explanation gave the model, see ProjectsEmailFiles,
-    /// or says why there is none, then Edit Project…, or Assign to Project for an email in no
-    /// project, and when a project's folders can change, that a change counts from the next
-    /// Explain Again. It starts folded for each email, and stays as the user leaves it while
-    /// the window is open, see ProjectsEmailModel.showsProjectFiles.
+    /// or says why there is none, and each file the user chose that gave it nothing, then
+    /// Choose Files for This Email… with Return to Automatic Selection while the email has a
+    /// choice, Edit Project…, or Assign to Project for an email in no project, what the next
+    /// explanation uses of the files the user chose, and when a project's folders can change,
+    /// that a change counts from the next Explain Again. It starts folded for each email, and
+    /// stays as the user leaves it while the window is open, see
+    /// ProjectsEmailModel.showsProjectFiles.
     ///
     /// It shows the explanation as it was saved and the folders as they are now. The folders
     /// resolve only while it is open, and again when they change, such as after Edit
@@ -214,7 +237,8 @@ extension ProjectsEmailArea {
         }
 
         private func content(_ files: [ProjectsEmailFiles.File]) -> some View {
-            let reload = Reload(messageID: emailModel.messageID, files: files, projectList: runtime.projectList)
+            let missing = ProjectsEmailFiles.chosenWithoutExcerpts(in: explanation)
+            let reload = Reload(messageID: emailModel.messageID, files: files + missing, projectList: runtime.projectList)
             return VStack(alignment: .leading, spacing: 12) {
                 if files.isEmpty {
                     Text(verbatim: ProjectsWindowText.noProjectFiles(inProject: email.project != nil))
@@ -233,7 +257,17 @@ extension ProjectsEmailArea {
                         FileRow(file: file, place: place(of: file), project: projectLine(file))
                     }
                 }
+                // The files the user chose that gave the model nothing, after those it read.
+                ForEach(missing) { file in
+                    FileRow(file: file, place: place(of: file), project: projectLine(file))
+                }
                 controls
+                if let note = emailModel.choiceNote {
+                    Text(verbatim: ProjectsWindowText.choiceNote(note))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let project {
                     Text("Folder changes count from the next Explain Again, once indexing finishes.")
                         .font(.caption)
@@ -257,27 +291,74 @@ extension ProjectsEmailArea {
             }
         }
 
-        /// Edit Project… for the email's project, or Assign to Project for an email in no
-        /// project. One under another in a column too narrow for a row.
+        /// Choose Files for This Email… and, while the email has a choice, Return to Automatic
+        /// Selection, then Edit Project… for the email's project, or Assign to Project for an
+        /// email in no project. One under another in a column too narrow for a row.
         @ViewBuilder
         private var controls: some View {
             if let project {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) {
+                        choiceButtons
                         editButton(project)
                     }
                     VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 10) {
+                            choiceButtons
+                        }
+                        editButton(project)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        choiceButtons
                         editButton(project)
                     }
                 }
             } else if email.project == nil {
-                // Its whole name where it fits, and cut in a column too narrow for it, as in
-                // Japanese at the window's smallest size.
-                ViewThatFits(in: .horizontal) {
-                    assignMenu
-                        .fixedSize()
-                    assignMenu
+                VStack(alignment: .leading, spacing: 8) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) {
+                            choiceButtons
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            choiceButtons
+                        }
+                    }
+                    // Its whole name where it fits, and cut in a column too narrow for it, as in
+                    // Japanese at the window's smallest size.
+                    ViewThatFits(in: .horizontal) {
+                        assignMenu
+                            .fixedSize()
+                        assignMenu
+                    }
                 }
+            } else {
+                choiceButtons
+            }
+        }
+
+        /// Choose Files for This Email…, which opens the sheet, and Return to Automatic
+        /// Selection while the email has a choice, which removes it at once, since nothing
+        /// changes before Explain Again and a choice is easy to make again.
+        /// Their titles wrap to two lines in a column too narrow for them.
+        @ViewBuilder
+        private var choiceButtons: some View {
+            Button {
+                model.chooseFiles(for: email)
+            } label: {
+                Text("Choose Files for This Email…")
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .disabled(runtime.phase != .on || ProjectsWindowText.noText(email) != nil)
+            if !emailModel.chosenFiles.isEmpty {
+                Button {
+                    Task { await emailModel.saveChoice([]) }
+                } label: {
+                    Text("Return to Automatic Selection")
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .disabled(runtime.phase != .on)
             }
         }
 
@@ -342,9 +423,17 @@ extension ProjectsEmailArea {
                                     Text(verbatim: note)
                                 }
                             }
-                            Text(verbatim: ProjectsWindowText.citation(file.isCited))
+                            if file.missing == nil {
+                                Text(verbatim: ProjectsWindowText.citation(file.isCited))
+                            }
                             if let reason = ProjectsWindowText.fileReason(file.reason) {
                                 Text(verbatim: reason)
+                            }
+                            if file.isNameOnly {
+                                Text("Name only")
+                            }
+                            if let missing = file.missing {
+                                Text(verbatim: ProjectsWindowText.chosenMissing(missing))
                             }
                             if let project {
                                 Text(verbatim: project)
@@ -369,8 +458,11 @@ extension ProjectsEmailArea {
                         .foregroundStyle(.secondary)
                 }
                 .accessibilityElement(children: .combine)
-                ExcerptChips(file: file)
-                    .padding(.leading, 26)
+                // A chosen file's name has no excerpt to show.
+                if !file.isNameOnly {
+                    ExcerptChips(file: file)
+                        .padding(.leading, 26)
+                }
             }
         }
     }

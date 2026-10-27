@@ -13,7 +13,9 @@ import Foundation
 /// is the text to change or to read, never a request either. The prompts' own tags and chat
 /// template tokens are taken out of every text. No prompt holds project files or other
 /// mail, so a new version can hold no project data that the draft, the email and the
-/// instruction do not.
+/// instruction do not. A path or a file name in the instruction stays the user's words,
+/// never a file to read: a file reaches a draft only when the user chooses it for the email
+/// and explains it again.
 ///
 /// The instructions are in English, as in ExplainPrompt. Thinking is off. Each prompt ends
 /// with its prefill, which the caller puts in front of what the model wrote before reading

@@ -7,8 +7,8 @@ import Observation
 /// another email, a move or an Explain Again that waits for the user's yes, the rule offered
 /// after moves, the project Settings asks to edit, the explanations under way, whether the
 /// email view shows the explanation, the email view of each email the user opened with the
-/// window's one handoff at a time, the line after Explain Message Selected in Mail, and
-/// Suggested Projects. ProjectsRuntime does the work.
+/// window's one handoff at a time, the line after Explain Message Selected in Mail, the sheet
+/// that chooses files for an email, and Suggested Projects. ProjectsRuntime does the work.
 @Observable
 final class ProjectsWindowModel {
     /// A line the window shows after an action of the user.
@@ -133,6 +133,11 @@ final class ProjectsWindowModel {
     /// The email whose Explain Again waits for the user's yes, since it replaces a draft
     /// the user changed, see `requestExplain(_:)`.
     var pendingExplain: String?
+    /// The email whose sheet that chooses files shows, see `chooseFiles(for:)`.
+    var choosingFiles: ChoosingFiles?
+    /// The email to explain once its sheet that chooses files closed, after Explain or Explain
+    /// Again there, so Replace your draft? shows as a dialog of the window.
+    var explainAfterChoosing: String?
     /// Counts the times the window let go of its email views, so the email view shown reads
     /// its email again into a new one.
     private(set) var emailViewGeneration = 0
@@ -201,7 +206,13 @@ final class ProjectsWindowModel {
 
     /// The selected email as the list shows it, or as it was read alone.
     var selectedEmail: MailStore.Listed? {
-        selectedMessageID.flatMap { id in rows.first { $0.messageID == id } ?? aloneEmail.flatMap { $0.messageID == id ? $0 : nil } }
+        selectedMessageID.flatMap(listed)
+    }
+
+    /// An email as the list shows it now, or as it was read alone, nil when the window shows
+    /// it in neither.
+    func listed(_ messageID: String) -> MailStore.Listed? {
+        rows.first { $0.messageID == messageID } ?? aloneEmail.flatMap { $0.messageID == messageID ? $0 : nil }
     }
 
     /// Whether the chosen list holds older emails than the window read, for Load Older
@@ -448,7 +459,8 @@ final class ProjectsWindowModel {
     func takeProjectToEdit(presenting: Bool) -> Project? {
         guard let id = projectToEdit else { return nil }
         projectToEdit = nil
-        guard !presenting, pendingMove == nil, pendingExplain == nil, let project = runtime.projectList.first(where: { $0.id == id }) else { return nil }
+        guard !presenting, pendingMove == nil, pendingExplain == nil, choosingFiles == nil,
+              let project = runtime.projectList.first(where: { $0.id == id }) else { return nil }
         place = .project(id)
         return project
     }
@@ -534,5 +546,45 @@ final class ProjectsWindowModel {
         }
         // Marks the explanation as under way before it first waits.
         await explain(messageID)
+    }
+}
+
+// MARK: Choosing files for an email
+
+extension ProjectsWindowModel {
+    /// The email whose sheet that chooses files shows.
+    nonisolated struct ChoosingFiles: Identifiable, Equatable, Sendable {
+        var email: MailStore.Listed
+
+        var id: String { email.messageID }
+    }
+
+    /// Choose Files for This Email…: shows the sheet that chooses files for the email, see
+    /// ProjectsChooseFiles, from the list's context menu, the project files of its explanation
+    /// or the change box.
+    func chooseFiles(for email: MailStore.Listed) {
+        explainAfterChoosing = nil
+        choosingFiles = ChoosingFiles(email: email)
+    }
+
+    /// Explain or Explain Again from the sheet, once it saved the choice: closes the sheet,
+    /// which explains the email once it closed, see `explainAfterTheSheet()`. An email the
+    /// list's context menu opened the sheet for is selected first, so its explanation shows as
+    /// it comes.
+    func explainFromTheSheet(_ messageID: String) {
+        explainAfterChoosing = messageID
+        if selectedMessageID != messageID, rows.contains(where: { $0.messageID == messageID }) {
+            selectedMessageID = messageID
+        }
+        choosingFiles = nil
+    }
+
+    /// Runs the Explain the sheet asked for once it closed, through `requestExplain(_:)`, so
+    /// Replace your draft? asks first when the user changed the draft, and Cancel there keeps
+    /// the draft and the saved choice.
+    func explainAfterTheSheet() async {
+        guard let messageID = explainAfterChoosing else { return }
+        explainAfterChoosing = nil
+        await requestExplain(messageID)
     }
 }

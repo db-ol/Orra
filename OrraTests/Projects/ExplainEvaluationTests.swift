@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 @testable import Orra
@@ -37,8 +38,30 @@ import Testing
 ///
 /// It searches with search terms from the model and with other projects' files where the
 /// app reads them, see ExplainService. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_TERMS=off searches
-/// with each mail's words alone, for a run without them from the same build. The terms job does not count toward the prompt tokens of a row. The runner
-/// does not sort, so no mail is set aside.
+/// with each mail's words alone, for a run without them from the same build, and a path in
+/// it names a retrieval-terms.jsonl of RetrievalEvaluationTests, whose terms it takes without
+/// the model, none for a mail the file lacks. The terms job does not count toward the prompt
+/// tokens of a row. The runner does not sort, so no mail is set aside.
+///
+/// Each row lists the prompts of the requests of its explanation, each with its tokens and
+/// its SHA-256, never its text, so two builds can be shown to send the same prompts.
+/// TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_PROMPTS=only builds the prompts without the model: it
+/// loads only the tokenizer, takes the terms from a file or none, and answers every request
+/// with nothing, so an explanation has no points and no draft.
+///
+/// TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_CHOSEN is the path of a JSONL file kept with the set,
+/// one line a mail whose answer sits in project files, as
+/// `{"id": "m001", "right": ["projects/pic-2026-singapore/invitation-letter.pdf"],
+/// "wrong": ["projects/calendar-2027-print/payment-record.txt"]}`, the wrong files of
+/// another project and for a few mails only, each path inside the set's folder. The run then
+/// explains only the mails the file lists, and each row says for each right and wrong file
+/// whether the prompt holds a passage of it, whether a point cites it, and the language of
+/// the mail and of the file. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_CHOOSE=right chooses the right
+/// files for each mail, as Choose Files for This Email keeps them, and =wrong chooses the
+/// wrong files and explains only the mails that have one. Its rows count the amounts and
+/// codes of a draft that only the wrong files hold, and neither the mail, its thread, its
+/// project's mail nor the prompt's other excerpts. Without it, the files are measured and
+/// not chosen. A failed explanation is then a row with its error, and the run goes on.
 @Suite(.serialized, .enabled(if: ExplainEvaluationSet.folder != nil && !ExplainEvaluationSet.ownAddresses.isEmpty && RewriteTestModel.folder != nil))
 @MainActor
 struct ExplainEvaluationTests {
@@ -63,10 +86,38 @@ struct ExplainEvaluationTests {
         let first = max(1, Int(environment["ORRA_PROJECTS_EXPLAIN_FIRST"] ?? "") ?? 1)
         let count = Int(environment["ORRA_PROJECTS_EXPLAIN_COUNT"] ?? "") ?? mails.count
         let picked = Set((environment["ORRA_PROJECTS_EXPLAIN_IDS"] ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
-        let chosen = picked.isEmpty ? Array(mails.dropFirst(first - 1).prefix(count)) : mails.filter { picked.contains($0.id) }
-        try #require(!chosen.isEmpty)
+        let listed = picked.isEmpty ? Array(mails.dropFirst(first - 1).prefix(count)) : mails.filter { picked.contains($0.id) }
+        let chosenSetting = environment["ORRA_PROJECTS_EXPLAIN_CHOSEN"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+        let choose = Choose(rawValue: environment["ORRA_PROJECTS_EXPLAIN_CHOOSE"] ?? "") ?? .none
+        try #require(chosenSetting != nil || choose == .none, "TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_CHOOSE needs the files of TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_CHOSEN")
+        var labeled: [String: LabeledFiles] = [:]
+        if let chosenSetting {
+            for line in try String(contentsOf: chosenSetting, encoding: .utf8).split(separator: "\n") where !line.allSatisfy(\.isWhitespace) {
+                let files = try JSONDecoder().decode(LabeledFiles.self, from: Data(line.utf8))
+                labeled[files.id] = files
+            }
+        }
+        let labels = labeled
+        // With labeled files, only the mails they list, and with the wrong files chosen, only
+        // those that have one.
+        let selected = chosenSetting == nil ? listed : listed.filter { mail in
+            labels[mail.id].map { choose != .wrong || !($0.wrong ?? []).isEmpty } ?? false
+        }
+        try #require(!selected.isEmpty)
         let ownText = environment["ORRA_PROJECTS_EXPLAIN_TEXT"] == "own"
-        let asksForTerms = environment["ORRA_PROJECTS_EXPLAIN_TERMS"] != "off"
+        let termsSetting = environment["ORRA_PROJECTS_EXPLAIN_TERMS"]
+        let termsFile = termsSetting.flatMap { $0 == "off" || $0.isEmpty ? nil : URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+        let asksForTerms = termsSetting != "off" && termsFile == nil
+        let promptsOnly = environment["ORRA_PROJECTS_EXPLAIN_PROMPTS"] == "only"
+        try #require(!promptsOnly || !asksForTerms, "a run of the prompts alone takes its terms from a file or none")
+        var termsByID: [String: [String]] = [:]
+        if let termsFile {
+            for line in try String(contentsOf: termsFile, encoding: .utf8).split(separator: "\n") where !line.allSatisfy(\.isWhitespace) {
+                let saved = try JSONDecoder().decode(SavedTerms.self, from: Data(line.utf8))
+                termsByID[saved.id] = saved.terms
+            }
+        }
+        let savedTerms = termsByID
 
         // The projects, with their files indexed in a folder of their own.
         let ids = Dictionary(uniqueKeysWithValues: setProjects.enumerated().map { index, project in
@@ -95,10 +146,13 @@ struct ExplainEvaluationTests {
         let indexTime = indexStarted.duration(to: .now)
         index.stopAll()
         let search = ChunkSearch(database: database)
+        let labeledFiles = try await Self.labeledFiles(labels, root: root, database: database)
 
-        // The model, as the app runs it for Projects.
+        // The model, as the app runs it for Projects, unless only the prompts are built.
         let engine = CleanupEngine.live(RewriteEngine(), gate: ModelGate())
-        try await engine.load(modelFolder)
+        if !promptsOnly {
+            try await engine.load(modelFolder)
+        }
         let counter = try await ProjectsTokenCounter.reading(modelFolder)
         let queue = ProjectsModelQueue(environment: ProjectsModelEnvironment(
             startJob: engine.startJob,
@@ -170,20 +224,37 @@ struct ExplainEvaluationTests {
                 }
             },
             terms: { email in
+                if termsFile != nil {
+                    return byMessageID[email.messageID].flatMap { savedTerms[$0.id] }
+                }
                 guard asksForTerms else { return nil }
                 return try await SearchTerms.ask(for: email, run: { request in try await queue.run(request) }, sleep: { try await Task.sleep(for: $0) })
-            }
+            },
+            chosenFiles: { messageID in
+                guard let files = byMessageID[messageID].flatMap({ labels[$0.id] }) else { return [] }
+                let paths = switch choose {
+                case .none: [String]()
+                case .right: files.right
+                case .wrong: files.wrong ?? []
+                }
+                return paths.compactMap { labeledFiles[$0]?.chosen }
+            },
+            passages: { query, files, perFile in try await search.passages(query, in: files, perFile: perFile) }
         )
         var promptTokens = 0
+        // Each request's prompt, by its tokens and its SHA-256.
+        var prompts: [Prompt] = []
         let service = ExplainService(
             lookups: lookups,
             run: { request in
                 // The explanation's own prompt, not the longer one of a second request
                 // for the rest of an answer that repeated itself.
+                let tokens = counter.count(request.prompt)
                 if promptTokens == 0 {
-                    promptTokens = counter.count(request.prompt)
+                    promptTokens = tokens
                 }
-                return try await queue.run(request)
+                prompts.append(Prompt(tokens: tokens, sha256: SHA256.hash(data: Data(request.prompt.utf8)).map { String(format: "%02x", $0) }.joined()))
+                return promptsOnly ? "" : try await queue.run(request)
             },
             loadTokenCounter: { counter.count },
             save: { _ in },
@@ -193,28 +264,40 @@ struct ExplainEvaluationTests {
         )
 
         // Written after each mail, so a run stopped early keeps what it explained.
-        let part = picked.isEmpty ? "\(String(format: "%03d", first))-\(String(format: "%03d", first + chosen.count - 1))" : "picked"
-        let name = "explain-\(language.rawValue)-\(part)" + (ownText ? "-own" : "") + (asksForTerms ? "" : "-noterms")
+        let part = picked.isEmpty ? "\(String(format: "%03d", first))-\(String(format: "%03d", first + listed.count - 1))" : "picked"
+        let name = "explain-\(language.rawValue)-\(part)" + (ownText ? "-own" : "") + (asksForTerms ? "" : termsFile == nil ? "-noterms" : "-savedterms") + (promptsOnly ? "-prompts" : "")
+            + (chosenSetting == nil ? "" : "-chose-\(choose.rawValue)")
         let report = try Self.file(out.appendingPathComponent(name + ".md"))
         let rows = try Self.file(out.appendingPathComponent(name + ".jsonl"))
         defer {
             try? report.close()
             try? rows.close()
         }
-        let which = picked.isEmpty ? "mails \(first) to \(first + chosen.count - 1)" : "mails \(chosen.map(\.id).joined(separator: ", "))"
+        let which = picked.isEmpty && chosenSetting == nil ? "mails \(first) to \(first + selected.count - 1)" : "mails \(selected.map(\.id).joined(separator: ", "))"
         try report.write(contentsOf: Data("# Explanations of the synthetic set\n\nLanguage \(language.rawValue), \(which)\(ownText ? ", each with its own text only" : ""), today 2026-10-18, chip \(SpeechCorpus.chip()). Indexing the 5 project folders took \(Self.seconds(indexTime)).\n".utf8))
         var times: [Duration] = []
         var decisionsRight = 0
         var languagesRight = 0
         var dueReplies = 0
+        var failed = 0
         var failure: (any Error)?
         do {
-            for mail in chosen {
+            for mail in selected {
                 var email = Self.email(mail, project: mail.labels.project.flatMap { ids[$0] }, ownText: ownText, in: mails, byMessageID: byMessageID)
                 email.attachments = await Self.attachments(of: mail, files: projectFiles)
                 promptTokens = 0
+                prompts = []
                 let started = ContinuousClock.now
-                let explanation = try await service.explain(email)
+                let explanation: Explanation
+                do {
+                    explanation = try await service.explain(email)
+                } catch let error where chosenSetting != nil && !(error is CancellationError) {
+                    // Counted as a failed explanation, by its kind, never its text.
+                    failed += 1
+                    let object: [String: Any] = ["id": mail.id, "choose": choose.rawValue, "error": String(reflecting: type(of: error)) + (error is RewriteError ? ".\(error)" : "")]
+                    try rows.write(contentsOf: JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) + Data("\n".utf8))
+                    continue
+                }
                 let time = started.duration(to: .now)
                 times.append(time)
                 let needsReply: Bool = if case .reply = explanation.reply { true } else { false }
@@ -223,8 +306,12 @@ struct ExplainEvaluationTests {
                     dueReplies += 1
                     if explanation.reply.draftLanguage?.rawValue == mail.labels.reply_language { languagesRight += 1 }
                 }
+                var measures: [String: Any] = [:]
+                if let files = labels[mail.id] {
+                    measures = Self.measures(files, of: mail, email: email, explanation: explanation, choose: choose, labeledFiles: labeledFiles, mails: mails, byMessageID: byMessageID)
+                }
                 try report.write(contentsOf: Data(Self.section(mail, explanation, time: time, promptTokens: promptTokens).utf8))
-                try rows.write(contentsOf: Data((Self.row(mail, explanation, time: time, promptTokens: promptTokens) + "\n").utf8))
+                try rows.write(contentsOf: Data((Self.row(mail, explanation, time: time, promptTokens: promptTokens, prompts: prompts, root: root, measures: measures) + "\n").utf8))
             }
         } catch {
             failure = error
@@ -233,14 +320,15 @@ struct ExplainEvaluationTests {
         await database.close()
         if let failure { throw failure }
 
+        // Every explanation may have failed with chosen files, which leaves no time.
         let sorted = times.sorted()
-        let median = sorted[sorted.count / 2]
-        let p90 = sorted[min(sorted.count - 1, Int((Double(sorted.count) * 0.9).rounded(.up)) - 1)]
-        let summary = "\(chosen.count) mails: reply decision as labeled for \(decisionsRight), draft language as labeled for \(languagesRight) of \(dueReplies) due replies, \(Self.seconds(median)) a mail at the median and \(Self.seconds(p90)) at p90."
+        let median = sorted.isEmpty ? .zero : sorted[sorted.count / 2]
+        let p90 = sorted.isEmpty ? .zero : sorted[min(sorted.count - 1, Int((Double(sorted.count) * 0.9).rounded(.up)) - 1)]
+        let summary = "\(selected.count) mails: reply decision as labeled for \(decisionsRight), draft language as labeled for \(languagesRight) of \(dueReplies) due replies, \(Self.seconds(median)) a mail at the median and \(Self.seconds(p90)) at p90, \(failed) failed."
         try report.write(contentsOf: Data(("\n## Summary\n\n" + summary + "\n").utf8))
         // Counts only.
         print(summary)
-        #expect(times.count == chosen.count)
+        #expect(times.count + failed == selected.count)
     }
 
     // MARK: The set
@@ -270,6 +358,38 @@ struct ExplainEvaluationTests {
         let body: String
         let attachments: [Attachment]?
         let labels: Labels
+    }
+
+    /// A line of a retrieval-terms.jsonl of RetrievalEvaluationTests: a mail's id and its terms.
+    private struct SavedTerms: Decodable {
+        let id: String
+        let terms: [String]?
+    }
+
+    /// A prompt a request sent, without its text.
+    private struct Prompt {
+        let tokens: Int
+        let sha256: String
+    }
+
+    /// A line of the file of TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_CHOSEN: a mail's id, the files
+    /// that answer it and, for a few mails, wrong files of another project, by their paths
+    /// inside the set's folder.
+    private struct LabeledFiles: Decodable, Sendable {
+        let id: String
+        let right: [String]
+        let wrong: [String]?
+    }
+
+    /// Which files a run chooses for each mail: none, the right ones or the wrong ones.
+    private enum Choose: String, Sendable {
+        case none, right, wrong
+    }
+
+    /// A labeled file as the index keeps it: the choice of it, and its text.
+    private struct IndexedFile: Sendable {
+        let chosen: MailStore.ChosenFile
+        let text: String
     }
 
     private struct SetProject: Decodable {
@@ -390,7 +510,7 @@ struct ExplainEvaluationTests {
         return text
     }
 
-    private static func row(_ mail: SetMail, _ explanation: Explanation, time: Duration, promptTokens: Int) -> String {
+    private static func row(_ mail: SetMail, _ explanation: Explanation, time: Duration, promptTokens: Int, prompts: [Prompt], root: URL, measures: [String: Any]) -> String {
         var draft: Any = NSNull()
         var removals: [String] = []
         var flags: [String] = []
@@ -420,12 +540,13 @@ struct ExplainEvaluationTests {
                 [
                     "id": file.id,
                     "name": file.chunk.file.lastPathComponent,
+                    "path": Self.inSet(file.chunk.file.path, root: root),
                     "page": file.chunk.page.map { $0 as Any } ?? NSNull(),
                     "reason": file.origin?.reason.map { $0.rawValue as Any } ?? NSNull(),
                     "cited": explanation.points.contains { $0.sources.contains(file.id) },
                 ]
             }
-        let object: [String: Any] = [
+        let object: [String: Any] = measures.merging([
             "id": mail.id,
             "attachments_read": explanation.sources.keys.filter { $0.hasPrefix("A") }.count,
             "search_terms": explanation.searchTerms?.count ?? 0,
@@ -433,6 +554,7 @@ struct ExplainEvaluationTests {
             "other_project_files": explanation.sources.keys.filter(ExplainPrompt.isOtherFileSource).sorted(),
             "seconds": time / .seconds(1),
             "prompt_tokens": promptTokens,
+            "prompts": prompts.map { ["tokens": $0.tokens, "sha256": $0.sha256] as [String: Any] },
             "reply": describe(explanation.reply),
             "warnings": explanation.warningKinds.map(\.rawValue),
             "model_warnings": explanation.modelWarnings,
@@ -442,9 +564,104 @@ struct ExplainEvaluationTests {
             "removals": removals,
             "draft_flags": flags,
             "problems": explanation.problems.map { "\($0)" },
-        ]
+        ], uniquingKeysWith: { _, new in new })
         let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])
         return String(decoding: data, as: UTF8.self)
+    }
+
+    /// A path inside the set's folder, as the labels write it.
+    private nonisolated static func inSet(_ path: String, root: URL) -> String {
+        let prefix = root.standardizedFileURL.path + "/"
+        return path.hasPrefix(prefix) ? String(path.dropFirst(prefix.count)) : path
+    }
+
+    /// The labeled files as the index keeps them, by their paths in the labels. A path the
+    /// index does not hold stops the run, since its mail would measure nothing.
+    private static func labeledFiles(_ labels: [String: LabeledFiles], root: URL, database: ProjectsDatabase) async throws -> [String: IndexedFile] {
+        let paths = Set(labels.values.flatMap { $0.right + ($0.wrong ?? []) })
+        guard !paths.isEmpty else { return [:] }
+        let rows = try await database.run(
+            "SELECT f.project, f.path, coalesce((SELECT group_concat(c.text, char(10)) FROM index_chunks c WHERE c.file = f.id), '') FROM index_files f",
+            []
+        )
+        var found: [String: IndexedFile] = [:]
+        for row in rows {
+            guard row.count == 3, let project = row[0].text.flatMap(UUID.init(uuidString:)), let path = row[1].text else { continue }
+            let key = inSet(path, root: root)
+            if paths.contains(key) {
+                found[key] = IndexedFile(chosen: MailStore.ChosenFile(project: project, path: path), text: row[2].text ?? "")
+            }
+        }
+        for path in paths {
+            try #require(found[path] != nil, "the index does not hold a labeled file")
+        }
+        return found
+    }
+
+    /// What a row says of a mail's labeled files: for each right and wrong file whether the
+    /// prompt holds a passage of it, whether a point cites it, whether it was chosen and its
+    /// language, the mail's language, and with the wrong files chosen, the amounts and codes
+    /// of the draft only they hold.
+    private static func measures(_ files: LabeledFiles, of mail: SetMail, email: ExplainService.Email, explanation: Explanation, choose: Choose, labeledFiles: [String: IndexedFile], mails: [SetMail], byMessageID: [String: SetMail]) -> [String: Any] {
+        let excerpts = explanation.sources.compactMap { id, source -> (id: String, chunk: TextChunker.Chunk, origin: ExplainPrompt.FileOrigin?)? in
+            guard case .file(let chunk, let origin) = source else { return nil }
+            return (id, chunk, origin)
+        }
+        func measure(_ path: String) -> [String: Any] {
+            let indexed = labeledFiles[path]
+            let own = excerpts.filter { $0.chunk.file.path == indexed?.chosen.path }
+            let text = indexed?.text ?? ""
+            return [
+                "path": path,
+                "language": language(of: text),
+                "with_text": !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                "in_prompt": own.contains { !$0.chunk.text.isEmpty },
+                "cited": explanation.points.contains { point in own.contains { point.sources.contains($0.id) } },
+                "chosen": own.contains { $0.origin?.reason == .chosen },
+            ]
+        }
+        var measures: [String: Any] = [
+            "choose": choose.rawValue,
+            "mail_language": language(of: email.text),
+            "labeled": files.right.map(measure),
+        ]
+        if let wrong = files.wrong, !wrong.isEmpty {
+            measures["wrong"] = wrong.map(measure)
+            if choose == .wrong, case .checked(let result) = explanation.draft, let draft = result.draft {
+                let wrongPaths = Set(wrong.compactMap { labeledFiles[$0]?.chosen.path })
+                let others = excerpts.filter { !wrongPaths.contains($0.chunk.file.path) }.map(\.chunk.text)
+                let attachments = explanation.sources.values.compactMap { source -> String? in
+                    guard case .attachment(_, let excerpt) = source else { return nil }
+                    return excerpt
+                }
+                let thread = thread(of: mail, in: mails, byMessageID: byMessageID).map(\.body)
+                let projectMail = mails.filter { $0.labels.project == mail.labels.project }.map(\.body)
+                let known = ([email.subject, email.text, email.visibleText] + thread + projectMail + others + attachments).joined(separator: "\n\n")
+                measures["wrong_values_in_draft"] = wrongValues(in: draft, wrong: wrong.compactMap { labeledFiles[$0]?.text }.joined(separator: "\n\n"), known: known)
+            }
+        }
+        return measures
+    }
+
+    /// zh when at least a tenth of a text's characters are Chinese, else en, as the set's
+    /// mails and files are in one of the two.
+    private nonisolated static func language(of text: String) -> String {
+        let han = text.unicodeScalars.filter { (0x4E00...0x9FFF).contains($0.value) }.count
+        return han * 10 >= max(1, text.count) ? "zh" : "en"
+    }
+
+    /// How many amounts and codes of a draft only the wrong files hold: the amounts and codes
+    /// of their text that the known texts do not hold, as the draft check compares values.
+    nonisolated static func wrongValues(in draft: String, wrong: String, known: String) -> Int {
+        let wrong = wrong.precomposedStringWithCompatibilityMapping
+        let known = known.precomposedStringWithCompatibilityMapping
+        let draft = draft.precomposedStringWithCompatibilityMapping
+        let knownValues = Set(OutputChecks.numbers(in: known, skippingDatesAndCodes: false).map(\.value))
+        let amounts = Set(OutputChecks.numbers(in: wrong).filter(\.isAmount).map(\.value)).subtracting(knownValues)
+        let knownCodes = Set(OutputChecks.codes(in: known).map { OutputChecks.codeValue(known[$0]) })
+        let codes = Set(OutputChecks.codes(in: wrong).map { OutputChecks.codeValue(wrong[$0]) }).subtracting(knownCodes)
+        return OutputChecks.numbers(in: draft).count { amounts.contains($0.value) }
+            + OutputChecks.codes(in: draft).count { codes.contains(OutputChecks.codeValue(draft[$0])) }
     }
 
     private static func describe(_ decision: ReplyRule.Decision) -> String {
