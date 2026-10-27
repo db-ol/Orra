@@ -3192,10 +3192,11 @@ struct ProjectsRuntimeTests {
         let taken = try await runtime.replyFile(at: plan, first: project.id).get()
         #expect(taken.url == plan)
         #expect(taken.projects == [project.id])
-        // Through a link to its folder, the file is the same file at its real path.
+        // Through a link outside the folders, the file is refused by its path, before
+        // anything reads it, as a file dropped there would be.
         let link = root.appending(path: "Link to Harbor")
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: folder)
-        #expect(try await runtime.replyFile(at: link.appending(path: "floor-plan-v3.txt"), first: nil).get().url == plan)
+        #expect(await runtime.replyFile(at: link.appending(path: "floor-plan-v3.txt"), first: nil) == .failure(.notInAddedFolder))
 
         // The folder events are off in the tests, so the index never lists a new file.
         let unread = folder.appending(path: "new.txt")

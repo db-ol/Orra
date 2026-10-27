@@ -37,8 +37,10 @@ extension ProjectsRuntime {
     /// into a reply: a regular file on this Mac, not a folder or a package, in a folder a
     /// project holds now, and one the index holds, so a file Projects never read in such a
     /// folder is refused too. `first` is the email's project, which comes first among the
-    /// file's projects. It reads the file's metadata only. Refused while Projects is off, and
-    /// when it turned off or started again while the checks ran.
+    /// file's projects. It reads the file's metadata only, and nothing at all of a file whose
+    /// path lies outside every folder, see ReplyFiles.file(at:roots:first:isDownloaded:).
+    /// Refused while Projects is off, and when it turned off or started again while the
+    /// checks ran.
     func replyFile(at url: URL, first: UUID?) async -> Result<ReplyFile, ReplyFileProblem> {
         guard projects.isOn, !projects.isDeleting, let running else { return .failure(.notInAddedFolder) }
         let list = running.list

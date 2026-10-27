@@ -45,6 +45,45 @@ struct ReplyFilesTests {
         #expect(await ReplyFiles.file(at: neighbor, roots: { roots }) == .failure(.notInAddedFolder))
     }
 
+    /// A file outside the folders of every project is refused by its path alone, before
+    /// anything reads the disk: a file that is not there gets the same answer, the check of
+    /// whether a file is on this Mac never runs, and a link outside the folders is refused
+    /// also where it leads into one. A path that leaves a folder by .. is outside it.
+    @Test func aFileOutsideEveryFolderIsRefusedBeforeAnyLook() async throws {
+        let tree = try Tree()
+        defer { tree.remove() }
+        try tree.file("Harbor/plan.pdf")
+        try tree.file("Private/salaries.xlsx")
+        try tree.link("Shortcut to Harbor", to: tree.url("Harbor").path)
+        let roots = [Self.harbor: [tree.url("Harbor")]]
+        let looks = Looks()
+        let isDownloaded: @Sendable (URL) -> Bool = { _ in
+            looks.add()
+            return true
+        }
+        for outside in ["Downloads/gone.pdf", "Private/salaries.xlsx", "Shortcut to Harbor/plan.pdf", "Harbor/../Private/salaries.xlsx"] {
+            #expect(await ReplyFiles.file(at: tree.url(outside), roots: { roots }, isDownloaded: isDownloaded) == .failure(.notInAddedFolder), "\(outside)")
+        }
+        #expect(looks.count == 0)
+        // Inside a folder the checks read the file.
+        let plan = await ReplyFiles.file(at: tree.url("Harbor/./plan.pdf"), roots: { roots }, isDownloaded: isDownloaded)
+        #expect(plan.map(\.url.path) == .success(tree.real("Harbor/plan.pdf")))
+        #expect(looks.count == 1)
+    }
+
+    /// How often a check asked whether a file is on this Mac.
+    private final class Looks: Sendable {
+        private let value = Mutex(0)
+
+        func add() {
+            value.withLock { $0 += 1 }
+        }
+
+        var count: Int {
+            value.withLock { $0 }
+        }
+    }
+
     @Test func aFolderOrAPackageIsRefused() async throws {
         let tree = try Tree()
         defer { tree.remove() }

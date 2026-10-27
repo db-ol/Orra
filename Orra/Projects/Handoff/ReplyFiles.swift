@@ -80,15 +80,25 @@ nonisolated enum ReplyFiles {
     /// file on this Mac, not a folder or a package, inside a folder that `roots` gives for a
     /// project. `roots` gives the folders of every project as they are now, by project.
     /// `first` is the email's project, which comes first among the file's projects.
+    ///
+    /// It first places the file by its path alone, as Choose Files for This Email places a
+    /// dropped file, and refuses one outside every folder before it reads anything on the
+    /// disk, so Projects never looks up a file the user drops or adds outside them, also when
+    /// a link there leads into a folder.
     static func file(
         at url: URL,
         roots: @Sendable () async -> [UUID: [URL]],
         first: UUID? = nil,
         isDownloaded: @escaping @Sendable (URL) -> Bool = FolderWalk.isDownloaded
     ) async -> Result<ReplyFile, ReplyFileProblem> {
+        guard url.isFileURL else { return .failure(.moved) }
         let roots = await roots()
+        let path = lexicalPath(url.path)
+        guard roots.values.joined().contains(where: { samePath(path, lexicalPath($0.path)) || isInside(path, root: lexicalPath($0.path)) }) else {
+            return .failure(.notInAddedFolder)
+        }
         return await onItsOwnThread {
-            guard url.isFileURL, let real = realPath(url.path) else { return .failure(.moved) }
+            guard let real = realPath(path) else { return .failure(.moved) }
             return check(real, roots: roots, order: first.map { [$0] } ?? [], isDownloaded: isDownloaded) { $0 }
         }
     }
@@ -239,6 +249,20 @@ nonisolated enum ReplyFiles {
     /// a file system that keeps both forms holds two folders.
     private static func samePath(_ first: String?, _ second: String) -> Bool {
         first.map { Array($0.utf8) == Array(second.utf8) } ?? false
+    }
+
+    /// An absolute path with its `.` and empty names dropped and each `..` taking away the
+    /// name before it, worked out from the path alone, without reading the disk.
+    private static func lexicalPath(_ path: String) -> String {
+        var names: [Substring] = []
+        for name in path.split(separator: "/") {
+            switch name {
+            case ".": continue
+            case "..": _ = names.popLast()
+            default: names.append(name)
+            }
+        }
+        return "/" + names.joined(separator: "/")
     }
 
     /// `path` with every symbolic link and `..` resolved, nil when it does not exist.
