@@ -11,10 +11,11 @@ nonisolated extension DraftCheck {
     /// before.
     ///
     /// A sentence about the other side's attachment, such as "Thanks for the attached plan",
-    /// 感谢您附上的文件 or "el archivo que me adjuntaste", and a request, such as "please
-    /// attach", 请附上 or "adjunta el plano", is no claim: those words are taken out of the
-    /// sentence before the claim patterns read it, so a sentence that also makes a claim of
-    /// its own still counts. The patterns read the matching form of SortingText and are
+    /// 感谢您附上的文件, 附件中的报价单 or "el archivo que me adjuntaste", a request, such as
+    /// "please attach", 请附上 or "adjunta el plano", a promise, such as 稍后附上 or "I'll send it
+    /// as an attachment", and a negation, such as "Nothing is attached", is no claim: those
+    /// words are taken out of the sentence before the claim patterns read it, so a sentence
+    /// that also makes a claim of its own still counts. The patterns read the matching form of SortingText and are
     /// bounded, and the first `claimedLength` characters are read.
     static func attachmentClaims(in draft: String) -> [String] {
         let text = SortingText.withoutFormatCharacters(String(String.UnicodeScalarView(draft.unicodeScalars.prefix(claimedLength))))
@@ -43,7 +44,7 @@ nonisolated extension DraftCheck {
         #"\bsee (?:the )?attachments?\b|\bin the attachments?\b|\bas (?:an )?attachments?\b"#,
         #"\benclosed (?:is|are|please find)\b|\bplease find enclosed\b"#,
         // Chinese
-        #"附上|随信附|随函附|附件是|附件为|见附件|请查收附件|附件中|已附|作为附件|在附件里"#,
+        #"附上|随信附|随函附|附件是|附件为|见附件|请查收附件|附件中(?!的)|已附|作为附件|在附件里"#,
         // Japanese
         #"添付(?:いた|致)します|添付します|添付しました|添付(?:いた|致)しました|添付しております|添付させていただ|添付のファイル|添付の資料|添付ファイルをご確認|同封(?:いた|致)します"#,
         // Spanish, with and without accents
@@ -59,14 +60,20 @@ nonisolated extension DraftCheck {
         #"\b(?:attached|attachments?|enclosed)(?: [a-z]+){0,3} (?:you|they|he|she) (?:sent|shared|attached|forwarded|included)\b"#,
         #"\b(?:you|they|he|she)(?:['’]ve| have| had)?(?: also| just)? (?:attached|enclosed)\b"#,
         #"\b(?:please|kindly|could you|can you|would you)(?: also)? (?:attach|enclose)\b"#,
+        // What is not attached, and what the sender will attach later.
+        #"\b(?:nothing|none|no [a-z]+(?: [a-z]+)?) (?:is|are|was|were|has been|have been)(?: yet| also| now)? (?:attached|enclosed)\b"#,
+        #"\b(?:i|we)(?:['’]ll| will| shall| am going to| are going to| plan to)\b[^.!?]{0,60}?\b(?:as (?:an )?attachments?|attach(?:ed)?|enclosed?)\b"#,
         // Chinese
         #"(?:感谢|谢谢|多谢)(?:您|你|贵司)?(?:的)?附上"#,
         #"(?:您|你|贵司|对方)(?:们)?(?:之前|刚才|上次)?附上的"#,
         #"收到(?:了)?(?:您|你|贵司)(?:们)?的附件"#,
-        #"(?:您|你|贵司)(?:们)?(?:的|发来的)附件"#,
+        #"(?:您|你|贵司|对方)(?:们)?(?:之前|刚才|上次)?(?:发来|发送|发|提供)?的?附件"#,
         #"(?:请|麻烦|劳烦|烦请|能否|可否|是否|能不能|可不可以|记得)(?:您|你)?(?:们)?(?:再|也)?附上"#,
         // What was not attached, or must not be.
         #"(?:没有|没|未|并未|不要|不用|别|勿|无需|不必|忘了|忘记)(?:再|也)?附上"#,
+        // What the sender will attach later.
+        #"(?:稍后|随后|之后|晚些时候|晚些|晚点|回头|改天|明天|后天|下周|下次|等会儿?|待会儿?)(?:再|会|将)?附上"#,
+        #"(?:我|我们)(?:会|将会|稍后|随后|之后|明天|晚些时候|下次)[^。！？!?，,]{0,12}?附上"#,
         // Japanese
         #"ご添付いただ|添付していただ|添付してください|添付をお願い|(?:いただいた|頂いた|くださった|下さった)添付"#,
         // Spanish
