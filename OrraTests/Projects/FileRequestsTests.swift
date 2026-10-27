@@ -96,6 +96,32 @@ struct FileRequestsTests {
         ])
     }
 
+    /// What is asked for may stand before the frame, as in 厨电规格麻烦发我一下, a signed paper
+    /// may be asked back, a clause that starts with 并 asks after a clause that asks, each
+    /// thing of a list keeps its own head, and a long file name fits after 把.
+    @Test func moreRequestsInChinese() {
+        Self.expectRequests([
+            ("厨电规格麻烦发我一下，开孔要用。", "厨电规格", [.specification]),
+            ("最新的排期表麻烦再发我一份", "排期表", [.schedule]),
+            ("厨房的立面图麻烦发我一份", "立面图", [.drawing]),
+            ("报价单麻烦发我邮箱", "报价单", [.quote]),
+            ("盖章后回传扫描件即可", "扫描件", [.scan]),
+            ("合同签字后寄回即可", "合同", [.contract]),
+            ("请帮我直接回复同意，并把装修合同和您的身份证照片发过来。", "装修合同和身份证照片", [.contract, .photo]),
+            ("请把报价单和您的营业执照发给我", "报价单和营业执照", [.quote, .certificate]),
+        ])
+        #expect(Self.found("麻烦把 proof-feedback-2026-10-14.md 再发我一下").first?.fileNames == ["proof-feedback-2026-10-14.md"])
+        Self.expectNone([
+            "平面图我已经发给你了，麻烦查收。",
+            "合同麻烦发一下意见",
+            "我们盖章后回传给您。",
+            "盖章后已回传。",
+            "合并后发给我。",
+            "他并把平面图发给了我。",
+            "请把对平面图的意见和建议发给我",
+        ])
+    }
+
     @Test func requestsInJapanese() {
         Self.expectRequests([
             ("平面図を送っていただけますか。", "平面図", [.floorPlan]),

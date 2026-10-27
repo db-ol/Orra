@@ -71,6 +71,7 @@ nonisolated enum DocumentKind: String, CaseIterable, Sendable {
         self == .document
     }
 
+
     var terms: Terms {
         switch self {
         case .floorPlan:
@@ -491,12 +492,14 @@ nonisolated enum FileRequests {
 
     // MARK: Chinese
 
-    /// The words that make a request, before the verb: 请, 麻烦, 能否, 也 and their like.
-    private static let chineseFrames = #"请|麻烦|劳烦|烦请|能否|可否|能不能|可不可以|可以|方便时|方便的话|记得|顺便|也|再|帮忙|帮我们|帮我|务必|还请|需要(?:你|您)们?|希望(?:你|您)们?(?:能)?|想请(?:你|您)?|别忘了?|别忘记了?|不要忘了?|不要忘记了?|千万别忘了?|千万不要忘了?|可别忘了?"#
+    /// The words that make a request, before the verb: 请, 麻烦, 能否, 也 and their like, the
+    /// steps before sending back a signed paper, as in 盖章后回传, and 并 that starts a clause
+    /// after one that asks, as in 请回复同意，并把合同发过来.
+    private static let chineseFrames = #"(?:签字|签名|签章|盖章|签署|签好|盖好|签完|盖完)(?:字|章)?(?:并|后|之后|以后)|(?<=[,;，；]\s{0,1})并且?|请|麻烦|劳烦|烦请|能否|可否|能不能|可不可以|可以|方便时|方便的话|记得|顺便|也|再|帮忙|帮我们|帮我|务必|还请|需要(?:你|您)们?|希望(?:你|您)们?(?:能)?|想请(?:你|您)?|别忘了?|别忘记了?|不要忘了?|不要忘记了?|千万别忘了?|千万不要忘了?|可别忘了?"#
     /// The verbs of sending. A verb of one character stands only before 给, 我, 一下 and the
     /// like, or right before a word of the glossary, as in 请发平面图给我, so 发票 or 发现 is
     /// no verb.
-    private static let chineseVerbs = #"发送|发给|发过来|发一下|发一份|发个|发到|传给|传过来|传一下|传一份|传到|寄给|寄过来|寄一下|寄一份|寄到|分享|提供|附上|转发|共享|发(?=我|吧|呗|来|回|$|[,.!?;。，！？；\s])|传(?=我|吧|来|$|[,.!?;。，！？；\s])|寄(?=我|吧|来|$|[,.!?;。，！？；\s])|(?:发|传|寄)(?=(?:(?:最新|最终|新|完整|正式|修改后|更新后|那|这)(?:版|个|份|些)?的?)?(?:"# + hanTerms + "))"
+    private static let chineseVerbs = #"回传|传回|发回|寄回|发送|发给|发过来|发一下|发一份|发个|发到|传给|传过来|传一下|传一份|传到|寄给|寄过来|寄一下|寄一份|寄到|分享|提供|附上|转发|共享|发(?=我|吧|呗|来|回|$|[,.!?;。，！？；\s])|传(?=我|吧|来|$|[,.!?;。，！？；\s])|寄(?=我|吧|来|$|[,.!?;。，！？；\s])|(?:发|传|寄)(?=(?:(?:最新|最终|新|完整|正式|修改后|更新后|那|这)(?:版|个|份|些)?的?)?(?:"# + hanTerms + "))"
     /// The words of the glossary in Chinese characters, longest first, as a pattern.
     private static let hanTerms: String = {
         var seen: Set<String> = []
@@ -511,8 +514,9 @@ nonisolated enum FileRequests {
     private static let chineseVerb = regex(chineseVerbs)
     /// A character of a clause: no punctuation that ends one, but the dot of a file name.
     private static let chineseClause = #"(?:[^,.!?;:。，！？；：、\n]|\.(?=[A-Za-z0-9]))"#
-    /// 把 or 将 with the object before the verb, as in 请把平面图发给我.
-    private static let chineseBa = regex("(" + chineseFrames + ")(" + chineseClause + "{0,10}?)(?:把|将)(" + chineseClause + "{1,30}?)(" + chineseVerbs + ")")
+    /// 把 or 将 with the object before the verb, as in 请把平面图发给我, long enough for a file
+    /// name, as in 麻烦把 proof-feedback-2026-10-14.md 再发我一下.
+    private static let chineseBa = regex("(" + chineseFrames + ")(" + chineseClause + "{0,10}?)(?:把|将)(" + chineseClause + "{1,60}?)(" + chineseVerbs + ")")
     /// The object after the verb, as in 麻烦发一下平面图.
     private static let chineseAsk = regex("(" + chineseFrames + ")(" + chineseClause + "{0,10}?)(" + chineseVerbs + ")(" + chineseClause + "{1,30})")
     /// 我们需要 or 我需要 with a kind, not with a verb as in 我们需要讨论平面图.
@@ -526,7 +530,7 @@ nonisolated enum FileRequests {
     /// in the frames 能不能 and 可不可以.
     private static let chineseNegation = regex(#"不用|不必|无需|无须|别|不要|不需要|没必要|勿|禁止|严禁|不得(?!不)"#)
     /// The sender's own attachment or a step already done, which no request holds.
-    private static let chineseOwn = regex(#"请查收|供参考|供您参考|请参阅|请参考|见附件|如附件|随信附|随邮件附|随函附|现附上|已附上|已发送|已经发|已发|附件(?:是|为)"#)
+    private static let chineseOwn = regex(#"请查收|供参考|供您参考|请参阅|请参考|见附件|如附件|随信附|随邮件附|随函附|现附上|已附上|已发送|已经发|已发|已(?:经)?(?:回传|传回|寄回)|附件(?:是|为)"#)
     /// A clause that only says the clause before it brings the sender's own file, as in
     /// 另外再附上一份报价单，请查收。
     private static let chineseOwnClause = regex(#"^\s*(?:(?:请|敬请|烦请|请您|请你)(?:查收|查阅|参阅|参考)|仅?供(?:您|你)?参考)\s*$"#)
@@ -572,6 +576,8 @@ nonisolated enum FileRequests {
                 let asksTheReader = sentence[frame].contains("你") || sentence[frame].contains("您")
                 if !asksTheReader, ContentChecks.matches([chineseFirstPerson], String(sentence[..<frame.lowerBound])) { continue }
                 if ContentChecks.matches([chineseFirstPerson], String(sentence[gap])) { continue }
+                // 并 joins a request only to a clause that asks, so 合并后发给我 asks nothing.
+                if sentence[frame].hasPrefix("并"), !ContentChecks.matches([chineseAsking], String(sentence[..<frame.lowerBound])) { continue }
                 // 也附上 or 再附上 without a word that asks, in the frame or right after it,
                 // brings the sender's own file.
                 if sentence[verb].hasPrefix("附"), !ContentChecks.matches([chineseAsking], String(sentence[frame.lowerBound..<gap.upperBound])) { continue }
@@ -582,7 +588,16 @@ nonisolated enum FileRequests {
                 if objectGroup > verbGroup, let end = chineseObjectEnd.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)), let range = Range(end.range, in: text) {
                     text = String(text[..<range.lowerBound])
                 }
-                asked.append(Asked(position: match.range.location, object: hanObject(text), needsWhich: false))
+                var asking = hanObject(text)
+                // What is asked for stands before the frame, as in 厨电规格麻烦发我一下, when the
+                // verb has only me, 一下 or 一份 after it: the clause before the frame, at most
+                // as long as an object after a verb.
+                if objectGroup > verbGroup, asking.isEmpty {
+                    let boundaries = ",;:，；：。!?！？、"
+                    let start = sentence[..<frame.lowerBound].lastIndex(where: { boundaries.contains($0) }).map { sentence.index(after: $0) } ?? sentence.startIndex
+                    asking = hanObject(String(sentence[start..<frame.lowerBound].suffix(30)))
+                }
+                asked.append(Asked(position: match.range.location, object: asking, needsWhich: false))
             }
         }
         for pattern in [chineseNeed, chineseHave] where sentence.contains(pattern === chineseNeed ? "要" : "有") {
@@ -714,7 +729,9 @@ nonisolated enum FileRequests {
     /// What a Chinese or Japanese request asks for: the text after the last 的 or の, which
     /// heads it, so 对平面图的意见 asks for comments and 最新的平面图 for the plan. When that
     /// head names only a plain file, as 平面图的电子版, or only a version or a format, as
-    /// 平面图的最新版 or 平面図のPDF, the whole object counts.
+    /// 平面图的最新版 or 平面図のPDF, the whole object counts. In a list of things, as in
+    /// 合同和您的身份证照片, each keeps its own head when the head of the whole would leave a
+    /// kind out.
     private static func hanObject(_ text: String) -> String {
         var object = unquoted(text)
         for _ in 0..<3 {
@@ -722,6 +739,26 @@ nonisolated enum FileRequests {
             if stripped == object { break }
             object = trimmed(stripped)
         }
+        let whole = hanHead(object)
+        let lost = Set(kinds(in: object).filter { !$0.isGeneric }).subtracting(kinds(in: whole))
+        let separators = matches(hanConjunction, object).compactMap { Range($0.range, in: object) }
+        guard !lost.isEmpty, !separators.isEmpty else { return whole }
+        var parts: [String] = []
+        var start = object.startIndex
+        for separator in separators {
+            parts.append(hanHead(trimmed(String(object[start..<separator.lowerBound]))) + String(object[separator]))
+            start = separator.upperBound
+        }
+        parts.append(hanHead(trimmed(String(object[start...]))))
+        return trimmed(parts.joined())
+    }
+
+    /// The words that join the things of a list asked for.
+    private static let hanConjunction = regex(#"以及|还有|和|与|及|跟|、|と"#)
+
+    /// The text after the last 的 or の of what is asked for, or the whole of it, see
+    /// `hanObject(_:)`.
+    private static func hanHead(_ object: String) -> String {
         guard let last = object.lastIndex(where: { $0 == "的" || $0 == "の" }) else { return object }
         let head = unquoted(String(object[object.index(after: last)...]))
         let headKinds = kinds(in: head)
@@ -734,8 +771,8 @@ nonisolated enum FileRequests {
     /// 最終版, データ and their like.
     private static let hanVersion = latin(#"^(?:(?:最新|最终|最終|最后|最後|新|旧|修改|修订|修正|改訂|更新|正式|完整|当前|現行|初|定|终|終|草|原)(?:版本|版|稿|バージョン)?|版本|バージョン|(?:pdf|cad|dwg|word|excel|jpe?g|png|tiff?|zip|ppt|pptx|xlsx?|docx?)(?:版|格式|形式|ファイル|档|文件)?)$"#)
 
-    private static let hanLead = regex(#"^(?:一下|一份|一个|一张|个|以下的?|下面的?|下列的?|如下的?|上述的?|以上的?|下|给我们|给我|过来|我们|我|你们的|您的|贵司的|贵方的)"#)
-    private static let hanTrail = regex(#"(?:吧|吗|呢|啊|哦|哈|呗|一下|也|过来|给我们|给我|好吗|可以吗|谢谢|嗎)$"#)
+    private static let hanLead = regex(#"^(?:一下|一份|一个|一张|个|以下的?|下面的?|下列的?|如下的?|上述的?|以上的?|下|给我们|给我|过来|我的邮箱|我邮箱|这个邮箱|邮箱|我们|我|你们的|您的|贵司的|贵方的|另外|还有|对了|顺便|此外|然后)"#)
+    private static let hanTrail = regex(#"(?:吧|吗|呢|啊|哦|哈|呗|一下|也|过来|给我们|给我|好吗|可以吗|谢谢|嗎|即可|就行|就好|就可以)$"#)
 
     /// The kinds a text names, each once, in the order the text names them.
     static func kinds(in text: String) -> [DocumentKind] {
