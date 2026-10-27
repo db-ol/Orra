@@ -30,9 +30,9 @@ import Testing
 /// the tables and the bar, and prints counts only.
 ///
 /// TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_TERMS names a retrieval-terms.jsonl of an earlier
-/// run, whose terms it takes without the model. TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_THRESHOLDS,
-/// such as 1,2,3, picks the passages again with each number of passages of the email's
-/// project that a term must match for other projects to stay out, without the model.
+/// run, whose terms it takes without the model. TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_SWEEP=1
+/// picks the passages again with each rule of `variants` for other projects' passages,
+/// without the model, and gives each rule's line of the bar.
 /// TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_EXPLAIN, such as zh,en, also explains the mails of the
 /// kinds other-project, needs-project and negative with the real model in those languages,
 /// and counts the drafts that hold a value, a name or an address that only another project's
@@ -148,13 +148,19 @@ struct RetrievalEvaluationTests {
         }
 
         let searchTimes = SearchTimes()
+        let rankings = Rankings()
         func lookups(_ terms: [String]?) -> ExplainService.Lookups {
             ExplainService.Lookups(
                 known: { _ in ExplainService.Known() }, thread: { _ in [] }, projectMail: { _ in [] },
                 search: { query in
                     let started = ContinuousClock.now
                     defer { searchTimes.add(started.duration(to: .now) / .seconds(1)) }
-                    return try await search.search(query)
+                    let hits = try await search.search(query)
+                    // The ranking of all projects for an email in a project, for a reader.
+                    if !query.termsOnly, (query.projects?.count ?? 0) > 1 {
+                        rankings.keep(hits)
+                    }
+                    return hits
                 },
                 newest: { project, limit in try await search.newest(project, limit: limit) },
                 files: { project in
@@ -168,17 +174,27 @@ struct RetrievalEvaluationTests {
                 },
                 terms: { _ in terms })
         }
-        func picked(_ found: ExplainService.Files) -> [Picked] {
+        /// The passages a prompt holds before its budget, see ExplainPrompt.excerpts, or with
+        /// `replacing` as round 2 held them: other projects' passages in place of the project's
+        /// weakest, and the newest files filling up to three passages counting them.
+        func picked(_ found: ExplainService.Files, replacing: Bool = false) -> [Picked] {
             let chunk = { (hit: ChunkSearch.Hit) in TextChunker.Chunk(file: hit.file, page: hit.page, modified: hit.modified, heading: hit.heading, text: hit.text) }
             let others = found.others.map { ExplainPrompt.OtherChunk(chunk: chunk($0), project: $0.project, projectName: "") }
-            let (own, other) = ExplainPrompt.excerpts(chunks: found.hits.map(chunk), newest: found.newest.map(chunk), others: others)
-            return own.map { Picked(path: relative($0.file), project: nil, text: $0.text) }
-                + other.map { Picked(path: relative($0.chunk.file), project: slugs[$0.project] ?? "?", text: $0.chunk.text) }
+            var (own, other) = ExplainPrompt.excerpts(chunks: found.hits.map(chunk), newest: found.newest.map(chunk), others: others)
+            if replacing {
+                own = Array(found.hits.map(chunk).prefix(ExplainPrompt.chunkLimit - other.count))
+                for newest in found.newest.map(chunk) where own.count + other.count < ExplainPrompt.fillUpTo && !own.contains(where: { $0.file == newest.file }) {
+                    own.append(newest)
+                }
+            }
+            let terms = Dictionary((found.hits + found.others).map { ($0.file.path + "\u{0}" + $0.text, $0.matchedTerms) }, uniquingKeysWith: { first, _ in first })
+            return own.map { Picked(path: relative($0.file), project: nil, text: $0.text, terms: terms[$0.file.path + "\u{0}" + $0.text] ?? []) }
+                + other.map { Picked(path: relative($0.chunk.file), project: slugs[$0.project] ?? "?", text: $0.chunk.text, terms: terms[$0.chunk.file.path + "\u{0}" + $0.chunk.text] ?? []) }
         }
-        let thresholds = (environment["ORRA_PROJECTS_RETRIEVAL_THRESHOLDS"] ?? "").split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+        let sweep = environment["ORRA_PROJECTS_RETRIEVAL_SWEEP"] == "1"
 
         var rows: [Row] = []
-        var sweeps: [Int: [String: [Picked]]] = [:]
+        var sweeps: [String: [String: [Picked]]] = [:]
         var termRuns: [TermsRun] = []
         for label in labels {
             let mail = try #require(byID[label.id], "no mail \(label.id)")
@@ -207,12 +223,16 @@ struct RetrievalEvaluationTests {
             run.id = label.id
             termRuns.append(run)
             searchTimes.reset()
+            _ = rankings.take()
             let after = try await ExplainService.files(for: email, project: projectValue, known: known, query: query, warnings: warnings, lookups: lookups(run.terms))
             let afterSearches = searchTimes.take()
+            let ranking = rankings.take().prefix(10).map { hit in
+                Picked(path: relative(hit.file), project: hit.project == project ? nil : slugs[hit.project] ?? "?", text: hit.text, terms: hit.matchedTerms)
+            }
             let afterUncapped = try await ExplainService.files(for: email, project: projectValue, known: known, query: query, warnings: warnings, lookups: lookups(run.terms), perFileChunks: nil)
-            for threshold in thresholds {
-                let swept = try await ExplainService.files(for: email, project: projectValue, known: known, query: query, warnings: warnings, lookups: lookups(run.terms), ownTermMatches: threshold)
-                sweeps[threshold, default: [:]][label.id] = picked(swept)
+            for variant in sweep ? Self.variants : [] {
+                let swept = try await ExplainService.files(for: email, project: projectValue, known: known, query: query, warnings: warnings, lookups: lookups(run.terms), rule: variant.rule)
+                sweeps[variant.name, default: [:]][label.id] = picked(swept, replacing: variant.replacing)
             }
             _ = searchTimes.take()
             rows.append(Row(
@@ -221,7 +241,7 @@ struct RetrievalEvaluationTests {
                 otherProjectsBefore: before.otherProjects.rawValue, otherProjectsAfter: after.otherProjects.rawValue,
                 warnings: ProjectsWarning.allCases.filter(warnings.contains).map(\.rawValue),
                 terms: run.terms?.count ?? 0, termsValid: run.terms != nil, termsSeconds: run.seconds, termsFallback: run.fallback,
-                searchSeconds: beforeSearches + afterSearches))
+                searchSeconds: beforeSearches + afterSearches, ranking: ranking.isEmpty ? nil : Array(ranking)))
         }
 
         // The rows and the report, outside the repository, before the leak check, so a run
@@ -233,6 +253,17 @@ struct RetrievalEvaluationTests {
         if termsFile == nil {
             try termRuns.map { String(decoding: try encoder.encode($0), as: UTF8.self) }.joined(separator: "\n").appending("\n")
                 .write(to: out.appendingPathComponent("retrieval-terms.jsonl"), atomically: true, encoding: .utf8)
+        }
+        if !sweeps.isEmpty {
+            // Each rule's passages for each mail, for a reader.
+            var lines: [String] = []
+            for variant in Self.variants {
+                for row in rows {
+                    let picked = sweeps[variant.name]?[row.id] ?? []
+                    lines.append(String(decoding: try encoder.encode(SweptRow(rule: variant.name, id: row.id, picked: picked)), as: UTF8.self))
+                }
+            }
+            try (lines.joined(separator: "\n") + "\n").write(to: out.appendingPathComponent("retrieval-sweep.jsonl"), atomically: true, encoding: .utf8)
         }
         func writeReport(_ leaks: [Leak]) throws {
             let report = Self.report(rows, sweeps: sweeps, leaks: leaks, files: Int(files), chunks: Int(chunks), indexTime: indexTime, measuredTerms: termsFile == nil)
@@ -331,27 +362,30 @@ struct RetrievalEvaluationTests {
         var answerTokens: Int?
     }
 
-    /// A passage of the selection: its file in the set's folder, and the project of another
-    /// project's passage.
+    /// A passage of the selection: its file in the set's folder, the project of another
+    /// project's passage, and the terms that match it, which say why it is there.
     private struct Picked: Codable {
         var path: String
         var project: String?
         var text: String
+        var terms: [String] = []
 
         enum CodingKeys: String, CodingKey {
-            case path, project
+            case path, project, terms
         }
 
-        init(path: String, project: String?, text: String) {
+        init(path: String, project: String?, text: String, terms: [String] = []) {
             self.path = path
             self.project = project
             self.text = text
+            self.terms = terms
         }
 
         init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             path = try container.decode(String.self, forKey: .path)
             project = try container.decodeIfPresent(String.self, forKey: .project)
+            terms = try container.decodeIfPresent([String].self, forKey: .terms) ?? []
             text = ""
         }
     }
@@ -377,6 +411,10 @@ struct RetrievalEvaluationTests {
         var termsSeconds: Double
         var termsFallback: String?
         var searchSeconds: [Double]
+        /// The first ten of the ranking of all projects for an email in a project, which
+        /// decides whether other projects' passages come in, with the project of each passage
+        /// of another project and the terms that match each.
+        var ranking: [Picked]? = nil
 
         func recall(_ picked: [Picked]) -> Double {
             guard !relevant.isEmpty else { return 0 }
@@ -400,6 +438,23 @@ struct RetrievalEvaluationTests {
         var language: String
         var draft: String?
         var found: [String]
+    }
+
+    /// The last ranking of all projects that a search gave.
+    private final class Rankings: @unchecked Sendable {
+        private let lock = NSLock()
+        private var hits: [ChunkSearch.Hit] = []
+
+        func keep(_ hits: [ChunkSearch.Hit]) {
+            lock.withLock { self.hits = hits }
+        }
+
+        func take() -> [ChunkSearch.Hit] {
+            lock.withLock {
+                defer { hits = [] }
+                return hits
+            }
+        }
     }
 
     private final class SearchTimes: @unchecked Sendable {
@@ -618,15 +673,52 @@ struct RetrievalEvaluationTests {
         return found
     }
 
+    // MARK: The sweep
+
+    /// The passages of one mail by one rule of the sweep.
+    private struct SweptRow: Codable {
+        var rule: String
+        var id: String
+        var picked: [Picked]
+    }
+
+    /// A rule for other projects' passages that the sweep tries.
+    private struct Variant {
+        var name: String
+        var rule: ExplainService.OtherProjectsRule
+        /// Whether their passages take the places of the project's weakest, as in round 2,
+        /// rather than come after its six, as the app has them.
+        var replacing = false
+    }
+
+    /// The rules of round 2, which searched other projects when fewer than a number of the
+    /// project's own passages matched a term, and the ranking of all projects, with other
+    /// projects' passages in place of the project's weakest or after its 6, and one, two or
+    /// three terms a passage must match for Needs a Project. The app's rule is the last but
+    /// one.
+    private static let variants: [Variant] = [
+        Variant(name: "own term matches 1", rule: .init(inProject: .ownTermMatches(1), needsProjectTerms: 1), replacing: true),
+        Variant(name: "own term matches 2", rule: .init(inProject: .ownTermMatches(2), needsProjectTerms: 1), replacing: true),
+        Variant(name: "own term matches 3", rule: .init(inProject: .ownTermMatches(3), needsProjectTerms: 1), replacing: true),
+        Variant(name: "own term matches 7", rule: .init(inProject: .ownTermMatches(7), needsProjectTerms: 1), replacing: true),
+        Variant(name: "ranked above, in place of the weakest", rule: .init(needsProjectTerms: 1), replacing: true),
+        Variant(name: "ranked above, after the own 6", rule: .init(needsProjectTerms: 1)),
+        Variant(name: "ranked above, in place of the weakest, Needs a Project 2 terms", rule: .init(needsProjectTerms: 2), replacing: true),
+        Variant(name: "ranked above, after the own 6, Needs a Project 2 terms", rule: .init(needsProjectTerms: 2)),
+        Variant(name: "ranked above, in place of the weakest, Needs a Project 3 terms", rule: .init(needsProjectTerms: 3), replacing: true),
+        Variant(name: "ranked above, after the own 6, Needs a Project 3 terms", rule: .init(needsProjectTerms: 3)),
+        Variant(name: "ranked above, after the own 6, Needs a Project 3 terms, no name or date in any search", rule: .init(needsProjectTerms: 3, namesSearchTheProject: false)),
+    ]
+
     // MARK: The report
 
     private static let subsets = ["plain", "zh-en", "en-zh", "synonym", "other-project", "needs-project", "negative"]
 
-    private static func report(_ rows: [Row], sweeps: [Int: [String: [Picked]]], leaks: [Leak], files: Int, chunks: Int, indexTime: Duration, measuredTerms: Bool) -> String {
+    private static func report(_ rows: [Row], sweeps: [String: [String: [Picked]]], leaks: [Leak], files: Int, chunks: Int, indexTime: Duration, measuredTerms: Bool) -> String {
         func percent(_ value: Double) -> String { String(format: "%.0f%%", value * 100) }
         func mean(_ values: [Double]) -> Double { values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count) }
         func subset(_ name: String) -> [Row] { rows.filter { $0.kinds.contains(name) } }
-        var text = "# Retrieval with search terms\n\n\(rows.count) labeled mails, \(files) files in \(chunks) chunks, indexed in \(seconds(indexTime)). Recall at 6 is the share of a mail's relevant files among the passages a prompt holds before its budget, at most 6. Hit at 6 says that one of them is there.\n\n"
+        var text = "# Retrieval with search terms\n\n\(rows.count) labeled mails, \(files) files in \(chunks) chunks, indexed in \(seconds(indexTime)). Recall at 6 is the share of a mail's relevant files among the passages a prompt holds before its budget: at most 6 of the email's project, and for an email in a project at most \(ExplainService.otherProjectChunks) of other projects after them, or at most 6 of other projects for an email in Needs a Project. Hit at 6 says that one of them is there.\n\n"
         text += "Before is the selection of 0.6.0, without terms and with every passage of a file. After has the terms and at most \(ExplainService.perFileChunks) passages of a file before the passages of other files. The two columns between take one of the changes alone.\n\n"
         text += "| Subset | Mails | Recall before | Recall, cap alone | Recall, terms alone | Recall after | Hit before | Hit after | First relevant rank after, median | Other projects' passages a mail |\n|---|---|---|---|---|---|---|---|---|---|\n"
         for name in subsets + ["zh-en or en-zh"] {
@@ -685,8 +777,9 @@ struct RetrievalEvaluationTests {
         text += "\n## The bar\n\n" + checks.map { "- \($0.1 ? "passed" : "FAILED"): \($0.0)" }.joined(separator: "\n") + "\n"
 
         if !sweeps.isEmpty {
-            text += "\n## Threshold sweep\n\n| Own term matches | Recall, set | Recall, zh-en and en-zh | Recall, synonym | Hit, other-project | Hit, needs-project | Negatives with another project's passage |\n|---|---|---|---|---|---|---|\n"
-            for (threshold, picked) in sweeps.sorted(by: { $0.key < $1.key }) {
+            text += "\n## Sweep\n\nEach rule for other projects' passages, with the terms of this run. Negatives count those in a project and those without one. A rule after the own 6 lets the prompt hold up to 8 passages.\n\n| Rule | Recall, set | Set mails that lost a file | Recall, zh-en and en-zh | Recall, synonym | Hit, other-project | Hit, needs-project | Negatives with another project's passage | Bars met of 7 |\n|---|---|---|---|---|---|---|---|---|\n"
+            for variant in variants {
+                guard let picked = sweeps[variant.name] else { continue }
                 func swept(_ rows: [Row]) -> [Row] {
                     rows.map { row in
                         var row = row
@@ -694,8 +787,22 @@ struct RetrievalEvaluationTests {
                         return row
                     }
                 }
-                let negativeHits = swept(negatives).filter { $0.after.contains { $0.project != nil } }.count
-                text += "| \(threshold) | \(percent(recall(swept(plain), true))) | \(percent(recall(swept(crossing), true))) | \(percent(recall(swept(synonym), true))) | \(percent(hit(swept(subset("other-project"))))) | \(percent(hit(swept(subset("needs-project"))))) | \(negativeHits) |\n"
+                let sweptPlain = swept(plain)
+                let sweptLost = sweptPlain.filter { row in
+                    !Set(row.before.map(\.path)).intersection(row.relevant).isSubset(of: Set(row.after.map(\.path)))
+                }.count
+                let sweptNegatives = swept(negatives).filter { $0.after.contains { $0.project != nil } }
+                let inProject = sweptNegatives.filter { $0.project != "none" }.count
+                let bars = [
+                    recall(sweptPlain, true) >= recall(plain, false) - 0.01,
+                    sweptLost <= 2,
+                    recall(swept(crossing), true) >= 0.6 && recall(swept(crossing), true) - recall(crossing, false) >= 0.3,
+                    recall(swept(synonym), true) >= 0.6 && recall(swept(synonym), true) - recall(synonym, false) >= 0.2,
+                    hit(swept(subset("other-project"))) >= 0.6,
+                    hit(swept(subset("needs-project"))) >= 0.6,
+                    sweptNegatives.count <= 3,
+                ].filter { $0 }.count
+                text += "| \(variant.name) | \(percent(recall(sweptPlain, true))) | \(sweptLost) | \(percent(recall(swept(crossing), true))) | \(percent(recall(swept(synonym), true))) | \(percent(hit(swept(subset("other-project"))))) | \(percent(hit(swept(subset("needs-project"))))) | \(sweptNegatives.count) (\(inProject) + \(sweptNegatives.count - inProject)) | \(bars) |\n"
             }
         }
         if !leaks.isEmpty {

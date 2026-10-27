@@ -12,11 +12,11 @@ import Foundation
 ///   step 3). The source of each excerpt keeps why it is in the prompt and the project
 ///   whose folder holds its file, which the prompt never shows.
 /// - excerpts of files of the user's other projects that the search terms matched, each
-///   with its project, in <other_files> with the ids O1 and up. They take the places of
-///   the project's weakest excerpts, so the prompt holds at most `chunkLimit` excerpts in
-///   all, and the newest files fill up to 3 counting them too. The rules then say that they
-///   may explain the email to the user and that the draft takes nothing from them. A prompt
-///   without them reads as it did before.
+///   with its project, in <other_files> with the ids O1 and up. They come after the
+///   project's own excerpts, which are those of the same prompt without them, so the prompt
+///   holds at most `chunkLimit` of each. The rules then say that they may explain the email
+///   to the user and that the draft takes nothing from them. A prompt without them reads as
+///   it did before.
 /// - the project's other mail, each marked as earlier or later than the email
 /// - the other messages of the thread, with their own text, trimmed. No summaries.
 /// - the email
@@ -274,18 +274,18 @@ nonisolated struct ExplainPrompt: Sendable {
         id.hasPrefix("O")
     }
 
-    /// The excerpts a prompt holds before its budget trims any: the first `chunkLimit` of
-    /// other projects' excerpts, the project's best in the places left, and the newest files
-    /// of the project filling up to `fillUpTo` excerpts in all, a file once.
+    /// The excerpts a prompt holds before its budget trims any: the project's best
+    /// `chunkLimit`, with the newest files of the project filling them up to `fillUpTo`, a
+    /// file once, and then the first `chunkLimit` of other projects' excerpts. So the
+    /// project keeps every excerpt it has in a prompt without other projects.
     static func excerpts(chunks: [TextChunker.Chunk], newest: [TextChunker.Chunk], others: [OtherChunk]) -> (own: [TextChunker.Chunk], others: [OtherChunk]) {
-        let others = Array(others.prefix(chunkLimit))
-        var own = Array(chunks.prefix(chunkLimit - others.count))
-        for chunk in newest where own.count + others.count < fillUpTo {
+        var own = Array(chunks.prefix(chunkLimit))
+        for chunk in newest where own.count < fillUpTo {
             if !own.contains(where: { $0.file == chunk.file }) {
                 own.append(chunk)
             }
         }
-        return (own, others)
+        return (own, Array(others.prefix(chunkLimit)))
     }
 
     /// The source id of the email itself: 本邮件 or this email.

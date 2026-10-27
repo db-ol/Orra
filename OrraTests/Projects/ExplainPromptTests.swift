@@ -1141,26 +1141,25 @@ struct ExplainPromptTests {
         #expect(ExplainPrompt.isOtherFileSource("O1") && !ExplainPrompt.isOtherFileSource("F1"))
     }
 
-    /// Other projects' excerpts take the places of the project's weakest, so the prompt
-    /// holds `chunkLimit` excerpts at most, and the newest files fill up to three counting
-    /// them.
-    @Test func thePromptHoldsSixExcerptsAtMostAndTheFillUpCountsOtherProjects() {
+    /// Other projects' excerpts come after the project's own, which are those of the prompt
+    /// without them: the best `chunkLimit`, and the newest files filling them up to three.
+    @Test func otherProjectsExcerptsComeAfterTheProjectsOwn() {
         let eight = (1...8).map { chunk("part-\($0).md", text: "Part \($0).") }
         var full = input(chunks: eight)
-        full.otherChunks = (1...3).map { other("kiln-\($0).md", text: "Kiln \($0).") }
+        full.otherChunks = (1...8).map { other("kiln-\($0).md", text: "Kiln \($0).") }
         let result = prompt(full)
-        #expect(result.sources.keys.filter { $0.hasPrefix("F") }.sorted() == ["F1", "F2", "F3"])
-        #expect(result.sources.keys.filter(ExplainPrompt.isOtherFileSource).sorted() == ["O1", "O2", "O3"])
-        #expect(file(result.sources["F3"]) == "part-3.md")
+        #expect(result.sources.keys.filter { $0.hasPrefix("F") }.sorted() == (1...6).map { "F\($0)" })
+        #expect(result.sources.keys.filter(ExplainPrompt.isOtherFileSource).sorted() == (1...6).map { "O\($0)" })
+        #expect(file(result.sources["F6"]) == "part-6.md")
 
         let newest = [chunk("new-1.md", text: "New one."), chunk("new-2.md", text: "New two.")]
         var few = input(chunks: [chunk("spec.md", text: "Paper.")], newest: newest)
-        few.otherChunks = [other("kiln-1.md", text: "Kiln one.")]
+        let alone = prompt(few)
+        few.otherChunks = [other("kiln-1.md", text: "Kiln one."), other("kiln-2.md", text: "Kiln two.")]
         let filled = prompt(few)
         #expect(file(filled.sources["F2"]) == "new-1.md")
-        #expect(filled.sources["F3"] == nil)
-        few.otherChunks.append(other("kiln-2.md", text: "Kiln two."))
-        #expect(prompt(few).sources["F2"] == nil)
+        #expect(file(filled.sources["F3"]) == "new-2.md")
+        #expect(filled.sources.filter { $0.key.hasPrefix("F") } == alone.sources.filter { $0.key.hasPrefix("F") })
     }
 
     @Test func anEmailWithoutAProjectNamesThePassagesOfYourProjects() {
@@ -1193,7 +1192,7 @@ struct ExplainPromptTests {
         #expect(withAttachments.contains("such as \(email), [F2], [O1], [M1], [T1] or [A1]."))
     }
 
-    /// A project, five files with the second replaced by the third, three other mails, four
+    /// A project, six files with the second replaced by the third, three other mails, four
     /// thread messages and a long email, with two excerpts of other projects' files.
     @Test func theBudgetTrimsOtherProjectsFilesAfterTheFilesBeyondTheThird() {
         let body = String(repeating: "x", count: 280)
@@ -1202,7 +1201,7 @@ struct ExplainPromptTests {
         let order = [
             "plan-v1.md",
             "m3@printworks.example", "m2@printworks.example", "m1@printworks.example",
-            "notes.md",
+            "contacts.md", "budget.md", "notes.md",
             "kiln-b.md", "kiln-a.md",
             "t-5@printworks.example", "t-3@printworks.example",
             "plan-v2.md",

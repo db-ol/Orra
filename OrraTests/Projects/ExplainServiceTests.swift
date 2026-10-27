@@ -967,14 +967,14 @@ struct ExplainServiceTests {
         #expect(fakes.callList.prefix(3) == ["known", "thread", "terms"])
     }
 
-    @Test func anEmailInNeedsAProjectSearchesEveryProjectForWhatATermMatches() async throws {
-        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
+    @Test func anEmailInNeedsAProjectSearchesEveryProjectForWhatThreeTermsMatch() async throws {
+        let fakes = Fakes(terms: ["floor plan", "lobby", "lamps"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
         let explanation = try await fakes.service().explain(Fixture.email(from: Fixture.rufus, project: nil))
         let query = try #require(fakes.queryList.first)
         #expect(fakes.queryList.count == 1)
         #expect(query.projects == [Fixture.projectID, Fixture.otherProjectID])
         #expect(query.termsOnly)
-        #expect(query.terms == ["floor plan"])
+        #expect(query.terms == ["floor plan", "lobby", "lamps"])
         #expect(query.limit == ExplainService.searchedChunks)
         let prompt = try #require(fakes.requestList.first?.prompt)
         #expect(prompt.contains("<other_files>\n<file id=\"O1\" project=\"Studio move\" name=\"floor-plan.pdf\""))
@@ -1028,7 +1028,7 @@ struct ExplainServiceTests {
             hit.chunk = Int64(700 + day)
             return hit
         }
-        let fakes = Fakes(terms: ["floor plan"], otherHits: notes, answer: .success(Fixture.englishAnswer))
+        let fakes = Fakes(terms: ["floor plan", "lobby", "lamps"], otherHits: notes, answer: .success(Fixture.englishAnswer))
         let explanation = try await fakes.service().explain(Fixture.email(from: Fixture.rufus, project: nil))
         #expect(explanation.sources.keys.filter(ExplainPrompt.isOtherFileSource).sorted() == ["O1", "O2"])
     }
@@ -1048,17 +1048,26 @@ struct ExplainServiceTests {
         #expect(fakes.queryList.isEmpty)
     }
 
-    /// Other projects' folders are searched without the terms that name the user, the
-    /// sender or a recipient, or that are a date, also when they come from a list saved
-    /// with an earlier explanation, while the email's own project is searched with all of
-    /// them. With only such terms, no other project is searched.
-    @Test func termsThatNameSomeoneOrADateSearchNoOtherProject() async throws {
+    /// A term that names the user, the sender or a recipient, or that is a date, brings in
+    /// no passage of another project, also when it comes from a list saved with an earlier
+    /// explanation, while the email's own project is searched and ranked with all of them.
+    /// With only such terms, no other project is searched.
+    @Test func termsThatNameSomeoneOrADateBringInNoOtherProject() async throws {
         let terms = ["Ms. Bai", "Iris Fang", "Wednesday", "proof", "打样"]
-        let fakes = Fakes(terms: terms, otherHits: [Fixture.plan], answer: .success(Fixture.englishAnswer))
+        var byName = Fixture.plan
+        byName.matchedTerms = ["Iris Fang", "Wednesday"]
+        var byProof = Fixture.otherHit("proof-notes.md", "Notes on the proof of the studio sign.")
+        byProof.matchedTerms = ["Iris Fang", "proof"]
+        let fakes = Fakes(terms: terms, otherHits: [byName, byProof], answer: .success(Fixture.englishAnswer))
         let explanation = try await fakes.service().explain(Fixture.email())
-        #expect(fakes.queryList.map(\.terms) == [terms, ["proof", "打样"]])
-        #expect(fakes.queryList.last?.termsOnly == true)
+        #expect(fakes.queryList.map(\.terms) == [terms, terms])
+        #expect(fakes.queryList.last?.projects == [Fixture.projectID, Fixture.otherProjectID])
         #expect(explanation.searchTerms == terms)
+        let others = explanation.sources.filter { ExplainPrompt.isOtherFileSource($0.key) }.compactMap { _, source -> String? in
+            guard case .file(let chunk, _) = source else { return nil }
+            return chunk.file.lastPathComponent
+        }
+        #expect(others == ["proof-notes.md"])
         let names = ["Bai Lu", "Lu", "October 30"]
         let none = Fakes(terms: names, otherHits: [Fixture.plan], answer: .success(Fixture.englishAnswer))
         let alone = try await ExplainService.files(
@@ -1098,32 +1107,46 @@ struct ExplainServiceTests {
         #expect(fakes.requestList.first?.prompt.contains("other_files") == false)
     }
 
-    @Test func aProjectWithFewTermMatchesTakesUpToTwoPassagesOfOtherProjects() async throws {
+    /// One ranking of all projects with the query of the email's own project: up to two
+    /// passages of other projects that rank above every passage of the project that a term
+    /// matches take the places of the project's weakest.
+    @Test func otherProjectsPassagesThatRankAboveTheProjectsOwnTakeUpToTwoPlaces() async throws {
         var matched = Fixture.quote
         matched.matchedTerm = true
         let others = (1...4).map { Fixture.otherHit("plan-\($0).pdf", "Plan \($0) of the studio.") }
         let fakes = Fakes(hits: [matched], terms: ["plan"], otherHits: others, answer: .success(Fixture.englishAnswer))
         let explanation = try await fakes.service().explain(Fixture.email())
         #expect(fakes.queryList.count == 2)
-        let other = try #require(fakes.queryList.last)
-        #expect(other.projects == [Fixture.otherProjectID])
-        #expect(other.termsOnly)
-        #expect(other.terms == ["plan"])
+        let own = try #require(fakes.queryList.first)
+        let ranking = try #require(fakes.queryList.last)
+        #expect(ranking.projects == [Fixture.projectID, Fixture.otherProjectID])
+        #expect(!ranking.termsOnly)
+        #expect(ranking.text == own.text && ranking.terms == own.terms && ranking.limit == own.limit)
         #expect(explanation.sources.keys.filter(ExplainPrompt.isOtherFileSource).sorted() == ["O1", "O2"])
         #expect(ExplainService.otherProjectChunks == 2)
-        #expect(ExplainService.ownTermMatches == 2)
     }
 
-    @Test func aProjectWithEnoughTermMatchesStaysInItsFolders() async throws {
+    /// A passage of another project that ranks below the project's best passage that a term
+    /// matches stays out, and so does one that no term matches, though it ranks first.
+    @Test func otherProjectsPassagesBelowTheProjectsBestTermMatchStayOut() async throws {
         let matched = ["brief.md", "spec.md"].map { name in
             var hit = Fixture.hit(name, "The proof of \(name).")
             hit.matchedTerm = true
             return hit
         }
-        let fakes = Fakes(hits: matched, terms: ["proof"], otherHits: [Fixture.plan], answer: .success(Fixture.englishAnswer))
-        let explanation = try await fakes.service().explain(Fixture.email())
-        #expect(fakes.queryList.count == 1)
+        let unmatched = Fixture.otherHit("hall.pdf", "The hall of the studio.", matchedTerm: false)
+        let below = Fakes(hits: matched, terms: ["proof"], otherHits: [Fixture.plan], ranking: [unmatched, matched[0], Fixture.plan, matched[1]], answer: .success(Fixture.englishAnswer))
+        let explanation = try await below.service().explain(Fixture.email())
+        #expect(below.queryList.count == 2)
         #expect(!explanation.sources.keys.contains(where: ExplainPrompt.isOtherFileSource))
+        let found = try await ExplainService.files(for: Fixture.email(), project: Fixture.project, known: Fixture.known, query: "proof", warnings: [], lookups: below.lookups)
+        #expect(found.otherProjects == .notNeeded)
+        #expect(found.others.isEmpty)
+        // Above the project's best, it comes in.
+        let above = Fakes(hits: matched, terms: ["proof"], otherHits: [Fixture.plan], ranking: [unmatched, Fixture.plan, matched[0]], answer: .success(Fixture.englishAnswer))
+        let inProject = try await ExplainService.files(for: Fixture.email(), project: Fixture.project, known: Fixture.known, query: "proof", warnings: [], lookups: above.lookups)
+        #expect(inProject.otherProjects == .searched)
+        #expect(inProject.others.map(\.file) == [Fixture.plan.file])
     }
 
     /// A folder added to two projects never counts as another project: a passage of a file
@@ -1142,12 +1165,14 @@ struct ExplainServiceTests {
         #expect(chunk.file == Fixture.plan.file)
     }
 
-    @Test func thePromptHoldsSixPassagesAtMost() async throws {
+    /// Up to two passages of other projects come after the project's six.
+    @Test func otherProjectsPassagesComeAfterTheProjectsSix() async throws {
         let six = (1...6).map { Fixture.hit("part-\($0).md", "Part \($0) of the brief.") }
-        let fakes = Fakes(hits: six, terms: ["brief"], otherHits: [Fixture.plan, Fixture.otherHit("hall.pdf", "The hall plan.")], answer: .success(Fixture.englishAnswer))
+        let others = (1...3).map { Fixture.otherHit("hall-\($0).pdf", "The hall plan \($0).") }
+        let fakes = Fakes(hits: six, terms: ["brief"], otherHits: others, answer: .success(Fixture.englishAnswer))
         let explanation = try await fakes.service().explain(Fixture.email())
         let ids = explanation.sources.keys.filter { $0.hasPrefix("F") || $0.hasPrefix("O") }.sorted()
-        #expect(ids == ["F1", "F2", "F3", "F4", "O1", "O2"])
+        #expect(ids == ["F1", "F2", "F3", "F4", "F5", "F6", "O1", "O2"])
     }
 
     /// The draft check gets other projects' passages apart from the project's own sources:
@@ -1216,13 +1241,32 @@ struct ExplainServiceTests {
     /// Warnings outside `otherProjectWarnings`, such as a link or pressure to act fast, do
     /// not keep other projects out.
     @Test func otherWarningsLeaveOtherProjectsIn() async throws {
-        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.englishAnswer))
+        let fakes = Fakes(terms: ["floor plan", "lobby", "lamps"], otherHits: [Fixture.plan], answer: .success(Fixture.englishAnswer))
         let found = try await ExplainService.files(
             for: Fixture.email(project: nil), project: nil, known: Fixture.known, query: "floor plan",
             warnings: [.link, .falseUrgency, .paymentTermsChange, .documentInstruction, .recipientNotInProjectPeople], lookups: fakes.lookups)
         #expect(found.otherProjects == .searched)
-        #expect(found.others == [Fixture.plan])
+        #expect(found.others.map(\.file) == [Fixture.plan.file])
         #expect(found.otherFiles.keys.sorted { $0.uuidString < $1.uuidString } == [Fixture.otherProjectID])
+    }
+
+    /// An email in Needs a Project gets a passage of a project's folders only when three
+    /// different terms match it: one or two words such as appointment and service match some
+    /// file of most users. A term that names someone counts for nothing.
+    @Test func aPassageThatFewerThanThreeTermsMatchStaysOutOfAnEmailInNeedsAProject() async throws {
+        let terms = ["floor plan", "lobby", "lamps", "Rufus Hale"]
+        var two = Fixture.plan
+        two.matchedTerms = ["lobby", "Rufus Hale", "lamps"]
+        var three = Fixture.otherHit("hall.pdf", "The hall and the lobby of the studio.")
+        three.matchedTerms = ["floor plan", "lobby", "lamps"]
+        let fakes = Fakes(terms: terms, otherHits: [two, three], answer: .success(Fixture.englishAnswer))
+        let found = try await ExplainService.files(for: Fixture.email(from: Fixture.rufus, project: nil), project: nil, known: Fixture.known, query: "lobby", warnings: [], lookups: fakes.lookups)
+        #expect(found.others.map(\.file) == [three.file])
+        #expect(ExplainService.OtherProjectsRule().needsProjectTerms == 3)
+        let any = try await ExplainService.files(
+            for: Fixture.email(from: Fixture.rufus, project: nil), project: nil, known: Fixture.known, query: "lobby", warnings: [], lookups: fakes.lookups,
+            rule: .init(needsProjectTerms: 1))
+        #expect(any.others.map(\.file) == [two.file, three.file])
     }
 }
 
@@ -1524,6 +1568,9 @@ private final class Fakes: Sendable {
     let terms: [String]?
     /// What a search of other projects' folders gives, one with `termsOnly`.
     let otherHits: [ChunkSearch.Hit]
+    /// What the ranking of all projects for an email in a project gives, nil for
+    /// `otherHits` before `hits`, so other projects' passages rank above the project's own.
+    let ranking: [ChunkSearch.Hit]?
     let answers: [Result<String, any Error>]
     let counts: Bool
     let tokens: @Sendable (String) -> Int
@@ -1536,6 +1583,7 @@ private final class Fakes: Sendable {
         projectMail: [ExplainPrompt.Mail] = [],
         terms: [String]? = nil,
         otherHits: [ChunkSearch.Hit] = [],
+        ranking: [ChunkSearch.Hit]? = nil,
         answer answers: Result<String, any Error>...,
         counts: Bool = true,
         tokens: @escaping @Sendable (String) -> Int = { $0.count / 3 }
@@ -1547,6 +1595,7 @@ private final class Fakes: Sendable {
         self.projectMail = projectMail
         self.terms = terms
         self.otherHits = otherHits
+        self.ranking = ranking
         self.answers = answers
         self.counts = counts
         self.tokens = tokens
@@ -1587,7 +1636,22 @@ private final class Fakes: Sendable {
             search: { [self] query in
                 queries.withLock { $0.append(query) }
                 note("search \(query.limit) \(query.text)")
-                return query.termsOnly ? otherHits : hits
+                let found: [ChunkSearch.Hit] = if query.termsOnly {
+                    otherHits
+                } else if (query.projects?.count ?? 0) > 1 {
+                    ranking ?? otherHits + hits
+                } else {
+                    hits
+                }
+                // A passage a term matched holds every term of the query, unless the test
+                // names its terms.
+                return found.map { hit in
+                    var hit = hit
+                    if hit.matchedTerm, hit.matchedTerms.isEmpty {
+                        hit.matchedTerms = query.terms
+                    }
+                    return hit
+                }
             },
             newest: { [self] _, limit in note("newest \(limit)"); return newest },
             files: { [self] project in
