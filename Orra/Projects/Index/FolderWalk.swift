@@ -350,9 +350,19 @@ nonisolated struct FolderWalk: Sendable {
     }
 
     /// `path` with every symbolic link and `..` resolved, nil when it does not exist.
-    private static func realPath(_ path: String) -> String? {
+    static func realPath(_ path: String) -> String? {
         guard let resolved = realpath(path, nil) else { return nil }
         defer { free(resolved) }
         return String(cString: resolved)
+    }
+
+    /// The real paths of folders, as the walk lists their files, in their order and without
+    /// a folder that is not there. Off the main actor, since it reads each folder's own
+    /// metadata, which a share that hangs can hold up, never what is inside.
+    @concurrent
+    static func realPaths(of folders: [URL]) async -> [URL] {
+        folders.compactMap { folder in
+            realPath(folder.path).map { URL(fileURLWithPath: $0, isDirectory: true) }
+        }
     }
 }

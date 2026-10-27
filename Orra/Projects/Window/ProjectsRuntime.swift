@@ -1263,6 +1263,46 @@ final class ProjectsRuntime {
         await resolve(project.folders)
     }
 
+    /// A project's folders as they are now, for the files of an explanation in the email
+    /// view: the real path of each folder that is there, as the index keeps its files, and
+    /// where each folder whose bookmark finds nothing was, such as one on a disk that is not
+    /// connected. The bookmarks resolve as for the index, see `resolve(_:)`, and when some
+    /// find nothing, each resolves alone to tell which. It reads the folders' own metadata
+    /// only, never what is inside them.
+    ///
+    /// Empty for a project the list does not hold. Nil while Projects is off, and when
+    /// Projects stopped, is turning off or the project's folders changed while the
+    /// bookmarks resolved, as in `startIndex(_:resortAfter:)`, so no folder is read after
+    /// Projects turned off or for a folder the project no longer holds. The view asks again
+    /// once the folders changed.
+    func folderRoots(of projectID: UUID) async -> ProjectsEmailFiles.Roots? {
+        // The switch itself, since `wantsOn` follows it a moment later.
+        guard projects.isOn, !projects.isDeleting, let list = running?.list else { return nil }
+        guard let project = list.project(projectID) else { return ProjectsEmailFiles.Roots() }
+        func isCurrent() -> Bool {
+            projects.isOn && !projects.isDeleting && running?.list === list && list.project(projectID)?.folders == project.folders
+        }
+        var folders = await resolve(project.folders)
+        guard isCurrent() else { return nil }
+        var missing: [Data] = []
+        if folders.isEmpty {
+            missing = project.folders
+        } else if folders.count < project.folders.count {
+            folders = []
+            for bookmark in project.folders {
+                let found = await resolve([bookmark])
+                guard isCurrent() else { return nil }
+                folders += found
+                if found.isEmpty {
+                    missing.append(bookmark)
+                }
+            }
+        }
+        return ProjectsEmailFiles.Roots(
+            folders: await FolderWalk.realPaths(of: folders),
+            unavailable: missing.compactMap(Project.savedPath(of:)))
+    }
+
     /// Where these folders are now. A resolve of the same folders under way is waited for,
     /// not started again, so a share that hangs holds one thread for each set of folders,
     /// however often Projects is turned off and on meanwhile.

@@ -4,7 +4,8 @@ import Testing
 
 /// Why each file excerpt of an explanation was in the prompt, as the explanation saves it:
 /// read by every Orra from 0.6.0 on, in both directions, also with a reason a later Orra
-/// adds. Made up files and projects, nothing from the synthetic set.
+/// adds. And where a file is in the folders of its project now. Made up files and
+/// projects, nothing from the synthetic set.
 struct ProjectsEmailFilesTests {
     static let project = UUID(uuidString: "6F1D0B5E-6C1B-4C4B-9F3A-0B8E2C9D7A11")!
     static let other = UUID(uuidString: "6F1D0B5E-6C1B-4C4B-9F3A-0B8E2C9D7A12")!
@@ -87,5 +88,31 @@ struct ProjectsEmailFilesTests {
         // As MailStore writes and reads it.
         let read = try JSONDecoder().decode(Explanation.self, from: try JSONEncoder().encode(explanation))
         #expect(read == explanation)
+    }
+
+    // MARK: Where a file is
+
+    /// A file's folder is the project folder that holds it, the deepest when the folders
+    /// nest, and the folders inside it down to the file. Names count without case, and only
+    /// whole names, so a folder does not hold the files of one whose name starts with its own.
+    @Test func aFilesFolderIsThePathInsideTheProjectFolderThatHoldsIt() {
+        typealias Files = ProjectsEmailFiles
+        let lobby = URL(fileURLWithPath: "/Users/lin/Projects/Harbor lobby", isDirectory: true)
+        let drawings = lobby.appending(path: "Drawings", directoryHint: .isDirectory)
+        let older = URL(fileURLWithPath: "/Users/lin/Projects/Harbor lobby old", isDirectory: true)
+        let disk = URL(fileURLWithPath: "/Volumes/Work/Harbor archive", isDirectory: true)
+        let roots = Files.Roots(folders: [lobby, drawings], unavailable: [disk])
+
+        #expect(Files.place(of: drawings.appending(path: "Lamps/schedule.pdf"), in: roots) == .inFolder(name: "Drawings", path: ["Lamps"]))
+        #expect(Files.place(of: lobby.appending(path: "Plans/2026/plan.pdf"), in: roots) == .inFolder(name: "Harbor lobby", path: ["Plans", "2026"]))
+        #expect(Files.place(of: lobby.appending(path: "notes.md"), in: roots) == .inFolder(name: "Harbor lobby", path: []))
+        #expect(Files.place(of: URL(fileURLWithPath: "/users/LIN/projects/harbor LOBBY/Plans/plan.pdf"), in: roots) == .inFolder(name: "Harbor lobby", path: ["Plans"]))
+        #expect(Files.place(of: older.appending(path: "plan.pdf"), in: roots) == .outside(older))
+        #expect(Files.place(of: older.appending(path: "plan.pdf"), in: Files.Roots(folders: [lobby, older])) == .inFolder(name: "Harbor lobby old", path: []))
+        #expect(Files.place(of: disk.appending(path: "2025/budget.xlsx"), in: roots) == .unavailable(name: "Harbor archive", path: ["2025"]))
+
+        let desktop = URL(fileURLWithPath: "/Users/lin/Desktop", isDirectory: true)
+        #expect(Files.place(of: desktop.appending(path: "quote.pdf"), in: roots) == .outside(desktop))
+        #expect(Files.place(of: desktop.appending(path: "quote.pdf"), in: Files.Roots()) == .outside(desktop))
     }
 }

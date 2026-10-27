@@ -1377,6 +1377,97 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// The email view reads where a project's folders are now: their real paths, as the
+    /// index keeps its files. A project the list does not hold has none, and nothing is read
+    /// while Projects is off.
+    @Test func theFoldersOfAProjectResolveToTheirRealPaths() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let alpha = try folder("Alpha", holding: "alpha.txt")
+        let project = Project(name: "Harbor", folders: [try Project.bookmark(of: alpha)])
+        try await runtime.add(project)
+        let real = URL(fileURLWithPath: try #require(FolderWalk.realPath(alpha.path)), isDirectory: true)
+        let roots = try #require(await runtime.folderRoots(of: project.id))
+        #expect(roots == ProjectsEmailFiles.Roots(folders: [real]))
+        #expect(ProjectsEmailFiles.place(of: real.appending(path: "Drawings/plan.pdf"), in: roots) == .inFolder(name: "Alpha", path: ["Drawings"]))
+        #expect(await runtime.folderRoots(of: UUID()) == ProjectsEmailFiles.Roots())
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+        #expect(await runtime.folderRoots(of: project.id) == nil)
+    }
+
+    /// A folder whose bookmark finds nothing, such as one on a disk that is not connected,
+    /// is not available, by the path its bookmark keeps, next to the folders that are there.
+    /// So its files are not taken for files that left the project.
+    @Test func aFolderWhoseBookmarkFindsNothingIsNotAvailable() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let alpha = try folder("Alpha", holding: "alpha.txt")
+        let gone = try folder("Gone", holding: "gone.txt")
+        let goneBookmark = try Project.bookmark(of: gone)
+        let goneReal = URL(fileURLWithPath: try #require(FolderWalk.realPath(gone.path)), isDirectory: true)
+        try FileManager.default.removeItem(at: gone)
+        let project = Project(name: "Harbor", folders: [goneBookmark, try Project.bookmark(of: alpha)])
+        try await runtime.add(project)
+        let roots = try #require(await runtime.folderRoots(of: project.id))
+        let alphaReal = URL(fileURLWithPath: try #require(FolderWalk.realPath(alpha.path)), isDirectory: true)
+        #expect(roots == ProjectsEmailFiles.Roots(folders: [alphaReal], unavailable: [goneReal]))
+        #expect(ProjectsEmailFiles.place(of: goneReal.appending(path: "Plans/plan.pdf"), in: roots) == .unavailable(name: "Gone", path: ["Plans"]))
+        #expect(ProjectsEmailFiles.place(of: alphaReal.appending(path: "alpha.txt"), in: roots) == .inFolder(name: "Alpha", path: []))
+
+        let only = Project(name: "Kiln", folders: [goneBookmark])
+        try await runtime.add(only)
+        #expect(await runtime.folderRoots(of: only.id) == ProjectsEmailFiles.Roots(unavailable: [goneReal]))
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Projects turns off while the email view waits for a project's folder to resolve, such
+    /// as on a share that hangs. Once it resolves, nothing reads the folder.
+    @Test(.timeLimit(.minutes(1))) func aFolderIsNotReadOnceProjectsTurnedOffDuringItsResolve() async throws {
+        defer { cleanUp() }
+        let folders = StallingFolders()
+        let (runtime, projects, _) = try await started(folders: folders)
+        var project = Project(name: "Harbor")
+        try await runtime.add(project)
+        try await waitUntil { runtime.indexReport(project.id)?.isIndexing == false }
+        project.folders = [try Project.bookmark(of: folder("Alpha", holding: "alpha.txt"))]
+        try await runtime.update(project)
+        try await waitUntil { folders.isHolding }
+
+        let roots = Task { await runtime.folderRoots(of: project.id) }
+        try await Task.sleep(for: .milliseconds(100))
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+        folders.letGo()
+        #expect(await roots.value == nil)
+    }
+
+    /// The user takes the folder out of the project while the email view waits for it to
+    /// resolve. Once it resolves, nothing reads it, and the view gets the folders as they
+    /// are now when it asks again.
+    @Test(.timeLimit(.minutes(1))) func aFolderTheProjectNoLongerHoldsIsNotReadOnceItResolves() async throws {
+        defer { cleanUp() }
+        let folders = StallingFolders()
+        let (runtime, projects, _) = try await started(folders: folders)
+        var project = Project(name: "Harbor")
+        try await runtime.add(project)
+        try await waitUntil { runtime.indexReport(project.id)?.isIndexing == false }
+        project.folders = [try Project.bookmark(of: folder("Alpha", holding: "alpha.txt"))]
+        try await runtime.update(project)
+        try await waitUntil { folders.isHolding }
+
+        let roots = Task { await runtime.folderRoots(of: project.id) }
+        try await Task.sleep(for: .milliseconds(100))
+        project.folders = []
+        try await runtime.update(project)
+        folders.letGo()
+        #expect(await roots.value == nil)
+        #expect(await runtime.folderRoots(of: project.id) == ProjectsEmailFiles.Roots())
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     // MARK: The model
 
     @Test func sortingAsksTheModelOnlyWhileTheWindowHoldsIt() async throws {
