@@ -23,10 +23,12 @@ import Testing
 ///
 /// TEST_RUNNER_ORRA_FILE_REQUESTS_SET names another folder of request mails under retrieval/
 /// in place of requests, such as requests-holdout, with its mail.jsonl and labels.jsonl in
-/// the same form and folders/ if it has its own. The run then measures its mails alone: the
-/// set, the supplement and the attack items still give the people the user knows and the
-/// threads, and the index still holds the folders of requests/, whose files its labels may
-/// name.
+/// the same form and folders/ if it has its own. The run then measures its mails alone. The
+/// people the user knows and the threads come from the mails of the set, the supplement and
+/// that folder, which takes the place of requests/, whose mails are not read, and never from
+/// the attack items. The index still holds the folders of requests/, whose files its labels
+/// may name. A folder the variable names without mail.jsonl and labels.jsonl fails the run,
+/// so a name spelled wrong never skips it.
 ///
 /// For each mail the user received it builds the email and the people the user knows as
 /// RetrievalEvaluationTests does, its thread from the set's thread ids and Message-ID links,
@@ -60,6 +62,9 @@ struct FileRequestEvaluationTests {
         let mode = try #require(Mode(rawValue: environment["ORRA_FILE_REQUESTS_MODE"] ?? "both"), "the mode is names, text, both or terms")
         let supplement = root.appendingPathComponent("retrieval", isDirectory: true)
         let requestsFolder = supplement.appendingPathComponent(FileRequestSet.name, isDirectory: true)
+        for file in ["mail.jsonl", "labels.jsonl"] {
+            try #require(FileManager.default.fileExists(atPath: requestsFolder.appendingPathComponent(file).path), "no \(file) in retrieval/\(FileRequestSet.name)")
+        }
         let baseRequests = supplement.appendingPathComponent(FileRequestSet.defaultName, isDirectory: true)
         // Another set of request mails is measured alone.
         let measuresAll = FileRequestSet.name == FileRequestSet.defaultName
@@ -631,14 +636,22 @@ nonisolated enum FileRequestSet {
     /// The folder of the request mails under retrieval/ that a run measures:
     /// TEST_RUNNER_ORRA_FILE_REQUESTS_SET, such as requests-holdout, or requests.
     static var name: String {
-        let name = ProcessInfo.processInfo.environment["ORRA_FILE_REQUESTS_SET"] ?? ""
-        return name.isEmpty ? defaultName : name
+        named ?? defaultName
     }
 
-    /// The set's folder, when it holds the labels of the request mails of `name`.
+    /// The folder TEST_RUNNER_ORRA_FILE_REQUESTS_SET names, nil without one.
+    private static var named: String? {
+        let name = ProcessInfo.processInfo.environment["ORRA_FILE_REQUESTS_SET"] ?? ""
+        return name.isEmpty ? nil : name
+    }
+
+    /// The set's folder, when it holds the labels of the request mails, or when a folder of
+    /// them is named, which the run then requires, so a name spelled wrong fails the run
+    /// instead of skipping it.
     static var folder: URL? {
         guard let path = ProcessInfo.processInfo.environment["ORRA_FILE_REQUESTS"], !path.isEmpty else { return nil }
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)
-        return FileManager.default.fileExists(atPath: url.appendingPathComponent("retrieval/\(name)/labels.jsonl").path) ? url : nil
+        guard named == nil else { return url }
+        return FileManager.default.fileExists(atPath: url.appendingPathComponent("retrieval/\(defaultName)/labels.jsonl").path) ? url : nil
     }
 }

@@ -239,8 +239,9 @@ RetrievalEvaluationTests output folder in `TEST_RUNNER_ORRA_FILE_REQUESTS_TERMS`
 search. `TEST_RUNNER_ORRA_FILE_REQUESTS_SET` names another folder of request mails under
 `retrieval/` in place of `requests`, such as `requests-holdout`, with its `mail.jsonl` and
 `labels.jsonl` in the same form. The run then measures its mails alone, with the index of the
-same folders and of the set's own `folders/` if it has any. It times the search, so it runs
-in a Release build:
+same folders and of the set's own `folders/` if it has any. A name without those two files
+there fails the run rather than skipping it. It times the search, so it runs in a Release
+build:
 
 ```
 TEST_RUNNER_ORRA_FILE_REQUESTS=$ORRA_BENCH/projects-testset \
