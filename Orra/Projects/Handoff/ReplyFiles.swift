@@ -84,7 +84,9 @@ nonisolated enum ReplyFiles {
     /// It first places the file by the names of its path alone, as Choose Files for This
     /// Email places a dropped file, and refuses one outside every folder before it reads
     /// anything on the disk, so Projects never looks up a file the user drops or adds outside
-    /// them, also when a link there leads into a folder.
+    /// them, also when a link there leads into a folder. A link in a folder that leads out of
+    /// them is refused by the real path it leads to, before the checks read the type, the
+    /// dates or the download state of what is there.
     static func file(
         at url: URL,
         roots: @Sendable () async -> [UUID: [URL]],
@@ -99,7 +101,7 @@ nonisolated enum ReplyFiles {
         }
         return await onItsOwnThread {
             guard let real = realPath("/" + names.joined(separator: "/")) else { return .failure(.moved) }
-            return check(real, roots: roots, order: first.map { [$0] } ?? [], isDownloaded: isDownloaded) { $0 }
+            return check(real, folders: realFolders(roots), order: first.map { [$0] } ?? [], isDownloaded: isDownloaded) { $0 }
         }
     }
 
@@ -148,32 +150,45 @@ nonisolated enum ReplyFiles {
 
     // MARK: Checks
 
+    /// The file of `recheck`. The file at its path is read only while a folder of a project
+    /// holds that path, and the file found by its number only once its real path lies in such
+    /// a folder, so a ticked file that left the folders is refused before a check reads it.
     private static func recheckNow(_ file: ReplyFile, roots: [UUID: [URL]], isDownloaded: @Sendable (URL) -> Bool) -> Result<ReplyFile, ReplyFileProblem> {
         let identity = file.identity
         let same = { (found: Identity) in found.device == identity.device && found.number == identity.number }
-        // The file at its path, unless a link now leads there.
-        if samePath(realPath(file.url.path), file.url.path), let found = self.identity(of: file.url.path) {
-            if same(found) {
-                return check(file.url.path, roots: roots, order: file.projects, isDownloaded: isDownloaded) { _ in identity }
-            }
+        let folders = realFolders(roots)
+        // The file at its path, while a folder holds it there and no link leads there.
+        if isPlaced(file.url.path, in: folders), samePath(realPath(file.url.path), file.url.path),
+           let found = self.identity(of: file.url.path), same(found) {
+            return check(file.url.path, folders: folders, order: file.projects, isDownloaded: isDownloaded) { _ in identity }
         }
         // Moved or renamed on its volume: the file with the same number, wherever it is now.
-        guard let moved = path(of: identity), let real = realPath(moved), let found = self.identity(of: real), same(found) else {
+        guard let moved = path(of: identity), let real = realPath(moved) else {
             return .failure(realPath(file.url.path) == nil ? .moved : .changed)
         }
-        return check(real, roots: roots, order: file.projects, isDownloaded: isDownloaded) { _ in identity }
+        guard isPlaced(real, in: folders) else { return .failure(.notInAddedFolder) }
+        guard let found = self.identity(of: real), same(found) else {
+            return .failure(realPath(file.url.path) == nil ? .moved : .changed)
+        }
+        return check(real, folders: folders, order: file.projects, isDownloaded: isDownloaded) { _ in identity }
     }
 
-    /// The checks of a file at a real path, and the file with its identity. `expected` gives
-    /// the identity the file must have, from the one found, so a recheck refuses a file that
-    /// changed.
+    /// The checks of a file at a real path, and the file with its identity. The path is
+    /// placed among `folders`, the real paths of the projects' folders, before anything of
+    /// the file is read, so nothing outside them is. `expected` gives the identity the file
+    /// must have, from the one found, so a recheck refuses a file that changed.
     private static func check(
         _ real: String,
-        roots: [UUID: [URL]],
+        folders: [UUID: [String]],
         order: [UUID],
         isDownloaded: @Sendable (URL) -> Bool,
         expected: (Identity) -> Identity
     ) -> Result<ReplyFile, ReplyFileProblem> {
+        let projects = holding(real, folders: folders, order: order)
+        guard !projects.isEmpty else {
+            // A folder of a project is a folder, not a file in it.
+            return .failure(isPlaced(real, in: folders) ? .package : .notInAddedFolder)
+        }
         var info = stat()
         guard lstat(real, &info) == 0 else { return .failure(.moved) }
         switch info.st_mode & S_IFMT {
@@ -185,26 +200,32 @@ nonisolated enum ReplyFiles {
         guard found == expected(found) else { return .failure(.changed) }
         let url = URL(fileURLWithPath: real, isDirectory: false)
         guard info.st_flags & UInt32(SF_DATALESS) == 0, isDownloaded(url) else { return .failure(.notDownloaded) }
-        let projects = holding(real, roots: roots, order: order)
-        guard !projects.isEmpty else { return .failure(.notInAddedFolder) }
         // A folder moved or a file replaced while the checks ran shows now: the path must
         // still be real and still hold the same file.
         guard samePath(realPath(real), real), identity(of: real) == found else { return .failure(.changed) }
         return .success(ReplyFile(url: url, projects: projects, identity: found))
     }
 
+    /// The real paths of the folders of `roots` that are there, by project.
+    private static func realFolders(_ roots: [UUID: [URL]]) -> [UUID: [String]] {
+        roots.mapValues { $0.compactMap { realPath($0.path) } }
+    }
+
     /// The projects whose folders hold the real path: those of `order` first, in its order,
     /// then the others by their ids, so the result never depends on the order of a
     /// dictionary.
-    private static func holding(_ real: String, roots: [UUID: [URL]], order: [UUID]) -> [UUID] {
-        let inside = Set(roots.compactMap { project, folders in
-            folders.contains { folder in
-                realPath(folder.path).map { isInside(real, root: $0) } ?? false
-            } ? project : nil
+    private static func holding(_ real: String, folders: [UUID: [String]], order: [UUID]) -> [UUID] {
+        let inside = Set(folders.compactMap { project, folders in
+            folders.contains { isInside(real, root: $0) } ? project : nil
         })
         let first = order.filter(inside.contains)
         let rest = inside.subtracting(first).sorted { $0.uuidString < $1.uuidString }
         return first + rest
+    }
+
+    /// Whether a real path is one of `folders` or lies in one, by their bytes.
+    private static func isPlaced(_ real: String, in folders: [UUID: [String]]) -> Bool {
+        folders.values.joined().contains { samePath(real, $0) || isInside(real, root: $0) }
     }
 
     /// The identity of what is at a path, read without following a link.

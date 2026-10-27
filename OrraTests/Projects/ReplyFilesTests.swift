@@ -117,6 +117,29 @@ struct ReplyFilesTests {
         #expect(looks.count == 0)
     }
 
+    /// A link in a folder that leads out of every folder is refused by the real path it
+    /// leads to, before any check reads what is there: a file there that is not on this
+    /// Mac, or a folder there, gives no other answer, and the check of whether a file is on
+    /// this Mac never runs.
+    @Test func aLinkOutOfTheFoldersIsRefusedBeforeALookAtWhereItLeads() async throws {
+        let tree = try Tree()
+        defer { tree.remove() }
+        try tree.file("Private/salaries.xlsx")
+        try tree.folder("Private/Payroll")
+        try tree.folder("Harbor")
+        try tree.link("Harbor/salaries.xlsx", to: tree.url("Private/salaries.xlsx").path)
+        try tree.link("Harbor/Payroll", to: tree.url("Private/Payroll").path)
+        let roots = [Self.harbor: [tree.url("Harbor")]]
+        let looks = Looks()
+        let notOnThisMac: @Sendable (URL) -> Bool = { _ in
+            looks.add()
+            return false
+        }
+        #expect(await ReplyFiles.file(at: tree.url("Harbor/salaries.xlsx"), roots: { roots }, isDownloaded: notOnThisMac) == .failure(.notInAddedFolder))
+        #expect(await ReplyFiles.file(at: tree.url("Harbor/Payroll"), roots: { roots }, isDownloaded: notOnThisMac) == .failure(.notInAddedFolder))
+        #expect(looks.count == 0)
+    }
+
     /// How often a check asked whether a file is on this Mac.
     private final class Looks: Sendable {
         private let value = Mutex(0)
@@ -204,14 +227,23 @@ struct ReplyFilesTests {
         #expect(moved.projects == [Self.kiln])
     }
 
+    /// A ticked file moved out of the folders of every project, or left behind by its folder,
+    /// is refused where it is now, before a check reads it there.
     @Test func aFileMovedOutOfTheFoldersOfEveryProjectIsRefused() async throws {
         let tree = try Tree()
         defer { tree.remove() }
         let roots = [Self.harbor: [tree.url("Harbor")]]
         try tree.folder("Elsewhere")
         let ticked = try await ReplyFiles.file(at: try tree.file("Harbor/plan.pdf"), roots: { roots }).get()
+        let looks = Looks()
+        let isDownloaded: @Sendable (URL) -> Bool = { _ in
+            looks.add()
+            return true
+        }
+        #expect(await ReplyFiles.recheck(ticked, roots: { [:] }, isDownloaded: isDownloaded) == .failure(.notInAddedFolder))
         try tree.move("Harbor/plan.pdf", to: "Elsewhere/plan.pdf")
-        #expect(await ReplyFiles.recheck(ticked, roots: { roots }) == .failure(.notInAddedFolder))
+        #expect(await ReplyFiles.recheck(ticked, roots: { roots }, isDownloaded: isDownloaded) == .failure(.notInAddedFolder))
+        #expect(looks.count == 0)
     }
 
     @Test func aDeletedFileIsMoved() async throws {
