@@ -195,7 +195,7 @@ struct ProjectsProjectPage: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if report.reachedTextLimit {
-                    Text("Projects reached the most text it keeps for a project. Newer files are left out.")
+                    Text("Projects reached the most text it keeps for a project. It knows newer files by name only.")
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
