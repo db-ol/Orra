@@ -13140,6 +13140,28 @@
         }
       }
     },
+    "Recognizing text in images and scans… %lld left" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reconociendo el texto de imágenes y escaneos… quedan %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画像とスキャンのテキストを認識中…残り%lld件"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在识别图片和扫描件中的文字…还剩 %lld 个"
+          }
+        }
+      }
+    },
     "Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard." : {
       "localizations" : {
         "es-419" : {
@@ -15791,6 +15813,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "其中有文字声称来自 Orra。"
+          }
+        }
+      }
+    },
+    "Text recognition waits until this Mac cools down." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El reconocimiento de texto espera hasta que esta Mac se enfríe."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacの温度が下がるまで、テキスト認識を一時停止します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 温度较高，文字识别暂停中。"
+          }
+        }
+      }
+    },
+    "Text recognition waits while Low Power Mode is on." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El reconocimiento de texto espera mientras el modo de bajo consumo está activado."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“低電力モード”がオンのあいだは、テキスト認識を一時停止します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“低电量模式”打开时，文字识别会暂停。"
+          }
+        }
+      }
+    },
+    "Text recognition waits while this Mac is low on memory." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El reconocimiento de texto espera mientras esta Mac tiene poca memoria."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacのメモリが不足しているあいだは、テキスト認識を一時停止します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 内存不足，文字识别暂停中。"
           }
         }
       }

@@ -37,7 +37,8 @@ nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable 
     /// such as one in a backup.
     case protectedFolder
     /// A file over its size limit, see `FolderWalk.maximumFileSize` and
-    /// `FileTextExtractor.Limits`.
+    /// `FileTextExtractor.Limits`, or an image with more pixels than text recognition reads,
+    /// see `TextRecognizer.Limits`.
     case tooLarge
     /// A file or folder whose data is not on this Mac, such as an iCloud file removed to
     /// save space. Reading it would download it.
@@ -53,7 +54,8 @@ nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable 
     case unreadable
     /// A PDF that needs a password.
     case locked
-    /// A PDF that took longer than its time limit to read.
+    /// A PDF that took longer than its time limit to read, or a file whose pages all ran
+    /// out of time in text recognition.
     case tooSlow
     /// A file without text, such as a PDF whose only text is hidden, or a scan whose pages
     /// gave no text when they were recognized.
@@ -239,7 +241,7 @@ nonisolated struct FileTextExtractor: Sendable {
         }
         let data: Data
         let modified: Date
-        switch contents(of: file.path, limit: limit(of: format)) {
+        switch Self.checkedContents(of: file.path, limit: limit(of: format), flags: flags) {
         case .success(let contents): (data, modified) = contents
         case .failure(let reason): return .failure(reason)
         }
@@ -311,8 +313,11 @@ nonisolated struct FileTextExtractor: Sendable {
 
     // MARK: Reading the bytes
 
-    /// The bytes of a regular file of at most `limit` bytes, and its modification date.
-    private func contents(of path: String, limit: Int64) -> Result<(Data, Date), FileSkipReason> {
+    /// The bytes of a regular file of at most `limit` bytes, and its modification date. The
+    /// one read of a file in a project folder, which TextRecognizer uses too: it follows no
+    /// link and never downloads a file that is not on this Mac. `flags` gives the stat flags
+    /// of a path, see `FolderWalk.statFlags(_:)`.
+    static func checkedContents(of path: String, limit: Int64, flags: (String) -> UInt32?) -> Result<(data: Data, modified: Date), FileSkipReason> {
         var checked = stat()
         guard lstat(path, &checked) == 0 else { return .failure(.noAccess) }
         if let reason = Self.skipReason(checked, flags: flags(path) ?? checked.st_flags, limit: limit) {
@@ -433,9 +438,7 @@ nonisolated struct FileTextExtractor: Sendable {
 
     /// A PDF page drawn at up to one pixel a point, to see where text leaves ink.
     private struct PageDrawing {
-        private let pixels: [UInt8]
-        private let width: Int
-        private let height: Int
+        private let ink: InkMap
         private let scale: CGFloat
         private let origin: CGPoint
 
@@ -461,62 +464,20 @@ nonisolated struct FileTextExtractor: Sendable {
                 return true
             }
             guard drawn else { return nil }
-            self.pixels = pixels
-            self.width = width
-            self.height = height
+            ink = InkMap(pixels: pixels, width: width, height: height, bytesPerPixel: 4)
             self.scale = scale
             self.origin = box.origin
         }
 
         /// Whether `box`, in page space, shows the ink of `characters` letters or digits of
-        /// `size` points: for each, ink on at least 2% of a square of that size. Ink is a
-        /// pixel that differs by more than 16 levels (1 in 16) in a channel from the box's
-        /// most common color, so text lighter than about 15/16 gray on white shows none. The
-        /// ink is counted per character, not per area, since PDFKit's box for a line can
-        /// reach far past its last character. A box off the page counts as showing ink, so
-        /// its text is kept.
+        /// `size` points, see InkMap. PDFKit's box for a line can reach far past its last
+        /// character, which is why the ink is counted per character. A box off the page
+        /// counts as showing ink, so its text is kept.
         func showsInk(in box: CGRect, characters: Int, size: CGFloat) -> Bool {
-            let left = max(0, Int(((box.minX - origin.x) * scale).rounded(.down)))
-            let right = min(width, Int(((box.maxX - origin.x) * scale).rounded(.up)))
-            let bottom = max(0, Int(((box.minY - origin.y) * scale).rounded(.down)))
-            let top = min(height, Int(((box.maxY - origin.y) * scale).rounded(.up)))
-            guard left < right, bottom < top else { return true }
-            return pixels.withUnsafeBufferPointer { pixels in
-                // The most common color is the average of the fullest bin, with bins of 32
-                // levels a channel. The first row in memory is the top of the drawing.
-                var counts = [Int](repeating: 0, count: 512)
-                var sums = [Int](repeating: 0, count: 512 * 3)
-                var common = 0
-                for y in bottom..<top {
-                    let row = (height - 1 - y) * width
-                    for x in left..<right {
-                        let pixel = (row + x) * 4
-                        let red = Int(pixels[pixel]), green = Int(pixels[pixel + 1]), blue = Int(pixels[pixel + 2])
-                        let bin = (red >> 5) << 6 | (green >> 5) << 3 | blue >> 5
-                        counts[bin] += 1
-                        sums[bin * 3] += red
-                        sums[bin * 3 + 1] += green
-                        sums[bin * 3 + 2] += blue
-                        if counts[bin] > counts[common] { common = bin }
-                    }
-                }
-                let red = sums[common * 3] / counts[common]
-                let green = sums[common * 3 + 1] / counts[common]
-                let blue = sums[common * 3 + 2] / counts[common]
-                var ink = 0
-                for y in bottom..<top {
-                    let row = (height - 1 - y) * width
-                    for x in left..<right {
-                        let pixel = (row + x) * 4
-                        if abs(Int(pixels[pixel]) - red) > 16 || abs(Int(pixels[pixel + 1]) - green) > 16
-                            || abs(Int(pixels[pixel + 2]) - blue) > 16 {
-                            ink += 1
-                        }
-                    }
-                }
-                let side = Double(size * scale)
-                return ink >= max(1, Int(Double(characters) * side * side / 50))
-            }
+            let pixels = CGRect(
+                x: (box.minX - origin.x) * scale, y: (box.minY - origin.y) * scale,
+                width: box.width * scale, height: box.height * scale)
+            return ink.showsInk(inPixels: pixels, characters: characters, size: Double(size * scale))
         }
     }
 
@@ -757,5 +718,70 @@ nonisolated struct FileTextExtractor: Sendable {
             afterCarriageReturn = scalar == "\r"
         }
         return String(scalars)
+    }
+}
+
+/// A drawn image, to see where text leaves ink: a PDF page FileTextExtractor draws to find
+/// hidden text in its text layer, or the image TextRecognizer gives Vision. 8 bits a
+/// channel, gray or RGBA, the first row in memory at the top.
+nonisolated struct InkMap: Sendable {
+    let pixels: [UInt8]
+    let width: Int
+    let height: Int
+    /// 1 for gray, 4 for RGBA, whose alpha is not looked at.
+    let bytesPerPixel: Int
+
+    /// Whether `box`, in pixels from the bottom left, shows the ink of `characters` letters or
+    /// digits `size` pixels high: for each, ink on at least 2% of a square of that size. Ink
+    /// is a pixel that differs by more than 16 levels (1 in 16) in a channel from the box's
+    /// most common color, so text lighter than about 15/16 gray on white shows none. The ink
+    /// is counted per character, not per area, since a box can be wider than its text. A box
+    /// outside the image counts as showing ink, so its text is kept.
+    func showsInk(inPixels box: CGRect, characters: Int, size: Double) -> Bool {
+        let left = max(0, Int(box.minX.rounded(.down)))
+        let right = min(width, Int(box.maxX.rounded(.up)))
+        let bottom = max(0, Int(box.minY.rounded(.down)))
+        let top = min(height, Int(box.maxY.rounded(.up)))
+        guard left < right, bottom < top, bytesPerPixel == 1 || bytesPerPixel >= 3,
+              pixels.count >= width * height * bytesPerPixel else { return true }
+        let step = bytesPerPixel
+        // The channels of a pixel: gray counts as three equal ones.
+        let blueOffset = step == 1 ? 0 : 2
+        let greenOffset = step == 1 ? 0 : 1
+        return pixels.withUnsafeBufferPointer { pixels in
+            // The most common color is the average of the fullest bin, with bins of 32
+            // levels a channel. The first row in memory is the top of the image.
+            var counts = [Int](repeating: 0, count: 512)
+            var sums = [Int](repeating: 0, count: 512 * 3)
+            var common = 0
+            for y in bottom..<top {
+                let row = (height - 1 - y) * width
+                for x in left..<right {
+                    let pixel = (row + x) * step
+                    let red = Int(pixels[pixel]), green = Int(pixels[pixel + greenOffset]), blue = Int(pixels[pixel + blueOffset])
+                    let bin = (red >> 5) << 6 | (green >> 5) << 3 | blue >> 5
+                    counts[bin] += 1
+                    sums[bin * 3] += red
+                    sums[bin * 3 + 1] += green
+                    sums[bin * 3 + 2] += blue
+                    if counts[bin] > counts[common] { common = bin }
+                }
+            }
+            let red = sums[common * 3] / counts[common]
+            let green = sums[common * 3 + 1] / counts[common]
+            let blue = sums[common * 3 + 2] / counts[common]
+            var ink = 0
+            for y in bottom..<top {
+                let row = (height - 1 - y) * width
+                for x in left..<right {
+                    let pixel = (row + x) * step
+                    if abs(Int(pixels[pixel]) - red) > 16 || abs(Int(pixels[pixel + greenOffset]) - green) > 16
+                        || abs(Int(pixels[pixel + blueOffset]) - blue) > 16 {
+                        ink += 1
+                    }
+                }
+            }
+            return ink >= max(1, Int(Double(characters) * size * size / 50))
+        }
     }
 }

@@ -166,12 +166,14 @@ struct FolderIndexMeasurementTests {
         let database = try await ProjectsDatabase.open(in: ProjectsStorage(root: copy))
         let stepSeconds = started.duration(to: .now) / .seconds(1)
         let reads = Reads()
+        // Text recognition waits, as in Low Power Mode, so the time is the sweep's alone.
         let index = FolderIndex(
             database: database, isDictating: { false },
             readText: { url in
                 reads.paths.withLock { $0.append(url.path) }
                 return await FileTextExtractor().text(of: url)
             },
+            recognitionPause: { .lowPower },
             watch: { _, _, _ in {} })
         started = ContinuousClock.now
         index.start(project: Sweep.project, folders: [folder])

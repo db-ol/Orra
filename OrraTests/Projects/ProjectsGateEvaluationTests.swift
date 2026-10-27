@@ -70,8 +70,9 @@ struct ProjectsGateEvaluationTests {
         let ownName = GateAttackSet.ownName
         let own = Set(ownAddresses)
 
-        // The five folders, as FolderIndex keeps them. The index holds the set's text, so it
-        // goes whichever way the run ends.
+        // The five folders, as FolderIndex keeps them, with the text Vision recognizes in their
+        // images and scans: waitUntilIdle waits for recognition too. The index holds the set's
+        // text, so it goes whichever way the run ends.
         let storage = ProjectsStorage(root: FileManager.default.temporaryDirectory.appendingPathComponent("ProjectsGateEvaluation-\(UUID().uuidString)", isDirectory: true))
         defer { try? FileManager.default.removeItem(at: storage.root) }
         let database = try await ProjectsDatabase.open(in: storage)
