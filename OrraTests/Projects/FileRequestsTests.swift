@@ -180,6 +180,303 @@ struct FileRequestsTests {
         ])
     }
 
+    // MARK: The constructions of each language
+
+    /// Each construction with the texts that ask with it: the request's object and the kinds
+    /// it names, document for a phrase that names no kind. The sentence that asks may come
+    /// after others, and what a pronoun points to may stand in the sentence before.
+    private static func expectConstruction(_ construction: String, _ cases: [Case]) {
+        #expect(cases.count >= 2, "\(construction)")
+        for item in cases {
+            let requests = found(item.sentence)
+            #expect(requests.count == 1, "\(construction): \(item.sentence)")
+            guard let request = requests.first else { continue }
+            #expect(request.object == item.object, "\(construction): \(item.sentence)")
+            #expect(request.documentKinds == item.kinds, "\(construction): \(item.sentence)")
+            #expect(request.saysWhichFile, "\(construction): \(item.sentence)")
+        }
+    }
+
+    @Test func englishAsksForADocumentInEachConstruction() {
+        Self.expectConstruction("a verb of sending and a phrase that names no kind, searched by its words", [
+            ("Could you send me the speaker bio you wrote for the panel?", "the speaker bio", [.document]),
+            ("Would you mind forwarding the venue checklist to Mei?", "the venue checklist", [.document]),
+            ("Please send the plan.", "the plan", [.document]),
+        ])
+        Self.expectConstruction("a request in passing, near the end of a text about something else", [
+            ("Thanks again for lunch. By the way, could you also send me the seating chart from Friday?", "the seating chart", [.document]),
+            ("The movers come at nine. If you could forward the packing list as well, that would help.", "the packing list", [.document]),
+        ])
+        Self.expectConstruction("a pronoun under a condition: if you have X, could you send it", [
+            ("If you still have the moodboard from March, could you forward it to me?", "the moodboard", [.document]),
+            ("If you have the signed waiver handy, please send it over.", "the signed waiver", [.document]),
+        ])
+        Self.expectConstruction("a pronoun or a plain file that points to the sentence before", [
+            ("We are still missing the packing list for the second shipment. Could you send it today?", "the packing list", [.document]),
+            ("You mentioned a style guide for the menus. Can you share it with us?", "a style guide", [.document]),
+            ("I lost the scan of the permit. Could you send me a copy?", "the scan of the permit", [.scan, .certificate]),
+            ("We still don't have your headshot. Could you send one today?", "your headshot", [.document]),
+            ("The auditors asked for the maintenance log. Do you have it? If so, please share it with me.", "the maintenance log", [.document]),
+            ("Please sign the attached agreement and send it back to me.", "the attached agreement", [.contract]),
+        ])
+        Self.expectConstruction("a wish to see or to have a document", [
+            ("I'd love to see the draft floor plan before Monday.", "the draft floor plan", [.floorPlan]),
+            ("Our client would like to see the renderings first.", "the renderings", [.rendering]),
+            ("Could I take a look at the signed contract?", "the signed contract", [.contract]),
+            ("I look forward to receiving the revised quote.", "the revised quote", [.quote]),
+            ("I'd love a copy of the seating plan.", "a copy of the seating plan", [.document]),
+        ])
+        Self.expectConstruction("show me, get me or ask for a document", [
+            ("Could you show me the latest renderings?", "the latest renderings", [.rendering]),
+            ("Can you get me a copy of the permit?", "a copy of the permit", [.document, .certificate]),
+            ("I'd like to ask you for the signed lease.", "the signed lease", [.contract]),
+        ])
+        Self.expectConstruction("a need, what is missing, and whether there is one", [
+            ("We are missing the brochure for the fair.", "the brochure", [.catalog]),
+            ("The signed consent form is still missing.", "The signed consent form", [.form]),
+            ("Is there a floor plan of the second floor?", "a floor plan of the second floor", [.floorPlan]),
+            ("Do you have the vendor list?", "the vendor list", [.document]),
+        ])
+    }
+
+    @Test func chineseAsksForADocumentInEachConstruction() {
+        Self.expectConstruction("请, 麻烦 … 发 and a phrase that names no kind, searched by its words", [
+            ("麻烦发一下上周的会议安排", "上周的会议安排", [.document]),
+            ("请发一下展位布置说明给我", "展位布置说明", [.document]),
+        ])
+        Self.expectConstruction("你把 X 发我, with no word that asks", [
+            ("你把那份装修合同发我一下吧", "那份装修合同", [.contract]),
+            ("你把面试题目发给我", "面试题目", [.document]),
+        ])
+        Self.expectConstruction("把 X 发我 at the start of a clause", [
+            ("把展会的照片发我一下吧", "照片", [.photo]),
+            ("好的，把样书的封面文件发过来", "封面文件", [.document]),
+        ])
+        Self.expectConstruction("X 发我一份, the document before the verb", [
+            ("合同扫描件发我一份就行", "合同扫描件", [.contract, .scan]),
+            ("那张效果图发我看看", "那张效果图", [.rendering]),
+            ("你的演示稿能不能今晚发给我？", "演示稿", [.document]),
+        ])
+        Self.expectConstruction("发我一份 X, 发 X 给我 and 给我发 X", [
+            ("发我一份最新的报价单", "报价单", [.quote]),
+            ("发一下排练流程给我", "排练流程", [.document]),
+            ("给我发一份产品手册", "产品手册", [.document]),
+        ])
+        Self.expectConstruction("a need, asking for a document by its name, and whether the reader has one", [
+            ("我们还缺一份营业执照复印件", "营业执照复印件", [.certificate, .document]),
+            ("我这边需要你们的报价单", "报价单", [.quote]),
+            ("想跟你要一份装修合同", "装修合同", [.contract]),
+            ("你们手上有装箱清单吗？", "装箱清单", [.document]),
+            ("有没有上周的签到表？", "上周的签到表", [.document]),
+        ])
+        Self.expectConstruction("a wish to see or to receive a document", [
+            ("我想先看看你们的设计稿", "设计稿", [.designFile]),
+            ("客户希望尽快收到合同", "合同", [.contract]),
+            ("能给我看一下平面图吗", "平面图", [.floorPlan]),
+        ])
+        Self.expectConstruction("nothing named after the verb, which points to the document named before", [
+            ("上次说的那份报价单，麻烦再发我一份。", "那份报价单", [.quote]),
+            ("门店的照片拍好了吗？拍好了麻烦发我几张。", "照片", [.photo]),
+            ("如果你手上有活动的海报，麻烦发我一份。", "活动的海报", [.document]),
+            ("上次的会议安排，麻烦发我一下。", "上次的会议安排", [.document]),
+            ("你们之前给过一份布展须知吗？麻烦再发我一份。", "布展须知", [.document]),
+        ])
+    }
+
+    @Test func japaneseAsksForADocumentInEachConstruction() {
+        Self.expectConstruction("X を送っていただけますか and a phrase that names no kind, or a count before the verb", [
+            ("展示会の案内文を送っていただけますか", "展示会の案内文", [.document]),
+            ("会場の写真を2枚お送りいただけますか", "写真", [.photo]),
+        ])
+        Self.expectConstruction("X も and X は before the verb, and いただけますと幸いです", [
+            ("見積書もあわせてお送りいただけますと幸いです。", "見積書", [.quote]),
+            ("工程表は共有していただけますか", "工程表", [.schedule]),
+            ("見積書については改めてお送りいただけますか", "見積書", [.quote]),
+        ])
+        Self.expectConstruction("no object before the verb, after Xがあれば or a phrase before the comma", [
+            ("もし議事録がお手元にあれば、お送りいただけますか。", "議事録", [.minutes]),
+            ("先日の打ち合わせのまとめ、お手数ですが共有していただけないでしょうか。", "先日の打ち合わせのまとめ", [.document]),
+            ("昨日お話しした見積書ですが、ご送付いただけると助かります。", "見積書", [.quote]),
+        ])
+        Self.expectConstruction("X のご共有をお願い and X 送付のお願い", [
+            ("納品書のご共有をお願いできますでしょうか", "納品書", [.document]),
+            ("設計図面ご送付のお願い", "設計図面", [.drawing]),
+        ])
+        Self.expectConstruction("X を頂戴できますか and X をお願いできますか, with a copy", [
+            ("契約書の写しを1通頂戴できますか", "契約書の写し", [.contract, .document]),
+            ("請求書の控えをお願いできますか", "請求書の控え", [.invoice, .document]),
+        ])
+        Self.expectConstruction("what is missing", [
+            ("契約書の原本が見当たりません", "契約書の原本", [.contract, .document]),
+            ("仕様書が足りません", "仕様書", [.specification]),
+        ])
+        Self.expectConstruction("a wish to see a document", [
+            ("完成予想図を拝見できれば幸いです", "完成予想図", [.rendering]),
+            ("パンフレットを見せていただけますか", "パンフレット", [.catalog]),
+            ("前回の議事録を拝見できますでしょうか。", "議事録", [.minutes]),
+        ])
+    }
+
+    @Test func spanishAsksForADocumentInEachConstruction() {
+        Self.expectConstruction("¿podrías?, te agradecería que … enviar and a phrase that names no kind, with what follows de", [
+            ("¿Podrías enviarme la lista de invitados?", "la lista de invitados", [.document]),
+            ("Te agradecería que me mandaras el guion de la charla.", "el guion de la charla", [.document]),
+            ("¿Serías tan amable de enviarme el presupuesto final?", "el presupuesto final", [.quote, .budget]),
+        ])
+        Self.expectConstruction("lo or la that point to the document named before", [
+            ("Perdí el acta firmada. ¿Me la puedes reenviar?", "el acta firmada", [.minutes]),
+            ("Si todavía tienes el folleto del evento, ¿me lo mandas?", "el folleto", [.catalog]),
+            ("Mencionaste una guía de estilo para los menús. ¿Me la puedes compartir?", "una guía de estilo", [.document]),
+            ("Te adjunto el contrato. Fírmalo y envíamelo de vuelta, por favor.", "el contrato", [.contract]),
+        ])
+        Self.expectConstruction("an imperative and a question in the present", [
+            ("Pásame la agenda del taller, porfa.", "la agenda del taller", [.document]),
+            ("Compártenos el borrador cuando lo tengas.", "el borrador", [.document]),
+            ("¿Me envías el plano actualizado?", "el plano actualizado", [.floorPlan, .drawing]),
+            ("¿Nos mandas las fotos del evento?", "las fotos del evento", [.photo]),
+        ])
+        Self.expectConstruction("a wish to see or to have a document, and asking for one", [
+            ("Me gustaría ver el contrato antes de firmar.", "el contrato", [.contract]),
+            ("¿Puedo ver los planos de la cocina?", "los planos", [.floorPlan, .drawing]),
+            ("Me gustaría una copia del contrato.", "una copia del contrato", [.document, .contract]),
+            ("Quería pedirte el contrato firmado, para archivarlo.", "el contrato firmado", [.contract]),
+        ])
+        Self.expectConstruction("what is missing, and whether the reader has one", [
+            ("Nos faltan las fotos del almacén.", "las fotos del almacén", [.photo]),
+            ("¿Tienes el catálogo en PDF?", "el catálogo", [.catalog]),
+        ])
+    }
+
+    // MARK: What never counts
+
+    @Test func commentsAndFeedbackAreNoFile() {
+        Self.expectNone([
+            "Could you send me your thoughts on the logo by Friday?",
+            "Please share your feedback about the second draft.",
+            "请把你对方案的意见发给我",
+            "资料的修改建议麻烦发我一下",
+            "資料についてのご意見をお送りください",
+            "¿Me puedes enviar tus comentarios sobre el texto?",
+        ])
+    }
+
+    @Test func availabilityIsNoFile() {
+        Self.expectNone([
+            "Could you send me your availability for next week?",
+            "Please share a few times that work for you.",
+            "麻烦发一下你方便的时间",
+            "ご都合のよい日時をお送りください",
+            "Envíame tu disponibilidad para el jueves.",
+        ])
+    }
+
+    @Test func anAddressIsNoFile() {
+        Self.expectNone([
+            "Can you send me your mailing address?",
+            "请把收货地址发我",
+            "ご住所を送っていただけますか",
+            "¿Me puedes mandar tu dirección?",
+        ])
+    }
+
+    @Test func bankAndTaxDetailsAreNoFile() {
+        Self.expectNone([
+            "Please send us your bank details and tax ID.",
+            "Could you provide your VAT number?",
+            "请提供一下开票信息和银行账户",
+            "振込先の口座情報を送ってください",
+            "Por favor, envíame tus datos bancarios.",
+        ])
+    }
+
+    @Test func aPortalToUploadToAsksForNoFile() {
+        Self.expectNone([
+            "Please upload the receipts to the expense portal.",
+            "Could you submit the slides through the conference platform?",
+            "The call for talks is open. Submit your proposal at talks.example/cfp.",
+            "请把发票上传到报销系统",
+            "ポータルに請求書をアップロードしてください",
+            "Por favor, envía las facturas a través del portal.",
+        ])
+    }
+
+    @Test func aFormOnlineAsksForNoFile() {
+        Self.expectNone([
+            "Could you complete the web form and submit it today?",
+            "Please send the online form back by Friday.",
+            "Por favor, completa el formulario en línea y envíalo hoy.",
+        ])
+    }
+
+    @Test func aQuoteStillToPrepareIsNoFile() {
+        Self.expectNone([
+            "Could you send us a quote for 300 mugs?",
+            "Please send me an estimate for the repair.",
+            "¿Puedes enviarnos una cotización para 200 piezas?",
+            "お見積りをお願いします",
+        ])
+    }
+
+    /// The sender sends, attaches or promises the file, also when a pronoun of a later
+    /// sentence points to the file the sender attached.
+    @Test func whatTheSenderSendsAttachesOrPromisesIsNoRequest() {
+        Self.expectNone([
+            "I'll send you the floor plan tonight.",
+            "Attached is the revised schedule.",
+            "I've attached the floor plan. Could you share it with your team?",
+            "Here is the revised budget. Please forward it to Kai.",
+            "Te adjunto el plano. ¿Lo puedes compartir con tu equipo?",
+            "附件是平面图。麻烦转发给团队。",
+            "見積書を添付いたします。社内で共有していただけますか。",
+            "我把报价单发给你了",
+            "合同我明天发您",
+            "資料を添付いたします",
+            "明日図面をお送りします",
+            "Te envío el contrato mañana.",
+            "Adjunto la factura.",
+        ])
+    }
+
+    /// Information, the email itself, a person, money, and what a newsletter asks readers to
+    /// pass on are no file.
+    @Test func otherThingsThatAreNoFile() {
+        Self.expectNone([
+            "Could you send me more details about the venue?",
+            "Please send me an update when you can.",
+            "Please forward this email to anyone who might be interested.",
+            "Could you send someone to fix the heater?",
+            "Our autumn catalog is out! Share it with anyone who loves tea.",
+            "请把定金转给我们",
+            "麻烦发一下产品信息",
+            "这封邮件麻烦转发给设计团队，谢谢。",
+            "Comparte este boletín con tus amigos.",
+        ])
+    }
+
+    /// A pronoun or a verb with no object asks for nothing when no document is named before
+    /// it, and a wish to see what is no file asks for nothing.
+    @Test func aPointerWithNothingNamedAndAWishForNoFileAreNoRequests() {
+        Self.expectNone([
+            "Could you send it to me?",
+            "Thanks for the call. Could you forward it to Kai?",
+            "麻烦发我一下",
+            "お送りいただけますか",
+            "¿Me lo puedes enviar?",
+            "I'd love to see you at the dinner.",
+            "Me gustaría ver la oficina.",
+            "我想看看你们的新办公室",
+        ])
+    }
+
+    /// A file that came, as in 你发给我的平面图, is no request.
+    @Test func aFileThatCameIsNoRequest() {
+        Self.expectNone([
+            "你上次发给我的平面图有问题",
+            "先日お送りいただいた資料、ありがとうございました。",
+            "Thanks so much for the floor plan you sent yesterday.",
+        ])
+    }
+
     // MARK: No requests
 
     @Test func theSendersOwnAttachmentsAndPromisesAreNoRequests() {
@@ -300,7 +597,6 @@ struct FileRequestsTests {
             "Do you have time to meet?",
             "Could you confirm the date?",
             "Please send me your thoughts.",
-            "Please send the plan.",
             "平面图收到了吗？",
             "我们需要讨论一下平面图",
             "请把发票开给我们公司",
@@ -443,6 +739,11 @@ struct FileRequestsTests {
             sentences("有没有你们有", length: 400, count: 20, end: "。"),
             sentences("資料をください資料をください", length: 400, count: 20, end: "。"),
             sentences("をもをも送って", length: 400, count: 20, end: "。"),
+            sentences("合同也发我一份合同也发我", length: 400, count: 20, end: "，"),
+            sentences("お送りいただけますかお送り", length: 400, count: 20, end: "、"),
+            sentences("If you have the plan, could you send it", length: 400, count: 20, end: ". "),
+            sentences("¿me lo mandas? me la podrías ", length: 400, count: 20, end: ". "),
+            sentences("資料をください資料をください", length: 400, count: 20, end: "、"),
         ]
         for text in texts {
             let started = ContinuousClock.now

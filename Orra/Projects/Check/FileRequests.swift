@@ -71,6 +71,12 @@ nonisolated enum DocumentKind: String, CaseIterable, Sendable {
         self == .document
     }
 
+    /// Where the kind stands among all kinds, which orders two kinds a text names at the same
+    /// place, as plano does a floor plan and a drawing.
+    var order: Int {
+        Self.allCases.firstIndex(of: self) ?? 0
+    }
+
     /// The extensions of the files a kind of document is, lowercased, for a kind that is a
     /// kind of file, such as a photo, a drawing, a scan, slides or a spreadsheet, and nil for
     /// a kind any document may be, such as a quote or a contract. A file of another type that
@@ -119,7 +125,7 @@ nonisolated enum DocumentKind: String, CaseIterable, Sendable {
                   japanese: ["請求書", "領収書", "インボイス"],
                   spanish: ["factura", "facturas", "recibo", "recibos"])
         case .contract:
-            Terms(english: ["contract", "contracts", "agreement", "agreements", "nda"],
+            Terms(english: ["contract", "contracts", "agreement", "agreements", "nda", "lease", "leases"],
                   chinese: ["合同", "协议", "协议书", "合约", "合約", "協議"],
                   japanese: ["契約書", "合意書", "覚書"],
                   spanish: ["contrato", "contratos", "acuerdo", "acuerdos", "convenio"])
@@ -171,7 +177,7 @@ nonisolated enum DocumentKind: String, CaseIterable, Sendable {
         case .document:
             Terms(english: ["file", "files", "document", "documents", "attachment", "attachments", "copy", "copies", "pdf", "materials"],
                   chinese: ["文件", "资料", "材料", "文档", "附件", "档案", "电子版", "原件", "复印件", "副本", "文檔", "資料"],
-                  japanese: ["資料", "ファイル", "書類", "データ一式", "原本", "コピー"],
+                  japanese: ["資料", "ファイル", "書類", "データ一式", "原本", "コピー", "写し", "控え"],
                   spanish: ["archivo", "archivos", "documento", "documentos", "material", "materiales", "copia", "copias"])
         case .scan:
             Terms(english: ["scan", "scans", "scanned copy", "scanned copies"],
@@ -232,21 +238,41 @@ nonisolated enum DocumentKind: String, CaseIterable, Sendable {
     }
 }
 
-/// Finds the files an email asks the user to send, such as "Please also send the floor
-/// plan.", 请把平面图发给我。, 平面図を送っていただけますか。 or "¿Me puedes enviar el
-/// plano?", with code rules in English, Chinese, Japanese and Spanish, no model.
+/// Finds the files an email asks the user to send, such as "Could you send me the floor
+/// plan?", 合同你也发我一份吧, 平面図を送っていただけますか。 or "¿Me lo podrías enviar?",
+/// with code rules in English, Chinese, Japanese and Spanish, no model.
+///
+/// Each language has a list of constructions, the ways it asks someone to send, share,
+/// forward or attach a document or to let the writer see one, written from the language and
+/// not from any set of mails: the words that ask with a verb of sending (could you send, 请发,
+/// お送りいただけますか, ¿podrías enviar?), the verb with what it asks for where the language
+/// puts it (把 X 发我, X 也发我一份, X を送っていただけ, mándame X), a request in passing or
+/// under a condition (if you have it, could you send it), a wish to see or have a document
+/// (I'd love to see, 想看看, 拝見できれば, me gustaría ver), a need (we need, 我们还缺, が必要です,
+/// nos falta) and a question whether the reader has one (do you have, 有没有, ¿tienes?).
+///
+/// What a construction asks for is read up to where its phrase ends. A word for a kind of
+/// document sets the kind, a file name is kept whole, and a phrase with neither, such as "the
+/// seating chart", asks for a document by its own words, which the search looks for by name
+/// and content. The constructions of verbs that also take time, help or a visit (need, have,
+/// see, give, provide) count only what names a document or a written thing such as a list.
+/// "It", "them", lo, それ, 这个 or no object at all, as in 麻烦再发我一份, point to the
+/// document named last before them, in the same sentence or in the sentence before, and ask
+/// for nothing when none is named.
+///
+/// Never a request: what is no file (comments, feedback, availability, an address, bank or
+/// tax details, information, money, goods, a link, the email itself), a portal to upload to
+/// or a form to fill in online, a quote or an invoice still to prepare ("send us a quote for
+/// 500 units"), a negation before the verb, the sender's own attachments, offers and promises
+/// (I'll send you, attached, 我发给你, 添付します, te envío), a question about what arrived or
+/// what the reader did to a document, and a file that came, as in 你发给我的平面图.
 ///
 /// It reads the subject, unless it is that of a reply or a forward, and the first
 /// `readLength` characters of the sender's own words, cut into sentences as DraftCheck cuts
-/// them, at most `mostSentences` of `sentenceLength` characters each. A sentence asks for a
-/// file when a request frame of one of the four languages matches it, no negation stands
-/// before the verb in the same clause or, for a list of verbs as in a notice of
-/// confidentiality, between the frame and the verb, and the head of what it asks for names a
-/// kind of document or a file name. The sender's own attachments, promises and offers, a
-/// question about what arrived or what the reader did to a document, and a request for
-/// comments on a document are no request. Every pattern is bounded, a sentence reads at most
-/// `mostFrames` matches of each, and what one asks for is read only as far as it is kept, so
-/// a hostile text cannot make it slow. Its limit is wording it does not know.
+/// them, at most `mostSentences` of `sentenceLength` characters each. Every pattern is
+/// bounded, runs only when the words it needs stand in the sentence, and a sentence reads at
+/// most `mostFrames` matches of each, so a hostile text cannot make it slow. Its limit is
+/// wording it does not know.
 ///
 /// Pure: it reads only the text it is given, and logs nothing.
 nonisolated enum FileRequests {
@@ -261,6 +287,10 @@ nonisolated enum FileRequests {
     /// The most matches of one pattern read in a sentence, so a sentence that repeats a frame
     /// costs no more than a few.
     static let mostFrames = 4
+    /// The most pronouns and plain files of a sentence that look for the document named
+    /// before them, and how far back in their sentence they look, in characters.
+    static let mostPointers = 4
+    static let antecedentReach = 160
 
     /// The files the email asks for, at most `mostRequests`, in the order of the text.
     /// `words` are the sender's own words, without quoted history, forwarded messages, the
@@ -284,9 +314,13 @@ nonisolated enum FileRequests {
         var index = 0
         while index < sentences.count, requests.count < mostRequests {
             let sentence = sentences[index]
+            // The sentence before, where a pronoun or a verb without an object may find the
+            // document it means.
+            let sentenceBefore = index > 0 ? sentences[index - 1] : nil
+            let sentenceBeforeThat = index > 1 ? sentences[index - 2] : nil
             index += 1
             let asked = self.asked(in: sentence)
-            var found = request(in: sentence, asked: asked)
+            var found = request(in: sentence, asked: asked, sentenceBefore: sentenceBefore, sentenceBeforeThat: sentenceBeforeThat)
             // A sentence that ends in a colon with a list under it, as "Please send the
             // following:", asks for the items of the list, once a frame of it passed its
             // checks, so "Please do not send the following:" asks for nothing.
@@ -321,40 +355,68 @@ nonisolated enum FileRequests {
 
     // MARK: A sentence
 
-    /// What one frame found: where it starts in the sentence, what it asks for, and whether
-    /// that must name a kind other than a plain file, as "we need" and "do you have" must.
-    private struct Asked {
-        var position: Int
-        var object: String
-        var needsWhich: Bool
+    private enum Language {
+        case english, spanish, chinese, japanese
     }
 
-    /// What the frames of a sentence ask for, each frame that passed its checks, in the order
-    /// of the sentence.
+    /// What one construction found in a sentence.
+    private struct Asked {
+        /// Where the construction starts in the sentence, in UTF-16 units.
+        var position: Int
+        /// What it asks for, in Chinese and Japanese its head, see `hanObject(_:)`.
+        var object: String
+        /// What it asks for as a whole, which names the document when its head names no
+        /// kind, as 展示会の案内文 does beside its head 案内文.
+        var phrase: String
+        /// The text of the sentence before the verb, or before what is asked for when that
+        /// comes first, where a pronoun may find its document.
+        var before: String
+        var language: Language
+        /// What it asks for must name a document, see `Construction.mustNameADocument`.
+        var mustNameADocument: Bool
+        /// It asks for "it", lo, それ or 这个, or for nothing named, as in 麻烦再发我一份, and so
+        /// points to a document named before it, see `antecedent(before:namedBefore:ownCounts:)`.
+        var pointsBack: Bool
+    }
+
+    /// What the constructions of a sentence ask for, in the order of the sentence.
     private static func asked(in original: String) -> [Asked] {
         let sentence = plain(original)
         guard !sentence.isEmpty else { return [] }
         return (english(sentence) + spanish(sentence) + chinese(sentence) + japanese(sentence)).sorted { $0.position < $1.position }
     }
 
-    /// The request of one sentence, nil when it asks for no file.
-    private static func request(in original: String, asked: [Asked]) -> FileRequest? {
+    /// The request of one sentence, nil when it asks for no file. `sentenceBefore` and
+    /// `sentenceBeforeThat` are the two sentences before it, where a pronoun may find its
+    /// document.
+    private static func request(in original: String, asked: [Asked], sentenceBefore: String?, sentenceBeforeThat: String?) -> FileRequest? {
         var objects: [String] = []
         var kinds: [DocumentKind] = []
         var fileNames: [String] = []
-        for item in asked {
-            // What is kept of the object is what names its kinds.
-            let object = clipped(item.object, to: objectKept)
-            guard !objects.contains(object) else { continue }
-            let itemKinds = self.kinds(in: object)
-            let itemNames = self.fileNames(in: object)
-            if item.needsWhich, !itemKinds.contains(where: { !$0.isGeneric }), itemNames.isEmpty {
-                continue
+        // A sentence that ends in a colon leaves what it does not name to the list under it.
+        let leadsAList = original.hasSuffix(":") || original.hasSuffix("：")
+        // A sentence that asks to sign a paper and send it back may point to the one the
+        // sender attached.
+        let signs = ContentChecks.matches([signedAndSentBack], plain(original))
+        // The document the sentence before names, read once for every pointer of the sentence,
+        // or, when that sentence only points back itself, as "Do you have it?" does, the one
+        // the sentence before it names.
+        var named: Antecedent??
+        func namedBefore() -> Antecedent? {
+            if let named { return named }
+            var found = sentenceBefore.flatMap { lastDocument(in: plain($0), ownCounts: signs) }
+            if found == nil, let sentenceBefore, let earlier = sentenceBeforeThat, ContentChecks.matches(pointerWords, plain(sentenceBefore)) {
+                found = lastDocument(in: plain(earlier), ownCounts: signs)
             }
-            guard !itemKinds.isEmpty || !itemNames.isEmpty else { continue }
-            objects.append(object)
-            kinds += itemKinds.filter { !kinds.contains($0) }
-            fileNames += itemNames.filter { !fileNames.contains($0) }
+            named = .some(found)
+            return found
+        }
+        var searches = 0
+        for item in asked {
+            guard let found = askedFor(item, namedBefore: namedBefore, signs: signs, searches: &searches, leadsAList: leadsAList), !objects.contains(found.object) else { continue }
+            objects.append(found.object)
+            kinds += found.kinds.filter { !kinds.contains($0) }
+            fileNames += found.fileNames.filter { !fileNames.contains($0) }
         }
         guard !objects.isEmpty else { return nil }
         return FileRequest(
@@ -365,12 +427,97 @@ nonisolated enum FileRequests {
         )
     }
 
+    /// What one construction asks for, with the kinds and file names it names, nil when that
+    /// is no file. A pronoun, or a plain file such as "a copy", takes the document named
+    /// before it. A phrase that names no kind and no file name asks for a document by its
+    /// own words, unless its construction must name a document.
+    private static func askedFor(_ item: Asked, namedBefore: () -> Antecedent?, signs: Bool, searches: inout Int, leadsAList: Bool) -> (object: String, kinds: [DocumentKind], fileNames: [String])? {
+        var object = clipped(item.object, to: objectKept)
+        var phrase = clipped(item.phrase, to: objectKept)
+        var language = item.language
+        if leadsAList, item.pointsBack || object.isEmpty {
+            return nil
+        }
+        var kinds = self.kinds(in: object)
+        var names = self.fileNames(in: object)
+        let plainFile = !kinds.isEmpty && kinds.allSatisfy(\.isGeneric) && names.isEmpty && ownWords(phrase).isEmpty
+        if item.pointsBack || plainFile, searches < mostPointers {
+            searches += 1
+            let found = antecedent(before: item.before, namedBefore: namedBefore, ownCounts: signs).map { found in
+                (object: clipped(found.object, to: objectKept), phrase: clipped(found.phrase, to: objectKept), language: found.language)
+            }
+            // A construction that must name a document takes only a document named by a kind
+            // or a file name, and a plain file keeps itself otherwise.
+            if let found, !item.mustNameADocument || !self.kinds(in: found.object).isEmpty || !self.fileNames(in: found.object).isEmpty {
+                object = found.object
+                phrase = found.phrase
+                language = found.language
+                kinds = self.kinds(in: object)
+                names = self.fileNames(in: object)
+            } else if item.pointsBack {
+                return nil
+            }
+        } else if item.pointsBack {
+            return nil
+        }
+        guard !object.isEmpty, !isNoFile(object, language), !isToPrepare(object) else { return nil }
+        if kinds.isEmpty, names.isEmpty {
+            guard !item.mustNameADocument || namesAWrittenThing(object, language), !ownWords(phrase).isEmpty, !isNoFile(phrase, language) else { return nil }
+            return (phrase, [.document], [])
+        }
+        return (object, kinds, names)
+    }
+
+    /// Whether a phrase that names no kind still names a written thing by its head, as "the
+    /// vendor list", "your notes", 装箱清单, 讲稿, 一覧 or "el borrador" do, which the
+    /// constructions that must name a document take as a document asked for by its words.
+    private static func namesAWrittenThing(_ object: String, _ language: Language) -> Bool {
+        let folded = matchingText(object)
+        guard !folded.isEmpty else { return false }
+        if folded.contains(where: { $0.isHan || $0.isKana }) {
+            return ContentChecks.matches([hanWrittenThing], trimmed(folded))
+        }
+        let words = folded.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        guard let last = words.last else { return false }
+        switch language {
+        case .spanish:
+            guard let head = words.first(where: { !spanishDeterminers.contains($0) }) else { return false }
+            return spanishWrittenThings.contains(head)
+        default:
+            var head = last
+            if let of = words.firstIndex(of: "of"), of > 0, !englishCounts.contains(words[of - 1]) {
+                head = words[of - 1]
+            }
+            return englishWrittenThings.contains(head)
+        }
+    }
+
+    private static let englishWrittenThings: Set<String> = [
+        "list", "lists", "sheet", "sheets", "chart", "charts", "notes", "draft", "drafts", "summary", "agenda", "checklist",
+        "checklists", "log", "logs", "records", "diagram", "diagrams", "layout", "sketch", "sketches", "outline", "handbook",
+        "manual", "guidelines", "brief", "template", "templates", "map", "maps",
+    ]
+    private static let spanishWrittenThings: Set<String> = [
+        "lista", "listas", "notas", "borrador", "borradores", "resumen", "agenda", "esquema", "bosquejo", "registro", "registros",
+        "diagrama", "manual", "plantilla", "mapa", "croquis", "hoja",
+    ]
+    /// The ends of a Chinese or Japanese head that name a written thing: 清单, 签到表, 讲稿, 手册,
+    /// 记录, 一覧, リスト, 書 and their like, but not 代表 or 手表.
+    private static let hanWrittenThing = regex(#"(?:(?<!简|买)单|(?<!代|发|外|手|电|仪|钟|水)表|稿|(?<!注)册|记录|笔记|日志|明细|模板|草图|地图|指南|须知|细则|一覧|リスト|書|録|原稿|下書き|明細|テンプレート|マニュアル|まとめ)$"#)
+
     /// The request of a sentence that ends in a colon, with the items of the list under it
-    /// as what it asks for.
+    /// as what it asks for. Items that name no kind ask for documents by their own words,
+    /// unless they are no file, as a name or an address.
     private static func listRequest(_ original: String, items: [String]) -> FileRequest? {
         let object = items.map { clipped($0, to: objectKept) }.joined(separator: ", ")
-        let kinds = self.kinds(in: object)
+        var kinds = self.kinds(in: object)
         let names = fileNames(in: object)
+        if kinds.isEmpty, names.isEmpty, items.contains(where: { item in
+            let language: Language = item.contains(where: { $0.isHan || $0.isKana }) ? (item.contains(where: \.isKana) ? .japanese : .chinese) : latinLanguage(item)
+            return !ownWords(item).isEmpty && !isNoFile(language == .chinese || language == .japanese ? hanObject(item) : item, language)
+        }) {
+            kinds = [.document]
+        }
         guard !items.isEmpty, !kinds.isEmpty || !names.isEmpty else { return nil }
         return FileRequest(
             sentence: String(trimmed(original).prefix(sentenceKept)),
@@ -400,78 +547,266 @@ nonisolated enum FileRequests {
             && Set(second.words.split(separator: " ")).isSubset(of: firstWords)
     }
 
+    // MARK: Constructions
+
+    /// A way a language asks the reader for a document, as one pattern with named groups:
+    /// `verb`, `frame` for the words that ask where they stand apart from the verb, `gap`
+    /// between the two, and `object` where what is asked for stands in the pattern, as in
+    /// 把 X 发 or X を送って. Without `object`, what is asked for is read after the verb.
+    private struct Construction: Sendable {
+        /// The construction in words, such as "could you send X" or 把 X 发我, for whoever
+        /// reads the list.
+        let reads: String
+        let pattern: NSRegularExpression
+        /// What is asked for must name a document: a kind, a file name, a word for a file such
+        /// as copy, 资料 or 書類, or a written thing such as a list, 清单 or 一覧, see
+        /// `namesAWrittenThing(_:_:)`. So it must for the verbs that also take time, help or a
+        /// visit: need, have, see, give and provide, and for a topic before its verb, which may
+        /// also be its subject. After a verb of sending, a phrase that names no kind asks for a
+        /// document by its own words.
+        let mustNameADocument: Bool
+        /// The sentence must end in a question mark, as "do you have X?" must.
+        let question: Bool
+        /// An imperative at the start of a clause, which the sender's own "I'll" before it
+        /// makes the sender's, as in "I'll check it and send the plan".
+        let imperative: Bool
+        /// The verb must send toward the writer, as 发我, 发给我 or 发过来 do, or end the
+        /// clause as a request, as 发一下吧 does, since a clause that starts with 把 and no
+        /// subject may also tell what someone did.
+        let towardTheWriter: Bool
+        /// Patterns the sentence must match first, so most sentences cost the construction
+        /// nothing.
+        let gates: [NSRegularExpression]
+        let hasFrame: Bool
+        let hasGap: Bool
+        let hasObject: Bool
+
+        init(
+            _ reads: String, _ pattern: NSRegularExpression, mustNameADocument: Bool = false, question: Bool = false,
+            imperative: Bool = false, towardTheWriter: Bool = false, gates: [NSRegularExpression] = []
+        ) {
+            self.reads = reads
+            self.pattern = pattern
+            self.mustNameADocument = mustNameADocument
+            self.question = question
+            self.imperative = imperative
+            self.towardTheWriter = towardTheWriter
+            self.gates = gates
+            hasFrame = pattern.pattern.contains("(?<frame>")
+            hasGap = pattern.pattern.contains("(?<gap>")
+            hasObject = pattern.pattern.contains("(?<object>")
+        }
+
+        /// Whether the construction may match the sentence at all.
+        func mayMatch(_ sentence: String) -> Bool {
+            if question, !(sentence.hasSuffix("?") || sentence.hasSuffix("？")) {
+                return false
+            }
+            return gates.allSatisfy { ContentChecks.matches([$0], sentence) }
+        }
+
+        /// Where a named group of a match stands, nil when the pattern has no such group or
+        /// the group took no part in the match.
+        func range(_ name: String, in match: NSTextCheckingResult, of sentence: String) -> Range<String.Index>? {
+            switch name {
+            case "frame": guard hasFrame else { return nil }
+            case "gap": guard hasGap else { return nil }
+            case "object": guard hasObject else { return nil }
+            default: break
+            }
+            let found = match.range(withName: name)
+            guard found.location != NSNotFound else { return nil }
+            return Range(found, in: sentence)
+        }
+    }
+
     // MARK: English
 
-    /// please, could you, would you mind, don't forget to and their like, then within 40
-    /// characters a verb of sending, with the gap before the verb and the verb.
-    private static let englishAsk = latin(#"\b(?:please|pls|plz|kindly|could you|can you|would you|will you|would you mind|could u|can u|don['’]?t forget to|do not forget to|(?:i|we)(?:['’]d| would) appreciate (?:it )?if you could|(?:i|we)(?:['’]d| would) be grateful if you could|would it be possible (?:for you )?to|(?:i|we) (?:also |still |really )?need you to|(?:i|we)(?:['’]d| would) like you to|(?:i|we) want you to)\b([^.!?;]{0,40}?)\b(send|resend|re-send|forward|share|attach|provide|upload|email|e-mail|sending|resending|forwarding|sharing|attaching|providing|uploading|emailing)\b"#)
-    /// Send me or send us at the start of a sentence, after a greeting.
-    private static let englishSendMe = latin(#"^(?:(?:hi|hello|hey|dear|good (?:morning|afternoon|evening))\b[^,!]{0,40}[,!]\s*)?(?:and |also |just |so |ok,? |okay,? )?(send|forward|email|e-mail|share)\s+(?:me|us)\b"#)
-    /// We need or I need, with a kind as the object.
-    private static let englishNeed = latin(#"\b(?:i|we)(?:['’]d|['’]ll| would| will| also| still| really| urgently| now| just| only){0,3}\s+(need)\b(?!\s+(?:to|you|your help|a reply|an answer|more time)\b)"#)
-    /// Do you have, with a kind as the object and a question mark.
-    private static let englishHave = latin(#"\bdo you (?:still |happen to |by any chance )?(have)\b"#)
-    private static let englishNegation = latin(#"\b(?:don['’]?t|do not|didn['’]?t|did not|no need to|not necessary|unnecessary|needn['’]t|need not|never|not|no longer|won['’]t|without)\b"#)
+    /// The words that ask: please, could you, would you mind, if you could, I'd appreciate it
+    /// if you could, don't forget to and their like.
+    private static let englishAsks = #"please|pls|plz|kindly|(?:could|can|would|will|might) (?:you|u)|(?:would|do) you mind|(?:if|whether) (?:you|u) (?:could|can|would|might)|you could|would it be possible (?:for you )?to|is it possible (?:for you )?to|any chance (?:you could|you can|of you)|(?:i|we)(?:['’]d| would)? (?:really |greatly |very much |so much )?appreciate (?:it )?if you (?:could|can|would)|(?:i|we)(?:['’]d| would) be (?:very |most |really |so )?(?:grateful|thankful|obliged|glad|happy) if you (?:could|can|would)|(?:i|we) (?:also |still |really )?need you to|(?:i|we)(?:['’]d| would) (?:like|love) you to|(?:i|we) want you to|don['’]?t forget to|do not forget to|remember to|make sure (?:to|you)|be sure to|feel free to|do not hesitate to|don['’]?t hesitate to|thanks? (?:you )?in advance for"#
+    /// The verbs of sending a file.
+    private static let englishSends = #"send|resend|re-send|forward|share|reshare|attach|email|e-mail|upload|submit|pass along|pass on|include|sending|resending|re-sending|forwarding|sharing|resharing|attaching|emailing|e-mailing|uploading|submitting|passing along|passing on|including"#
+    /// The verbs that give or show, which also take a call, a hand or a tour.
+    private static let englishGives = #"provide|providing|(?:give|giving|get|getting|show|showing|lend|lending) (?:me|us)|let (?:me|us) (?:have|see)"#
+    /// The verbs of a wish to have or to see.
+    private static let englishSees = #"see|seeing|view|viewing|have|having|get|getting|receive|receiving|read|reading|look at|looking at|take a look at|taking a look at|have a look at|having a look at|go through|going through|glance at|peek at"#
+
+    /// The ways English asks the reader for a document.
+    private static let englishConstructions: [Construction] = [
+        Construction(
+            "please, could you, would you mind, if you could, I'd appreciate it if you could … send, forward, share or attach X",
+            latin(#"\b(?<frame>"# + englishAsks + #")\b(?<gap>[^.!?;]{0,40}?)\b(?<verb>"# + englishSends + #")\b"#)),
+        Construction(
+            "could you provide, give, get or show me X",
+            latin(#"\b(?<frame>"# + englishAsks + #")\b(?<gap>[^.!?;]{0,40}?)\b(?<verb>"# + englishGives + #")\b"#),
+            mustNameADocument: true),
+        Construction(
+            "send me X, forward X, share X, at the start of a clause, not upload or submit X, which calls for a portal",
+            latin(#"(?:^|[,;:]\s*)(?:(?:hi|hello|hey|dear|good (?:morning|afternoon|evening))\b[^,!]{0,40}[,!]\s*)?(?:(?:and|also|just|so|ok|okay|then|oh|ps|p\.s\.)[,:]?\s+){0,2}(?<verb>send|resend|forward|email|e-mail|share|attach|pass along|pass on)\s+(?=(?:me|us|over|along|across|back|through|again|the|your|that|this|these|those|it|them|a|an|any|all|both|copies|one|some)\b)"#),
+            imperative: true),
+        Construction(
+            "I'd love to see X, can I have X, she'd like to read X, I look forward to receiving X",
+            latin(#"\b(?<frame>(?:i|we|she|he|they)(?:['’]d|['’]ll| would| will| really| also| still| just){0,2} (?:love|like|want|wish|hope|need)s? to|(?!(?:you|u)\b)[\p{L}]+(?:['’]d| would)(?: really| also| just)? (?:love|like) to|(?:i|we)(?:['’]m|['’]re| am| are) (?:keen|eager|hoping|looking|waiting) to|(?:can|could|may|might) (?:i|we)(?: please)?|it (?:would|will|might)(?: be)? (?:\w+ )?(?:help|helpful|great|useful|good|nice|ideal) to|(?:i|we) look forward to|(?:i|we)(?:['’]m|['’]re| am| are) looking forward to|looking forward to)\s+(?<verb>"# + englishSees + #")\b"#),
+            mustNameADocument: true),
+        Construction(
+            "I'd love a copy of X, we'd like the X",
+            latin(#"\b(?<frame>(?:i|we)(?:['’]d| would)(?: really| also)?) (?<verb>love|like|appreciate)\s+(?=(?:a|an|the|your|any|some|copies|both)\b)"#),
+            mustNameADocument: true),
+        Construction(
+            "I'd like to ask you for X, may I ask for X",
+            latin(#"\b(?<frame>(?:i|we)(?:['’]d| would)? (?:like to |want to |wanted to )?|(?:can|could|may|might) (?:i|we) )(?<verb>ask (?:you )?for)\b"#),
+            mustNameADocument: true),
+        Construction(
+            "we need X, we'll need X",
+            latin(#"\b(?:i|we)(?:['’]d|['’]ll| would| will| also| still| really| urgently| now| just| only){0,3}\s+(?<verb>need|require)\b(?!\s+(?:to|you|your help|a reply|an answer|more time)\b)"#),
+            mustNameADocument: true),
+        Construction(
+            "we are missing X, we lack X",
+            latin(#"\b(?:i|we)(?:['’]re|['’]m| are| am)?(?: still| also)? (?<verb>missing|lacking|lack)\b"#),
+            mustNameADocument: true),
+        Construction(
+            "X is missing, X is still needed",
+            latin(#"(?<object>\b(?:the|your|a|an|our)\s[^,.!?;:]{1,60}?)\s+(?<verb>(?:is|are) (?:still |also )?(?:missing|needed|required))\b"#),
+            mustNameADocument: true),
+        Construction(
+            "do you have X?",
+            latin(#"\bdo (?:you|u)(?: still| also| happen to| by any chance){0,2} (?<verb>have)\b"#),
+            mustNameADocument: true, question: true),
+        Construction(
+            "have you got X?",
+            latin(#"\bhave (?:you|u) (?<verb>got)\b"#),
+            mustNameADocument: true, question: true),
+        Construction(
+            "is there X?",
+            latin(#"\b(?<verb>is there|are there)\b"#),
+            mustNameADocument: true, question: true),
+    ]
+
+    private static let englishNegation = latin(#"\b(?:don['’]?t|do not|didn['’]?t|did not|no need to|not necessary|unnecessary|needn['’]t|need not|never|not|no longer|won['’]t|without|can['’]?t|cannot|couldn['’]?t|wouldn['’]?t|shouldn['’]?t)\b"#)
     /// Who sends: a subject, or me or us before to, as in "would you like me to send".
     private static let englishPronoun = latin(#"\b(i|we|you|u|they|he|she|me(?=\s+to\b)|us(?=\s+to\b))\b"#)
     /// The pronouns that make the sender the one who sends.
     private static let englishSender: Set<String> = ["i", "we", "me", "us"]
-    /// Words before what is asked for that are none of it, as in "send me over the plan".
-    private static let englishLead = latin(#"^(?:\s*\b(?:me|us|over|along|across|back|through|again|also|please|kindly|to me|to us|over to (?:me|us)|across to (?:me|us))\b)*\s*(?:the following(?: files?| documents?| items?)?\s*:|these\s*:|following\s*:)?"#)
-    /// Where what is asked for ends.
-    private static let englishCut = latin(#"\s+(?:on|about|regarding|re|for|by|to|with|from|in|within|before|after|when|whenever|if|as soon as|asap|so that|so|because|since|once|until|till|today|tomorrow|tonight|this week|next week|at|via|through|back|over|along|across|again|and (?:let|tell|confirm|please|could|can|also|then|i|we)|but|thanks|thank you)\b|[,;:()\[\]]|\s[-–—]\s"#)
+    /// A permission between the words that ask and the verb, as in "allows you to".
+    private static let englishAllowed = latin(#"\b(?:allow|allows|allowed|let|lets|permit|permits|permitted|authori[sz]e|authori[sz]es)\s+(?:you|u)\b"#)
+    /// The sender's own future before an imperative, as in "I'll check it and send the plan".
+    private static let englishSendersOwn = latin(#"\b(?:i|we)(?:['’]ll| will| shall|['’]m going to| am going to|['’]re going to| are going to)\b"#)
+    /// Words before what is asked for that are none of it, as in "send me over the plan", and
+    /// him or her before what is asked for, as in "send him the plan".
+    private static let englishLead = latin(#"^(?:\s*\b(?:me|us|over|along|across|back|through|again|also|please|kindly|to me|to us|over to (?:me|us)|across to (?:me|us)|(?:him|her|them)(?=\s+(?:the|a|an|your|our|that|this|these|those|any|all|both|copies|one)\b))\b)*\s*(?:the following(?: files?| documents?| items?)?\s*:|these\s*:|following\s*:)?"#)
+    /// Where what is asked for ends, also before a clause that says more about it, as in
+    /// "the plan that we discussed" or "the plan you sent".
+    private static let englishCut = latin(#"\s+(?:on|about|regarding|re|for|by|to|with|from|in|within|before|after|when|whenever|if|as soon as|asap|so that|so|because|since|once|until|till|today|tomorrow|tonight|this week|next week|at|via|through|back|over|along|across|again|too|as well|either|please|as|is|are|was|were|has|have|had|will|handy|ready|available|on hand|at hand|first(?=\s*[.!?]?\s*$)|that|which|who|whom|whose|where|you|we|i|they|he|she|and (?:let|tell|confirm|please|could|can|also|then|i|we|send|forward|share|sign|return|email|attach|upload|submit)|but|thanks|thank you)\b|[,;:()\[\]]|\s[-–—]\s"#)
     /// The cut words after which "a copy of the contract" and "una copia de la factura" go on.
     private static let prepositions: Set<String> = ["on", "about", "for", "by", "to", "with", "from", "in", "sobre", "para", "por", "con", "de", "del", "en", "a", "al"]
     private static let englishKeepGoing: Set<String> = ["copy", "copies", "version", "versions", "scan", "scans", "pdf", "pdfs", "photo", "photos", "picture", "pictures", "image", "images"]
+    /// What asks for the document named before it.
+    private static let englishPointer = latin(#"^(?:it|them|that|this|these|those|one|ones|the one|the ones|the same|that one|this one|those ones|it all|them all|all of them|all of it|both|both of them)$"#)
 
     private static func english(_ sentence: String) -> [Asked] {
         var asked: [Asked] = []
-        func add(_ match: NSTextCheckingResult, verb: Range<String.Index>, objectFrom start: String.Index, frame: String.Index? = nil, needsWhich: Bool) {
-            guard !negated(sentence, from: frame, before: verb.lowerBound, negation: englishNegation) else { return }
-            let object = latinObject(after: start, in: sentence, lead: englishLead, cut: englishCut, keepGoing: englishKeepGoing)
-            asked.append(Asked(position: match.range.location, object: object, needsWhich: needsWhich))
-        }
-        for match in frames(englishAsk, sentence) {
-            guard let whole = Range(match.range, in: sentence),
-                  let gap = Range(match.range(at: 1), in: sentence),
-                  let verb = Range(match.range(at: 2), in: sentence) else { continue }
-            // The sender as the one who sends, as in "please let me know if I should send" or
-            // "would you like me to send".
-            if let pronoun = lastMatch(englishPronoun, in: String(sentence[gap]))?.lowercased(), englishSender.contains(pronoun) {
-                continue
-            }
-            add(match, verb: verb, objectFrom: verb.upperBound, frame: whole.lowerBound, needsWhich: false)
-        }
-        for match in frames(englishSendMe, sentence) {
-            guard let whole = Range(match.range, in: sentence), let verb = Range(match.range(at: 1), in: sentence) else { continue }
-            add(match, verb: verb, objectFrom: whole.upperBound, needsWhich: false)
-        }
-        for match in frames(englishNeed, sentence) {
-            guard let verb = Range(match.range(at: 1), in: sentence) else { continue }
-            add(match, verb: verb, objectFrom: verb.upperBound, needsWhich: true)
-        }
-        if sentence.hasSuffix("?") {
-            for match in frames(englishHave, sentence) {
-                guard let verb = Range(match.range(at: 1), in: sentence) else { continue }
-                add(match, verb: verb, objectFrom: verb.upperBound, needsWhich: true)
+        for construction in englishConstructions where construction.mayMatch(sentence) {
+            for match in frames(construction.pattern, sentence) {
+                guard let whole = Range(match.range, in: sentence), let verb = construction.range("verb", in: match, of: sentence) else { continue }
+                let frame = construction.range("frame", in: match, of: sentence)
+                // The sender as the one who sends, between the words that ask and the verb, as
+                // in "please let me know if I should send" or "would you like me to send".
+                if let frame, frame.upperBound < verb.lowerBound,
+                   let pronoun = lastMatch(englishPronoun, in: String(sentence[frame.upperBound..<verb.lowerBound]))?.lowercased(),
+                   englishSender.contains(pronoun) {
+                    continue
+                }
+                if construction.imperative, ContentChecks.matches([englishSendersOwn], String(sentence[..<verb.lowerBound])) {
+                    continue
+                }
+                // What the reader may do, as in "can you confirm the client allows you to show
+                // screenshots", asks for no file.
+                if let frame, frame.upperBound < verb.lowerBound, ContentChecks.matches([englishAllowed], String(sentence[frame.upperBound..<verb.lowerBound])) {
+                    continue
+                }
+                guard !negated(sentence, from: frame?.lowerBound, before: verb.lowerBound, negation: englishNegation),
+                      !ContentChecks.matches([portal], clause(of: whole, verb: verb, in: sentence)) else { continue }
+                // Passing something on to anyone at all, as in "share it with your friends" or
+                // "forward this to a friend", asks the reader for no file.
+                if ContentChecks.matches([englishAnyone], String(sentence[verb.upperBound...])) {
+                    continue
+                }
+                // "include me" or "attach us" asks for no file.
+                if ["include", "including", "attach", "attaching", "upload", "uploading", "submit", "submitting"].contains(sentence[verb].lowercased()),
+                   ContentChecks.matches([objectIsAPerson], String(sentence[verb.upperBound...])) {
+                    continue
+                }
+                let object = construction.range("object", in: match, of: sentence).map { trimmed(String(sentence[$0])) }
+                    ?? latinObject(after: verb.upperBound, in: sentence, lead: englishLead, cut: englishCut, keepGoing: englishKeepGoing)
+                let pointsBack = ContentChecks.matches([englishPointer], object) || (object.isEmpty && !construction.mustNameADocument)
+                // What a pronoun may point to stands before the verb, also between the words
+                // that ask and the verb, as in "please sign the attached form and send it back".
+                let before = construction.range("object", in: match, of: sentence)?.lowerBound ?? verb.lowerBound
+                asked.append(Asked(
+                    position: match.range.location, object: object, phrase: object, before: String(sentence[..<before]),
+                    language: .english, mustNameADocument: construction.mustNameADocument, pointsBack: pointsBack))
             }
         }
         return asked
     }
 
+    private static let objectIsAPerson = latin(#"^\s*(?:me|us|him|her)\b"#)
+    /// Anyone at all as whom something goes to, as in a newsletter.
+    private static let englishAnyone = latin(#"\b(?:with|to)\s+(?:anyone|anybody|everyone|everybody|a friend|friends|your friends|your network|your colleagues|others|other people|people you know)\b"#)
+
     // MARK: Spanish
 
+    /// The words that ask: por favor, ¿podrías?, te agradecería que, necesito que, no
+    /// olvides, si puedes and their like.
+    private static let spanishAsks = #"por favor|porfa|porfavor|favor de|ser[ií]as? tan amable de|tendr[ií]as? la amabilidad de|puedes|podr[ií]as|puede|podr[ií]a|pueden|podr[ií]an|pod[eé]s|(?:te |le |les )?agradecer[ií]a(?: mucho)? (?:que|si)|necesito que|necesitamos que|necesitar[ií]a que|ser[ií]a posible que|es posible que|me har[ií]as el favor de|hazme el favor de|me haces el favor de|no olvides|no te olvides de|no se olvide de|no olvide|recuerda|recuerde|(?:te|le|les) importar[ií]a|(?:te|le|les) molestar[ií]a|si puedes|si pudieras|si puede|si pudiera|cuando puedas|cuando pueda|(?:te|le|les) pido que|quisiera pedirte que|quisiera pedirle que|te encargo|(?:me|nos) gustar[ií]a que|(?:me|nos) encantar[ií]a que|ser[ií]a (?:\w+ )?(?:genial|ideal|perfecto|bueno|[uú]til|estupendo|de gran ayuda) (?:si|que)|estar[ií]a bien que|gracias de antemano por|gracias por adelantado por"#
     /// The verbs of sending, in the infinitive, the imperative and the subjunctive, with me
     /// or nos and lo or la, accented or not. Never the first person, as in te envío, adjunto
     /// or envié, which the sender says of their own attachment or of what they sent.
-    private static let spanishVerbs = #"(?:re)?env[ií](?:[aá]r|[aá]|e|es|en|[aá]ras?|[aá]ran|[aá]ses?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|m[aá]nd(?:[aá]r|[aá]|e|es|en|[aá]ras?|[aá]ran)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|comp[aá]rt(?:[ií]r|[aá]|e|as|an|en|[ií]eras?|[ií]eran)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|adj[uú]nt(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|p[aá]s(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|fac[ií]l[ií]t(?:[aá]r|[aá]|e|es|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|proporci[oó]n(?:[aá]r|[aá]|e|es|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|rem[ií]t(?:[ií]r|[aá]|e|as|[ií]eras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?"#
-    private static let spanishAsk = latin(#"\b(?:por favor|porfa|porfavor|favor de|puedes|podr[ií]as|puede|podr[ií]a|pueden|podr[ií]an|me puedes|me podr[ií]as|nos puedes|nos podr[ií]as|me puede|me podr[ií]a|nos puede|nos podr[ií]a|te agradecer[ií]a que|le agradecer[ií]a que|les agradecer[ií]a que|agradecer[ií]a que|necesito que|necesitamos que|ser[ií]a posible que|me har[ií]as el favor de|hazme el favor de|no olvides|no te olvides de|no se olvide de|no olvide|recuerda|recuerde)\b([^.!?;]{0,40}?)\b("# + spanishVerbs + #")\b"#)
-    /// The imperatives with me or nos anywhere, and a bare imperative at the start of a
-    /// clause, as in "adjunta el plano", not as in "va adjunta la factura", and not the
-    /// participle that brings the sender's own file, as in "adjunta encontrarás la factura",
-    /// "adjunta te envío" or "adjunta va".
-    private static let spanishImperative = latin(#"\b((?:env[ií]a|m[aá]nda|comp[aá]rte|p[aá]sa|reenv[ií]a|fac[ií]l[ií]ta|adj[uú]nta|rem[ií]te)(?:me|nos)(?:lo|la|los|las)?)\b|(?:^|[,;:¿¡]\s*)((?:adj[uú]nta|env[ií]a|m[aá]nda|comp[aá]rte))\b(?!\s+(?:encontrar[aáeé]?\w*|hallar[aáeé]?\w*|ver[aá]s|va|van|est[aá]n?|tienes?|te|le|les|os|se|me|nos|env[ií]o|remito|mando|adjunto)\b)"#)
-    private static let spanishNeed = latin(#"\b(necesito|necesitamos|necesitar[ií]a|necesitar[ií]amos|me hace falta|nos hace falta)\b(?!\s+que\b)"#)
+    private static let spanishSends = #"(?:re)?env[ií](?:[aá]r|[aá]|e|es|en|[aá]ras?|[aá]ran|[aá]ses?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|m[aá]nd(?:[aá]r|[aá]|e|es|en|[aá]ras?|[aá]ran)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|comp[aá]rt(?:[ií]r|[aá]|e|as|an|en|[ií]eras?|[ií]eran)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|adj[uú]nt(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|p[aá]s(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|rem[ií]t(?:[ií]r|[aá]|e|as|[ií]eras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|hac(?:er|e|es)(?:me|nos|le|les|se)?(?:lo|la|los|las)?\s+llegar|hag(?:as|a|an)\s+llegar|hicier(?:as|a|an)\s+llegar|haz(?:me|nos)(?:lo|la|los|las)?\s+llegar"#
+    /// The verbs that give or show, which also take help or a visit.
+    private static let spanishGives = #"fac[ií]l[ií]t(?:[aá]r|[aá]|e|es|[aá]ras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|proporci[oó]n(?:[aá]r|[aá]|e|es|[aá]ras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|d(?:ar|[eé]s?|a)(?:me|nos)(?:lo|la|los|las)?|mostr(?:ar|[eé]s?)(?:me|nos)(?:lo|la|los|las)?|mu[eé]str(?:a|e|as)(?:me|nos)(?:lo|la|los|las)?|ense[nñ](?:ar|a|e|es)(?:me|nos)(?:lo|la|los|las)?"#
+
+    /// The ways Spanish asks the reader for a document.
+    private static let spanishConstructions: [Construction] = [
+        Construction(
+            "por favor, ¿podrías?, te agradecería que, no olvides … enviar, mandar, compartir, adjuntar o hacer llegar X",
+            latin(#"\b(?<frame>"# + spanishAsks + #")\b(?<gap>[^.!?;]{0,40}?)\b(?<verb>"# + spanishSends + #")\b"#)),
+        Construction(
+            "¿podrías facilitarme, darme o mostrarme X?",
+            latin(#"\b(?<frame>"# + spanishAsks + #")\b(?<gap>[^.!?;]{0,40}?)\b(?<verb>"# + spanishGives + #")\b"#),
+            mustNameADocument: true),
+        Construction(
+            "envíame X, mándamelo, compártenos X, hazme llegar X",
+            latin(#"\b(?<verb>(?:env[ií]a|m[aá]nda|comp[aá]rte|p[aá]sa|reenv[ií]a|adj[uú]nta|rem[ií]te)(?:me|nos)(?:lo|la|los|las)?|haz(?:me|nos)(?:lo|la|los|las)?\s+llegar)\b"#)),
+        Construction(
+            "adjunta X, envía X, at the start of a clause, not the participle of the sender's own file, as in adjunta encontrarás la factura",
+            latin(#"(?:^|[,;:¿¡]\s*)(?<verb>adj[uú]nta|env[ií]a|m[aá]nda|comp[aá]rte)\b(?!\s+(?:encontrar[aáeé]?\w*|hallar[aáeé]?\w*|ver[aá]s|va|van|est[aá]n?|tienes?|te|le|les|os|se|me|nos|env[ií]o|remito|mando|adjunto)\b)"#)),
+        Construction(
+            "¿me envías X?, ¿me lo mandas?, ¿me enviarías X?",
+            latin(#"(?:^|[¿,;:]\s*)(?:(?:y|tambi[eé]n|oye|oiga|entonces)\s+)?(?<frame>me|nos)\s+(?:(?:lo|la|los|las)\s+)?(?<verb>env[ií]as|mandas|pasas|compartes|reenv[ií]as|adjuntas|remites|haces llegar|env[ií]ar[ií]as|mandar[ií]as|pasar[ií]as|compartir[ií]as|reenviar[ií]as)\b"#)),
+        Construction(
+            "me gustaría ver X, quisiera recibir X, ¿puedo ver X?",
+            latin(#"\b(?<frame>(?:me|nos|le|les) gustar[ií]a|(?:me|nos|le|les) encantar[ií]a|quisiera|quisi[eé]ramos|quiero|queremos|quiere|quieren|querr[ií]a|deseo|deseamos|desear[ií]a|puedo|podemos|espero|esperamos)\s+(?<verb>ver|tener|recibir|leer|echar(?:le)? un vistazo a(?:l)?|dar(?:le)? un vistazo a(?:l)?|mirar|obtener|contar con)\b"#),
+            mustNameADocument: true),
+        Construction(
+            "me gustaría una copia de X",
+            latin(#"\b(?<frame>(?:me|nos) gustar[ií]a|(?:me|nos) encantar[ií]a|quisiera|quisi[eé]ramos)\s+(?<verb>)(?=(?:una?|el|la|los|las|tu|tus|su|sus)\s)"#),
+            mustNameADocument: true),
+        Construction(
+            "quería pedirte X, te pido X",
+            latin(#"\b(?<frame>(?:te |le |les )?quer[ií]a pedir(?:te|le|les)?|quisiera pedir(?:te|le|les)|(?:te|le|les) pido|(?:te|le|les) quer[ií]a pedir)\s+(?<verb>)(?=(?:una?|el|la|los|las|tu|tus|su|sus)\s)"#),
+            mustNameADocument: true),
+        Construction(
+            "necesito X, nos falta X",
+            latin(#"\b(?<verb>necesito|necesitamos|necesitar[ií]a|necesitar[ií]amos|me hace falta|nos hace falta|me falta|nos falta|me faltan|nos faltan|requerimos|requiero)\b(?!\s+que\b)"#),
+            mustNameADocument: true),
+        Construction(
+            "¿tienes X?",
+            latin(#"(?:^|¿)\s*(?<verb>tienes|tiene|tienen|tendr[aá]s|tendr[ií]as|tendr[ií]a|cuentas con|cuenta con|hay|habr[aá])\b"#),
+            mustNameADocument: true, question: true),
+    ]
+
     /// No before the verb, but not the polite no of "¿no me podrías enviar…?", and ni, as in
     /// "no copie, use ni reenvíe".
     private static let spanishNegation = latin(#"\b(?:no(?!\s+(?:me\s+|nos\s+|te\s+|le\s+)?(?:puedes|podr[ií]as|puede|podr[ií]a|pueden|podr[ií]an)\b)|ni|nunca|jam[aá]s|tampoco|sin)\b"#)
@@ -479,46 +814,70 @@ nonisolated enum FileRequests {
     /// envíe el plano".
     private static let spanishSender = latin(#"\bque\s+(?:yo\s+)?(?:te|le|les|os)\s+$|\bque\s+yo\s+$"#)
     private static let spanishLead = latin(#"^(?:\s*\b(?:me|nos|te|le|les|tambi[eé]n|por favor|porfa|de nuevo|otra vez|nuevamente|ahora|ya)\b)*\s*(?:(?:lo|los|las) siguientes?(?: archivos| documentos)?\s*:)?"#)
-    private static let spanishCut = latin(#"\s+(?:sobre|para|por|con|de|del|a|al|antes|despu[eé]s|cuando|si|hoy|ma[nñ]ana|lo antes posible|en|porque|ya que|y (?:me|nos|te|le|av[ií]same|conf[ií]rmame)|pero|gracias)\b|[,;:()\[\]]|\s[-–—]\s"#)
+    private static let spanishCut = latin(#"\s+(?:sobre|para|por|con|de|del|a|al|antes|despu[eé]s|cuando|si|hoy|ma[nñ]ana|lo antes posible|en|porque|ya que|que|tambi[eé]n|por favor|es|est[aá]|est[aá]n|son|fue|ya|y (?:me|nos|te|le|av[ií]same|conf[ií]rmame|env[ií]\w*|m[aá]nd\w*|f[ií]rm\w*|devu[eé]lv\w*|reenv[ií]\w*|comp[aá]rt\w*)|pero|gracias)\b|[,;:()\[\]]|\s[-–—]\s"#)
+    /// Where what is asked for ends when its head names no kind, so the words after de stay,
+    /// as in "la lista de invitados".
+    private static let spanishCutAfterDe = latin(#"\s+(?:sobre|para|por|con|a|al|antes|despu[eé]s|cuando|si|hoy|ma[nñ]ana|lo antes posible|en|porque|ya que|que|tambi[eé]n|por favor|es|est[aá]|est[aá]n|son|fue|ya|y (?:me|nos|te|le|av[ií]same|conf[ií]rmame|env[ií]\w*|m[aá]nd\w*|f[ií]rm\w*|devu[eé]lv\w*|reenv[ií]\w*|comp[aá]rt\w*)|pero|gracias)\b|[,;:()\[\]]|\s[-–—]\s"#)
+
+    /// What a Spanish construction asks for after its verb, and the phrase a search reads:
+    /// the same, or with the words after de when the head names no kind or file name, as
+    /// "la lista de invitados" beside "la lista".
+    private static func spanishObject(after start: String.Index, in sentence: String) -> (object: String, phrase: String) {
+        let object = latinObject(after: start, in: sentence, lead: spanishLead, cut: spanishCut, keepGoing: spanishKeepGoing)
+        guard kinds(in: object).isEmpty, fileNames(in: object).isEmpty else { return (object, object) }
+        return (object, latinObject(after: start, in: sentence, lead: spanishLead, cut: spanishCutAfterDe, keepGoing: spanishKeepGoing))
+    }
+
     private static let spanishKeepGoing: Set<String> = ["copia", "copias", "versión", "version", "versiones", "foto", "fotos", "escaneo", "escaneos", "pdf", "imagen", "imágenes", "imagenes"]
+    /// Lo, la, los or las on the verb or right before it, which point back, as in
+    /// mándamelo or ¿me lo podrías enviar?
+    private static let spanishCliticOnVerb = latin(#"(?:lo|la|los|las)(?:\s+llegar)?$"#)
+    private static let spanishCliticBefore = latin(#"(?:^|[\s¿¡,])(?:(?:me|nos|te|se|le|les)\s+)?(?:lo|la|los|las)\s*$|(?:^|[\s¿¡,])(?:lo|la|los|las)\s+(?:puedes|podr[ií]as|puede|podr[ií]a|pueden|podr[ií]an|pod[eé]s)\b"#)
+    private static let spanishAnyone = latin(#"\b(?:con|a)\s+(?:todos|todo el mundo|cualquiera|tus amigos|sus amigos|un amigo|una amiga|tus colegas|quien quieras)\b"#)
+    private static let spanishPointer = latin(#"^(?:eso|esto|esos|estos|esa|esas|ese|este|ello|lo mismo|el mismo|la misma|los mismos|las mismas)$"#)
 
     private static func spanish(_ sentence: String) -> [Asked] {
         var asked: [Asked] = []
-        func add(_ match: NSTextCheckingResult, verb: Range<String.Index>, frame: String.Index? = nil, needsWhich: Bool) {
-            guard !negated(sentence, from: frame, before: verb.lowerBound, negation: spanishNegation) else { return }
-            let object = latinObject(after: verb.upperBound, in: sentence, lead: spanishLead, cut: spanishCut, keepGoing: spanishKeepGoing)
-            asked.append(Asked(position: match.range.location, object: object, needsWhich: needsWhich))
-        }
-        for match in frames(spanishAsk, sentence) {
-            guard let whole = Range(match.range, in: sentence), let verb = Range(match.range(at: 2), in: sentence) else { continue }
-            // "que te envíe" with a verb not of tú: the sender sends to the reader.
-            if !sentence[verb].lowercased().hasSuffix("s"), ContentChecks.matches([spanishSender], String(sentence[whole.lowerBound..<verb.lowerBound])) {
-                continue
+        for construction in spanishConstructions where construction.mayMatch(sentence) {
+            for match in frames(construction.pattern, sentence) {
+                guard let whole = Range(match.range, in: sentence), let verb = construction.range("verb", in: match, of: sentence) else { continue }
+                let frame = construction.range("frame", in: match, of: sentence)
+                // "que te envíe" with a verb not of tú: the sender sends to the reader.
+                if frame != nil, !sentence[verb].lowercased().hasSuffix("s"),
+                   ContentChecks.matches([spanishSender], String(sentence[whole.lowerBound..<verb.lowerBound])) {
+                    continue
+                }
+                // Passing something on to anyone at all, as in "compártelo con tus amigos".
+                if ContentChecks.matches([spanishAnyone], String(sentence[verb.upperBound...])) {
+                    continue
+                }
+                guard !negated(sentence, from: frame?.lowerBound, before: verb.lowerBound, negation: spanishNegation),
+                      !ContentChecks.matches([portal], clause(of: whole, verb: verb, in: sentence)) else { continue }
+                let (object, phrase) = spanishObject(after: verb.upperBound, in: sentence)
+                // Lo or la on the verb, before the words that ask or between them and the verb.
+                let clitic = ContentChecks.matches([spanishCliticOnVerb], String(sentence[verb]))
+                    || ContentChecks.matches([spanishCliticBefore], String(sentence[..<(frame?.lowerBound ?? verb.lowerBound)].suffix(12)))
+                    || ContentChecks.matches([spanishCliticBefore], String(sentence[(frame?.lowerBound ?? verb.lowerBound)..<verb.lowerBound]))
+                let pointsBack = ContentChecks.matches([spanishPointer], object)
+                    || (object.isEmpty && (clitic || !construction.mustNameADocument))
+                asked.append(Asked(
+                    position: match.range.location, object: object, phrase: phrase, before: String(sentence[..<verb.lowerBound]),
+                    language: .spanish, mustNameADocument: construction.mustNameADocument, pointsBack: pointsBack))
             }
-            add(match, verb: verb, frame: whole.lowerBound, needsWhich: false)
-        }
-        for match in frames(spanishImperative, sentence) {
-            let group = match.range(at: 1).location != NSNotFound ? 1 : 2
-            guard let verb = Range(match.range(at: group), in: sentence) else { continue }
-            add(match, verb: verb, needsWhich: false)
-        }
-        for match in frames(spanishNeed, sentence) {
-            guard let verb = Range(match.range(at: 1), in: sentence) else { continue }
-            add(match, verb: verb, needsWhich: true)
         }
         return asked
     }
 
     // MARK: Chinese
 
-    /// The words that make a request, before the verb: 请, 麻烦, 能否, 也 and their like, the
-    /// steps before sending back a signed paper, as in 盖章后回传, and 并 that starts a clause
-    /// after one that asks, as in 请回复同意，并把合同发过来.
-    private static let chineseFrames = #"(?:签字|签名|签章|盖章|签署|签好|盖好|签完|盖完)(?:字|章)?(?:并|后|之后|以后)|(?<=[,;，；]\s{0,1})并且?|请|麻烦|劳烦|烦请|能否|可否|能不能|可不可以|可以|方便时|方便的话|记得|顺便|也|再|帮忙|帮我们|帮我|务必|还请|需要(?:你|您)们?|希望(?:你|您)们?(?:能)?|想请(?:你|您)?|别忘了?|别忘记了?|不要忘了?|不要忘记了?|千万别忘了?|千万不要忘了?|可别忘了?"#
+    /// The words that make a request, before the verb: 请, 麻烦, 能否, 方便的话, 也 and their
+    /// like, 你能 or 您可以, the steps before sending back a signed paper, as in 盖章后回传, and
+    /// 并 that starts a clause after one that asks, as in 请回复同意，并把合同发过来.
+    private static let chineseFrames = #"(?:签字|签名|签章|盖章|签署|签好|盖好|签完|盖完)(?:字|章)?(?:并|后|之后|以后)|(?<=[,;，；]\s{0,1})并且?|请|麻烦|劳烦|烦请|能否|可否|能不能|可不可以|可以|是否可以|是否能|方便时|方便的话|有空(?:的话|时|的时候)?|如果可以(?:的话)?|如果方便(?:的话)?|要是方便(?:的话)?|记得|顺便|顺手|顺带|也|再|帮忙|帮我们|帮我|务必|还请|劳驾|辛苦(?:你|您)了?|拜托(?:你|您)?|抽空|得空|尽快|赶紧|需要(?:你|您)们?|希望(?:你|您)们?(?:能)?|想请(?:你|您)?|(?:你|您)们?(?:这边|那边)?(?:能不能|能|可以|可不可以|方便)|别忘了?|别忘记了?|不要忘了?|不要忘记了?|千万别忘了?|千万不要忘了?|可别忘了?"#
     /// The verbs of sending. A verb of one character stands only before 给, 我, 一下 and the
     /// like, or right before a word of the glossary, as in 请发平面图给我, so 发票 or 发现 is
     /// no verb.
-    private static let chineseVerbs = #"回传|传回|发回|寄回|发送|发给|发过来|发一下|发一份|发个|发到|传给|传过来|传一下|传一份|传到|寄给|寄过来|寄一下|寄一份|寄到|分享|提供|附上|转发|共享|发(?=我|吧|呗|来|回|$|[,.!?;。，！？；\s])|传(?=我|吧|来|$|[,.!?;。，！？；\s])|寄(?=我|吧|来|$|[,.!?;。，！？；\s])|(?:发|传|寄)(?=(?:(?:最新|最终|新|完整|正式|修改后|更新后|那|这)(?:版|个|份|些)?的?)?(?:"# + hanTerms + "))"
+    private static let chineseSends = #"回传|传回|发回|寄回|发送|发给|发过来|发过去|发一下|发一份|发个|发到|传给|传过来|传过去|传一下|传一份|传到|寄给|寄过来|寄一下|寄一份|寄到|分享|附上|转发|共享|转给|转过来|转一下|抄送(?:给)?|交给|上传|转(?=我)|发(?=我|吧|呗|来|回|$|[,.!?;。，！？；\s])|传(?=我|吧|来|$|[,.!?;。，！？；\s])|寄(?=我|吧|来|$|[,.!?;。，！？；\s])|(?:发|传|寄)(?=(?:(?:最新|最终|新|完整|正式|修改后|更新后|那|这)(?:版|个|份|些)?的?)?(?:"# + hanTerms + "))"
     /// The words of the glossary in Chinese characters, longest first, as a pattern.
     private static let hanTerms: String = {
         var seen: Set<String> = []
@@ -528,23 +887,102 @@ nonisolated enum FileRequests {
             .map(NSRegularExpression.escapedPattern(for:))
             .joined(separator: "|")
     }()
-    /// A verb of sending anywhere, which the patterns of 把 and of the object after the verb
-    /// need, so a sentence without one costs them nothing.
-    private static let chineseVerb = regex(chineseVerbs)
+    /// A verb of sending anywhere, which the constructions of sending need, so a sentence
+    /// without one costs them nothing.
+    private static let chineseSend = regex(chineseSends)
+    /// A verb of sending of one character, which 发 X 给我 and X 发我一下 need.
+    private static let chineseSendCharacter = regex(#"发|传|寄|转|分享|共享"#)
+    /// A verb of sending that stands before what it sends, as in 发排练流程给我, and not the
+    /// first character of a word such as 发票, 发现, 传真 or 寄存.
+    private static let chineseBareSend = #"(?:发(?!票|现|布|生|展|言|表|明|起|出|货|动|挥|放|行|育|达|烧|热|音|射|酵|型|量|觉|愁|呆|火|疯|抖|胖|财|奋|掘|源|件|给|到|过|了|送)|传(?!统|说|达|播|真|染|承|奇|闻|授|唤|递|输|给|到|过|了)|寄(?!存|托|生|宿|养|居|给|到|过|了)|转发|分享|共享)"#
     /// A character of a clause: no punctuation that ends one, but the dot of a file name.
     private static let chineseClause = #"(?:[^,.!?;:。，！？；：、\n]|\.(?=[A-Za-z0-9]))"#
-    /// 把 or 将 with the object before the verb, as in 请把平面图发给我, long enough for a file
-    /// name, as in 麻烦把 proof-feedback-2026-10-14.md 再发我一下.
-    private static let chineseBa = regex("(" + chineseFrames + ")(" + chineseClause + "{0,10}?)(?:把|将)(" + chineseClause + "{1,60}?)(" + chineseVerbs + ")")
-    /// The object after the verb, as in 麻烦发一下平面图.
-    private static let chineseAsk = regex("(" + chineseFrames + ")(" + chineseClause + "{0,10}?)(" + chineseVerbs + ")(" + chineseClause + "{1,30})")
-    /// 我们需要 or 我需要 with a kind, not with a verb as in 我们需要讨论平面图.
-    private static let chineseNeed = regex("(?:我们|我司|本公司|我这边|我们这边|我)(?:这边|还|也|现在|目前|急|很)?(?:需要|要)(?!(?:你|您|讨论|确认|看|了解|修改|调整|知道|开会|安排|沟通|商量|审核|核对|更新|准备|提交|签|做|画|改|出|跟|和|与|去|来|再|重新|尽快|先))(" + chineseClause + "{1,30})")
-    /// 有没有 with a kind, and 你有…吗 as a question.
-    private static let chineseHave = regex("有没有(" + chineseClause + "{1,30}?)(?:吗|$|[?？])|(?:你|您)们?(?:这边|那边)?有(" + chineseClause + "{1,30}?)吗")
-    /// A verb at the start of what 有没有 or 你有…吗 asks about, which asks whether the reader
-    /// did something to a document, as in 你有没有看过平面图, not for the document.
-    private static let chineseHaveVerb = regex(#"^(?:看|查看|查阅|阅读|读|确认|核对|核实|检查|审核|审阅|审批|批准|批过|签|盖章|更新|修改|修订|调整|改|收到|收好|拿到|下载|上传|保存|打印|提交|提供|准备|完成|处理|做|画过|画了|画好|找到|找过|用过|用了|使用|参考|考虑|讨论|联系|通知|安排|整理|发过|发了|发给|发送|发出|传过|传了|传给|寄过|寄了|寄出|转发|分享|共享|附上)"#)
+    /// A character of a topic before its verb, as in 合同也发我一份: one of a clause, but not
+    /// 把 or 将, whose constructions read their own object.
+    private static let chineseTopic = #"(?:[^,.!?;:。，！？；：、\n把将]|\.(?=[A-Za-z0-9]))"#
+    /// The start of a clause, where a request without a word that asks may start.
+    private static let chineseClauseStart = #"(?:^|(?<=[,，;；:：。!！?？、]))\s*"#
+    /// What may stand between the subject and the verb of a request: 也, 再, 能, 方便, 帮忙,
+    /// 尽快, 明天 and their like.
+    private static let chineseAdverbs = "(?:也|再|就|先|都|还|能不能|能|可不可以|可以|方便|有空|帮忙|帮我|尽快|赶紧|直接|顺便|" + chineseWhen + "){0,4}"
+    /// When the reader is asked to send it: 今晚, 明天, 下周 and their like.
+    private static let chineseWhen = #"今天|今晚|明天|明早|后天|这周|本周|下周|周末|回头|到时候|稍后|晚点|早点|尽早|待会|一会儿|有空时|方便时"#
+
+    /// The ways Chinese asks the reader for a document.
+    private static let chineseConstructions: [Construction] = [
+        Construction(
+            "请, 麻烦, 能否, 方便的话, 也 … 发, 传, 转发, 附上 X, or nothing named, as in 麻烦再发我一份",
+            regex("(?<frame>" + chineseFrames + ")(?<gap>" + chineseTopic + "{0,10}?)(?<verb>" + chineseSends + ")(?<object>" + chineseClause + "{0,30})"),
+            gates: [chineseSend]),
+        Construction(
+            "请发 X 给我, 麻烦传 X 过来",
+            regex("(?<frame>" + chineseFrames + ")(?<gap>" + chineseClause + "{0,10}?)(?<verb>" + chineseBareSend + ")(?<object>" + chineseClause + "{1,30}?)(?=给(?:我|我们|他|她|他们|她们|大家|客户|对方|同事)|过来|过去)"),
+            gates: [chineseSendCharacter]),
+        Construction(
+            "请把 X 发给我, 麻烦将 X 转发",
+            regex("(?<frame>" + chineseFrames + ")(?<gap>" + chineseClause + "{0,10}?)(?:把|将)(?<object>" + chineseClause + "{1,60}?)(?<verb>" + chineseSends + "|提供)"),
+            gates: [regex(chineseSends + "|提供")]),
+        Construction(
+            "请提供 X",
+            regex("(?<frame>" + chineseFrames + ")(?<gap>" + chineseClause + "{0,10}?)(?<verb>提供)(?<object>" + chineseClause + "{1,30})"),
+            mustNameADocument: true, gates: [regex("提供")]),
+        Construction(
+            "你把 X 发我一下, 您将 X 转发给客户",
+            regex(chineseClauseStart + "(?<frame>(?:你|您)们?(?:这边|那边)?" + chineseAdverbs + ")(?:把|将)(?<object>" + chineseClause + "{1,60}?)(?:也|再|都|先|一起|直接)?(?<verb>" + chineseSends + ")"),
+            gates: [chineseSend]),
+        Construction(
+            "把 X 发我, 把 X 发过来吧, at the start of a clause",
+            regex(chineseClauseStart + "(?<frame>" + chineseAdverbs + ")(?:把|将)(?<object>" + chineseClause + "{1,60}?)(?:也|再|都|先|一起|直接)?(?<verb>" + chineseSends + ")"),
+            towardTheWriter: true, gates: [chineseSend]),
+        Construction(
+            "X 发我一下, X 也发我一份吧, X 发过来",
+            regex(chineseClauseStart + "(?<object>" + chineseTopic + "{1,30}?)(?<frame>(?:(?:你|您)们?)?(?:" + chineseFrames + "|也|再|就|先|都|还|帮忙|尽快|赶紧|直接|顺便|" + chineseWhen + "){0,4})(?<verb>发|传|寄|转发|转|分享|共享|发送)(?=给?(?:我|我们)(?:一下|一份|一个|个|吧|哈|呀|啊|哦|呗|看看|参考|就行|就好|就可以|即可|好吗|可以吗)*(?:$|[,，;；:：。!！?？\\s])|过来)"),
+            mustNameADocument: true, gates: [chineseSendCharacter]),
+        Construction(
+            "发我一份 X, 你发我一下 X, at the start of a clause",
+            regex(chineseClauseStart + "(?<frame>(?:你|您)?们?" + chineseAdverbs + ")(?<verb>(?:发|传|寄|转发|转|分享|共享|发送)给?(?:我|我们))(?<object>" + chineseClause + "{0,30})"),
+            gates: [chineseSendCharacter]),
+        Construction(
+            "发 X 给我, 传 X 过来, at the start of a clause",
+            regex(chineseClauseStart + "(?<frame>(?:你|您)?们?" + chineseAdverbs + ")(?<verb>" + chineseBareSend + ")(?<object>" + chineseClause + "{1,30}?)(?=给(?:我|我们)|过来)"),
+            gates: [chineseSendCharacter]),
+        Construction(
+            "给我发一份 X, 能给我传一下 X 吗",
+            regex(chineseClauseStart + "(?<frame>(?:" + chineseFrames + ")?(?:你|您)?们?(?:能不能|能|可以|方便)?)(?<verb>给(?:我|我们)(?:发|传|寄|转发))(?<object>" + chineseClause + "{0,30})"),
+            gates: [regex("给")]),
+        Construction(
+            "给我一份 X, 能给我 X 吗",
+            regex(chineseClauseStart + "(?<frame>(?:" + chineseFrames + ")?(?:你|您)?们?(?:能不能|能|可以|方便)?)(?<verb>给(?:我|我们)(?:一份|一下|一个|一张|个)?)(?!发|传|寄|转|打|回|讲|说|看)(?<object>" + chineseClause + "{1,30})"),
+            mustNameADocument: true, gates: [regex("给")]),
+        Construction(
+            "想跟你要一份 X, 找您要一下 X",
+            regex("(?<frame>(?:想|能|可以|方便)?(?:跟|向|找)(?:你|您)们?)(?<verb>要(?:一份|一下|一个|个|一张)?)(?<object>" + chineseClause + "{1,30})"),
+            mustNameADocument: true, gates: [regex("要")]),
+        Construction(
+            "我们需要 X, 我们还缺 X, not a verb as in 我们需要讨论平面图",
+            regex("(?<frame>(?:我们|我司|本公司|我这边|我们这边|我)(?:这边|还|也|现在|目前|急|很)?)(?<verb>需要|要|缺少|缺|还差|少了)(?!(?:(?:你|您)(?!们?的)|讨论|确认|看|了解|修改|调整|知道|开会|安排|沟通|商量|审核|核对|更新|准备|提交|签|做|画|改|出|跟|和|与|去|来|再|重新|尽快|先))(?<object>" + chineseClause + "{1,30})"),
+            mustNameADocument: true, gates: [regex("要|缺|差|少")]),
+        Construction(
+            "有没有 X?, not a question about what the reader did, as in 你有没有看过平面图",
+            regex("(?<verb>有没有)" + chineseNotDone + "(?<object>" + chineseClause + "{1,30}?)(?:吗|$|[?？])"),
+            mustNameADocument: true, gates: [regex("有没有")]),
+        Construction(
+            "你有 X 吗?",
+            regex("(?<verb>(?:你|您)们?(?:这边|那边|手上|手里|手边|那里|那儿)?有)" + chineseNotDone + "(?<object>" + chineseClause + "{1,30}?)吗"),
+            mustNameADocument: true, gates: [regex("有")]),
+        Construction(
+            "想看看 X, 希望收到 X, 她想提前看看 X",
+            regex("(?<frame>(?:我|我们|她|他|她们|他们|客户|对方|老板|领导|候选人|同事|大家|业主|甲方|老师)?(?:很|也|还|都|先|正|一直|特别)?(?:想|希望|想要|期待|盼着|打算)(?:能|可以)?(?:先|提前|尽快|再|早点|早日)?)(?<verb>看看|看一下|看一看|看下|瞧瞧|过目|拿到|收到|看到|拿一份|要一份|参考一下|参考|看(?!过|了))(?<object>" + chineseClause + "{1,30})"),
+            mustNameADocument: true, gates: [regex("想|希望|期待|盼|打算")]),
+        Construction(
+            "给我看看 X, 能让我看一下 X 吗",
+            regex("(?<frame>(?:能不能|能否|可否|可以|能|麻烦|请)?(?:你|您)?(?:让|给)(?:我|我们))(?<verb>看看|看一下|看一看|过目|瞧瞧|参考一下)(?<object>" + chineseClause + "{1,30})"),
+            mustNameADocument: true, gates: [regex("看|过目|瞧|参考")]),
+    ]
+
+    /// Not a verb after 有没有 or 你有, as in 你有没有看过平面图, which asks whether the reader did
+    /// something to a document, not for it.
+    private static let chineseNotDone = "(?!(?:没有)?(?:看|查看|查阅|阅读|读|确认|核对|核实|检查|审核|审阅|审批|批准|批过|签|盖章|更新|修改|修订|调整|改|收到|收好|拿到|下载|上传|保存|打印|提交|提供|准备|完成|处理|做|画过|画了|画好|找到|找过|用过|用了|使用|参考|考虑|讨论|联系|通知|安排|整理|发过|发了|发给|发送|发出|传过|传了|传给|寄过|寄了|寄出|转发|分享|共享|附上))"
     /// A negation before the verb: 不用, 别, 请勿 and their like. Not 不能 or 不可, which stand
     /// in the frames 能不能 and 可不可以.
     private static let chineseNegation = regex(#"不用|不必|无需|无须|别|不要|不需要|没必要|勿|禁止|严禁|不得(?!不)"#)
@@ -559,7 +997,19 @@ nonisolated enum FileRequests {
     /// The sender as the one who sends, right before a word of request: 我也, 我们这边也可以,
     /// but not 帮我 or 给我.
     private static let chineseFirstPerson = regex(#"(?:^|[^帮给替为让])(?:我们|我|本人)(?:这边|那边)?(?:也|还|再|就|都|会|将|可以|能|马上|稍后|今天|明天|先|随后)*$"#)
-    private static let chineseObjectEnd = regex(#"给|到|至|过来|吧|吗|呢|哦|啊|谢谢|哈|呗|好吗|可以吗"#)
+    private static let chineseObjectEnd = regex(#"(?:给|到|至)(?=我|我们|你|您|他|她|他们|她们|大家|客户|对方|同事|邮箱|这个|那个|公司|微信|群)|过来|过去|吧|吗|呢|哦|啊|谢谢|哈|呗|好吗|可以吗|请|麻烦|劳烦|烦请"#)
+    /// After the verb: a file that came, as in 你发给我的平面图 or 发来的报价单, and what was
+    /// done, as in 发给我了, which ask for nothing. After 发到 or 寄至 what follows is a place,
+    /// as in 发到我的邮箱.
+    private static let chineseCame = regex(#"^(?:给)?(?:我们|我|你们|你|您|他|她)?(?:来|过来)?(?:一下|一份)?的"#)
+    private static let chineseDone = regex(#"^(?:给)?(?:我们|我|你们|你|您|他|她)?(?:来|过来)?(?:一下|一份)?(?:了|过)"#)
+    /// Toward the writer, after a verb of a clause that starts with 把: 发我, 发给我, 发过来,
+    /// or the end of a request, as in 发一下吧.
+    private static let chineseTowardTheWriter = regex(#"^(?:给)?(?:我们|我|过来)|^(?:一下|一份)?(?:吧|呗|哈|啊|呀)|^(?:一下)?(?:$|[,，;；:：。!！?？])"#)
+    /// A verb whose next words name whom or where it goes, not what.
+    private static let chineseToWhom = regex(#"(?:给|到|至|抄送)$"#)
+    /// What asks for the document named before it.
+    private static let chinesePointer = regex(#"^(?:它|它们|这个|那个|这份|那份|这些|那些|这一份|那一份|这个东西|那个东西)$"#)
 
     private static func chinese(_ sentence: String) -> [Asked] {
         guard sentence.contains(where: \.isHan) else { return [] }
@@ -580,56 +1030,77 @@ nonisolated enum FileRequests {
             let nextEnd = sentence[next...].firstIndex(where: { boundaries.contains($0) }) ?? sentence.endIndex
             return ContentChecks.matches([chineseOwnClause], String(sentence[next..<nextEnd]))
         }
-        // The patterns run only when the words they need stand in the sentence.
-        let sends = ContentChecks.matches([chineseVerb], sentence)
-        for (pattern, objectGroup, verbGroup) in [(chineseBa, 3, 4), (chineseAsk, 4, 3)] where sends {
-            for match in frames(pattern, sentence) {
-                guard !own(match),
-                      let frame = Range(match.range(at: 1), in: sentence),
-                      let gap = Range(match.range(at: 2), in: sentence),
-                      let verb = Range(match.range(at: verbGroup), in: sentence),
-                      let object = Range(match.range(at: objectGroup), in: sentence) else { continue }
-                // 我们需要你提供 asks the reader, whoever stands before it. The sender as the
-                // one who sends, before the frame or between it and the verb, as in 请等我把
-                // 平面图发给你 or 请问需要我把合同发给你吗, asks nothing.
-                let asksTheReader = sentence[frame].contains("你") || sentence[frame].contains("您")
-                if !asksTheReader, ContentChecks.matches([chineseFirstPerson], String(sentence[..<frame.lowerBound])) { continue }
-                if ContentChecks.matches([chineseFirstPerson], String(sentence[gap])) { continue }
-                // 并 joins a request only to a clause that asks, so 合并后发给我 asks nothing.
-                if sentence[frame].hasPrefix("并"), !ContentChecks.matches([chineseAsking], String(sentence[..<frame.lowerBound])) { continue }
+        for construction in chineseConstructions where construction.mayMatch(sentence) {
+            for match in frames(construction.pattern, sentence) {
+                guard !own(match), let whole = Range(match.range, in: sentence),
+                      let verb = construction.range("verb", in: match, of: sentence) else { continue }
+                let frame = construction.range("frame", in: match, of: sentence).flatMap { $0.isEmpty ? nil : $0 }
+                let gap = construction.range("gap", in: match, of: sentence)
+                let objectRange = construction.range("object", in: match, of: sentence)
+                if let frame {
+                    // 我们需要你提供 asks the reader, whoever stands before it. The sender as the
+                    // one who sends, before the frame or between it and the verb, as in 请等我
+                    // 把平面图发给你 or 请问需要我把合同发给你吗, asks nothing.
+                    let asksTheReader = sentence[frame].contains("你") || sentence[frame].contains("您")
+                    if !asksTheReader, frame.lowerBound == whole.lowerBound,
+                       ContentChecks.matches([chineseFirstPerson], String(sentence[..<frame.lowerBound])) {
+                        continue
+                    }
+                    // 并 joins a request only to a clause that asks, so 合并后发给我 asks nothing.
+                    if sentence[frame].hasPrefix("并"), !ContentChecks.matches([chineseAsking], String(sentence[..<frame.lowerBound])) { continue }
+                }
+                if let gap, ContentChecks.matches([chineseFirstPerson], String(sentence[gap])) { continue }
                 // 也附上 or 再附上 without a word that asks, in the frame or right after it,
                 // brings the sender's own file.
-                if sentence[verb].hasPrefix("附"), !ContentChecks.matches([chineseAsking], String(sentence[frame.lowerBound..<gap.upperBound])) { continue }
-                // 附上了 or 发过 tell what was done.
-                if sentence[verb.upperBound...].hasPrefix("了") || sentence[verb.upperBound...].hasPrefix("过") { continue }
-                guard !negated(sentence, before: verb.lowerBound, negation: chineseNegation) else { continue }
-                var text = String(sentence[object])
-                if objectGroup > verbGroup, let end = chineseObjectEnd.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)), let range = Range(end.range, in: text) {
+                if sentence[verb].hasPrefix("附") {
+                    let asking = frame.map { String(sentence[$0.lowerBound..<(gap?.upperBound ?? $0.upperBound)]) } ?? ""
+                    if !ContentChecks.matches([chineseAsking], asking) { continue }
+                }
+                // 发给我的 or 发来的 name a file that came, and 附上了, 发过 or 发给我了 tell what
+                // was done.
+                let after = String(sentence[verb.upperBound...])
+                let sends = ContentChecks.matches([chineseSendCharacter], String(sentence[verb])) || sentence[verb].contains("附") || sentence[verb].contains("交") || sentence[verb].contains("抄")
+                let toAPlace = sentence[verb].hasSuffix("到") || sentence[verb].hasSuffix("至")
+                if sends, ContentChecks.matches([chineseDone], after) || (!toAPlace && ContentChecks.matches([chineseCame], after)) { continue }
+                if construction.towardTheWriter, !sentence[verb].contains("我"), !sentence[verb].hasSuffix("过来"),
+                   !ContentChecks.matches([chineseTowardTheWriter], after) {
+                    continue
+                }
+                guard !negated(sentence, before: verb.lowerBound, negation: chineseNegation),
+                      !ContentChecks.matches([portal], clause(of: whole, verb: verb, in: sentence)) else { continue }
+                var text = objectRange.map { String(sentence[$0]) } ?? ""
+                let objectAfterVerb = objectRange.map { $0.lowerBound >= verb.upperBound } ?? true
+                if objectAfterVerb, let end = chineseObjectEnd.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)), let range = Range(end.range, in: text) {
                     text = String(text[..<range.lowerBound])
                 }
-                var asking = hanObject(text)
-                // What is asked for stands before the frame, as in 厨电规格麻烦发我一下, when the
-                // verb has only me, 一下 or 一份 after it: the clause before the frame, after its
-                // last 把 or 将, at most as long as an object after a verb.
-                if objectGroup > verbGroup, asking.isEmpty {
+                var object = hanObject(text)
+                var phrase = hanCleaned(text)
+                // After 发给, 传到 or 抄送, or 转发 followed by 给, comes whom or where it goes, as in
+                // 发给大家 or 转发给设计团队, so what follows asks for a file only when it names a
+                // document, as in 发给我一份报价单.
+                if objectAfterVerb, ContentChecks.matches([chineseToWhom], String(sentence[verb])) || text.hasPrefix("给") || text.hasPrefix("到") || text.hasPrefix("至"),
+                   kinds(in: object).isEmpty, fileNames(in: text).isEmpty {
+                    object = ""
+                    phrase = ""
+                }
+                // Nothing after the verb but me, 一下 or 一份: what is asked for may stand before
+                // the words that ask, as in 厨电规格麻烦发我一下, when it names a document.
+                // Otherwise it points back.
+                if object.isEmpty, objectAfterVerb, let frame {
                     let boundaries = ",;:，；：。!?！？、把将"
                     let start = sentence[..<frame.lowerBound].lastIndex(where: { boundaries.contains($0) }).map { sentence.index(after: $0) } ?? sentence.startIndex
-                    asking = hanObject(String(sentence[start..<frame.lowerBound].suffix(30)))
+                    let topic = String(sentence[start..<frame.lowerBound].suffix(30))
+                    if !kinds(in: hanObject(topic)).isEmpty || !fileNames(in: topic).isEmpty || ContentChecks.matches([chinesePointer], hanObject(topic)) {
+                        object = hanObject(topic)
+                        phrase = hanCleaned(topic)
+                    }
                 }
-                asked.append(Asked(position: match.range.location, object: asking, needsWhich: false))
-            }
-        }
-        for pattern in [chineseNeed, chineseHave] where sentence.contains(pattern === chineseNeed ? "要" : "有") {
-            for match in frames(pattern, sentence) {
-                let group = (1..<match.numberOfRanges).first { match.range(at: $0).location != NSNotFound } ?? 1
-                guard !own(match), let object = Range(match.range(at: group), in: sentence) else { continue }
-                if pattern === chineseHave, ContentChecks.matches([chineseHaveVerb], String(sentence[object])) { continue }
-                guard !negated(sentence, before: object.lowerBound, negation: chineseNegation) else { continue }
-                var text = String(sentence[object])
-                if let end = chineseObjectEnd.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)), let range = Range(end.range, in: text) {
-                    text = String(text[..<range.lowerBound])
-                }
-                asked.append(Asked(position: match.range.location, object: hanObject(text), needsWhich: true))
+                let pointsBack = object.isEmpty || ContentChecks.matches([chinesePointer], object)
+                if pointsBack, construction.mustNameADocument, object.isEmpty { continue }
+                let start = objectRange.map { min($0.lowerBound, verb.lowerBound) } ?? verb.lowerBound
+                asked.append(Asked(
+                    position: match.range.location, object: object, phrase: phrase, before: String(sentence[..<start]),
+                    language: .chinese, mustNameADocument: construction.mustNameADocument, pointsBack: pointsBack))
             }
         }
         return asked
@@ -637,49 +1108,468 @@ nonisolated enum FileRequests {
 
     // MARK: Japanese
 
-    private static let japaneseClause = #"(?:[^,.!?;:。、，！？；：\n]|\.(?=[A-Za-z0-9]))"#
-    private static let japaneseEndings = #"ください|下さい|くださいませ|いただけますか|いただけませんか|いただけますでしょうか|いただけないでしょうか|頂けますか|頂けませんか|頂けますでしょうか|もらえますか|もらえませんか|お願いします|お願いいたします|お願い致します|お願いできますか|いただければ|頂ければ|いただけると|頂けると|いただきたく|いただきたいです|頂きたく|願います|ほしいです|欲しいです"#
-    /// A polite request anywhere, which the first three patterns need: an ending of
-    /// `japaneseEndings`, of the noun pattern (お願い…) or of the give pattern (いただきたい).
-    private static let japaneseEnding = regex(japaneseEndings + "|お願い|いただきたい|頂きたい")
-    /// A verb of sending anywhere, which the first two patterns need.
-    private static let japaneseSend = regex(#"送って|送付して|共有して|添付して|送信して|転送して|お送り|ご送付|ご共有|ご提供|ご送信|ご転送"#)
-    /// The object before を or も, a verb of sending, and a polite request.
-    private static let japaneseAsk = regex("(" + japaneseClause + "{1,30}?)(?:を|も)(?:至急|早めに|早急に|改めて|再度|もう一度|今一度|一度|すぐに|先に)?(?:送って|送付して|共有して|添付して|送信して|転送して|お送り|ご送付|ご共有|ご提供|ご送信|ご転送)(?:して|を)?(?:" + japaneseEndings + ")")
-    /// The object before の and a noun of sending, as in 契約書のご提供をお願いいたします.
-    private static let japaneseNoun = regex("(" + japaneseClause + "{1,30}?)の(?:ご送付|ご提供|ご共有|ご送信|ご転送|お送り)を(?:お願いします|お願いいたします|お願い致します|お願いできますか|お願いできますでしょうか|お願い申し上げます)")
-    /// The object before を with いただけますか alone.
-    private static let japaneseGive = regex("(" + japaneseClause + "{1,30}?)を(?:いただけますか|いただけませんか|いただけますでしょうか|頂けますか|頂けませんか|ください|下さい|もらえますか|いただきたい|頂きたい)")
-    /// A kind before が必要です.
-    private static let japaneseNeed = regex("(" + japaneseClause + "{1,30}?)が(?:必要です|必要になります|必要となります|必要でして|必要でございます|必要なのですが|必要なので|ほしいです|欲しいです)")
-    /// The object before を, a verb of sending and 忘れないでください, don't forget to send.
-    private static let japaneseForget = regex("(" + japaneseClause + "{1,30}?)を(?:送る|送付する|共有する|添付する|お送りする|転送する)の(?:を)?忘れないで(?:ください|下さい|くださいね|ね)?")
-    private static let japaneseLead = regex(#"^(?:また|あと|それと|それから|さらに|念のため|ついでに|恐れ入りますが|お手数ですが|お手数をおかけしますが|すみませんが|申し訳ありませんが|至急)+"#)
+    /// A character of what is asked for before its particle: no punctuation and no を, so it
+    /// starts after the last を before the verb.
+    private static let japaneseObject = #"(?:[^を、。,.!?！？\n]|\.(?=[A-Za-z0-9]))"#
+    /// What may stand between the particle and the verb, as 2部, メールで or PDFで.
+    private static let japaneseGap = #"[^を、。,.!?！？\n]"#
+    /// A number of copies or an adverb between the particle and a verb of giving, as 2部 or
+    /// 至急.
+    private static let japaneseQuantity = #"(?:(?:\d+|[一二三四五六七八九十数]+|何)(?:点|部|枚|通|件|つ|冊|式)か?|いくつか|至急|早めに|改めて|再度|もう一度|今一度|一度|すぐに|先に|ぜひ|是非)?"#
+    /// The verbs of sending.
+    private static let japaneseSends = #"送って|送付して|お送り|ご送付|送信して|ご送信|転送して|ご転送|共有して|ご共有|添付して|ご添付|返送して|ご返送|メールして|お届け|届けて|お回し|回して|アップロードして|アップして"#
+    /// The endings that ask politely, from ください to いただけないでしょうか.
+    private static let japanesePolite = #"いただけますと|頂けますと|いただけましたら|頂けましたら|くださいますと|くださいませんか|くださいますか|くださいますでしょうか|くださいませ|くださいね|ください|下さい|いただけますでしょうか|いただけないでしょうか|いただけないですか|いただけないか|いただけますか|いただけませんか|いただけると|いただければ|いただけたら|いただきたい|いただきたく|頂けますでしょうか|頂けないでしょうか|頂けますか|頂けませんか|頂けると|頂ければ|頂けたら|頂きたい|頂きたく|頂戴できますか|頂戴できれば|頂戴したく|頂戴したい|もらえないでしょうか|もらえますか|もらえませんか|もらえると|もらえたら|もらいたい|くれますか|くれませんか|くれない|ほしいです|欲しいです|ほしい|欲しい|お願いします|お願いいたします|お願い致します|お願いできますでしょうか|お願いできますか|お願いできれば|お願い申し上げます|願います"#
+    /// A verb of sending anywhere, and a polite ending anywhere, which the constructions of
+    /// sending need.
+    private static let japaneseSend = regex(japaneseSends)
+    private static let japaneseEnding = regex(japanesePolite)
+
+    /// The ways Japanese asks the reader for a document.
+    private static let japaneseConstructions: [Construction] = [
+        Construction(
+            "X を送っていただけますか, X をお送りください, X を2部お送りいただけますでしょうか",
+            regex("(?<object>" + japaneseObject + "{1,30}?)を(?<gap>" + japaneseGap + "{0,15}?)(?<verb>" + japaneseSends + ")(?:して|を)?(?:" + japanesePolite + ")"),
+            gates: [regex("を"), japaneseSend, japaneseEnding]),
+        Construction(
+            "X も送ってください",
+            regex("(?<object>" + japaneseObject + "{1,30}?)も(?<gap>" + japaneseGap + "{0,15}?)(?<verb>" + japaneseSends + ")(?:して|を)?(?:" + japanesePolite + ")"),
+            mustNameADocument: true, gates: [regex("も"), japaneseSend, japaneseEnding]),
+        Construction(
+            "X は送っていただけますか, X については送ってください",
+            regex("(?<object>" + japaneseObject + "{1,30}?)(?:については|につきましては|は)(?<gap>" + japaneseGap + "{0,15}?)(?<verb>" + japaneseSends + ")(?:して|を)?(?:" + japanesePolite + ")"),
+            mustNameADocument: true, gates: [regex("は"), japaneseSend, japaneseEnding]),
+        Construction(
+            "お送りいただけますか with nothing named before it in its clause, after Xがあれば or a sentence that names X",
+            regex("(?:^|(?<=[、。,，！!？?]))\\s*(?<gap>[^をもは、。,.!?！？\\n]{0,20}?)(?<verb>" + japaneseSends + ")(?:して|を)?(?:" + japanesePolite + ")"),
+            gates: [japaneseSend, japaneseEnding]),
+        Construction(
+            "X のご送付をお願いいたします",
+            regex("(?<object>" + japaneseObject + "{1,30}?)の(?<verb>ご送付|ご提供|ご共有|ご送信|ご転送|お送り|ご返送)を(?:お願いします|お願いいたします|お願い致します|お願いできますか|お願いできますでしょうか|お願い申し上げます)"),
+            gates: [regex("の"), regex("お願い")]),
+        Construction(
+            "X 送付のお願い, X ご共有のお願い",
+            regex("(?<object>" + japaneseObject + "{1,30}?)の?(?<verb>(?:ご)?(?:送付|共有|提供|送信|転送|返送))の?(?:お願い|ご依頼|依頼)"),
+            gates: [regex("お願い|依頼")]),
+        Construction(
+            "X をいただけますか, X をください, X を頂戴できますか, not a quote still to prepare",
+            regex("(?<object>" + japaneseObject + "{1,30}?)(?<!見積もり)(?<!見積り)(?<!見積)を(?<gap>" + japaneseQuantity + ")(?<verb>いただけますでしょうか|いただけないでしょうか|いただけますか|いただけませんか|頂けますでしょうか|頂けないでしょうか|頂けますか|頂けませんか|ください|下さい|もらえますか|もらえませんか|いただきたい|頂きたい|頂戴できますか|頂戴できれば|頂戴したい|いただけると|いただければ|いただけたら|頂けると|頂ければ)"),
+            mustNameADocument: true, gates: [regex("を"), regex("いただ|頂|ください|下さい|もらえ")]),
+        Construction(
+            "X をお願いします, not a quote still to prepare",
+            regex("(?<object>" + japaneseObject + "{1,30}?)(?<!見積もり)(?<!見積り)(?<!見積)を(?<verb>お願いします|お願いいたします|お願い致します|お願いできますでしょうか|お願いできますか|お願いできれば|お願いしたく|お願いしたいです|お願い申し上げます)"),
+            mustNameADocument: true, gates: [regex("を"), regex("お願い")]),
+        Construction(
+            "X が必要です, X が見当たりません",
+            regex("(?<object>" + japaneseObject + "{1,30}?)が(?<verb>必要です|必要になります|必要となります|必要でして|必要でございます|必要なのですが|必要なので|ほしいです|欲しいです|足りません|見当たりません|見当たらない)"),
+            mustNameADocument: true, gates: [regex("が")]),
+        Construction(
+            "X を拝見できれば, X を見せていただけますか, X が見たいです",
+            regex("(?<object>" + japaneseObject + "{1,30}?)(?:を|が)(?<gap>" + japaneseQuantity + ")(?<verb>(?:拝見|拝読)(?:でき(?:れば|ますか|ますでしょうか|ると|たら)|したい|したく|させて(?:いただけ|頂け|いただきたい|頂きたい|ください|下さい|もらえ))|(?:見せて|お見せ)(?:して)?(?:" + japanesePolite + ")|見たい|目を通したい)"),
+            mustNameADocument: true, gates: [regex("を|が"), regex("拝見|拝読|見せ|見たい|目を通")]),
+        Construction(
+            "X を送るのを忘れないでください",
+            regex("(?<object>" + japaneseObject + "{1,30}?)を(?<verb>送る|送付する|共有する|添付する|お送りする|転送する)の(?:を)?忘れないで(?:ください|下さい|くださいね|ね)?"),
+            gates: [regex("を"), regex("忘れないで")]),
+    ]
+
+    private static let japaneseLead = regex(#"^(?:また|あと|それと|それから|さらに|念のため|ついでに|恐れ入りますが|お手数ですが|お手数をおかけしますが|すみませんが|申し訳ありませんが|申し訳ございませんが|至急|もし|もしも|できれば|可能であれば|よろしければ)+"#)
+    /// Where what is asked for starts after a clause or a particle before it, as in
+    /// 昨日話した図面 or お持ちでしたらそれ: after たら, ので, が, は, に, で, て or た before a
+    /// character of a noun.
+    private static let japaneseClauseBefore = regex(#"^.*(?:たら|れば|ので|のに|けど|けれど|から|まで|ため|には|では|とは|が|は|に|で|て|へ|た)(?=[\p{Han}\p{Katakana}A-Za-z0-9ー])"#)
+    /// What asks for the document named before it.
+    private static let japanesePointer = regex(#"^(?:それ|それら|そちら|これ|これら|こちら|あれ|あちら|その件|例の件|例のもの|同じもの)$"#)
 
     private static func japanese(_ sentence: String) -> [Asked] {
         // Every pattern needs kana, which Chinese has none of.
         guard sentence.contains(where: \.isKana) else { return [] }
         var asked: [Asked] = []
-        // The patterns run only when the words they need stand in the sentence: the first
-        // three end in a polite request, and the first two hold a verb of sending.
-        let asks = ContentChecks.matches([japaneseEnding], sentence)
-        let sends = asks && ContentChecks.matches([japaneseSend], sentence)
-        let needs: [(NSRegularExpression, Bool, Bool)] = [
-            (japaneseAsk, false, sends), (japaneseNoun, false, sends), (japaneseGive, false, asks),
-            (japaneseForget, false, sentence.contains("忘れないで")), (japaneseNeed, true, sentence.contains("が")),
-        ]
-        for (pattern, needsWhich, mayMatch) in needs where mayMatch {
-            for match in frames(pattern, sentence) {
-                guard let object = Range(match.range(at: 1), in: sentence) else { continue }
-                var text = String(sentence[object])
-                if let lead = japaneseLead.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)), let range = Range(lead.range, in: text) {
-                    text = String(text[range.upperBound...])
-                }
-                asked.append(Asked(position: match.range.location, object: hanObject(text), needsWhich: needsWhich))
+        for construction in japaneseConstructions where construction.mayMatch(sentence) {
+            for match in frames(construction.pattern, sentence) {
+                guard let whole = Range(match.range, in: sentence), let verb = construction.range("verb", in: match, of: sentence),
+                      !ContentChecks.matches([portal], clause(of: whole, verb: verb, in: sentence)) else { continue }
+                let objectRange = construction.range("object", in: match, of: sentence)
+                let text = objectRange.map { japaneseHead(String(sentence[$0])) } ?? ""
+                let object = hanObject(text)
+                let pointsBack = object.isEmpty || ContentChecks.matches([japanesePointer], object)
+                if pointsBack, construction.mustNameADocument { continue }
+                asked.append(Asked(
+                    position: match.range.location, object: object, phrase: hanCleaned(text), before: String(sentence[..<(objectRange?.lowerBound ?? verb.lowerBound)]),
+                    language: .japanese, mustNameADocument: construction.mustNameADocument, pointsBack: pointsBack))
             }
         }
         return asked
     }
+
+    /// What a Japanese construction asks for without the words before it: a lead such as
+    /// また or お手数ですが, and a clause or a particle before the noun.
+    private static func japaneseHead(_ text: String) -> String {
+        var text = trimmed(text)
+        if let lead = japaneseLead.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)), let range = Range(lead.range, in: text) {
+            text = String(text[range.upperBound...])
+        }
+        if let clause = japaneseClauseBefore.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)), let range = Range(clause.range, in: text) {
+            text = String(text[range.upperBound...])
+        }
+        return trimmed(text)
+    }
+
+    // MARK: What is no file
+
+    /// Whether what is asked for is no file: comments and feedback, availability, an address
+    /// or a phone number, bank, tax or identity details, information and answers, money and
+    /// goods, a link or a password, the email itself, greetings, or a person. In English the
+    /// last word before "of" decides, in Spanish the first word after an article, and in
+    /// Chinese and Japanese the end of the head, as 发票信息 is information and 意见书 a file.
+    private static func isNoFile(_ object: String, _ language: Language) -> Bool {
+        let folded = matchingText(object)
+        guard !folded.isEmpty else { return false }
+        if folded.contains(where: { $0.isHan || $0.isKana }) {
+            let head = trimmed(folded)
+            return hanNoFile.contains(where: { head.hasSuffix($0) }) || hanNoFileWhole.contains(head)
+        }
+        let words = folded.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        guard !words.isEmpty else { return false }
+        let joined = " " + words.joined(separator: " ") + " "
+        if latinNoFilePhrases.contains(where: { joined.contains(" \($0) ") }) {
+            return true
+        }
+        switch language {
+        case .spanish:
+            guard let head = words.first(where: { !spanishDeterminers.contains($0) }) else { return false }
+            return spanishNoFile.contains(head)
+        default:
+            // The word before "of" heads the phrase, as in "a copy of the contract", unless it
+            // counts what follows, as in "a couple of times".
+            var head = words[words.count - 1]
+            if let of = words.firstIndex(of: "of"), of > 0, !englishCounts.contains(words[of - 1]) {
+                head = words[of - 1]
+            }
+            return englishNoFile.contains(head)
+        }
+    }
+
+    private static let englishNoFile: Set<String> = [
+        "comment", "comments", "feedback", "thought", "thoughts", "opinion", "opinions", "views", "input", "suggestion", "suggestions",
+        "idea", "ideas", "remark", "remarks", "reaction", "reactions", "impressions",
+        "availability", "time", "times", "date", "dates", "slot", "slots",
+        "address", "addresses", "phone", "mobile", "number", "numbers", "contact", "contacts", "wechat", "whatsapp", "name", "names",
+        "birthday",
+        "iban", "swift", "details", "detail", "information", "info", "update", "updates", "news", "status", "answer", "answers",
+        "reply", "replies", "response", "responses", "confirmation", "approval", "decision", "rsvp", "question", "questions",
+        "payment", "payments", "money", "deposit", "funds", "transfer", "balance", "sample", "samples", "package", "packages",
+        "parcel", "parcels", "goods", "product", "products", "order", "orders", "shipment", "gift", "gifts",
+        "link", "links", "url", "invite", "invites", "invitation", "password", "passwords", "code", "login", "credentials", "access",
+        "email", "emails", "mail", "message", "messages", "thread", "line", "lines", "words", "sentence", "sentences", "paragraph",
+        "newsletter", "newsletters", "post", "posts", "blog",
+        "regards", "greetings", "wishes", "love", "best",
+        "someone", "somebody", "anyone", "anybody", "people", "person", "technician", "driver", "courier", "screen", "location",
+        "help", "support", "assistance", "what", "whatever", "anything", "something", "everything", "nothing",
+    ]
+    /// Words that count what follows them, as couple in "a couple of times".
+    private static let englishCounts: Set<String> = ["couple", "few", "number", "lot", "lots", "bunch", "handful", "pair", "series", "range", "selection", "some", "any", "all", "both", "each", "one", "two", "three"]
+    private static let spanishNoFile: Set<String> = [
+        "comentario", "comentarios", "opinion", "opiniones", "observacion", "observaciones", "sugerencia", "sugerencias",
+        "retroalimentacion", "feedback", "impresiones", "idea", "ideas", "aportes",
+        "disponibilidad", "fecha", "fechas", "hora", "horas",
+        "direccion", "domicilio", "telefono", "numero", "numeros", "celular", "contacto", "whatsapp", "wechat", "nombre", "nombres",
+        "informacion", "info", "detalles", "novedades", "actualizacion", "actualizaciones", "respuesta", "respuestas", "confirmacion",
+        "aprobacion", "decision", "noticias", "estatus", "pregunta", "preguntas", "dudas",
+        "pago", "pagos", "dinero", "deposito", "anticipo", "transferencia", "saldo", "muestra", "muestras", "paquete", "paquetes",
+        "pedido", "pedidos", "regalo", "mercancia",
+        "enlace", "enlaces", "link", "liga", "invitacion", "contrasena", "codigo", "acceso",
+        "correo", "correos", "mensaje", "mensajes", "hilo", "lineas", "palabras", "parrafo", "boletin", "boletines", "publicacion",
+        "saludos", "saludo", "abrazo",
+        "alguien", "persona", "personas", "tecnico", "ubicacion", "pantalla", "ayuda", "apoyo", "algo", "todo", "nada",
+    ]
+    private static let spanishDeterminers: Set<String> = [
+        "el", "la", "los", "las", "un", "una", "unos", "unas", "tu", "tus", "su", "sus", "mi", "mis", "nuestro", "nuestra", "nuestros",
+        "nuestras", "este", "esta", "estos", "estas", "ese", "esa", "esos", "esas", "aquel", "aquella", "todo", "toda", "todos",
+        "todas", "algun", "alguna", "algunos", "algunas", "otro", "otra", "mas", "nuevo", "nueva", "ultimo", "ultima", "cualquier", "lo",
+    ]
+    private static let latinNoFilePhrases = [
+        "bank details", "bank account", "account details", "account number", "routing number", "tax id", "tax number", "vat number",
+        "passport number", "id number", "phone number", "email address", "e mail address", "mailing address", "shipping address",
+        "billing details", "payment details", "contact details", "contact information", "contact info",
+        "datos bancarios", "datos fiscales", "datos de contacto", "datos de facturacion", "cuenta bancaria", "numero de cuenta",
+        "informacion bancaria", "datos de la cuenta",
+    ]
+    /// Ends of a Chinese or Japanese head that name no file.
+    private static let hanNoFile = [
+        "意见", "反馈", "建议", "想法", "看法", "评论", "点评", "感想", "时间", "档期", "日期", "地址", "电话", "手机号", "手机", "号码",
+        "联系方式", "微信", "账户", "账号", "帐户", "帐号", "开户行", "户名", "税号", "识别号", "信息", "详情", "情况", "进展", "进度",
+        "消息", "回复", "答复", "确认", "结果", "决定", "定金", "订金", "尾款", "付款", "货款", "转账", "样品", "快递", "包裹", "礼物",
+        "链接", "网址", "邀请", "密码", "验证码", "权限", "邮件", "问候", "师傅", "位置", "定位", "屏幕", "问题", "句话", "段话",
+        "意見", "感想", "フィードバック", "コメント", "指摘", "都合", "空き状況", "候補日", "日時", "住所", "送付先", "連絡先",
+        "電話番号", "メールアドレス", "アドレス", "口座情報", "振込先", "口座", "口座番号", "登録番号", "法人番号", "マイナンバー", "情報",
+        "詳細", "状況", "進捗", "近況", "返信", "返事", "回答", "確認", "結果", "連絡", "支払い", "代金", "入金", "振込", "振り込み",
+        "サンプル", "荷物", "商品", "リンク", "url", "パスワード", "コード", "招待", "担当者", "画面", "質問", "メール", "メッセージ", "一言", "数行",
+        "メルマガ", "ニュースレター", "公众号", "推文",
+    ]
+    /// Chinese words that name no file only on their own: money, goods, a person.
+    private static let hanNoFileWhole: Set<String> = ["款", "钱", "货", "人"]
+
+    /// A quote, an estimate, a proposal or an invoice asked for with a or una, which is one
+    /// still to prepare, not a file to send, as in "send us a quote for 500 units".
+    private static let toPrepare = latin(#"^(?:a|an|un|una)\s+(?:(?:new|nueva|nuevo|quick|rough|formal|detailed|firm)\s+)?(?:quote|quotation|estimate|proposal|invoice|offer|bid|cotizaci[oó]n|presupuesto|propuesta|factura|oferta)\b"#)
+
+    /// Whether what is asked for is a document still to prepare, or one to upload to a portal
+    /// or to fill in online.
+    private static func isToPrepare(_ object: String) -> Bool {
+        ContentChecks.matches([toPrepare], object) || ContentChecks.matches([onlineForm], object)
+    }
+
+    /// The clause of a construction, from the start of the clause it starts in to the end
+    /// of the clause of its verb, where a portal it asks to upload to would stand.
+    private static func clause(of whole: Range<String.Index>, verb: Range<String.Index>, in sentence: String) -> String {
+        let boundaries = ",;:，；：。!?！？"
+        let start = sentence[..<whole.lowerBound].lastIndex(where: { boundaries.contains($0) }).map { sentence.index(after: $0) } ?? sentence.startIndex
+        let end = sentence[verb.upperBound...].firstIndex(where: { boundaries.contains($0) }) ?? sentence.endIndex
+        return String(sentence[start..<max(start, end)])
+    }
+
+    /// A form online, which the reader fills in and does not send.
+    private static let onlineForm = latin(#"\b(?:online|web) form\b|formulario en l[ií]nea|在线表单|网上表格|线上表单|オンラインフォーム|ウェブフォーム"#)
+    /// A portal, a platform or a system to upload to or to fill in, which asks for no file to
+    /// send: "upload them to the portal", 上传到系统, ポータルにアップロード, súbelos a la plataforma.
+    private static let portal = latin(#"\b(?:to|on|onto|via|through|in|into|using)\s+(?:the |our |your |their |this |that )?(?:[\w-]+\s+){0,2}(?:portal|platform)\b|\b(?:upload\w*|submit\w*)\b[^.!?;]{0,60}?(?:\b(?:website|system|app|online|form)\b|\b(?:at|on|via|through)\s+(?:https?://|www\.|[\w-]+\.[a-z]{2,}/))|\b(?:a|al|en|por|mediante|desde|a trav[eé]s de(?:l)?)\s+(?:la |el |nuestra |nuestro |su |tu )?(?:[\w-]+\s+){0,2}(?:portal|plataforma)\b|(?:上传|提交|填写|录入|登记)(?:到|至|进|在)?[^，。！？；]{0,12}?(?:系统|平台|网站|后台|门户|网页|小程序|表单|链接)|在[^，。！？；]{0,10}?(?:系统|平台|网站|后台|门户|网页|小程序|线上|网上)(?:上|里|中)?(?:上传|提交|填写|登记)|(?:在线|线上|网上)(?:提交|填写|上传|登记)|(?:ポータル|システム|サイト|フォーム|ウェブ|専用ページ|マイページ)(?:に|へ|から|で|上で|上に)[^、。！？]{0,10}?(?:アップロード|アップ|登録|入力|提出|送信)|オンラインで(?:ご)?(?:提出|入力|登録)"#)
+
+    // MARK: What a pointer points to
+
+    /// The words that point back, in four languages, which make a sentence look one further
+    /// back for what they mean.
+    private static let pointerWords: [NSRegularExpression] = [
+        latin(#"\b(?:it|them|that|those|one|lo|la|los|las|eso|esto)\b"#),
+        regex(#"它|这个|那个|这份|那份|一份|それ|そちら|これ|こちら"#),
+    ]
+
+    /// The document a pronoun, a plain file or a verb without an object points to.
+    private struct Antecedent {
+        var object: String
+        var phrase: String
+        var language: Language
+    }
+
+    /// The document named last before a pointer: in the same sentence before its
+    /// construction, or else in the sentence before. A clause names a document by a word for
+    /// a kind or a file name, and so do "if you have", "do you have", "we are missing", "you
+    /// sent", 如果有, 有没有, 我们还缺, 你们之前给过, があれば, が見当たりません, si tienes and nos
+    /// falta with what follows or precedes them. A clause where the sender attaches, sends or
+    /// promises names none, and neither does a phrase that is no file.
+    private static func antecedent(before: String, namedBefore: () -> Antecedent?, ownCounts: Bool) -> Antecedent? {
+        let near = String(before.suffix(antecedentReach))
+        return lastDocument(in: near, ownCounts: ownCounts) ?? topic(near) ?? namedBefore()
+    }
+
+    /// Signing, stamping or filling in before sending back, as in "sign it and send it back",
+    /// 盖章后发回, ご署名のうえご返送, fírmalo y envíamelo, which asks for the signed copy of a
+    /// paper the sender attached.
+    private static let signedAndSentBack = latin(#"\b(?:sign|signed|countersign|stamp|initial|fill (?:in|out)|complete)\b|\bf[ií]rm\w*|\bllen\w*|\bcomplet\w*|\bsell\w*|签字|签名|签章|盖章|签署|签好|盖好|填好|填写|署名|押印|捺印|記入"#)
+
+    /// The clause right before a pointer when it is only a noun phrase, which names what the
+    /// pointer means, as in 上次的会议安排，麻烦发我一下, 先日の打ち合わせのまとめ、共有して
+    /// いただけますか or "The seating chart from Friday, could you send it?". A clause with
+    /// a verb or a person in it is none.
+    private static func topic(_ before: String) -> Antecedent? {
+        // The clause before the last comma, with no more than a few words that ask between
+        // that comma and the verb, as 麻烦, お手数ですが or "could you".
+        guard let comma = before.lastIndex(where: { ",;:，；：、".contains($0) }) else { return nil }
+        let between = trimmed(String(before[before.index(after: comma)...]))
+        let latinGap = !between.contains(where: { $0.isHan || $0.isKana })
+        guard between.count <= (latinGap ? 40 : 12) else { return nil }
+        let text = trimmed(String(before[..<comma]))
+        guard let range = clauseRanges(of: text).last else { return nil }
+        let clause = trimmed(String(text[range]))
+        guard !clause.isEmpty, clause.count <= 30 else { return nil }
+        let found: Antecedent
+        if clause.contains(where: \.isKana) {
+            guard !ContentChecks.matches([japaneseNotATopic], clause) else { return nil }
+            let head = japaneseHead(removing(japaneseTopicMark, from: clause))
+            found = Antecedent(object: hanObject(head), phrase: hanCleaned(head), language: .japanese)
+        } else if clause.contains(where: \.isHan) {
+            guard ContentChecks.matches([chineseTopicMark], clause), !ContentChecks.matches([chineseNotATopic], clause) else { return nil }
+            found = Antecedent(object: hanObject(clause), phrase: hanCleaned(clause), language: .chinese)
+        } else {
+            guard ContentChecks.matches([latinTopic], clause), !ContentChecks.matches([latinNotATopic], clause) else { return nil }
+            let language = latinLanguage(clause)
+            let (object, phrase) = language == .spanish
+                ? spanishObject(after: clause.startIndex, in: clause)
+                : (latinObject(after: clause.startIndex, in: clause, lead: englishLead, cut: englishCut, keepGoing: englishKeepGoing), "")
+            found = Antecedent(object: object, phrase: phrase.isEmpty ? object : phrase, language: language)
+        }
+        guard !found.object.isEmpty, !isNoFile(found.object, found.language), !isToPrepare(found.object),
+              !kinds(in: found.object).isEmpty || !fileNames(in: found.object).isEmpty || !ownWords(found.phrase).isEmpty
+        else { return nil }
+        return found
+    }
+
+    /// What a clause that is only a noun phrase holds none of: a verb, a person, a word that
+    /// asks or a question.
+    private static let chineseNotATopic = regex(#"是|有|要|能|了|过|着|吗|呢|吧|我|你|您|他|她|请|麻烦|想|说|问|做|觉得|已|没|不|后$|时$|时候|以后|之后|之前|以前|收到|看到|拿到"#)
+    /// What marks a Chinese noun phrase that names a thing: 的 or a demonstrative.
+    private static let chineseTopicMark = regex(#"的|那份|这份|那个|这个|那张|这张|那些|这些|上次|上周|之前的|昨天"#)
+    private static let japaneseNotATopic = regex(#"です|ます|ました|ません|でした|だった|ください|下さい|ので|けど|から|たら|れば|ない|たい|私|僕|弊社"#)
+    private static let japaneseTopicMark = regex(#"(?:については|につきましては|は|も)$"#)
+    private static let latinTopic = latin(#"^(?:the|that|this|these|those|your|our|el|la|los|las|ese|esa|esos|esas|este|esta|tu|tus|su|sus)\b"#)
+    private static let latinNotATopic = latin(#"\b(?:is|are|was|were|has|have|had|will|would|can|could|should|do|does|did|i|we|you|es|est[aá]n?|son|fue|tiene|tienen|hay|ser[aá])\b"#)
+
+    private static func lastDocument(in text: String, ownCounts: Bool = false) -> Antecedent? {
+        let text = trimmed(text)
+        guard !text.isEmpty else { return nil }
+        var best: (end: String.Index, found: Antecedent)?
+        func consider(_ found: Antecedent, end: String.Index) {
+            let object = trimmed(found.object)
+            guard !object.isEmpty, !isNoFile(object, found.language), !isToPrepare(object),
+                  !kinds(in: object).isEmpty || !fileNames(in: object).isEmpty || !ownWords(found.phrase).isEmpty,
+                  best.map({ end >= $0.end }) ?? true
+            else { return }
+            best = (end, Antecedent(object: object, phrase: trimmed(found.phrase), language: found.language))
+        }
+        let clauses = clauseRanges(of: text)
+        // A clause where the sender attaches, sends or promises a file, or one about a portal
+        // or a form online, names nothing a pointer may mean.
+        func namesNothing(_ clause: String) -> Bool {
+            (!ownCounts && ContentChecks.matches(ownClause, clause)) || ContentChecks.matches([portal, onlineForm], clause)
+        }
+        func isOwnClause(_ position: String.Index) -> Bool {
+            guard let clause = clauses.first(where: { $0.contains(position) || $0.upperBound == position }) else { return false }
+            return namesNothing(String(text[clause]))
+        }
+        for clause in clauses where !namesNothing(String(text[clause])) {
+            if let found = documentPhrase(in: String(text[clause])) {
+                consider(found, end: clause.upperBound)
+            }
+        }
+        for (gate, pattern, language) in antecedentPatterns where ContentChecks.matches([gate], text) {
+            for match in frames(pattern, text) {
+                guard let whole = Range(match.range, in: text), !isOwnClause(whole.lowerBound) else { continue }
+                switch language {
+                case .english, .spanish:
+                    let (object, phrase) = language == .spanish
+                        ? spanishObject(after: whole.upperBound, in: text)
+                        : (latinObject(after: whole.upperBound, in: text, lead: englishLead, cut: englishCut, keepGoing: englishKeepGoing), "")
+                    let end = text.range(of: object, range: whole.upperBound..<text.endIndex)?.upperBound ?? whole.upperBound
+                    consider(Antecedent(object: object, phrase: phrase.isEmpty ? object : phrase, language: language), end: end)
+                case .chinese, .japanese:
+                    let objectFound = match.range(withName: "object")
+                    guard objectFound.location != NSNotFound, let range = Range(objectFound, in: text) else { continue }
+                    var object = String(text[range])
+                    if language == .japanese {
+                        object = japaneseHead(object)
+                    }
+                    consider(Antecedent(object: hanObject(object), phrase: hanCleaned(object), language: language), end: range.upperBound)
+                }
+            }
+        }
+        return best?.found
+    }
+
+    /// Where the clauses of a text stand, between its commas and stops.
+    private static func clauseRanges(of text: String) -> [Range<String.Index>] {
+        var ranges: [Range<String.Index>] = []
+        var start = text.startIndex
+        var index = text.startIndex
+        while index < text.endIndex {
+            if ",;:，；：、。!?！？".contains(text[index]) {
+                if start < index {
+                    ranges.append(start..<index)
+                }
+                start = text.index(after: index)
+            }
+            index = text.index(after: index)
+        }
+        if start < text.endIndex {
+            ranges.append(start..<text.endIndex)
+        }
+        return ranges
+    }
+
+    /// The phrase of a clause that names a document by a word for a kind or a file name, read
+    /// from the last such word: in Chinese and Japanese the clause up to that word, from its
+    /// last particle, and in English and Spanish the phrase from the article before it.
+    private static func documentPhrase(in clause: String) -> Antecedent? {
+        let names = fileNames(in: clause)
+        if clause.contains(where: { $0.isHan || $0.isKana }) {
+            // Only the words whose first character the clause holds are looked for, each in
+            // one NSString of the clause.
+            let searched = clause as NSString
+            let characters = Set(clause)
+            var end: Int?
+            for term in characters.flatMap({ hanKindTermsByFirst[$0] ?? [] }) + names {
+                let found = searched.range(of: term, options: [.caseInsensitive, .backwards])
+                if found.location != NSNotFound, end.map({ found.location + found.length > $0 }) ?? true {
+                    end = found.location + found.length
+                }
+            }
+            guard let end, let range = Range(NSRange(location: 0, length: end), in: clause) else { return nil }
+            let endIndex = range.upperBound
+            let japanese = clause.contains(where: \.isKana)
+            var text = String(clause[..<endIndex])
+            text = japanese ? japaneseHead(text) : text
+            return Antecedent(object: hanObject(text), phrase: hanCleaned(text), language: japanese ? .japanese : .chinese)
+        }
+        let searched = clause as NSString
+        var term: Range<String.Index>?
+        for word in latinKindTerms + names {
+            for found in ranges(of: word, in: clause, searched) where term.map({ found.lowerBound > $0.lowerBound }) ?? true {
+                term = found
+            }
+        }
+        guard let term else { return nil }
+        let language = latinLanguage(clause)
+        var start = term.lowerBound
+        let before = String(clause[..<term.lowerBound].suffix(40))
+        if let article = latinArticle.firstMatch(in: before, range: NSRange(before.startIndex..., in: before)), let range = Range(article.range, in: before) {
+            start = clause.index(term.lowerBound, offsetBy: -before.distance(from: range.lowerBound, to: before.endIndex))
+        }
+        let (object, phrase) = language == .spanish
+            ? spanishObject(after: start, in: clause)
+            : (latinObject(after: start, in: clause, lead: englishLead, cut: englishCut, keepGoing: englishKeepGoing), "")
+        return Antecedent(object: object, phrase: phrase.isEmpty ? object : phrase, language: language)
+    }
+
+    /// An article or a possessive up to three words before a word for a kind.
+    private static let latinArticle = latin(#"\b(?:the|a|an|your|our|my|his|her|their|this|that|these|those|el|la|los|las|un|una|unos|unas|tu|tus|su|sus|mi|mis|nuestro|nuestra|nuestros|nuestras|este|esta|estos|estas|ese|esa|esos|esas)\s+(?:[\p{L}\p{N}'’-]+\s+){0,3}$"#)
+    /// The words of the glossary for a kind other than a plain file, in Chinese and Japanese
+    /// script, and in Latin letters.
+    private static let hanKindTermsByFirst: [Character: [String]] = {
+        var seen: Set<String> = []
+        let terms = DocumentKind.allCases.filter { !$0.isGeneric }.flatMap { $0.terms.chinese + $0.terms.japanese }
+            .filter { $0.contains(where: { $0.isHan || $0.isKana }) && seen.insert($0).inserted }
+        return Dictionary(grouping: terms, by: { $0.first! })
+    }()
+    private static let latinKindTerms: [String] = {
+        var seen: Set<String> = []
+        return DocumentKind.allCases.filter { !$0.isGeneric }.flatMap(\.terms.all)
+            .filter { !$0.contains(where: { $0.isHan || $0.isKana }) && seen.insert($0).inserted }
+    }()
+
+    /// Words that only Spanish of the two Latin languages uses, which tell its phrases apart.
+    private static let spanishMarkers = latin(#"\b(?:el|la|los|las|del|una|unos|unas|que|por|para|con|nos|tienes|tiene|hay|falta|faltan|necesito|necesitamos|podr[ií]as|puedes|ya|muy|pero|est[aá])\b"#)
+
+    private static func latinLanguage(_ text: String) -> Language {
+        ContentChecks.matches([spanishMarkers], text) ? .spanish : .english
+    }
+
+    /// The clauses where the sender attaches, sends or promises a file, in four languages.
+    private static let ownClause: [NSRegularExpression] = [
+        latin(#"\b(?:(?:attached|enclosed) (?:is|are|please find|you will find|you'll find)|(?:please )?find (?:attached|enclosed)|here (?:is|are)|here['’]s|(?:i|we)(?:['’]ve| have)? (?:just |already )?(?:sent|attached|shared|forwarded|uploaded|included)|(?:i|we)(?:['’]ll| will| shall) (?:send|forward|share|attach))\b"#),
+        latin(#"\b(?:adjunto|adjunta|adjuntos|adjuntas|te env[ií]o|le env[ií]o|les env[ií]o|te mando|te paso|te comparto|te reenv[ií]o|aqu[ií] (?:tienes|est[aá]n?|va|van))\b"#),
+        chineseOwn,
+        regex(#"(?:我|我们)(?:已|已经|刚|刚刚|会|稍后|明天|马上)?(?:发|传|寄|转发|附上)(?:给)?(?:你|您)"#),
+        regex(#"添付(?:いた)?します|添付しました|添付いたしました|お送りします|お送りいたします|お送りしました|送付いたします|送付します|送付しました|送ります|送りました|共有します|共有しました|添付の"#),
+    ]
+
+    /// The constructions that name a document a pronoun may point to: what the reader has or
+    /// sent, and what the writer needs or misses, with what follows them in English, Spanish
+    /// and Chinese and what precedes them in Japanese.
+    private static let antecedentPatterns: [(gate: NSRegularExpression, pattern: NSRegularExpression, language: Language)] = [
+        (latin(#"\b(?:have|has|had|keep|kept|got|find|mentioned|showed|sent|shared|prepared|drafted|updated|revised|made|wrote|drew|missing|lacking|lack|need|needed|lost|misplaced|there|received|asked|asks|requested|requests)\b"#), latin(#"\b(?:if (?:you|u) (?:still |also |happen to |by any chance |already )?(?:have|has|kept|keep|got|find|can find|could find)|do (?:you|u)(?: still| also| happen to| by any chance){0,2} have|(?:you|u) (?:still |also |just )?(?:have|had|kept|mentioned|showed|sent|shared|prepared|drafted|updated|revised|made|wrote|drew)|(?:i|we)(?:['’]re|['’]m| are| am)?(?: still| also)? (?:missing|lacking|lack|need|needed|lost|misplaced)|(?:i|we) (?:can['’]t|cannot|couldn['’]t) find|(?:i|we) (?:still |also )?(?:don['’]t|do not|didn['’]t|did not) have|(?:i|we) (?:still |also )?(?:haven['’]t|have not) (?:got|received)|(?:asked|asks|requested|requests) for|(?:is|are) there(?: still)?)\b"#), .english),
+        (latin(#"\b(?:tien\w*|tendr\w*|conserv\w*|guard\w*|cuent\w*|encuentr\w*|falt\w*|necesit\w*|perd\w*|mencion\w*|mostr\w*|envi\w*|mand\w*|compart\w*|prepar\w*|hici\w*|actualiz\w*)"#), latin(#"\b(?:si (?:todav[ií]a |a[uú]n |ya )?(?:tienes|tiene|tienen|conservas|conserva|guardas|guarda|cuentas con|cuenta con|encuentras|encuentra)|(?:tienes|tiene|tienen|tendr[aá]s|tendr[ií]as|cuentas con|cuenta con)|(?:me|nos) (?:falta|faltan|hace falta|hacen falta)|necesito|necesitamos|perd[ií]|perdimos|no encuentro|no encontramos|(?:me |nos )?(?:mencionaste|mostraste|enviaste|mandaste|compartiste|preparaste|hiciste|actualizaste))\b"#), .spanish),
+        (regex(#"有|缺|少|差|需要|找不到|丢|给过|发过|提过|提到|说过|做过|准备过|做好|改好|画过|写过"#), regex("(?:(?:如果|要是|若|假如|如)(?:你|您)?们?(?:那边|这边|手上|手里|手边|还|也|已经)*有|有没有|(?:你|您)们?(?:那边|这边|之前|上次|还|也|已经)*(?:有|给过|发过|提过|提到过|提到|说过|说的|讲的|做过|准备过|做好了|改好了|画过|写过)|(?:我们|我)(?:这边|还|也|现在|目前)*(?:缺少|缺|少了|还差|需要|找不到|丢了|弄丢了))(?<object>" + chineseClause + "{1,30})"), .chinese),
+        (regex(#"あれば|ありましたら|ございましたら|お持ち|お手元|ありますか|ございますか|必要|足りません|見当たりません|なくして|紛失"#), regex("(?<object>" + japaneseObject + "{1,30}?)(?:が|を|は)?(?:あれば|ありましたら|ございましたら|お持ちでしたら|お持ちであれば|お持ちなら|お手元にあれば|お手元にございましたら|ありますか|ございますか|お持ちですか|必要です|必要になります|足りません|見当たりません|なくして|紛失)"), .japanese),
+    ]
 
     // MARK: What is asked for
 
@@ -692,6 +1582,9 @@ nonisolated enum FileRequests {
         if let match = lead.firstMatch(in: rest, range: NSRange(rest.startIndex..., in: rest)), let range = Range(match.range, in: rest) {
             rest = String(rest[range.upperBound...].prefix(objectKept * 2))
         }
+        // A space before what is left, so a word that ends the object right after the lead
+        // ends it there, as "by" in "could you send by Friday".
+        rest = " " + rest
         // A word of the glossary stays whole, as "hoja de cálculo" or "price list".
         let searched = rest as NSString
         let phrases = phraseTerms.flatMap { term in ranges(of: term, in: rest, searched) }
@@ -709,8 +1602,11 @@ nonisolated enum FileRequests {
             end = range.lowerBound
             break
         }
-        return unquoted(String(rest[..<end]).trimmingCharacters(in: CharacterSet(charactersIn: ".!?¿¡")))
+        // A conjunction the text ends with joins nothing more, as "and" in "sign the form and".
+        return removing(trailingConjunction, from: unquoted(String(rest[..<end]).trimmingCharacters(in: CharacterSet(charactersIn: ".!?¿¡"))))
     }
+
+    private static let trailingConjunction = latin(#"\s+(?:and|or|y|o|e|&)$"#)
 
     /// The words of the glossary that hold a space, which no cut may split.
     private static let phraseTerms: [String] = {
@@ -745,6 +1641,18 @@ nonisolated enum FileRequests {
         return trimmed(inner).trimmingCharacters(in: CharacterSet(charactersIn: "'‘’").union(.whitespaces))
     }
 
+    /// What a Chinese or Japanese request asks for without the words around it that are
+    /// none of it, such as 一下, 给我 or 吧.
+    private static func hanCleaned(_ text: String) -> String {
+        var object = unquoted(text)
+        for _ in 0..<3 {
+            let stripped = removing(hanTrail, from: removing(hanLead, from: object))
+            if stripped == object { break }
+            object = trimmed(stripped)
+        }
+        return object
+    }
+
     /// What a Chinese or Japanese request asks for: the text after the last 的 or の, which
     /// heads it, so 对平面图的意见 asks for comments and 最新的平面图 for the plan. When that
     /// head names only a plain file, as 平面图的电子版, or only a version or a format, as
@@ -752,12 +1660,7 @@ nonisolated enum FileRequests {
     /// 合同和您的身份证照片, each keeps its own head when the head of the whole would leave a
     /// kind out.
     private static func hanObject(_ text: String) -> String {
-        var object = unquoted(text)
-        for _ in 0..<3 {
-            let stripped = removing(hanTrail, from: removing(hanLead, from: object))
-            if stripped == object { break }
-            object = trimmed(stripped)
-        }
+        let object = hanCleaned(text)
         let whole = hanHead(object)
         let lost = Set(kinds(in: object).filter { !$0.isGeneric }).subtracting(kinds(in: whole))
         let separators = matches(hanConjunction, object).compactMap { Range($0.range, in: object) }
@@ -790,27 +1693,37 @@ nonisolated enum FileRequests {
     /// 最終版, データ and their like.
     private static let hanVersion = latin(#"^(?:(?:最新|最终|最終|最后|最後|新|旧|修改|修订|修正|改訂|更新|正式|完整|当前|現行|初|定|终|終|草|原)(?:版本|版|稿|バージョン)?|版本|バージョン|(?:pdf|cad|dwg|word|excel|jpe?g|png|tiff?|zip|ppt|pptx|xlsx?|docx?)(?:版|格式|形式|ファイル|档|文件)?)$"#)
 
-    private static let hanLead = regex(#"^(?:一下|一份|一个|一张|个|以下的?|下面的?|下列的?|如下的?|上述的?|以上的?|下|给我们|给我|过来|我的邮箱|我邮箱|这个邮箱|邮箱|我们|我|你们的|您的|贵司的|贵方的|另外|还有|对了|顺便|此外|然后)"#)
-    private static let hanTrail = regex(#"(?:吧|吗|呢|啊|哦|哈|呗|一下|也|再|都|先|过来|给我们|给我|好吗|可以吗|谢谢|嗎|即可|就行|就好|就可以)$"#)
+    private static let hanLead = regex(#"^(?:一下|一份|一个|一张|(?:几|两|三|若干|多)(?:张|份|个|些|页|套)|一些|个|以下的?|下面的?|下列的?|如下的?|上述的?|以上的?|下|给我们|给我|过来|我的邮箱|我邮箱|这个邮箱|邮箱|我们|我|你们的|您的|你的|贵司的|贵方的|另外|还有|对了|顺便|此外|然后|把|将|的)"#)
+    private static let hanTrail = regex(#"(?:吧|吗|呢|啊|哦|哈|呗|一下|也|再|都|先|过来|给我们|给我|好吗|可以吗|谢谢|嗎|即可|就行|就好|就可以|(?:如果|要是)?有的话|的话|看看|参考)$"#)
 
     /// The kinds a text names, each once, in the order the text names them.
     static func kinds(in text: String) -> [DocumentKind] {
         let folded = matchingText(text)
+        guard !folded.isEmpty else { return [] }
         let searched = folded as NSString
-        var found: [(position: Int, kind: DocumentKind)] = []
-        for (kind, terms) in matchingTerms {
-            let first = terms.compactMap { position(of: $0, in: folded, searched) }.min()
-            if let first {
-                found.append((first, kind))
+        // Only the words whose first character the text holds are looked for.
+        let characters = Set(folded)
+        var first: [DocumentKind: Int] = [:]
+        for character in characters {
+            for (term, kind) in matchingTermsByFirst[character] ?? [] {
+                if let position = position(of: term, in: folded, searched), first[kind].map({ position < $0 }) ?? true {
+                    first[kind] = position
+                }
             }
         }
-        return found.sorted { $0.position < $1.position }.map(\.kind)
+        return first.sorted { $0.value != $1.value ? $0.value < $1.value : $0.key.order < $1.key.order }.map(\.key)
     }
 
-    /// The words of every kind as the kinds are matched.
-    private static let matchingTerms: [(DocumentKind, [String])] = DocumentKind.allCases.map { kind in
-        (kind, kind.terms.all.map(matchingText))
-    }
+    /// The words of every kind as the kinds are matched, by their first character.
+    private static let matchingTermsByFirst: [Character: [(String, DocumentKind)]] = {
+        var terms: [Character: [(String, DocumentKind)]] = [:]
+        for kind in DocumentKind.allCases {
+            for term in kind.terms.all.map(matchingText) where !term.isEmpty {
+                terms[term.first!, default: []].append((term, kind))
+            }
+        }
+        return terms
+    }()
 
     /// The file names a text gives whole: a run of letters, digits, spaces, dots, hyphens
     /// and underscores that ends in an extension of a document, an image, an archive or a
@@ -845,9 +1758,12 @@ nonisolated enum FileRequests {
             var word = String(token)
             if word.contains(where: \.isHan) || word.contains(where: \.isKana) {
                 for stop in hanStopWords + generic where word.contains(stop) && stop.contains(where: { $0.isHan || $0.isKana }) {
-                    word = word.replacingOccurrences(of: stop, with: " ")
+                    word = stop == "と"
+                        ? particleRemoved(stop, from: word)
+                        : word.replacingOccurrences(of: stop, with: " ")
                 }
-                words += word.split(separator: " ").map(String.init)
+                // A single kana left over, as こ of この, is no word to search by.
+                words += word.split(separator: " ").map(String.init).filter { !($0.count == 1 && $0.allSatisfy(\.isKana)) }
                 continue
             }
             guard !stopWords.contains(word), !generic.contains(word) else { continue }
@@ -857,19 +1773,36 @@ nonisolated enum FileRequests {
         return words.filter { !$0.isEmpty && seen.insert($0).inserted }.joined(separator: " ")
     }
 
+    /// A word with the particle と taken out where it joins two words, as in 写真と見積書, and
+    /// kept inside a word of hiragana, as in まとめ.
+    private static func particleRemoved(_ particle: String, from word: String) -> String {
+        let characters = Array(word)
+        var result = ""
+        for (index, character) in characters.enumerated() {
+            let before = index > 0 ? characters[index - 1] : nil
+            let after = index + 1 < characters.count ? characters[index + 1] : nil
+            if String(character) == particle, !(before?.isHiragana ?? false) || !(after?.isHiragana ?? false) {
+                result.append(" ")
+            } else {
+                result.append(character)
+            }
+        }
+        return result
+    }
+
     private static let stopWords: Set<String> = [
         "the", "a", "an", "your", "our", "my", "his", "her", "their", "its", "this", "that", "these", "those", "me", "us", "you",
         "it", "them", "latest", "last", "new", "newest", "updated", "final", "current", "recent", "most", "version", "versions",
         "of", "and", "or", "also", "please", "both", "all", "any", "some", "from", "for", "to", "in", "on", "at", "with", "by",
-        "about", "attached", "enclosed", "signed", "back", "below", "above", "listed", "following", "mentioned",
+        "about", "attached", "enclosed", "signed", "back", "below", "above", "listed", "following", "mentioned", "one", "same",
         "el", "la", "los", "las", "un", "una", "unos", "unas", "del", "al", "de", "tu", "tus", "su", "sus", "mi", "mis",
         "nuestro", "nuestra", "nuestros", "nuestras", "este", "esta", "estos", "estas", "ese", "esa", "esos", "esas",
         "ultimo", "ultima", "nuevo", "nueva", "actualizado", "actualizada", "final", "y", "o", "tambien", "version",
-        "para", "por", "con", "en", "a", "sobre", "siguiente", "siguientes", "abajo", "indicados", "listados",
+        "para", "por", "con", "en", "a", "sobre", "siguiente", "siguientes", "abajo", "indicados", "listados", "lo", "eso", "esto",
     ]
     /// Words before a file name that are none of it, as in "the attached file report.pdf".
     private static let fileNameLead: Set<String> = ["attached", "enclosed", "file", "files", "document", "documents", "archivo", "documento", "adjunto"]
-    private static let hanStopWords = ["一下", "一份", "一个", "那个", "这个", "那份", "这份", "最新版", "最新", "新版", "最终版", "你们", "您", "你", "贵司", "和", "与", "及", "的", "例の", "先日", "前回", "最新の", "と", "の"]
+    private static let hanStopWords = ["一下", "一份", "一个", "那个", "这个", "那份", "这份", "最新版", "最新", "新版", "最终版", "你们", "您", "你", "贵司", "和", "与", "及", "的", "例の", "先日", "前回", "最新の", "と", "の", "それ", "これ", "そちら", "こちら", "它"]
 
     // MARK: Helpers
 
@@ -1058,6 +1991,11 @@ nonisolated enum FileRequests {
 }
 
 nonisolated extension Character {
+    /// Hiragana alone.
+    fileprivate var isHiragana: Bool {
+        unicodeScalars.allSatisfy { (0x3041...0x309F).contains($0.value) }
+    }
+
     /// Hiragana or katakana, the half width forms included.
     fileprivate var isKana: Bool {
         unicodeScalars.allSatisfy { (0x3040...0x30FF).contains($0.value) || (0xFF66...0xFF9F).contains($0.value) || $0.value == 0x30FC }
