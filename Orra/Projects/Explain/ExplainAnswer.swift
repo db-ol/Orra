@@ -411,10 +411,11 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
     /// the separators between two of them, a comma, 、, a semicolon, and, 和, と or y, so
     /// "2026 [this email], [A1]." reads "2026.". A bracket goes with the spaces after it, or
     /// with those before it at the end of a line or before a mark that ends a sentence, a
-    /// clause or a bracket, and with its line when nothing else is on it. Between Chinese
-    /// characters it takes the spaces on both sides, as in 录用意向书中. Where no space was
-    /// on either side, a space keeps a Latin word or a number apart from the word next to
-    /// it, as in "合同 v3".
+    /// clause or a bracket. Between Chinese characters it takes the spaces on both sides, as
+    /// in 录用意向书中. Where no space was on either side, a space keeps a Latin word or a
+    /// number apart from the word next to it, as in "合同 v3". A line that held nothing but
+    /// brackets goes, and so does a blank line after such lines when a blank line is before
+    /// them or they began the text.
     private static func removing(_ ranges: [Range<String.Index>], from text: String) -> String {
         var runs: [Range<String.Index>] = []
         for range in ranges {
@@ -424,6 +425,7 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
                 runs.append(range)
             }
         }
+        // No cut reaches past the end of its line, so each line stays where it is.
         var result = ""
         var cursor = text.startIndex
         for run in runs {
@@ -431,7 +433,24 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
             result += text[cursor..<range.lowerBound] + replacement
             cursor = range.upperBound
         }
-        return result + text[cursor...]
+        result += text[cursor...]
+        let lines = result.split(separator: "\n", omittingEmptySubsequences: false)
+        let written = text.split(separator: "\n", omittingEmptySubsequences: false)
+        guard lines.count == written.count else { return result }
+        var kept: [Substring] = []
+        var went = false
+        for (line, before) in zip(lines, written) {
+            let blank = line.allSatisfy(\.isWhitespace)
+            if blank, !before.allSatisfy(\.isWhitespace) {
+                went = true
+            } else if blank, went, kept.last?.allSatisfy(\.isWhitespace) ?? true {
+                went = false
+            } else {
+                went = false
+                kept.append(line)
+            }
+        }
+        return kept.joined(separator: "\n")
     }
 
     /// Whether the text between two brackets only parts them: spaces, commas, 、 and
@@ -459,16 +478,11 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         }
         let before = start > text.startIndex ? text[text.index(before: start)] : nil
         let after = end < text.endIndex ? text[end] : nil
-        let opensLine = before.map(\.isNewline) ?? true
-        let endsLine = after.map(\.isNewline) ?? true
-        if opensLine, endsLine {
-            return (line(from: start, to: end, in: text), "")
-        }
-        guard let before, !opensLine else {
+        guard let before, !before.isNewline else {
             // At the start of a line, after any indent.
             return (run.lowerBound..<end, "")
         }
-        guard let after, !endsLine, !closingMarks.contains(after), !(isWide(before) && isWide(after)) else {
+        guard let after, !after.isNewline, !closingMarks.contains(after), !(isWide(before) && isWide(after)) else {
             return (start..<end, "")
         }
         if start < run.lowerBound || end > run.upperBound {
@@ -483,21 +497,6 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
     /// take no space between them.
     private static func isWide(_ character: Character) -> Bool {
         character.isHan || character.unicodeScalars.allSatisfy { (0x3000...0x30FF).contains($0.value) || (0xFF00...0xFFEF).contains($0.value) }
-    }
-
-    /// The line from `start` to `end` with a line break: the one after it, or the one
-    /// before the last line, and a blank line after it too when a blank line is before it.
-    private static func line(from start: String.Index, to end: String.Index, in text: String) -> Range<String.Index> {
-        guard end < text.endIndex else {
-            return (start > text.startIndex ? text.index(before: start) : start)..<end
-        }
-        var next = text.index(after: end)
-        let blankBefore = start > text.startIndex
-            && (text.index(before: start) == text.startIndex || text[text.index(start, offsetBy: -2)].isNewline)
-        if blankBefore, next < text.endIndex, text[next].isNewline {
-            next = text.index(after: next)
-        }
-        return start..<next
     }
 
     /// The marks that take no space before them, so a bracket before one goes with the

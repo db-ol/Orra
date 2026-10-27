@@ -217,6 +217,11 @@ struct ExplainAnswerTests {
 
         let english = read("Draft reply:\nHi Iris,\n\nThe proof (F1) is ready [this email]. Delivery is on 2026-11-20 [F1], [M1].\n\n[T1]\n\nBest,\nBai Lu", Self.englishSources)
         #expect(english.draft == .reply("Hi Iris,\n\nThe proof is ready. Delivery is on 2026-11-20.\n\nBest,\nBai Lu"))
+
+        // Lines of ids alone, also one after another and at the end, go, and so does a blank
+        // line after them when a blank line is before them.
+        let lines = read("Draft reply:\nHi Iris,\n\n[F1]\n[M1]\n\nThanks.\n\nBai Lu\n[T1]\n  [this email]", Self.englishSources)
+        #expect(lines.draft == .reply("Hi Iris,\n\nThanks.\n\nBai Lu"))
     }
 
     /// The questions lose their brackets of ids the prompt names the same way, and gain no
