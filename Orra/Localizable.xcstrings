@@ -14986,7 +14986,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El reconocimiento de texto espera mientras Modo de bajo consumo está activado."
+            "value" : "El reconocimiento de texto espera mientras el modo de bajo consumo está activado."
           }
         },
         "ja" : {
