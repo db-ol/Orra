@@ -121,9 +121,10 @@ nonisolated extension ExplainPrompt.Source {
 /// For one email it:
 /// - gathers by closure the user's own addresses, the projects and the people the user
 ///   knows, the other messages of the thread, and for an email in a project the chunks
-///   that search finds, the newest files when search finds fewer than 3, the project's
-///   files for their versions, and the project's other mail. Search reads the email's
-///   subject and text after PromptHygiene, so hidden lines never steer it.
+///   that search finds, at most 2 of one file, the newest files when search finds fewer
+///   than 3, the project's files for their versions, and the project's other mail. Search
+///   reads the email's subject and text after PromptHygiene, so hidden lines never steer
+///   it.
 /// - runs the sender and content checks and the hygiene of the email and its attachments
 ///   before the search, and searches with the email's search terms too, see
 ///   `files(for:project:known:query:warnings:lookups:)`: the terms saved with the email's
@@ -263,6 +264,12 @@ final class ExplainService {
     /// The passages of other projects an email in a project gets at most, in place of its
     /// project's weakest. An email in Needs a Project gets up to `ExplainPrompt.chunkLimit`.
     nonisolated static let otherProjectChunks = 2
+    /// The passages of one file the prompt takes at most, so a long file that matches many
+    /// words, such as a log, leaves room for other files. In the synthetic set's retrieval
+    /// supplement one log took five or six of the six places of many emails.
+    nonisolated static let perFileChunks = 2
+    /// The chunks a search asks for, so `perFileChunks` leaves enough of other files.
+    nonisolated static let searchedChunks = ExplainPrompt.chunkLimit * 4
     /// The warnings that keep the files of other projects out of an explanation, in the
     /// email, its header or an attachment: a stranger's mail must not pull the user's other
     /// projects into the prompt, and a request for a file is a common phishing pattern.
@@ -457,19 +464,24 @@ final class ExplainService {
     ///    `ExplainPrompt.chunkLimit` passages a term matched in all projects' folders.
     /// 6. The files of each project of those passages, for their versions.
     ///
-    /// `ownTermMatches` is the app's, evaluations try others.
+    /// Each list takes at most `perFileChunks` passages of one file, from the best
+    /// `searchedChunks` of its search. `ownTermMatches` and `perFileChunks` are the app's,
+    /// evaluations try others, and a nil `perFileChunks` searches for
+    /// `ExplainPrompt.chunkLimit` chunks and takes them all, as 0.6.0 did.
     @concurrent
     nonisolated static func files(
         for email: Email, project: Project?, known: Known, query: String, warnings: Set<ProjectsWarning>, lookups: Lookups,
-        ownTermMatches: Int = ExplainService.ownTermMatches
+        ownTermMatches: Int = ExplainService.ownTermMatches, perFileChunks: Int? = ExplainService.perFileChunks
     ) async throws -> Files {
         guard !email.isSetAside else { return Files(otherProjects: .setAside) }
         let allowed = warnings.isDisjoint(with: otherProjectWarnings)
         guard project != nil || allowed else { return Files(otherProjects: .warned) }
         var found = Files(terms: try await lookups.terms(email), otherProjects: .searched)
         let terms = found.terms ?? []
+        let searched = perFileChunks == nil ? ExplainPrompt.chunkLimit : searchedChunks
         if let project {
-            found.hits = try await lookups.search(ChunkSearch.Query(text: query, terms: terms, projects: [project.id], limit: ExplainPrompt.chunkLimit))
+            let hits = try await lookups.search(ChunkSearch.Query(text: query, terms: terms, projects: [project.id], limit: searched))
+            found.hits = capped(hits, perFile: perFileChunks, limit: ExplainPrompt.chunkLimit)
             if found.hits.count < ExplainPrompt.fillUpTo {
                 found.newest = try await lookups.newest(project.id, newestChunks)
             }
@@ -487,11 +499,12 @@ final class ExplainService {
         } else {
             let own = Set(found.files.map(\.url.path) + (found.hits + found.newest).map(\.file.path))
             let limit = project == nil ? ExplainPrompt.chunkLimit : otherProjectChunks
-            let hits = try await lookups.search(ChunkSearch.Query(text: query, terms: terms, projects: others, termsOnly: true, limit: ExplainPrompt.chunkLimit))
+            let hits = try await lookups.search(ChunkSearch.Query(text: query, terms: terms, projects: others, termsOnly: true, limit: searched))
             var seen = Set<String>()
-            found.others = Array(hits.filter { hit in
+            let fresh = hits.filter { hit in
                 !own.contains(hit.file.path) && seen.insert(hit.file.path + "\u{0}" + String(hit.page ?? 0) + "\u{0}" + hit.text).inserted
-            }.prefix(limit))
+            }
+            found.others = capped(fresh, perFile: perFileChunks, limit: limit)
             var projects: [UUID] = []
             for hit in found.others where !projects.contains(hit.project) {
                 projects.append(hit.project)
@@ -501,6 +514,19 @@ final class ExplainService {
             }
         }
         return found
+    }
+
+    /// The first `limit` hits, in their order, with at most `perFile` of one file, or the first
+    /// `limit` of all when `perFile` is nil.
+    nonisolated static func capped(_ hits: [ChunkSearch.Hit], perFile: Int?, limit: Int) -> [ChunkSearch.Hit] {
+        guard let perFile else { return Array(hits.prefix(limit)) }
+        var taken: [String: Int] = [:]
+        var kept: [ChunkSearch.Hit] = []
+        for hit in hits where kept.count < limit && taken[hit.file.path, default: 0] < perFile {
+            taken[hit.file.path, default: 0] += 1
+            kept.append(hit)
+        }
+        return kept
     }
 
     /// The prompt and what the checks after the model need.

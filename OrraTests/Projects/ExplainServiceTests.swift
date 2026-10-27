@@ -153,7 +153,7 @@ struct ExplainServiceTests {
         let few = Fakes(hits: [Fixture.quote], newest: [Fixture.hit("notes.md", "Meeting notes of 2026-10-02.")], answer: .success(Fixture.englishAnswer))
         _ = try await few.service().explain(Fixture.email())
         #expect(few.callList.contains("newest \(ExplainService.newestChunks)"))
-        #expect(few.callList.contains { $0.hasPrefix("search \(ExplainPrompt.chunkLimit) ") })
+        #expect(few.callList.contains { $0.hasPrefix("search \(ExplainService.searchedChunks) ") })
         #expect(few.requestList.first?.prompt.contains("Meeting notes of 2026-10-02.") == true)
 
         let hits = (1...3).map { Fixture.hit("part-\($0).md", "Part \($0) of the brief.") }
@@ -926,10 +926,10 @@ struct ExplainServiceTests {
 
     // MARK: Search terms and other projects' files
 
-    @Test func withoutTermsTheSearchAndThePromptAreAsBefore() async throws {
+    @Test func withoutTermsTheSearchReadsTheEmailsWordsInItsProjectAlone() async throws {
         let fakes = Fakes(otherHits: [Fixture.plan], answer: .success(Fixture.englishAnswer))
         let explanation = try await fakes.service().explain(Fixture.email())
-        #expect(fakes.queryList == [ChunkSearch.Query(text: await ExplainService.searchText(Fixture.email()), projects: [Fixture.projectID], limit: ExplainPrompt.chunkLimit)])
+        #expect(fakes.queryList == [ChunkSearch.Query(text: await ExplainService.searchText(Fixture.email()), projects: [Fixture.projectID], limit: ExplainService.searchedChunks)])
         let prompt = try #require(fakes.requestList.first?.prompt)
         #expect(!prompt.contains("other_files"))
         #expect(explanation.searchTerms == nil)
@@ -944,7 +944,7 @@ struct ExplainServiceTests {
         #expect(own.terms == ["proof", "打样"])
         #expect(own.projects == [Fixture.projectID])
         #expect(!own.termsOnly)
-        #expect(own.limit == ExplainPrompt.chunkLimit)
+        #expect(own.limit == ExplainService.searchedChunks)
         #expect(explanation.searchTerms == ["proof", "打样"])
         #expect(fakes.callList.prefix(3) == ["known", "thread", "terms"])
     }
@@ -957,7 +957,7 @@ struct ExplainServiceTests {
         #expect(query.projects == [Fixture.projectID, Fixture.otherProjectID])
         #expect(query.termsOnly)
         #expect(query.terms == ["floor plan"])
-        #expect(query.limit == ExplainPrompt.chunkLimit)
+        #expect(query.limit == ExplainService.searchedChunks)
         let prompt = try #require(fakes.requestList.first?.prompt)
         #expect(prompt.contains("<other_files>\n<file id=\"O1\" project=\"Studio move\" name=\"floor-plan.pdf\""))
         #expect(prompt.contains("Project: none yet. The email is in no project. <other_files> holds passages of files from Bai Lu's projects that match it, as background only."))
@@ -968,6 +968,31 @@ struct ExplainServiceTests {
         #expect(explanation.citesOtherProjectFile)
         #expect(explanation.sourceProjects == [Fixture.otherProjectID])
         #expect(fakes.callList.contains("files"))
+    }
+
+    /// A long file, such as a log, gives two passages at most, so the others go to other
+    /// files.
+    @Test func aLongFileGivesTwoPassagesAtMost() async throws {
+        let log = (1...5).map { day in
+            var hit = Fixture.hit("site-log.md", "Day \(day) of the site log: the crew worked on the lobby.")
+            hit.chunk = Int64(500 + day)
+            return hit
+        }
+        let fakes = Fakes(hits: log + [Fixture.quote], answer: .success(Fixture.englishAnswer))
+        _ = try await fakes.service().explain(Fixture.email())
+        let prompt = try #require(fakes.requestList.first?.prompt)
+        #expect(prompt.contains("Day 1 of the site log") && prompt.contains("Day 2 of the site log"))
+        #expect(!prompt.contains("Day 3 of the site log"))
+        #expect(prompt.contains("Quote v2: 500 calendars"))
+    }
+
+    @Test func cappedKeepsTheOrderWithTwoOfAFileAndNilKeepsThemAll() {
+        let hits = ["a.md", "a.md", "b.md", "a.md", "c.md", "b.md", "b.md"].enumerated().map { index, name in
+            Fixture.hit(name, "Passage \(index).")
+        }
+        #expect(ExplainService.capped(hits, perFile: 2, limit: 4).map(\.text) == ["Passage 0.", "Passage 1.", "Passage 2.", "Passage 4."])
+        #expect(ExplainService.capped(hits, perFile: 2, limit: 10).map(\.text) == ["Passage 0.", "Passage 1.", "Passage 2.", "Passage 4.", "Passage 5."])
+        #expect(ExplainService.capped(hits, perFile: nil, limit: 4).map(\.text) == ["Passage 0.", "Passage 1.", "Passage 2.", "Passage 3."])
     }
 
     @Test func anEmailSetAsideReadsNoFilesAndAsksForNoTerms() async throws {
