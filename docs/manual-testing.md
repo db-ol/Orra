@@ -3814,7 +3814,9 @@ recognition, which a later change adds, so they show in no count yet.
   build. The log's first sweep reads the xlsx and not the docx, and the scanned PDF leaves
   Why Files Were Skipped, since it waits for text recognition.
 - [ ] With an iCloud Drive folder set to Optimize Mac Storage, an evicted dwg is not
-  downloaded, as Finder keeps its cloud icon, and is not counted.
+  downloaded, as Finder keeps its cloud icon. It counts under Skipped, and Why Files Were
+  Skipped lists it as Not downloaded to this Mac. If Projects knew it before it was evicted,
+  it still counts under Files found by name only too.
 - [ ] An email with an xlsx attachment and one with a pptx attachment show them as read under
   Original Email, and their explanations can cite them.
 - [ ] VoiceOver on the project page reads "Files found by name only" with its number. At 760
