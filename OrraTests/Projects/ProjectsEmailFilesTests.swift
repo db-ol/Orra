@@ -153,7 +153,8 @@ struct ProjectsEmailFilesTests {
     // MARK: Words
 
     /// A file chip's popover calls its excerpt saved, with its page, since the explanation
-    /// keeps the lines the hygiene took out before the model read it.
+    /// keeps the lines the hygiene took out before the model read it. For a deck's slide and
+    /// a workbook's sheet, see theExcerptsOfADeckNameTheirSlideAndOfAWorkbookTheirSheet.
     @Test func theExcerptOfAFileSaysItIsTheSavedOne() {
         var chunk = Self.schedule
         #expect(ProjectsWindowText.savedExcerpt(chunk) == "Saved excerpt, page 2")
@@ -239,6 +240,60 @@ struct ProjectsEmailFilesTests {
             ["notes.md, Saved Excerpt 1", "notes.md, Saved Excerpt 2"],
             ["brief.md, Saved Excerpt"],
             ["plan.pdf, page 1"],
+        ])
+    }
+
+    /// The excerpts of a deck name their slide and those of a workbook their sheet, as the
+    /// place formatter names them, in the popover's line, on the chips of the list and for
+    /// VoiceOver. A sheet has no page, yet the excerpts of two sheets never share numbers.
+    @Test func theExcerptsOfADeckNameTheirSlideAndOfAWorkbookTheirSheet() {
+        func sheet(_ name: String, text: String = "Text.") -> TextChunker.Chunk {
+            var chunk = Self.chunk("budget.xlsx", text: text)
+            chunk.sheet = name
+            return chunk
+        }
+        let slide = Self.chunk("deck.pptx", page: 3)
+        #expect(ProjectsWindowText.savedExcerpt(slide) == "Saved excerpt, slide 3")
+        #expect(ProjectsWindowText.savedExcerpt(sheet("Lamps")) == "Saved excerpt, sheet “Lamps”")
+        #expect(ProjectsWindowText.savedExcerpt(Self.chunk("Show.PPSX", page: 1)) == "Saved excerpt, slide 1")
+        #expect(ProjectsWindowText.excerptChip(slide, number: nil) == "Slide 3")
+        #expect(ProjectsWindowText.excerptChip(sheet("Lamps"), number: nil) == "Sheet “Lamps”")
+        #expect(ProjectsWindowText.excerptChipLabel(slide, number: nil) == "deck.pptx, slide 3")
+        #expect(ProjectsWindowText.excerptChipLabel(slide, number: nil) == ProjectsWindowText.sourceLabel(.file(slide)))
+        #expect(ProjectsWindowText.excerptChipLabel(sheet("Lamps"), number: nil) == "budget.xlsx, sheet “Lamps”")
+
+        let found = ExplainPrompt.FileOrigin(reason: .match, project: Self.project)
+        let files = ProjectsEmailFiles.files(in: Self.explanation(sources: [
+            "F1": .file(sheet("Lamps", text: "| Lobby lamps | 12 |"), origin: found),
+            "F2": .file(sheet("Doors", text: "| Doors | 4 |"), origin: found),
+            "F3": .file(sheet("Lamps", text: "| Wall lamps | 6 |"), origin: found),
+            "F4": .file(Self.chunk("deck.pptx", page: 3, text: "Lobby lamps"), origin: found),
+            "F5": .file(Self.chunk("deck.pptx", page: 3, text: "Notes: order them in week 47."), origin: found),
+            "F6": .file(Self.chunk("deck.pptx", page: 5), origin: found),
+            "F7": .file(Self.chunk("totals.xlsx", text: "| Total | 86000 |"), origin: found),
+        ]))
+        #expect(files.map(\.url.lastPathComponent) == ["budget.xlsx", "deck.pptx", "totals.xlsx"])
+        #expect(files.map(\.chipNumbers) == [[1, nil, 2], [1, 2, nil], [nil]])
+        let chips = files.map { file in
+            zip(file.excerpts, file.chipNumbers).map { ProjectsWindowText.excerptChip($0.chunk, number: $1) }
+        }
+        #expect(chips == [
+            ["Sheet “Lamps”, Saved Excerpt 1", "Sheet “Doors”", "Sheet “Lamps”, Saved Excerpt 2"],
+            ["Slide 3, Saved Excerpt 1", "Slide 3, Saved Excerpt 2", "Slide 5"],
+            ["Saved Excerpt"],
+        ])
+        let labels = files.map { file in
+            zip(file.excerpts, file.chipNumbers).map { ProjectsWindowText.excerptChipLabel($0.chunk, number: $1) }
+        }
+        #expect(labels == [
+            ["budget.xlsx, sheet “Lamps”, Saved Excerpt 1", "budget.xlsx, sheet “Doors”", "budget.xlsx, sheet “Lamps”, Saved Excerpt 2"],
+            ["deck.pptx, slide 3, Saved Excerpt 1", "deck.pptx, slide 3, Saved Excerpt 2", "deck.pptx, slide 5"],
+            ["totals.xlsx, Saved Excerpt"],
+        ])
+        let lines = files.flatMap { $0.excerpts.map { ProjectsWindowText.savedExcerpt($0.chunk) } }
+        #expect(lines == [
+            "Saved excerpt, sheet “Lamps”", "Saved excerpt, sheet “Doors”", "Saved excerpt, sheet “Lamps”",
+            "Saved excerpt, slide 3", "Saved excerpt, slide 3", "Saved excerpt, slide 5", "Saved excerpt",
         ])
     }
 

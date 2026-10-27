@@ -506,6 +506,62 @@
         }
       }
     },
+    "%@, sheet “%@”" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, sheet “%2$@”"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, hoja “%2$@”"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@、シート“%2$@”"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@，工作表“%2$@”"
+          }
+        }
+      }
+    },
+    "%@, slide %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, slide %2$lld"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, diapositiva %2$lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@、スライド%2$lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@，第 %2$lld 张幻灯片"
+          }
+        }
+      }
+    },
     "%@. %@" : {
       "localizations" : {
         "en" : {
@@ -2012,6 +2068,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "较早的邮件"
+          }
+        }
+      }
+    },
+    "An image without text" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una imagen sin texto"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テキストのない画像"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不含文字的图片"
           }
         }
       }
@@ -5058,28 +5136,6 @@
         }
       }
     },
-    "Excel and PowerPoint files are not read yet" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Los archivos de Excel y PowerPoint aún no se leen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ExcelとPowerPointのファイルはまだ読み取らない"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "暂不读取 Excel 和 PowerPoint 文件"
-          }
-        }
-      }
-    },
     "Expanded" : {
       "localizations" : {
         "es-419" : {
@@ -5208,6 +5264,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在解释…"
+          }
+        }
+      }
+    },
+    "Files found by name only" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archivos que solo se encuentran por su nombre"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイル名でのみ見つかるファイル"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅能按文件名找到的文件"
           }
         }
       }
@@ -11125,6 +11203,28 @@
         }
       }
     },
+    "Past the number of files Projects reads" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Supera la cantidad de archivos que lee Proyectos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”が読み取るファイル数を超えている"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超出“项目”读取的文件数"
+          }
+        }
+      }
+    },
     "Paste Original Text" : {
       "localizations" : {
         "es-419" : {
@@ -12424,24 +12524,24 @@
         }
       }
     },
-    "Projects reached the most text it keeps for a project. Newer files are left out." : {
+    "Projects reached the most text it keeps for a project. It knows newer files by name only." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Proyectos llegó al máximo de texto que guarda por proyecto. Los archivos más nuevos quedan fuera."
+            "value" : "Proyectos llegó al máximo de texto que guarda por proyecto. De los archivos más nuevos solo conoce el nombre."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“プロジェクト”は1つのプロジェクトに保存できるテキストの上限に達しました。新しいファイルは除外されます。"
+            "value" : "“プロジェクト”は1つのプロジェクトに保存できるテキストの上限に達しました。新しいファイルはファイル名だけを記録します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“项目”已达到每个项目可保存文字的上限，更新的文件会被略去。"
+            "value" : "“项目”已达到每个项目可保存文字的上限，较新的文件只记下文件名。"
           }
         }
       }
@@ -13124,6 +13224,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "识别"
+          }
+        }
+      }
+    },
+    "Recognized from an image, so words and numbers may be wrong." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se reconoció a partir de una imagen, así que las palabras y los números pueden tener errores."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画像から認識したテキストのため、語句や数字が誤っている可能性があります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这段文字识别自图片，文字和数字可能有误。"
           }
         }
       }
@@ -14123,6 +14245,50 @@
         }
       }
     },
+    "Saved excerpt, sheet “%@”" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fragmento guardado, hoja “%@”"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存された抜粋、シート“%@”"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存的摘录，工作表“%@”"
+          }
+        }
+      }
+    },
+    "Saved excerpt, slide %lld" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fragmento guardado, diapositiva %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存された抜粋、スライド%lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存的摘录，第 %lld 张幻灯片"
+          }
+        }
+      }
+    },
     "Saved on this Mac until you remove it, and loaded when Orra starts." : {
       "localizations" : {
         "es-419" : {
@@ -14519,6 +14685,28 @@
         }
       }
     },
+    "Sheet “%@”" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hoja “%@”"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "シート“%@”"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作表“%@”"
+          }
+        }
+      }
+    },
     "Shift can't be the talk key. On its own, it switches input methods between Chinese and English." : {
       "localizations" : {
         "es-419" : {
@@ -14809,6 +14997,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已跳过"
+          }
+        }
+      }
+    },
+    "Slide %lld" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diapositiva %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スライド%lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %lld 张幻灯片"
           }
         }
       }
@@ -17935,24 +18145,46 @@
         }
       }
     },
-    "This project holds more files than Projects reads. The others are left out." : {
+    "This project holds more files than Projects lists. The others are left out." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Este proyecto tiene más archivos de los que lee Proyectos. Los demás quedan fuera."
+            "value" : "Este proyecto tiene más archivos de los que enumera Proyectos. Los demás quedan fuera."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このプロジェクトには“プロジェクト”が読み取れる数を超えるファイルがあります。それ以外のファイルは除外されます。"
+            "value" : "このプロジェクトには“プロジェクト”が一覧にできる数を超えるファイルがあります。それ以外のファイルは除外されます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个项目的文件数超过了“项目”读取的上限，其余文件会被略去。"
+            "value" : "这个项目的文件数超过了“项目”列出的上限，其余文件会被略去。"
+          }
+        }
+      }
+    },
+    "This project holds more files than Projects reads. It knows the others by name only." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este proyecto tiene más archivos de los que lee Proyectos. De los demás solo conoce el nombre."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このプロジェクトには“プロジェクト”が読み取れる数を超えるファイルがあります。それ以外のファイルはファイル名だけを記録します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个项目的文件数超过了“项目”读取的上限，其余文件只记下文件名。"
           }
         }
       }
@@ -19165,6 +19397,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请等听写结束后再录音。"
+          }
+        }
+      }
+    },
+    "Waiting for text recognition" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esperando el reconocimiento de texto"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テキスト認識待ち"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待识别文字"
           }
         }
       }

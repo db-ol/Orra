@@ -115,7 +115,8 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
-    /// Why a file gives no text, for the project page.
+    /// Why a file gives no text, for the project page. The page only counts the files of
+    /// some reasons, see `FolderWalk.countedSkips` and `FolderIndex.countedSkips`.
     static func skipReason(_ reason: FileSkipReason) -> String {
         switch reason {
         case .hidden: String(localized: "Hidden")
@@ -129,13 +130,15 @@ nonisolated enum ProjectsWindowText {
         case .tooLarge: String(localized: "Too large")
         case .dataless, .notDownloaded: String(localized: "Not downloaded to this Mac")
         case .unsupportedFormat: String(localized: "A format Projects does not read")
-        case .spreadsheetOrSlides: String(localized: "Excel and PowerPoint files are not read yet")
         case .noAccess: String(localized: "Orra is not allowed to read it")
         case .unreadable: String(localized: "Could not be read")
         case .locked: String(localized: "Locked with a password")
         case .tooSlow: String(localized: "Took too long to read")
         case .noText: String(localized: "Holds no text")
         case .cancelled: String(localized: "Not read yet")
+        case .waitsForRecognition: String(localized: "Waiting for text recognition")
+        case .imageWithoutText: String(localized: "An image without text")
+        case .overFileLimit: String(localized: "Past the number of files Projects reads")
         }
     }
 
@@ -439,9 +442,7 @@ nonisolated enum ProjectsWindowText {
         case .mail:
             return String(localized: "An earlier email")
         case .file(let chunk):
-            let name = chunk.file.lastPathComponent
-            guard let page = chunk.page else { return name }
-            return String(localized: "\(name), page \(page)")
+            return file(chunk.file.lastPathComponent, at: place(of: chunk))
         case .otherProjectFile(let chunk, let project):
             let file = Self.source(.file(chunk))
             return String(
@@ -464,6 +465,48 @@ nonisolated enum ProjectsWindowText {
         return (file, String(whole.dropFirst(file.count)))
     }
 
+    /// Where an excerpt lies in its file: a page of a PDF, a slide of a deck or a sheet of a
+    /// workbook. Every label of an excerpt names its place through `place(of:)`, so a slide
+    /// or a sheet never reads as a page.
+    nonisolated enum Place: Hashable {
+        case page(Int)
+        case slide(Int)
+        case sheet(String)
+    }
+
+    /// The place of an excerpt, nil for a file without pages, such as a docx. A chunk's page
+    /// is a slide in a pptx or ppsx.
+    static func place(of chunk: TextChunker.Chunk) -> Place? {
+        if let sheet = chunk.sheet, !sheet.isEmpty { return .sheet(sheet) }
+        guard let page = chunk.page else { return nil }
+        return ["pptx", "ppsx"].contains(chunk.file.pathExtension.lowercased()) ? .slide(page) : .page(page)
+    }
+
+    /// A place on a line of its own, such as Page 2, Slide 3 or Sheet “Budget”.
+    static func place(_ place: Place) -> String {
+        switch place {
+        case .page(let page): String(localized: "Page \(page)")
+        case .slide(let slide): String(localized: "Slide \(slide)")
+        case .sheet(let sheet): String(localized: "Sheet “\(sheet)”")
+        }
+    }
+
+    /// A file's name with the place of an excerpt in it, such as schedule.pdf, page 2.
+    static func file(_ name: String, at place: Place?) -> String {
+        switch place {
+        case nil: name
+        case .page(let page)?: String(localized: "\(name), page \(page)")
+        case .slide(let slide)?: String(localized: "\(name), slide \(slide)")
+        case .sheet(let sheet)?: String(localized: "\(name), sheet “\(sheet)”")
+        }
+    }
+
+    /// The note under the place of an excerpt whose text was recognized in an image or on a
+    /// scanned page, nil for any other.
+    static func recognized(_ chunk: TextChunker.Chunk) -> String? {
+        chunk.recognized == true ? String(localized: "Recognized from an image, so words and numbers may be wrong.") : nil
+    }
+
     /// What VoiceOver reads for a source's chip: its text, for an attachment that it is
     /// one, since its chip may show the name of a project file too, and for another
     /// project's file the project it is from.
@@ -480,12 +523,16 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
-    /// The line under a file's name in the popover of its excerpt, with its page. The
-    /// explanation keeps the excerpt as the index had it, with any lines that the hygiene
-    /// took out before the model read it, so the popover calls it saved.
+    /// The line under a file's name in the popover of its excerpt, with its page, slide or
+    /// sheet. The explanation keeps the excerpt as the index had it, with any lines that the
+    /// hygiene took out before the model read it, so the popover calls it saved.
     static func savedExcerpt(_ chunk: TextChunker.Chunk) -> String {
-        guard let page = chunk.page else { return String(localized: "Saved excerpt") }
-        return String(localized: "Saved excerpt, page \(page)")
+        switch place(of: chunk) {
+        case nil: String(localized: "Saved excerpt")
+        case .page(let page)?: String(localized: "Saved excerpt, page \(page)")
+        case .slide(let slide)?: String(localized: "Saved excerpt, slide \(slide)")
+        case .sheet(let sheet)?: String(localized: "Saved excerpt, sheet “\(sheet)”")
+        }
     }
 
     // MARK: The project files of an explanation
@@ -554,22 +601,22 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
-    /// The chip of a saved excerpt in the list of an explanation's files: its page, or Saved
-    /// Excerpt for a file without pages. With its number when the file has several excerpts
-    /// of that page, or several without pages, see ProjectsEmailFiles.File.chipNumbers, such
-    /// as Page 4, Saved Excerpt 2.
+    /// The chip of a saved excerpt in the list of an explanation's files: its page, slide or
+    /// sheet, as `place(_:)` names it, or Saved Excerpt for a file without them. With its
+    /// number when the file has several excerpts of that place, or several without one, see
+    /// ProjectsEmailFiles.File.chipNumbers, such as Page 4, Saved Excerpt 2.
     static func excerptChip(_ chunk: TextChunker.Chunk, number: Int?) -> String {
-        guard let page = chunk.page else { return savedExcerptChip(number) }
-        let place = String(localized: "Page \(page)")
-        guard number != nil else { return place }
-        return String(localized: "\(place), \(savedExcerptChip(number))")
+        guard let place = Self.place(of: chunk) else { return savedExcerptChip(number) }
+        let name = Self.place(place)
+        guard number != nil else { return name }
+        return String(localized: "\(name), \(savedExcerptChip(number))")
     }
 
-    /// What VoiceOver reads for the chip of a saved excerpt: the file with its page, as for
-    /// the file's chip under a point, and the excerpt when the chip names it.
+    /// What VoiceOver reads for the chip of a saved excerpt: the file with its page, slide or
+    /// sheet, as for the file's chip under a point, and the excerpt when the chip names it.
     static func excerptChipLabel(_ chunk: TextChunker.Chunk, number: Int?) -> String {
         let file = sourceLabel(.file(chunk))
-        guard chunk.page == nil || number != nil else { return file }
+        guard place(of: chunk) == nil || number != nil else { return file }
         return String(localized: "\(file), \(savedExcerptChip(number))")
     }
 

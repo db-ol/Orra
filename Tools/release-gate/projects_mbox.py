@@ -16,10 +16,10 @@ of multipart/alternative, so Mail shows the HTML, as it shows real mail. Every a
 becomes a part with its name and type. Projects reads the text of attachments, so a part
 holds the item's attachment text when it has one, else the file of the set's project
 folders with the attachment's name, as when a supplier mails the quote that is also in
-the folder, and a placeholder line otherwise. An attachment text of a PDF or a docx
-becomes a real file of that kind, made here, in which a line that starts with
-"[white text] " is white without the mark, as the release gate's test makes them. Other
-attachment text goes in as it is. A Received header carries the date too, in case Mail
+the folder, and a placeholder line otherwise. An attachment text of a PDF, a docx, an xlsx or a
+pptx becomes a real file of that kind, made here, in which a line that starts with
+"[white text] " is white without the mark, on a white shape in a pptx, as the release
+gate's test makes them. Other attachment text goes in as it is. A Received header carries the date too, in case Mail
 takes the date received from it.
 
 It prints counts only, never mail text. Standard library only.
@@ -53,11 +53,16 @@ UTF8_POLICY = POLICY.clone(utf8=True)
 
 PLACEHOLDER = "Synthetic attachment of the Projects test set, without its content.\n"
 
-# The mark of a line of attachment text that is white in a PDF or docx, see attachment_file.
+# The mark of a line of attachment text that is white in a PDF or an Office file, see
+# attachment_file.
 WHITE_MARK = "[white text] "
-# The date inside each docx, so a second run writes the same bytes.
+# The date inside each Office file, so a second run writes the same bytes.
 FIXED_ZIP_TIME = (2026, 10, 1, 0, 0, 0)
 DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+PPTX_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+RELATIONSHIP_TYPES = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
 
 # Each output, with the set file it comes from and how to take the messages out of a line.
 OUTPUTS = (
@@ -111,6 +116,11 @@ def docx_bytes(text: str) -> bytes:
         + paragraphs
         + "</w:body></w:document>",
     }
+    return zip_bytes(parts)
+
+
+def zip_bytes(parts: dict[str, str]) -> bytes:
+    """A ZIP file of the parts in order, deflated, with a fixed date."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         for name, content in parts.items():
@@ -118,6 +128,83 @@ def docx_bytes(text: str) -> bytes:
             info.compress_type = zipfile.ZIP_DEFLATED
             archive.writestr(info, content.encode("utf-8"))
     return buffer.getvalue()
+
+
+def package_parts(main: str, main_type: str) -> dict[str, str]:
+    """The content types and the package relationship of an Office file with that main part."""
+    return {
+        "[Content_Types].xml": XML_HEAD
+        + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        f'<Override PartName="/{main}" ContentType="{main_type}"/>'
+        "</Types>",
+        "_rels/.rels": relationships([("rId1", "officeDocument", main)]),
+    }
+
+
+def relationships(items: list[tuple[str, str, str]]) -> str:
+    """A relationships part with each id, type and target."""
+    return (
+        XML_HEAD
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + "".join(f'<Relationship Id="{id}" Type="{RELATIONSHIP_TYPES}{kind}" Target="{target}"/>' for id, kind, target in items)
+        + "</Relationships>"
+    )
+
+
+def xlsx_bytes(text: str) -> bytes:
+    """A workbook of one sheet with a row a line, each an inline string, in a white font
+    on no fill where marked: the parts Orra reads."""
+    rows = []
+    for number, (line, white) in enumerate(marked_lines(text), start=1):
+        style = ' s="1"' if white else ""
+        rows.append(f'<row r="{number}"><c r="A{number}"{style} t="inlineStr"><is><t xml:space="preserve">{escape(line)}</t></is></c></row>')
+    spreadsheet = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+    parts = package_parts("xl/workbook.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml")
+    parts["xl/workbook.xml"] = (
+        XML_HEAD + f'<workbook {spreadsheet} xmlns:r="{RELATIONSHIP_TYPES[:-1]}">'
+        '<sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>'
+    )
+    parts["xl/_rels/workbook.xml.rels"] = relationships([("rId1", "worksheet", "worksheets/sheet1.xml"), ("rId2", "styles", "styles.xml")])
+    parts["xl/worksheets/sheet1.xml"] = XML_HEAD + f"<worksheet {spreadsheet}><sheetData>" + "".join(rows) + "</sheetData></worksheet>"
+    parts["xl/styles.xml"] = (
+        XML_HEAD + f"<styleSheet {spreadsheet}>"
+        '<fonts count="2"><font><sz val="11"/><color theme="1"/></font><font><sz val="11"/><color rgb="FFFFFFFF"/></font></fonts>'
+        '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+        '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0"/><xf numFmtId="0" fontId="1" fillId="0" applyFont="1"/></cellXfs>'
+        "</styleSheet>"
+    )
+    return zip_bytes(parts)
+
+
+def pptx_bytes(text: str) -> bytes:
+    """A deck of one slide with a paragraph a line in a shape filled white, the text black,
+    or white where marked, like the fill: the parts Orra reads."""
+    paragraphs = "".join(
+        f'<a:p><a:r><a:rPr lang="en-US"><a:solidFill><a:srgbClr val="{"FFFFFF" if white else "000000"}"/></a:solidFill></a:rPr>'
+        f"<a:t>{escape(line)}</a:t></a:r></a:p>"
+        for line, white in marked_lines(text)
+    )
+    namespaces = (
+        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+        f'xmlns:r="{RELATIONSHIP_TYPES[:-1]}" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"'
+    )
+    parts = package_parts("ppt/presentation.xml", "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml")
+    parts["ppt/presentation.xml"] = (
+        XML_HEAD + f"<p:presentation {namespaces}>"
+        '<p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/></p:presentation>'
+    )
+    parts["ppt/_rels/presentation.xml.rels"] = relationships([("rId2", "slide", "slides/slide1.xml")])
+    parts["ppt/slides/slide1.xml"] = (
+        XML_HEAD + f"<p:sld {namespaces}><p:cSld><p:spTree>"
+        '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>'
+        '<p:sp><p:nvSpPr><p:cNvPr id="2" name="Text"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>'
+        '<p:spPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></p:spPr>'
+        f"<p:txBody><a:bodyPr/><a:lstStyle/>{paragraphs}</p:txBody></p:sp>"
+        "</p:spTree></p:cSld></p:sld>"
+    )
+    return zip_bytes(parts)
 
 
 def pdf_bytes(text: str) -> bytes:
@@ -157,13 +244,17 @@ def pdf_bytes(text: str) -> bytes:
 
 
 def attachment_file(text: str, name: str, mime_type: str) -> bytes:
-    """The bytes of an attachment with text: a PDF or a docx by the name's extension, else
-    by the type, and the text in UTF-8 for every other kind."""
+    """The bytes of an attachment with text: a PDF, a docx, an xlsx or a pptx by the name's
+    extension, else by the type, and the text in UTF-8 for every other kind."""
     extension = Path(name).suffix.lower().lstrip(".")
     if extension == "pdf" or (not extension and mime_type == "application/pdf"):
         return pdf_bytes(text)
     if extension == "docx" or (not extension and mime_type == DOCX_TYPE):
         return docx_bytes(text)
+    if extension in ("xlsx", "xlsm") or (not extension and mime_type == XLSX_TYPE):
+        return xlsx_bytes(text)
+    if extension in ("pptx", "ppsx") or (not extension and mime_type == PPTX_TYPE):
+        return pptx_bytes(text)
     return text.encode("utf-8")
 
 

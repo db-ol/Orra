@@ -42,7 +42,8 @@ nonisolated struct ChunkSearch: Sendable {
         var chunk: Int64
         var project: UUID
         var file: URL
-        /// The page number in a PDF, nil for the other formats.
+        /// The page number in a PDF and the slide number in a deck, nil for the other
+        /// formats.
         var page: Int?
         /// The heading above the chunk's first line.
         var heading: String?
@@ -54,6 +55,10 @@ nonisolated struct ChunkSearch: Sendable {
         var fileHiddenRuns: Int
         /// The fused rank score, higher is better. Zero for `newest(_:limit:)`.
         var score: Double
+        /// The name of the chunk's sheet in a workbook, nil for the other formats.
+        var sheet: String? = nil
+        /// Whether the text was recognized in an image or on a scanned page.
+        var recognized = false
         /// Whether a term of the query matches the chunk.
         var matchedTerm = false
         /// The query's terms that match the chunk, each searched alone as the lists of the
@@ -388,17 +393,17 @@ nonisolated struct ChunkSearch: Sendable {
     }
 
     private static let hitSQL = """
-        SELECT c.id, c.project, f.path, c.page, c.heading, c.modified, c.text, f.hidden_runs
+        SELECT c.id, c.project, f.path, c.page, c.heading, c.modified, c.text, f.hidden_runs, c.sheet, c.recognized
         FROM index_chunks c JOIN index_files f ON f.id = c.file
         """
 
     private static func hit(_ row: [ProjectsDatabase.Value], score: Double) -> Hit? {
-        guard row.count == 8, let chunk = row[0].integer, let project = row[1].text.flatMap(UUID.init(uuidString:)),
+        guard row.count == 10, let chunk = row[0].integer, let project = row[1].text.flatMap(UUID.init(uuidString:)),
               let path = row[2].text, let modified = row[5].real, let text = row[6].text else { return nil }
         return Hit(
             chunk: chunk, project: project, file: URL(fileURLWithPath: path), page: row[3].integer.map(Int.init),
             heading: row[4].text, modified: Date(timeIntervalSince1970: modified), text: text,
-            fileHiddenRuns: Int(row[7].integer ?? 0), score: score)
+            fileHiddenRuns: Int(row[7].integer ?? 0), score: score, sheet: row[8].text, recognized: row[9].integer == 1)
     }
 
     /// A JSON array of the values, for json_each. UUIDs and numbers need no escaping.

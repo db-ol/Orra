@@ -35,20 +35,22 @@ nonisolated enum ProjectsEmailFiles {
         var id: URL { url }
 
         /// The number on the chip of each of its excerpts, in their order: the excerpt's
-        /// place among the excerpts of its page, or among those of a file without pages,
-        /// when there are several, so no two chips of the file read the same. Nil for an
-        /// excerpt alone on its page, or the one excerpt of a file without pages.
+        /// place among the excerpts of its page, slide or sheet, or among those of a file
+        /// without them, when there are several, so no two chips of the file read the same.
+        /// Nil for an excerpt alone on its page, slide or sheet, or the one excerpt of a file
+        /// without them. The places are those the chips name, see
+        /// ProjectsWindowText.place(of:), so the excerpts of two sheets never share numbers.
         var chipNumbers: [Int?] {
-            var counts: [Int?: Int] = [:]
-            for excerpt in excerpts {
-                counts[excerpt.chunk.page, default: 0] += 1
+            let places = excerpts.map { ProjectsWindowText.place(of: $0.chunk) }
+            var counts: [ProjectsWindowText.Place?: Int] = [:]
+            for place in places {
+                counts[place, default: 0] += 1
             }
-            var numbers: [Int?: Int] = [:]
-            return excerpts.map { excerpt in
-                let page = excerpt.chunk.page
-                guard counts[page, default: 0] > 1 else { return nil }
-                numbers[page, default: 0] += 1
-                return numbers[page]
+            var numbers: [ProjectsWindowText.Place?: Int] = [:]
+            return places.map { place in
+                guard counts[place, default: 0] > 1 else { return nil }
+                numbers[place, default: 0] += 1
+                return numbers[place]
             }
         }
     }
@@ -397,12 +399,13 @@ extension ProjectsEmailArea {
         }
     }
 
-    /// A saved excerpt's chip: its page, or Saved Excerpt, which shows the excerpt in the
-    /// popover of a file's source chip.
+    /// A saved excerpt's chip: its page, slide or sheet, or Saved Excerpt, which shows the
+    /// excerpt in the popover of a file's source chip.
     struct ExcerptChip: View {
         let excerpt: ProjectsEmailFiles.SavedExcerpt
-        /// Its number among the file's excerpts of its page, or of a file without pages,
-        /// nil when it is the only one there, see ProjectsEmailFiles.File.chipNumbers.
+        /// Its number among the file's excerpts of its page, slide or sheet, or of a file
+        /// without them, nil when it is the only one there, see
+        /// ProjectsEmailFiles.File.chipNumbers.
         let number: Int?
         @State private var showsExcerpt = false
 
