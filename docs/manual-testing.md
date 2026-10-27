@@ -3793,8 +3793,7 @@ Debug build with Projects on, a project whose folder holds the files below, and 
 watched with `/usr/bin/log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND
 category == "projects-index"'`, which shows counts and times, never a name. This change adds
 step 6 to the Projects database, so an older build cannot open the data afterwards, see
-Projects in a Debug build in docs/development.md. Images and scanned PDF pages wait for text
-recognition, which a later change adds, so they show in no count yet.
+Projects in a Debug build in docs/development.md.
 
 - [ ] Put an xlsx saved by Excel and one exported by Numbers or WPS, a pptx with speaker
   notes saved by PowerPoint and one exported by Keynote, a csv, a dwg, a zip, a video and a
@@ -3811,8 +3810,8 @@ recognition, which a later change adds, so they show in no count yet.
 - [ ] Rename the dwg and move it into another folder of the project. A minute later it is
   still counted once. Delete it, and the count drops.
 - [ ] With 0.6.0, index a folder with a scanned PDF, an xlsx and a docx, then update to this
-  build. The log's first sweep reads the xlsx and not the docx, and the scanned PDF leaves
-  Why Files Were Skipped, since it waits for text recognition.
+  build. The log's first sweep reads the xlsx and not the docx, and the scanned PDF is
+  recognized after it.
 - [ ] With an iCloud Drive folder set to Optimize Mac Storage, an evicted dwg is not
   downloaded, as Finder keeps its cloud icon, and is not counted.
 - [ ] An email with an xlsx attachment and one with a pptx attachment show them as read under
@@ -3821,6 +3820,38 @@ recognition, which a later change adds, so they show in no count yet.
   by 420, every line of the Index section wraps and none is cut, in all four languages.
 - [ ] In 简体中文, the Index section reads 仅能按文件名找到的文件, and a slide's chip reads
   “deck.pptx，第 3 张幻灯片”.
+
+Text recognition in images and scanned PDF pages, added on 2026-10-26, not verified yet.
+TextRecognitionTests and FolderIndexTests check the pages read, the caps, the order, the
+hidden text, the page time, the pauses before every page and during a page, and the pages
+kept across a restart, with a stand in for Vision. VisionTextRecognitionTests reads one image
+with Vision, and TextRecognitionMeasurementTests measures Vision on synthetic scans and
+images. No scan from a scanner app or photo from an iPhone is among them. Check in a Debug
+build with Projects on and the index watched with the log stream above.
+
+- [ ] Put a scanned PDF from a scanner app or Notes, a PDF with text and one scanned page, an
+  iPhone HEIC photo of a printed page, a PNG screenshot and a photo without text into the
+  folder. The project page says "Recognizing text in images and scans… N left" until it is
+  done. Then Files with text counts the scans, the screenshot and the photo of the page,
+  and Files found by name only the photo without text.
+- [ ] Explain an email that names a value only the scan holds. It comes back as a source,
+  and the popover of its chip says "Recognized from an image, so words and numbers may be
+  wrong."
+- [ ] While "Recognizing text in images and scans…" shows, dictate ten times. Each paste is as
+  fast as with recognition done, and the log shows that a job of recognition stopped at
+  each key press.
+- [ ] Turn on Live Captions and click Explain while recognition runs. The log shows no page
+  recognized until captions end and the explanation is done.
+- [ ] Turn on Low Power Mode in System Settings, Battery. Within a minute the page says "Text
+  recognition waits while Low Power Mode is on." and the count stops. Turn it off, and
+  within a minute it goes on.
+- [ ] Turn Wi-Fi off and add an image with text. Its text is found.
+- [ ] Quit Orra while a long scan is recognized, open it again, and the log shows the scan
+  goes on after the pages it had read.
+- [ ] Activity Monitor shows Orra's memory during recognition. Note the peak.
+- [ ] VoiceOver on the project page reads the progress line once, as one line. At 760 by
+  420, the progress and pause lines wrap and none is cut, in all four languages.
+- [ ] In 简体中文, the progress line reads 正在识别图片和扫描件中的文字…还剩 N 个.
 
 ## Not implemented
 
