@@ -179,11 +179,12 @@ model, through ProjectsModelQueue as a request of the user, and at most two pass
 file before the passages of other files. It also picks with each of the two changes alone. It writes `retrieval.jsonl`, one row a mail, `retrieval-terms.jsonl` with the terms,
 and `retrieval.md` with the tables, the time of the terms jobs and the bar to merge of pull
 request E. `TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_TERMS` takes the terms of an earlier run
-without the model, `TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_THRESHOLDS=1,2,3` picks again with
-each number of the email's project's passages a term must match for other projects to stay
-out, and `TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_EXPLAIN=zh,en` also explains the mails that
-may read other projects' files and counts the drafts that hold a value, a name, an address
-or a run of 6 words or 10 Chinese characters that only another project's passage holds.
+without the model, `TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_SWEEP=1` picks again with each rule
+for other projects' passages that the suite lists, with each rule's line of the bar, and
+`TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_EXPLAIN=zh,en` also explains the mails that may read
+other projects' files, as the app does and once more with one request as before, times
+both, and counts the drafts that hold a value, a name, an address or a run of 6 words or 10
+Chinese characters that only another project's passage holds.
 
 A pull request that changes which passages Explain picks, such as more file types or files
 the user chooses, runs the suite against a baseline of main. One that changes no selection

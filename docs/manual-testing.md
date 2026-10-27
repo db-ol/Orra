@@ -3863,12 +3863,18 @@ in the test guide, in English and then in 简体中文:
 - [ ] Add an English file about lamps to a project's folder, then explain a Chinese email
   about them. A point cites the English file.
 - [ ] Explain an email in Needs a Project about a document of a project. Its chip names the
-  project in brackets, the line under the points says that such files are for you only,
-  and the excerpt says From the folders of with the project's name. The draft, if any,
-  holds none of that file's amounts, codes or names, nor the project's name. Read it for
-  facts of that file in other words, such as a date or a count, which no check takes out.
+  project in brackets, the line under the points says that such files are for you only and
+  that the draft was written without them, and the excerpt says From the folders of with
+  the project's name. The log says that the draft was written by a request without other
+  projects' passages. The draft holds nothing of that file, also in other words, such as
+  a date or a count.
+- [ ] Dictate while such an explanation runs, also between its two requests. The dictation
+  pastes as fast as usual, and the explanation goes on after it, with its draft.
 - [ ] Assign that email to the project and click Explain Again. The chip has no brackets
   now, and the draft may use the file.
+- [ ] Explain an email of one project about a file that only another project's folders
+  hold. A point cites that file with its project in brackets, and Project Files for This
+  Explanation lists the project's own files first and that file after them.
 - [ ] An email in Needs a Project with a warning about its sender, or with a line to an
   assistant, gets no file chips.
 - [ ] Explain Again on an explained email starts the explanation without asking the model
