@@ -995,6 +995,25 @@ struct ExplainServiceTests {
         #expect(ExplainService.capped(hits, perFile: nil, limit: 4).map(\.text) == ["Passage 0.", "Passage 1.", "Passage 2.", "Passage 3."])
     }
 
+    /// The draft check gets the names of the projects whose passages are in the prompt: each
+    /// project's name or its parts, its people, and what its domains spell in two words or
+    /// more, but not a domain the email's project lists too.
+    @Test func otherProjectsNamesReachTheDraftCheck() async throws {
+        var known = Fixture.known
+        var other = Fixture.otherProject
+        other.name = "Studio move / 工作室搬迁"
+        other.domains = ["kiln-works.example", "movers.example", "print-works.example"]
+        var project = Fixture.project
+        project.domains = ["printworks.example", "print-works.example"]
+        known.projects = [project, other]
+        let fakes = Fakes(known: known, terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(explanation.draftCheck?.otherProjectNames == ["Studio move", "工作室搬迁", "Ken Ito", "kiln works"])
+        let plain = try await Fakes(answer: .success(Fixture.englishAnswer)).service().explain(Fixture.email())
+        #expect(plain.draftCheck != nil)
+        #expect(plain.draftCheck?.otherProjectNames == nil)
+    }
+
     @Test func anEmailSetAsideReadsNoFilesAndAsksForNoTerms() async throws {
         var email = Fixture.email(from: Fixture.rufus, project: nil)
         email.isSetAside = true

@@ -25,12 +25,13 @@ struct DraftCheckTests {
         questions: [String] = [],
         imitating: [String] = [],
         asksForData: Bool = false,
-        others: [String]? = nil
+        others: [String]? = nil,
+        otherNames: [String]? = nil
     ) async -> DraftCheck.Result {
         await DraftCheck.check(DraftCheckInput(
             draft: draft, language: language, recipients: recipients, projectPeople: Self.projectPeople, own: Self.own,
             incomingText: incoming, sourceTexts: sources, questionsForUser: questions, today: Self.today,
-            imitatingDomains: imitating, asksForData: asksForData, otherProjectTexts: others
+            imitatingDomains: imitating, asksForData: asksForData, otherProjectTexts: others, otherProjectNames: otherNames
         ))
     }
 
@@ -487,6 +488,27 @@ struct DraftCheckTests {
         #expect(toThem.draft == draft)
     }
 
+    /// The names of the other projects, of their people and of what their domains spell
+    /// leave every draft too, in any case and in pinyin, unless the email or the project's
+    /// own sources hold them.
+    @Test func otherProjectsNamesLeaveEveryDraft() async {
+        let names = ["Kiln studio", "窑工坊", "何立伟", "bridgeway talent"]
+        let others = ["Lobby plan, revision C."]
+        let draft = "Hi Owen,\n\nAs with Kiln Studio and 窑工坊, He Liwei of Bridgeway Talent will help.\n\nBai Lu"
+        let gone = "[another project's data removed]"
+        let result = await check(draft, to: [Self.owen], others: others, otherNames: names)
+        #expect(result.draft == "Hi Owen,\n\nAs with \(gone) and \(gone), \(gone) of \(gone) will help.\n\nBai Lu")
+        #expect(removed(result) == [
+            "otherProjectData: Kiln Studio", "otherProjectData: 窑工坊", "otherProjectData: He Liwei", "otherProjectData: Bridgeway Talent",
+        ])
+        let fromEmail = await check(draft, to: [Self.owen], incoming: "Kiln Studio, 窑工坊, He Liwei and Bridgeway Talent are on it.", others: others, otherNames: names)
+        #expect(fromEmail.draft == draft)
+        let fromSources = await check(draft, to: [Self.owen], sources: ["Kiln Studio and 窑工坊 work with He Liwei of Bridgeway Talent."], others: others, otherNames: names)
+        #expect(fromSources.draft == draft)
+        // Without other projects' excerpts, as from an earlier build, nothing changes.
+        #expect(await check(draft, to: [Self.owen], otherNames: names).draft == draft)
+    }
+
     /// A sentence that copies a run of 8 words, or of 12 Chinese characters, from another
     /// project's excerpt goes whole, since a retold fact keeps few of its words.
     @Test func aSentenceCopiedFromAnotherProjectsFileGoesWhole() async {
@@ -524,11 +546,14 @@ struct DraftCheckTests {
         let input = DraftCheckInput(draft: "", language: .en, recipients: [Self.owen], projectPeople: Self.projectPeople, incomingText: "Hello Bai Lu.", today: Self.today)
         let json = String(decoding: try JSONEncoder().encode(input), as: UTF8.self)
         #expect(!json.contains("otherProjectTexts"))
+        #expect(!json.contains("otherProjectNames"))
         let read = try JSONDecoder().decode(DraftCheckInput.self, from: Data(json.utf8))
         #expect(read == input)
         #expect(read.otherProjectTexts == nil)
+        #expect(read.otherProjectNames == nil)
         var withOthers = input
         withOthers.otherProjectTexts = [Self.kilnQuote]
+        withOthers.otherProjectNames = ["Kiln studio", "韩书言"]
         #expect(try JSONDecoder().decode(DraftCheckInput.self, from: JSONEncoder().encode(withOthers)) == withOthers)
 
         let later = #"{"draft":"Hi Owen, [file removed]","language":"en","removals":[{"kind":"link","text":"x.example"},{"kind":"attachmentClaim","text":"Attached is the plan."}],"flags":[],"outsideRecipients":[]}"#

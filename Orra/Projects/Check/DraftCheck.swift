@@ -39,6 +39,11 @@ nonisolated struct DraftCheckInput: Sendable, Equatable, Codable {
     /// The excerpts of other projects' files the model read, whose data and sentences no
     /// draft carries, whoever it reaches. Nil in a check an earlier build saved.
     var otherProjectTexts: [String]? = nil
+    /// The names that belong to the projects of those excerpts: each project's name, the
+    /// names of its people and the names its domains spell, which no draft carries either,
+    /// see `ExplainService.otherProjectNames(_:)`. Nil without such excerpts, and in a check
+    /// an earlier build saved.
+    var otherProjectNames: [String]? = nil
 }
 
 /// Checks a draft after the model and before the user sees it (code step 5 of the phase 0
@@ -59,10 +64,13 @@ nonisolated struct DraftCheckInput: Sendable, Equatable, Codable {
 ///   project's sources hold, from every draft, whoever it reaches
 /// - another project's data, from every draft, whoever it reaches: amounts, scores, codes
 ///   and years other than this one and the next and last whose value only an excerpt of
-///   another project's file holds, and the names and addresses of people in those excerpts
-///   that neither the incoming mail, the email's own project's sources, the recipients,
-///   the user nor the project's people hold. Both rules run before the next one, so the
-///   window names the more exact reason.
+///   another project's file holds, the names and addresses of people in those excerpts,
+///   and the names of those projects, of their people and of what their domains spell, see
+///   `DraftCheckInput.otherProjectNames`, that neither the incoming mail, the email's own
+///   project's sources, the recipients, the user nor the project's people hold. Both rules
+///   run before the next one, so the window names the more exact reason. Facts retold in
+///   other words, dates and counts stay, so the prompt tells the model to leave other
+///   projects out of the draft.
 /// - project data when the reply goes to someone outside the project's people: amounts in
 ///   digits or in Chinese words, scores, codes such as booking, ID and account numbers,
 ///   years that are not this year or the next or last, and the names and addresses of other
@@ -471,9 +479,9 @@ nonisolated enum DraftCheck {
     /// Where the draft holds data that only an excerpt of another project's file holds:
     /// amounts, scores, codes and years other than this one and the next and last whose
     /// value such an excerpt holds and neither the incoming mail nor the email's own
-    /// project's sources hold, and the names and addresses of people in those excerpts that
-    /// none of those texts, the recipients, the user or the project's people hold.
-    /// Overlapping finds are merged.
+    /// project's sources hold, and the names and addresses of people in those excerpts, and
+    /// the names of `DraftCheckInput.otherProjectNames`, that none of those texts, the
+    /// recipients, the user or the project's people hold. Overlapping finds are merged.
     private static func otherProjectData(in draft: String, input: DraftCheckInput) -> [Range<String.Index>] {
         guard let others = input.otherProjectTexts, !others.isEmpty else { return [] }
         let folded = OutputChecks.Folded(draft)
@@ -507,7 +515,7 @@ nonisolated enum DraftCheck {
                 found.append(range)
             }
         }
-        let names = namePatterns(personalNames(in: others), allowed: input.recipients + input.own + input.projectPeople)
+        let names = namePatterns(personalNames(in: others) + (input.otherProjectNames ?? []), allowed: input.recipients + input.own + input.projectPeople)
         for patterns in names where !patterns.contains(where: { $0.firstMatch(in: known, range: NSRange(known.startIndex..., in: known)) != nil }) {
             for pattern in patterns {
                 found += pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { Range($0.range, in: text) }

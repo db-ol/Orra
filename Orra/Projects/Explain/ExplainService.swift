@@ -846,7 +846,8 @@ final class ExplainService {
                 today: gathered.today,
                 imitatingDomains: imitating,
                 asksForData: asksForData,
-                otherProjectTexts: texts.otherProjects.isEmpty ? nil : texts.otherProjects
+                otherProjectTexts: texts.otherProjects.isEmpty ? nil : texts.otherProjects,
+                otherProjectNames: texts.otherProjects.isEmpty ? nil : otherProjectNames(prepared)
             )
             draftCheck = input
             if case .reply(let text) = answer.draft {
@@ -938,6 +939,40 @@ final class ExplainService {
             }
         }
         return (incoming.joined(separator: "\n\n"), other, otherProjects)
+    }
+
+    /// The names that belong to the projects whose excerpts are among the other projects'
+    /// texts of `sourceTexts(_:)`, which no draft carries either: each project's name, or each
+    /// part of a name such as "2027 台历印制 / 2027 desk calendar print run", the names of its
+    /// people, and the names its domains spell in two words or more, as
+    /// bridgeway-talent.example spells Bridgeway Talent. A domain the email's own project lists
+    /// stays out. Nil when there are none.
+    nonisolated static func otherProjectNames(_ prepared: Prepared) -> [String]? {
+        let gathered = prepared.gathered
+        var projects: [UUID] = []
+        for id in prepared.prompt.sources.keys.sorted() {
+            guard let source = prepared.prompt.sources[id], source.isOtherProjectFile(emailProject: gathered.project?.id),
+                  case .file(_, let origin?) = source, let project = origin.project, !projects.contains(project) else { continue }
+            projects.append(project)
+        }
+        let ownDomains = Set((gathered.project?.domains ?? []).map(domainForm))
+        var names: [String] = []
+        for id in projects {
+            guard let project = gathered.known.projects.first(where: { $0.id == id }) else { continue }
+            names += project.name.split(whereSeparator: { "/／|｜".contains($0) }).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            names += project.people.map(\.name)
+            for domain in project.domains.map(domainForm) where !ownDomains.contains(domain) {
+                for label in domain.split(separator: ".").dropLast() {
+                    let words = label.split(separator: "-")
+                    if words.count >= 2 {
+                        names.append(words.joined(separator: " "))
+                    }
+                }
+            }
+        }
+        var seen = Set<String>()
+        let unique = names.filter { !$0.isEmpty && seen.insert($0).inserted }
+        return unique.isEmpty ? nil : unique
     }
 
     /// The people of a mail's header, which the prompt shows with it, one a line and
