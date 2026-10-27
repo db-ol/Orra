@@ -148,6 +148,8 @@ struct ReplyFilesTests {
         let ticked = try await ReplyFiles.file(at: try tree.file("Harbor/plan.pdf", "same"), roots: { roots }).get()
         try FileManager.default.removeItem(at: tree.url("Harbor/plan.pdf"))
         try tree.file("Harbor/plan.pdf", "same")
+        // The same size and the same date of change make it no less another file.
+        try FileManager.default.setAttributes([.modificationDate: ticked.modified], ofItemAtPath: tree.url("Harbor/plan.pdf").path)
         #expect(await ReplyFiles.recheck(ticked, roots: { roots }) == .failure(.changed))
 
         let renamedOver = try await ReplyFiles.file(at: tree.url("Harbor/plan.pdf"), roots: { roots }).get()
@@ -174,6 +176,35 @@ struct ReplyFilesTests {
         let again = try await ReplyFiles.file(at: file, roots: { roots }).get()
         try FileManager.default.setAttributes([.modificationDate: again.modified.addingTimeInterval(60)], ofItemAtPath: file.path)
         #expect(await ReplyFiles.recheck(again, roots: { roots }) == .failure(.changed))
+    }
+
+    /// A folder swapped for a link to its new place outside the project while the checks
+    /// run, here while they ask whether the file is downloaded, is caught by the last look
+    /// at the path, and the file is not taken.
+    @Test func aFolderMovedOutWhileTheChecksRunIsRefused() async throws {
+        let tree = try Tree()
+        defer { tree.remove() }
+        let roots = [Self.harbor: [tree.url("Harbor")]]
+        try tree.folder("Elsewhere")
+        let ticked = try await ReplyFiles.file(at: try tree.file("Harbor/Drawings/plan.pdf"), roots: { roots }).get()
+        let moved = Moved(tree)
+        let result = await ReplyFiles.recheck(ticked, roots: { roots }, isDownloaded: { _ in
+            moved.once {
+                try? FileManager.default.moveItem(at: tree.url("Harbor/Drawings"), to: tree.url("Elsewhere/Drawings"))
+                try? tree.link("Harbor/Drawings", to: tree.url("Elsewhere/Drawings").path)
+            }
+            return true
+        })
+        #expect(result == .failure(.changed))
+        #expect(moved.happened)
+    }
+
+    @Test func aPathIsInsideAFolderByItsBytes() {
+        #expect(ReplyFiles.isInside("/Volumes/Share/Caf\u{00E9}/plan.pdf", root: "/Volumes/Share/Caf\u{00E9}"))
+        #expect(!ReplyFiles.isInside("/Volumes/Share/Cafe\u{0301}/plan.pdf", root: "/Volumes/Share/Caf\u{00E9}"))
+        #expect(!ReplyFiles.isInside("/Users/someone/Harbor lobby/plan.pdf", root: "/Users/someone/Harbor"))
+        #expect(ReplyFiles.isInside("/Users/someone/Harbor/plan.pdf", root: "/Users/someone/Harbor/"))
+        #expect(!ReplyFiles.isInside("/Users/someone/Harbor", root: "/Users/someone/Harbor"))
     }
 
     /// The folders come from `roots` at the check, so a folder removed from its project
@@ -227,7 +258,33 @@ struct ReplyFilesTests {
         ReplyFile(
             url: URL(fileURLWithPath: "/Users/someone/Projects/Harbor/plan-\(size).pdf"),
             projects: projects,
-            identity: ReplyFile.Identity(device: 1, fileSystem: 26, number: UInt64(size), size: size, modified: Date(timeIntervalSince1970: 1_760_000_000)))
+            identity: ReplyFile.Identity(
+                device: 1, fileSystem: 26, number: UInt64(size), made: Date(timeIntervalSince1970: 1_759_000_000),
+                size: size, modified: Date(timeIntervalSince1970: 1_760_000_000)))
+    }
+
+    /// A change of the tree that runs once, from the thread of the checks.
+    private final class Moved: Sendable {
+        private let tree: Tree
+        private let done = Mutex(false)
+
+        init(_ tree: Tree) {
+            self.tree = tree
+        }
+
+        func once(_ change: () -> Void) {
+            let first = done.withLock { done in
+                defer { done = true }
+                return !done
+            }
+            if first {
+                change()
+            }
+        }
+
+        var happened: Bool {
+            done.withLock { $0 }
+        }
     }
 
     /// The folders of the projects as a test changes them, with how often a check read them.

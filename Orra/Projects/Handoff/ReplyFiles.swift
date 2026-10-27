@@ -5,9 +5,13 @@ import Foundation
 /// logged.
 nonisolated struct ReplyFile: Sendable, Equatable, Identifiable {
     /// What makes a file the same file: its resource identifier, the volume and the file's
-    /// number on it, which URL's fileResourceIdentifier compares too, with its size and the
-    /// date it changed. A rename on the same volume keeps all four. A new file at the path,
-    /// a file saved anew in place of the old one, and a change of its content do not.
+    /// number on it, which URL's fileResourceIdentifier compares too, with the date it was
+    /// made, its size and the date it changed. A rename on the same volume keeps them all. A
+    /// new file at the path, a file saved anew in place of the old one, and a change of its
+    /// content do not. APFS never gives a file's number to another file, and the date it
+    /// was made tells a newer file apart on a volume that does. A process that can write the
+    /// user's files could still change one and set its dates back, which no check of a
+    /// file's state can tell.
     nonisolated struct Identity: Sendable, Equatable {
         /// The volume, as lstat gives it.
         var device: Int32
@@ -15,6 +19,7 @@ nonisolated struct ReplyFile: Sendable, Equatable, Identifiable {
         var fileSystem: Int32
         /// The file's number on the volume.
         var number: UInt64
+        var made: Date
         var size: Int64
         var modified: Date
     }
@@ -137,7 +142,7 @@ nonisolated enum ReplyFiles {
         let identity = file.identity
         let same = { (found: Identity) in found.device == identity.device && found.number == identity.number }
         // The file at its path, unless a link now leads there.
-        if realPath(file.url.path) == file.url.path, let found = self.identity(of: file.url.path) {
+        if samePath(realPath(file.url.path), file.url.path), let found = self.identity(of: file.url.path) {
             if same(found) {
                 return check(file.url.path, roots: roots, order: file.projects, isDownloaded: isDownloaded) { _ in identity }
             }
@@ -172,6 +177,9 @@ nonisolated enum ReplyFiles {
         guard info.st_flags & UInt32(SF_DATALESS) == 0, isDownloaded(url) else { return .failure(.notDownloaded) }
         let projects = holding(real, roots: roots, order: order)
         guard !projects.isEmpty else { return .failure(.notInAddedFolder) }
+        // A folder moved or a file replaced while the checks ran shows now: the path must
+        // still be real and still hold the same file.
+        guard samePath(realPath(real), real), identity(of: real) == found else { return .failure(.changed) }
         return .success(ReplyFile(url: url, projects: projects, identity: found))
     }
 
@@ -181,8 +189,7 @@ nonisolated enum ReplyFiles {
     private static func holding(_ real: String, roots: [UUID: [URL]], order: [UUID]) -> [UUID] {
         let inside = Set(roots.compactMap { project, folders in
             folders.contains { folder in
-                guard let root = realPath(folder.path) else { return false }
-                return real.hasPrefix(root.hasSuffix("/") ? root : root + "/")
+                realPath(folder.path).map { isInside(real, root: $0) } ?? false
             } ? project : nil
         })
         let first = order.filter(inside.contains)
@@ -204,6 +211,7 @@ nonisolated enum ReplyFiles {
             device: info.st_dev,
             fileSystem: volume.f_fsid.val.1,
             number: UInt64(info.st_ino),
+            made: Date(timeIntervalSince1970: TimeInterval(info.st_birthtimespec.tv_sec) + TimeInterval(info.st_birthtimespec.tv_nsec) / 1_000_000_000),
             size: Int64(info.st_size),
             modified: FolderWalk.date(of: info)
         )
@@ -216,6 +224,21 @@ nonisolated enum ReplyFiles {
         var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
         guard fsgetpath(&buffer, buffer.count, &volume, identity.number) > 0 else { return nil }
         return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }
+
+    /// Whether a real path lies inside a real folder, compared by their bytes, so a folder
+    /// whose name starts like another's, or differs from it only in how an accent is
+    /// written, is another folder.
+    static func isInside(_ path: String, root: String) -> Bool {
+        let folder = root.hasSuffix("/") ? root : root + "/"
+        return Array(path.utf8).starts(with: Array(folder.utf8))
+    }
+
+    /// Whether two paths are the same bytes. Swift compares strings by their canonical
+    /// form, so two names that differ only in how an accent is written count as equal, while
+    /// a file system that keeps both forms holds two folders.
+    private static func samePath(_ first: String?, _ second: String) -> Bool {
+        first.map { Array($0.utf8) == Array(second.utf8) } ?? false
     }
 
     /// `path` with every symbolic link and `..` resolved, nil when it does not exist.
