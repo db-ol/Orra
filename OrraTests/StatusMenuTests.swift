@@ -162,7 +162,8 @@ struct StatusMenuTests {
             attachments: { _ in throw MailBridgeError.mailNotRunning },
             mailbox: { _ in throw MailBridgeError.mailNotRunning },
             selection: { throw MailBridgeError.mailNotRunning },
-            reply: { _, _ in throw MailBridgeError.mailNotRunning }
+            reply: { _, _ in throw MailBridgeError.mailNotRunning },
+            attach: { _, _ in throw MailBridgeError.mailNotRunning }
         )
         return ProjectsRuntime(projects: projects, dependencies: ProjectsRuntime.Dependencies(
             storage: storage,

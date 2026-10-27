@@ -541,7 +541,7 @@ class MailEventsRuleTests(SourceCheckTestCase):
             'let a = "aevtquit"': '"aevtquit", the code of quit',
             'let a = "setd"': '"setd", the code of set',
             'let a = "cpma"': '"cpma", the code of perform mail action with messages',
-            'let a = "ctnt"': '"ctnt", the code of content',
+            'let a = "ctnt"': '"ctnt", the code of content, outside endOfContent(ofReply:)',
             'let a = #"move"#': '"move", the code of move',
             'let a = "del\\u{6F}"': '"delo", the code of delete',
             "let a = 0x6465_6C6F": "0x6465_6C6F, the code delo of delete",
@@ -558,13 +558,15 @@ class MailEventsRuleTests(SourceCheckTestCase):
 
     def test_the_banned_codes(self):
         banned = check_rules.MAIL_BANNED_CODES
-        for code in ("delo", "send", "fwms", "chma", "emsg", "aevt", "ctnt", "setd"):
+        for code in ("delo", "send", "fwms", "chma", "emsg", "aevt", "ctnt", "setd", "crel"):
             self.assertIn(code, banned)
-        for code in ("core", "emal", "getd", "cnte", "rpms", "raso", "meid"):
+        for code in ("core", "emal", "getd", "cnte", "rpms", "raso", "meid", "atts", "atfn", "bcke"):
             self.assertNotIn(code, banned)
+        self.assertNotIn("corecrel", check_rules.MAIL_CHANGING_COMMANDS)
+        self.assertEqual(check_rules.MAIL_EVENTS["attach"], "corecrel")
 
     def test_the_list_covers_every_command_of_mail(self):
-        """Every command in Mail's scripting dictionary is either one of the three events, a
+        """Every command in Mail's scripting dictionary is either one of the four events, a
         command that only reads, or a command rule 10 bans. Skipped where Mail is not, as on
         the Linux runner."""
         dictionaries = [
@@ -584,6 +586,91 @@ class MailEventsRuleTests(SourceCheckTestCase):
                     self.assertTrue(code in allowed or code in reading or code in check_rules.MAIL_CHANGING_COMMANDS, code)
                     if code in check_rules.MAIL_CHANGING_COMMANDS:
                         self.assertEqual(check_rules.MAIL_CHANGING_COMMANDS[code].lower(), command.get("name").lower())
+
+    # The attach event: make makes an attachment and nothing else, at the end of a reply's
+    # content only, with only its file.
+
+    def test_the_real_file_holds_the_attach_event(self):
+        self.assertIn('case attach = "corecrel"', self.REAL)
+        self.assertEqual(self.rule_ten(self.REAL), [])
+
+    def test_attach_makes_only_an_attachment(self):
+        for new in ('typeCode: MailEvents.code("bcke")', "typeCode: attachmentClass"):
+            with self.subTest(new=new):
+                self.assert_rule_ten_fails(self.changed('typeCode: MailEvents.code("atts")', new), "make without the attachment class atts")
+        self.assert_rule_ten_fails(
+            self.REAL + "func other(_ event: NSAppleEventDescriptor) {\n"
+            "    event.setParam(NSAppleEventDescriptor(typeCode: MailEvents.Code.message), forKeyword: keyAEObjectClass)\n}\n",
+            "keyAEObjectClass outside the classes of make and count",
+        )
+        self.assert_rule_ten_fails(self.REAL + "let other = keyAEObjectClass\n", "keyAEObjectClass outside the classes of make and count")
+        self.assert_rule_ten_fails(self.REAL + 'let other = MailEvents.code("atts")\n', '"atts" outside the class of make')
+        self.assert_rule_ten_fails(self.REAL + 'let other = MailEvents.code("kocl")\n', '"kocl", the code of the class of a new object')
+        self.assert_rule_ten_fails(self.REAL + "let other = 0x6B6F_636C\n", "0x6B6F_636C, the code kocl of the class of a new object")
+
+    def test_content_is_only_the_place_of_the_attachment(self):
+        self.assert_rule_ten_fails(
+            self.REAL + 'let read = MailEvents.Request.get(.property(MailEvents.code("ctnt"), of: .application))\n',
+            '"ctnt", the code of content, outside endOfContent(ofReply:)',
+        )
+        self.assert_rule_ten_fails(self.REAL + "let place = try? MailEvents.Request.endOfContent(ofReply: 7)\n", "endOfContent outside the place of make")
+        place = "event.setParam(try Self.endOfContent(ofReply: reply), forKeyword: keyAEInsertHere)"
+        self.assert_rule_ten_fails(
+            self.changed(place, place + "\n                " + place),
+            "make without its place at the end of a reply's content",
+        )
+        self.assert_rule_ten_fails(
+            self.changed(place, place + "\n                event.setParam(try Self.endOfContent(ofReply: reply + 1), forKeyword: keyAEInsertHere)"),
+            "endOfContent outside the place of make",
+        )
+        self.assert_rule_ten_fails(
+            self.REAL + "func other(_ event: NSAppleEventDescriptor, _ place: NSAppleEventDescriptor) {\n"
+            "    event.setParam(place, forKeyword: keyAEInsertHere)\n}\n",
+            "keyAEInsertHere outside the place of make",
+        )
+        self.assert_rule_ten_fails(self.REAL + 'let other = MailEvents.code("insh")\n', '"insh", the code of the place of a new object')
+        self.assert_rule_ten_fails(self.REAL + 'let other = MailEvents.code("kobj")\n', '"kobj", the code of the object of an insertion location')
+        self.assert_rule_ten_fails(self.changed("func endOfContent(ofReply", "func placeOfAttachment(ofReply"), "not one endOfContent(ofReply:)")
+
+    def test_an_attachment_goes_only_at_the_end(self):
+        for name in ("kAEAfter", "kAEBefore", "kAEBeginning", "kAEReplace"):
+            with self.subTest(name=name):
+                self.assert_rule_ten_fails(self.changed("enumCode: kAEEnd", "enumCode: " + name), name)
+        self.assert_rule_ten_fails(self.changed("enumCode: kAEEnd", 'enumCode: MailEvents.code("afte")'), '"afte", the code of the position after')
+        self.assert_rule_ten_fails(self.changed("enumCode: kAEEnd", 'enumCode: MailEvents.code("afte")'), "endOfContent(ofReply:) without the position at the end")
+        self.assert_rule_ten_fails(self.REAL + "let other = kAEEnd\n", "kAEEnd outside the end of a reply's content")
+        self.assert_rule_ten_fails(self.REAL + 'let other = MailEvents.code("kpos")\n', '"kpos", the code of the position of an insertion location')
+
+    def test_the_attachment_holds_only_its_file(self):
+        only_the_file = 'properties.setDescriptor(NSAppleEventDescriptor(fileURL: file), forKeyword: MailEvents.code("atfn"))'
+        self.assert_rule_ten_fails(
+            self.changed(only_the_file, only_the_file + '\n        properties.setDescriptor(NSAppleEventDescriptor(boolean: true), forKeyword: MailEvents.Code.name)'),
+            "fileProperties(_:) with more than its file",
+        )
+        self.assert_rule_ten_fails(
+            self.changed("NSAppleEventDescriptor(fileURL: file)", "NSAppleEventDescriptor(string: file.path)"),
+            "fileProperties(_:) with more than its file",
+        )
+        self.assert_rule_ten_fails(
+            self.REAL + "func other(_ event: NSAppleEventDescriptor, _ extra: NSAppleEventDescriptor) {\n"
+            "    event.setParam(extra, forKeyword: keyAEPropData)\n}\n",
+            "keyAEPropData outside the properties of make",
+        )
+        self.assert_rule_ten_fails(self.REAL + 'let other = MailEvents.code("atfn")\n', '"atfn" outside the file of the attachment')
+        self.assert_rule_ten_fails(self.REAL + 'let other = MailEvents.code("prdt")\n', '"prdt", the code of the properties of a new object')
+        self.assert_rule_ten_fails(self.REAL + "let other = try? MailEvents.Request.fileProperties(url)\n", "fileProperties outside the properties of make")
+
+    def test_crel_stays_banned_elsewhere(self):
+        self.assert_rule_ten_fails(self.REAL + 'let a = "crel"\n', '"crel", the code of make')
+        self.assert_rule_ten_fails(self.REAL + "let a = 0x6372_656C\n", "0x6372_656C, the code crel of make")
+        self.assert_rule_ten_fails(
+            self.changed('case attach = "corecrel"', 'case attach = "coredelo"'),
+            "MailEvent case attach = coredelo",
+        )
+
+    def test_comments_about_the_attachment_pass(self):
+        text = self.REAL + '// "ctnt", "atts", "atfn", kAEAfter and keyAEInsertHere in a comment\n'
+        self.assertEqual(self.rule_ten(text), [])
 
 
 class ScriptTextTests(SourceCheckTestCase):

@@ -81,7 +81,7 @@ struct ReplyHandoff {
             return .copiedMailNotRunning
         }
         do {
-            try await mail.reply(message, all)
+            _ = try await mail.reply(message, all)
         } catch is CancellationError {
             // Cancelled before its turn on the send thread, so Mail was never asked.
             return .copied

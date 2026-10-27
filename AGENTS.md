@@ -20,7 +20,7 @@ This file is the guide for anyone, human or agent, who changes this repository.
 
 ## Intended flow
 Hotkey -> Audio Capture -> TranscriptionEngine -> optional RewriteEngine -> Text Injection
-Projects (optional, a preview): Mail app (Apple Events) and project folders -> local index -> cleanup model -> Projects window -> Mail's reply window and the clipboard, on the user's click
+Projects (optional, a preview): Mail app (Apple Events) and project folders -> local index -> cleanup model -> Projects window -> Mail's reply window with the files the user ticked, and the clipboard, on the user's click
 
 Keep it simple. Do not add a protocol, layer, or abstraction without a concrete need in the code today.
 
@@ -106,9 +106,14 @@ trusted once in Xcode. docs/dependencies.md has the details.
 - The Projects model must have no tools. Projects code must treat the model's output as data
   and show it in the Projects window as plain text only. Code in Orra/Projects must never call
   TextInserter, post keyboard events, perform Accessibility actions, open URLs or run
-  processes. The Mail bridge must send only its fixed read requests and `reply` with
-  `opening window`, with every value passed as an Apple Event parameter, never inside script
-  text. Tools/ci/check_rules.py checks these rules.
+  processes. The Mail bridge must send only its fixed read requests, `reply` with
+  `opening window`, and right after a reply the user asked for, `make new attachment` at the
+  end of that reply's content once for each file the user ticked for it, only while the Mail
+  that made the reply runs. Every value goes in as an Apple Event parameter, never inside
+  script text, and a file goes in as a file URL that Mail reads itself. Projects code gives
+  Mail only files in the folders the user added to a project, checked again right before the
+  reply, only on the user's click on Open Reply in Mail or Reply All, and never ticks a file
+  by itself. Tools/ci/check_rules.py checks these rules.
 - Dictation goes first. Projects code must have the model read a long prompt in slices, and
   must start no model call from the press of the talk key or the translation key until the
   dictation is pasted or cancelled, as captions do, see EngineTurns. Every Projects model call
@@ -155,7 +160,8 @@ docs/privacy.md, as docs/website.md describes.
   It also checks the Projects source rules of Runtime rules: the names code in Orra/Projects
   must not use, where NSAttributedString may appear, that Orra/Projects holds Swift files
   only, Apple Events built or sent in Orra outside the files it allows or sent from tests,
-  the three events the Mail bridge may build and the window each reply opens,
+  the four events the Mail bridge may build, the window each reply opens and the one
+  attachment make may create, with only its file, at the end of a reply's content,
   script text in any file under Orra, OrraTests or Tools, and where SQLite, removing files
   and UserDefaults may appear. It reads names in code, not every way around them, so review
   Projects changes by hand too. The same job runs the tests of the rules check in Tools/ci

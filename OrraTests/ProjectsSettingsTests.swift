@@ -681,7 +681,8 @@ struct ProjectsSettingsTests {
                 attachments: { _ in [] },
                 mailbox: { _ in throw MailBridgeError.unexpectedReply },
                 selection: { [] },
-                reply: { _, _ in }
+                reply: { _, _ in nil },
+                attach: { _, _ in }
             )
         }
     }

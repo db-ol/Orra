@@ -259,7 +259,8 @@ struct ReplyHandoffTests {
                         }
                         return try await thread.run { try self.send(request) }
                     },
-                    permission: { _ in 0 }
+                    permission: { _ in 0 },
+                    session: { nil }
                 )),
                 isOrraActive: {
                     self.state.withLock { state in

@@ -161,7 +161,9 @@ struct ProjectsEmailModelTests {
                     while value.replyWaits {
                         try await Task.sleep(for: .milliseconds(5))
                     }
-                }
+                    return nil
+                },
+                attach: { _, _ in }
             )
         }
     }

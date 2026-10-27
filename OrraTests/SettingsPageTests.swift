@@ -239,7 +239,8 @@ struct SettingsPageTests {
             attachments: { _ in [] },
             mailbox: { _ in throw MailBridgeError.notFound },
             selection: { [] },
-            reply: { _, _ in }
+            reply: { _, _ in nil },
+            attach: { _, _ in }
         )
         return ProjectsSettings.MailAccess(bridge: bridge, choice: MailChoice(defaults: defaults, suggestsInboxAndSent: false), projects: { projects }, missingMailboxes: { missing }, isOn: isOn)
     }

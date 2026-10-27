@@ -526,26 +526,29 @@ SOURCE_RULES = {
     7: "In Orra/Projects only ProjectsStorage.swift removes, moves, replaces or trashes files.",
     8: "In Orra/Projects only ProjectsSwitch.swift and Mail/MailChoice.swift use UserDefaults.",
     9: "Orra/Projects holds Swift files only, since Xcode would copy any other file into the app.",
-    10: "MailEvents.swift builds only the get, count and reply events of its MailEvent enum, opens "
-        "a window with every reply, and holds no code of a Mail command that changes mail, sends "
-        "it, or opens, prints or quits something, nor the code of content.",
+    10: "MailEvents.swift builds only the get, count, reply and attach events of its MailEvent enum, "
+        "opens a window with every reply, makes nothing but an attachment with only its file at the "
+        "end of a reply's content, and holds no other code of a Mail command that changes mail, "
+        "sends it, or opens, prints or quits something, nor the code of content outside that one place.",
 }
 
-# Rule 10. The three events the Mail bridge may build, by their names in the MailEvent enum,
+# Rule 10. The four events the Mail bridge may build, by their names in the MailEvent enum,
 # each the event class and the event ID as Mail.sdef writes them. get and count, from the
 # standard suite, only read. reply, from Mail's suite, makes a reply in a window of its own.
-MAIL_EVENTS = {"get": "coregetd", "count": "corecnte", "reply": "emalrpms"}
+# attach is make, from the standard suite, which check_mail_events holds to one use: an
+# attachment, with only its file, at the end of the content of a reply.
+MAIL_EVENTS = {"get": "coregetd", "count": "corecnte", "reply": "emalrpms", "attach": "corecrel"}
 # The commands that change mail, send it, or open, print or quit something, from
 # /System/Applications/Mail.app/Contents/Resources/Mail.sdef (Mail 16.0 on macOS 26.6) and
 # the standard suite it includes from /System/Library/ScriptingDefinitions/CocoaStandard.sdef.
 # set is in neither, since AppleScript sends it for any property, so its code comes from
-# AERegistry.h (kAECoreSuite and kAESetData).
+# AERegistry.h (kAECoreSuite and kAESetData). make is the attach event of MAIL_EVENTS, so it
+# is not here, and its event ID is banned on its own below.
 MAIL_CHANGING_COMMANDS = {
     "coresetd": "set",
     "coredelo": "delete",
     "coremove": "move",
     "coreclon": "duplicate",
-    "corecrel": "make",
     "coresave": "save",
     "coreclos": "close",
     "emsgsend": "send",
@@ -563,8 +566,10 @@ MAIL_CHANGING_COMMANDS = {
     "aevtquit": "quit",
 }
 # The four letter codes rule 10 bans: the event ID of each of those commands, the event class
-# of those whose class no event of MAIL_EVENTS shares, and content, the message property
-# Mail renders, which the model must never read (AGENTS.md).
+# of those whose class no event of MAIL_EVENTS shares, the event ID of make, which only the
+# attach case of MailEvent may hold as part of its whole code, and content, the message
+# property Mail renders, which the model must never read (AGENTS.md). content stands only
+# as the place of a new attachment, see check_mail_events.
 MAIL_BANNED_CODES = {
     **{command[4:]: name for command, name in MAIL_CHANGING_COMMANDS.items()},
     **{
@@ -572,7 +577,22 @@ MAIL_BANNED_CODES = {
         for command, name in MAIL_CHANGING_COMMANDS.items()
         if command[:4] not in {event[:4] for event in MAIL_EVENTS.values()}
     },
+    "crel": "make",
     "ctnt": "content",
+}
+# The codes of the parameters of make and of an insertion location, and of the positions
+# other than the end, which MailEvents.swift must name through the SDK's names that
+# check_mail_events reads, never through their four letters.
+MAKE_CODES = {
+    "kocl": "the class of a new object",
+    "insh": "the place of a new object",
+    "prdt": "the properties of a new object",
+    "kobj": "the object of an insertion location",
+    "kpos": "the position of an insertion location",
+    "befo": "the position before",
+    "afte": "the position after",
+    "bgng": "the position at the beginning",
+    "rplc": "the position that replaces",
 }
 
 
@@ -759,6 +779,32 @@ OPENING_WINDOW = re.compile(
     r'forKeyword\s*:\s*(?:(?:MailEvents|Self)\s*\.\s*)?code\s*\(\s*"ropw"\s*\)\s*\)'
 )
 INTEGER_LITERAL = re.compile(r"(?<![\w.])(0x[0-9A-Fa-f_]+|0o[0-7_]+|0b[01_]+|[0-9][0-9_]*)(?![\w.])")
+# The calls of attach that check_mail_events allows, each once. make makes only an attachment:
+# its class is the attachment class atts, and keyAEObjectClass names no other class but the
+# class the count event counts. It goes only at the end of a reply's content, built by
+# endOfContent(ofReply:). Its properties are only its file, built by fileProperties(_:).
+_CODE_CALL = r'(?:(?:MailEvents|Self)\s*\.\s*)?code\s*\(\s*"{}"\s*\)'
+ATTACHMENT_CLASS = re.compile(
+    r'\.\s*setParam\s*\(\s*NSAppleEventDescriptor\s*\(\s*typeCode\s*:\s*' + _CODE_CALL.format("atts")
+    + r'\s*\)\s*,\s*forKeyword\s*:\s*keyAEObjectClass\s*\)'
+)
+COUNTED_CLASS = re.compile(
+    r'\.\s*setParam\s*\(\s*NSAppleEventDescriptor\s*\(\s*typeCode\s*:\s*elementClass\s*\)\s*,\s*forKeyword\s*:\s*keyAEObjectClass\s*\)'
+)
+END_OF_CONTENT_PLACE = re.compile(
+    r'\.\s*setParam\s*\(\s*try\s+Self\s*\.\s*endOfContent\s*\(\s*ofReply\s*:\s*\w+\s*\)\s*,\s*forKeyword\s*:\s*keyAEInsertHere\s*\)'
+)
+AT_THE_END = re.compile(
+    r'\.\s*setDescriptor\s*\(\s*NSAppleEventDescriptor\s*\(\s*enumCode\s*:\s*kAEEnd\s*\)\s*,\s*forKeyword\s*:\s*keyAEPosition\s*\)'
+)
+FILE_PROPERTIES = re.compile(
+    r'\.\s*setParam\s*\(\s*try\s+Self\s*\.\s*fileProperties\s*\(\s*\w+\s*\)\s*,\s*forKeyword\s*:\s*keyAEPropData\s*\)'
+)
+ONLY_THE_FILE = re.compile(
+    r'\.\s*setDescriptor\s*\(\s*NSAppleEventDescriptor\s*\(\s*fileURL\s*:\s*\w+\s*\)\s*,\s*forKeyword\s*:\s*' + _CODE_CALL.format("atfn") + r'\s*\)'
+)
+# The positions of an insertion location other than the end.
+OTHER_POSITIONS = _rule(r"\bkAEBefore\b", r"\bkAEAfter\b", r"\bkAEBeginning\b", r"\bkAEReplace\b")
 
 SourceProblem = namedtuple("SourceProblem", "path line rule name")
 
@@ -1194,9 +1240,131 @@ def _mail_event_cases(code, uncommented, body):
     return cases
 
 
+def _function_bodies(code, signature):
+    """The spans of the bodies of the functions whose declaration matches signature, a
+    pattern that runs to the parenthesis that opens the parameters, in the code view."""
+    bodies = []
+    for match in re.finditer(signature, code):
+        opening = match.end() - 1
+        if _arguments(code, opening) is None:
+            continue
+        depth = 0
+        index = opening
+        while index < len(code):
+            if code[index] == "(":
+                depth += 1
+            elif code[index] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            index += 1
+        brace = code.find("{", index)
+        if brace < 0:
+            continue
+        depth = 0
+        for end in range(brace, len(code)):
+            if code[end] == "{":
+                depth += 1
+            elif code[end] == "}":
+                depth -= 1
+                if depth == 0:
+                    bodies.append((brace + 1, end))
+                    break
+    return bodies
+
+
+def _inside(offset, spans):
+    return any(start <= offset < end for start, end in spans)
+
+
+def _check_attach(text, code, uncommented, literals, problem):
+    """The attach event of rule 10: make makes an attachment and nothing else, at the end
+    of a reply's content only, with only its file."""
+    values = []
+    for start, end in literals:
+        value = _string_value(text, start, end)
+        if value is not None:
+            values.append((start, value))
+
+    def spans(pattern, view):
+        return [match.span() for match in pattern.finditer(view)]
+
+    def once(pattern, view, name):
+        found = spans(pattern, view)
+        if len(found) != 1:
+            problem(found[1][0] if len(found) > 1 else None, name)
+        return found
+
+    def words(name):
+        return [match.start() for match in re.finditer(r"\b" + name + r"\b", code)]
+
+    # make makes only an attachment, and keyAEObjectClass names no other class but the one
+    # the count event counts.
+    attachment_class = once(ATTACHMENT_CLASS, uncommented, "make without the attachment class atts")
+    counted_class = spans(COUNTED_CLASS, uncommented)
+    for start, value in values:
+        if value == "atts" and not _inside(start, attachment_class[:1]):
+            problem(start, '"atts" outside the class of make')
+    for offset in words("keyAEObjectClass"):
+        if not _inside(offset, attachment_class[:1] + counted_class[:1]):
+            problem(offset, "keyAEObjectClass outside the classes of make and count")
+
+    # At the end of a reply's content only.
+    end_of_content = _function_bodies(code, r"\bfunc\s+endOfContent\s*\(")
+    if len(end_of_content) != 1:
+        problem(None, "not one endOfContent(ofReply:)")
+    place = once(END_OF_CONTENT_PLACE, uncommented, "make without its place at the end of a reply's content")
+    for offset in words("endOfContent"):
+        declared = re.match(r"endOfContent\s*\(\s*ofReply\b", code[offset:]) is not None and \
+            re.search(r"\bfunc\s+$", code[max(0, offset - 40):offset]) is not None
+        if not declared and not _inside(offset, place[:1]):
+            problem(offset, "endOfContent outside the place of make")
+    for offset in words("keyAEInsertHere"):
+        if not _inside(offset, place[:1]):
+            problem(offset, "keyAEInsertHere outside the place of make")
+    at_the_end = spans(AT_THE_END, uncommented)
+    for name in ("keyAEPosition", "kAEEnd"):
+        for offset in words(name):
+            if not (_inside(offset, at_the_end) and _inside(offset, end_of_content[:1])):
+                problem(offset, name + " outside the end of a reply's content")
+    if not any(_inside(start, end_of_content[:1]) for start, _ in at_the_end):
+        problem(None, "endOfContent(ofReply:) without the position at the end")
+    for start, value in values:
+        if value == "ctnt" and not _inside(start, end_of_content[:1]):
+            problem(start, '"ctnt", the code of content, outside endOfContent(ofReply:)')
+
+    # With only its file.
+    file_properties = _function_bodies(code, r"\bfunc\s+fileProperties\s*\(")
+    if len(file_properties) != 1:
+        problem(None, "not one fileProperties(_:)")
+    properties = once(FILE_PROPERTIES, uncommented, "make without its file as its properties")
+    for offset in words("keyAEPropData"):
+        if not _inside(offset, properties[:1]):
+            problem(offset, "keyAEPropData outside the properties of make")
+    for offset in words("fileProperties"):
+        declared = re.search(r"\bfunc\s+$", code[max(0, offset - 40):offset]) is not None
+        if not declared and not _inside(offset, properties[:1]):
+            problem(offset, "fileProperties outside the properties of make")
+    only_the_file = [span for span in spans(ONLY_THE_FILE, uncommented) if _inside(span[0], file_properties[:1])]
+    keys = [match.start() for match in re.finditer(r"\bsetDescriptor\s*\(", code) if _inside(match.start(), file_properties[:1])]
+    if len(only_the_file) != 1 or len(keys) != 1:
+        problem(file_properties[0][0] if file_properties else None, "fileProperties(_:) with more than its file")
+    for start, value in values:
+        if value == "atfn" and not _inside(start, [span for span in only_the_file[:1]]):
+            problem(start, '"atfn" outside the file of the attachment')
+
+    # The parameters and positions only through the names read above.
+    for start, value in values:
+        if value in MAKE_CODES:
+            problem(start, f'"{value}", the code of {MAKE_CODES[value]}')
+    for pattern, _ in OTHER_POSITIONS:
+        for match in pattern.finditer(code):
+            problem(match.start(), match.group())
+
+
 def check_mail_events(text, path=MAIL_EVENTS_FILE):
     """Rule 10 for MailEvents.swift: only the events of MAIL_EVENTS, every reply with its
-    window, and no code of MAIL_BANNED_CODES."""
+    window, make only as the attach event, and no code of MAIL_BANNED_CODES outside it."""
     comments, literals = _lex(text)
     code = _blanked(text, comments + literals)
     uncommented = _blanked(text, comments)
@@ -1257,15 +1425,20 @@ def check_mail_events(text, path=MAIL_EVENTS_FILE):
         if not any(start <= offset < end for start, end in allowed):
             problem(offset, "ropw not set to true")
 
-    # No code of a command that changes mail, in a string or as a number.
+    # make makes only an attachment, at the end of a reply's content, with only its file.
+    _check_attach(text, code, uncommented, literals, problem)
+
+    # No code of a command that changes mail, in a string or as a number. content, which
+    # _check_attach allows as the place of an attachment, counts there.
     for start, end in literals:
         value = _string_value(text, start, end)
-        if value is None:
+        if value is None or value == "ctnt":
             continue
         name = MAIL_CHANGING_COMMANDS.get(value) if len(value) == 8 else MAIL_BANNED_CODES.get(value) if len(value) == 4 else None
         if name is not None:
             problem(start, f'"{value}", the code of {name}')
-    banned_numbers = {int.from_bytes(code_text.encode("latin-1"), "big"): (code_text, name) for code_text, name in MAIL_BANNED_CODES.items()}
+    numbered = {**MAIL_BANNED_CODES, **MAKE_CODES}
+    banned_numbers = {int.from_bytes(code_text.encode("latin-1"), "big"): (code_text, name) for code_text, name in numbered.items()}
     for match in INTEGER_LITERAL.finditer(code):
         literal = match.group(1).replace("_", "")
         number = int(literal, 0) if literal[:2].lower() in ("0x", "0o", "0b") else int(literal, 10)

@@ -748,7 +748,8 @@ struct SortingAgainEvaluationTests {
                 attachments: { _ in [] },
                 mailbox: { _ in throw MailBridgeError.notFound },
                 selection: { [] },
-                reply: { _, _ in throw MailBridgeError.unexpectedReply }
+                reply: { _, _ in throw MailBridgeError.unexpectedReply },
+                attach: { _, _ in throw MailBridgeError.unexpectedReply }
             )
         }
 

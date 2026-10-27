@@ -3162,7 +3162,8 @@ struct ProjectsRuntimeTests {
                     await self.waitWhileHeld("selection")
                     return selection
                 },
-                reply: { _, _ in try self.answer("reply") { _ in } }
+                reply: { _, _ in try self.answer("reply") { _ in nil } },
+                attach: { _, _ in try self.answer("attach") { _ in } }
             )
         }
     }

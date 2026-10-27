@@ -1135,7 +1135,8 @@ struct ProjectsWindowViewTests {
                 attachments: { _ in throw MailBridgeError.mailNotRunning },
                 mailbox: { _ in throw MailBridgeError.mailNotRunning },
                 selection: { throw MailBridgeError.mailNotRunning },
-                reply: { _, _ in throw MailBridgeError.mailNotRunning }
+                reply: { _, _ in throw MailBridgeError.mailNotRunning },
+                attach: { _, _ in throw MailBridgeError.mailNotRunning }
             )
             let choice = MailChoice(defaults: defaults, suggestsInboxAndSent: false)
             choice.choose([.inbox])
