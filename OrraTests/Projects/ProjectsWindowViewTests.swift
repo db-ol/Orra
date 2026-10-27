@@ -753,6 +753,16 @@ struct ProjectsWindowViewTests {
         return nil
     }
 
+    /// How wide the sidebar and the list show, from the panes of the split view other than
+    /// the email view's, in their order. Where the sidebar floats over the list's pane, as
+    /// on macOS 26, that pane starts at the window's left edge, and the list shows only
+    /// beside the sidebar. A sidebar that is collapsed or hidden shows nothing.
+    private static func shownWidths(sidebar: NSView, list: NSView, in split: NSSplitView) -> (sidebar: CGFloat, list: CGFloat) {
+        let hidden = split.isSubviewCollapsed(sidebar) || sidebar.isHidden || sidebar.frame.width < 1
+        let sidebarEnd = hidden ? list.frame.minX : sidebar.frame.maxX
+        return (hidden ? 0 : sidebar.frame.width, max(0, list.frame.maxX - max(list.frame.minX, sidebarEnd)))
+    }
+
     /// The scroll views in a view that no other scroll view in it holds: the email view's
     /// one, or its two panes while comparing.
     private static func outerScrollViews(in view: NSView) -> [NSScrollView] {
@@ -1020,6 +1030,149 @@ struct ProjectsWindowViewTests {
         let pdf = try #require(top("lamps.pdf", in: usualTexts))
         let usualNote = try #require(top("see the note from the lamp maker", in: usualTexts))
         #expect(to > pdf && pdf > usualNote)
+    }
+
+    /// Opt in, with TEST_RUNNER_ORRA_PROJECTS_WINDOW_LIVE=1, which CI never sets. Shows the
+    /// Projects window as the app makes it, with the fixture's explained email, through
+    /// orderFrontRegardless, never activating the app, at its first size, at its smallest
+    /// and at 1,440 by 900. Compare with Original hides the sidebar, the list keeps at least
+    /// its smallest width, and the email view gets the room, with its panes side by side or
+    /// one above the other as its width says. Exit Comparison shows the columns as before.
+    /// At the first size, the sidebar shown again while comparing, as the toolbar's sidebar
+    /// button shows it, ends the comparison. It waits for each layout at most two seconds
+    /// while the main run loop runs, prints the widths it measured and closes the window.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_PROJECTS_WINDOW_LIVE"] == "1"))
+    func compareWithOriginalInAShownWindow() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let id = explained.messageID
+        let sizes: [(size: CGSize, expected: Arrangement)] = [
+            (ProjectsWindow.defaultSize, .sideBySide), (ProjectsWindow.minimumSize, .stacked), (CGSize(width: 1_440, height: 900), .sideBySide),
+        ]
+        for (size, expected) in sizes {
+            let model = ProjectsWindowModel(runtime: runtime)
+            await model.show(id)
+            let emailModel = model.emailModel(for: id)
+            await emailModel.load()
+            let asked = Columns()
+            let window = ProjectsWindow.window(hosting: ProjectsWindowView(runtime: runtime, model: model, openSettings: {}, openMail: {}, columnsChanged: asked.hear))
+            window.setContentSize(size)
+            window.orderFrontRegardless()
+            defer { window.close() }
+            let content = try #require(window.contentView)
+            func findEditor() -> NSTextView? {
+                Self.descendants(of: content).compactMap { $0 as? NSTextView }.first { !$0.isFieldEditor && $0.string == emailModel.text }
+            }
+            #expect(try await holdsSoon { findEditor() != nil })
+            let editor = try #require(findEditor())
+            let (split, pane) = try #require(Self.pane(holding: editor))
+            let others = split.arrangedSubviews.filter { $0 !== pane }
+            try #require(others.count == 2)
+            let (sidebar, list) = (others[0], others[1])
+            func shown() -> (sidebar: CGFloat, list: CGFloat, email: CGFloat) {
+                let widths = Self.shownWidths(sidebar: sidebar, list: list, in: split)
+                return (widths.sidebar, widths.list, pane.frame.width)
+            }
+            /// Waits until the columns stop moving, as after an animation.
+            func settle() async throws {
+                var last = shown()
+                var still = 0
+                for _ in 0..<40 where still < 3 {
+                    try await Task.sleep(for: .milliseconds(50))
+                    window.layoutIfNeeded()
+                    let now = shown()
+                    still = now == last ? still + 1 : 0
+                    last = now
+                }
+            }
+            try await settle()
+            let before = shown()
+            let contentWidth = window.contentLayoutRect.width
+            #expect(before.sidebar >= 180 && before.list >= 279, "\(size): \(before)")
+            #expect(window.isVisible)
+
+            model.compare(id)
+            #expect(try await holdsSoon { shown().sidebar == 0 }, "\(size): the sidebar did not hide, \(shown())")
+            try await settle()
+            let comparing = shown()
+            let arrangement = Self.arrangement(in: pane, editor: editor)
+            #expect(asked.last == .doubleColumn, "\(size): the split view was asked for \(asked.asked)")
+            #expect(comparing.sidebar == 0, "\(size): \(comparing)")
+            #expect(comparing.list >= 279, "\(size): \(comparing)")
+            #expect(comparing.email > before.email, "\(size): \(before) then \(comparing)")
+            #expect(comparing.email >= contentWidth - comparing.list - 2, "\(size): \(comparing) in \(contentWidth)")
+            #expect(arrangement == expected, "\(size): \(comparing)")
+            #expect(Self.descendants(of: content).contains { $0 === editor })
+            print("Projects window \(Int(size.width)) by \(Int(size.height)), email view \(Int(pane.frame.width)) by \(Int(window.contentLayoutRect.height)) under the toolbar: before, sidebar \(before.sidebar), list \(before.list), email view \(before.email). Comparing, sidebar \(comparing.sidebar), list \(comparing.list), email view \(comparing.email), \(arrangement).")
+
+            model.endComparing()
+            #expect(try await holdsSoon { shown().sidebar > 0 }, "\(size): the sidebar did not show again, \(shown())")
+            try await settle()
+            let after = shown()
+            #expect(asked.last == .all, "\(size): the split view was asked for \(asked.asked)")
+            #expect(abs(after.sidebar - before.sidebar) <= 1 && abs(after.list - before.list) <= 1 && abs(after.email - before.email) <= 1, "\(size): \(before) then \(after)")
+            #expect(Self.arrangement(in: pane, editor: editor) == .one)
+            print("Projects window \(Int(size.width)) by \(Int(size.height)) after Exit Comparison: sidebar \(after.sidebar), list \(after.list), email view \(after.email), window \(window.frame.width) wide, its smallest content \(window.contentMinSize).")
+            if size == ProjectsWindow.minimumSize {
+                // The sidebar hidden and shown again without the comparison, as the toolbar's
+                // sidebar button does it, from the size the window has now.
+                let controller = try #require(split.delegate as? NSSplitViewController)
+                let wide = window.frame.width
+                controller.toggleSidebar(nil)
+                _ = try await holdsSoon { shown().sidebar == 0 }
+                try await settle()
+                let hidden = shown()
+                controller.toggleSidebar(nil)
+                _ = try await holdsSoon { shown().sidebar > 0 }
+                try await settle()
+                print("Projects window sidebar round trip from \(wide) wide: hidden \(hidden), shown \(shown()), window \(window.frame.width) wide.")
+                // The same from the smallest size.
+                window.setContentSize(size)
+                try await settle()
+                let small = shown()
+                controller.toggleSidebar(nil)
+                _ = try await holdsSoon { shown().sidebar == 0 }
+                try await settle()
+                let smallHidden = shown()
+                controller.toggleSidebar(nil)
+                _ = try await holdsSoon { shown().sidebar > 0 }
+                try await settle()
+                print("Projects window sidebar round trip at \(size): before \(small), hidden \(smallHidden), shown \(shown()), window \(window.frame.width) wide, its smallest content \(window.contentMinSize).")
+            }
+
+            if size == ProjectsWindow.defaultSize {
+                // The sidebar shown again, as the toolbar's sidebar button or View > Show
+                // Sidebar shows it, ends the comparison and stays.
+                model.compare(id)
+                #expect(try await holdsSoon { shown().sidebar == 0 })
+                try await settle()
+                let controller = try #require(split.delegate as? NSSplitViewController)
+                controller.toggleSidebar(nil)
+                #expect(try await holdsSoon { !model.isComparing }, "\(size): the comparison went on, \(asked.asked)")
+                try await settle()
+                #expect(shown().sidebar > 0)
+                let toolbar = window.toolbar?.items.map(\.itemIdentifier.rawValue) ?? []
+                print("Projects window toolbar: \(toolbar)")
+            }
+            window.close()
+            #expect(!window.isVisible)
+        }
+        await fixture.stop()
+    }
+
+    /// Waits until a condition holds, at most two seconds, while the main run loop runs, and
+    /// returns whether it did, for the shown window, where a layout that never comes is a
+    /// finding to report rather than a reason to wait a minute, as `waitUntil(_:)` does.
+    private func holdsSoon(_ condition: () -> Bool) async throws -> Bool {
+        for _ in 0..<40 {
+            if condition() {
+                return true
+            }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        return condition()
     }
 
     // MARK: The talk key
@@ -1967,9 +2120,41 @@ struct ProjectsWindowViewTests {
         // shown may stay empty in the first.
         try await renderWindow(ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}, openMail: {}), to: folder.appendingPathComponent("\(language)-projects-window-760.png"))
         try await render(ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}, openMail: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-window-760-columns.png"))
+        try await renderTheComparison(of: explained, runtime: runtime, language: language, to: folder)
         // Last, since it adds a project.
         try await renderTheProjectFiles(of: explained, runtime: runtime, language: language, to: folder)
         await fixture.stop()
+    }
+
+    /// The email view's sizes while comparing, as the shown window test measured them on
+    /// macOS 26.6.2 under the toolbar, see `compareWithOriginalInAShownWindow()`: at the
+    /// window's first size, at its smallest and at 1,440 by 900, then its narrowest, beside
+    /// the widest list at the smallest size, for the bar's button.
+    static let comparedSizes: [(name: String, size: NSSize)] = [
+        ("compare", NSSize(width: 699, height: 588)),
+        ("compare-760", NSSize(width: 419, height: 420)),
+        ("compare-1440", NSSize(width: 1_099, height: 848)),
+        // The list at its widest, 480 points, in the window at its smallest.
+        ("compare-narrowest", NSSize(width: 279, height: 420)),
+    ]
+
+    /// Renders Compare with Original, part of `renderTheWindowsParts`: the email view alone
+    /// while comparing, at the sizes of `comparedSizes`, since a window that is never shown
+    /// draws its third column empty, then the This email popover and Original Email with
+    /// the sender's words first.
+    private func renderTheComparison(of explained: MailStore.Listed, runtime: ProjectsRuntime, language: String, to folder: URL) async throws {
+        let model = ProjectsWindowModel(runtime: runtime)
+        await model.show(explained.messageID)
+        await model.emailModel(for: explained.messageID).load()
+        model.compare(explained.messageID)
+        #expect(model.isComparing)
+        for (name, size) in Self.comparedSizes {
+            try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: size, to: folder.appendingPathComponent("\(language)-projects-\(name).png"))
+        }
+        let popover = ProjectsEmailArea.Excerpt(source: .thisEmail, emailText: "", original: Self.forward, attachments: Self.attachments)
+        try await render(popover, size: NSSize(width: 420, height: 420), to: folder.appendingPathComponent("\(language)-projects-this-email.png"))
+        let wordsFirst = ProjectsEmailOriginal(content: Self.forward, attachments: Self.attachments, wordsFirst: true).padding(20)
+        try await render(wordsFirst, size: NSSize(width: 380, height: 720), to: folder.appendingPathComponent("\(language)-projects-email-original-words-first.png"))
     }
 
     /// Renders Project Files for This Explanation open, part of `renderTheWindowsParts`: the
