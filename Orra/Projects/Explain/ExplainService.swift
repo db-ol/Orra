@@ -133,12 +133,13 @@ nonisolated extension ExplainPrompt.Source {
 ///   with the email's explanation or new ones from the model, see SearchTerms. An email in
 ///   Needs a Project gets passages of the folders of the user's projects that match three of
 ///   its terms, and an email in a project up to two passages of other projects' folders
-///   that rank above every passage of its own project that a term matches, after its
-///   project's own passages, see `OtherProjectsRule`. A term that names the user, the
-///   sender or a recipient or that is a date brings in none of them, and neither does an
-///   email with a warning of `otherProjectWarnings`. They go into <other_files>, for the
-///   warnings, points and questions only. Mail set aside gets no files and asks for no
-///   terms. Without terms only the email's words search, and only its project's folders.
+///   that match two of its terms and rank above every passage of its own project that a term
+///   matches, after its project's own passages, see `OtherProjectsRule`. A term that names
+///   the user, the sender or a recipient or that is a date brings in none of them, and
+///   neither does an email with a warning of `otherProjectWarnings`. They go into
+///   <other_files>, for the warnings, points and questions only. Mail set aside gets no
+///   files and asks for no terms. Without terms only the email's words search, and only its
+///   project's folders.
 /// - decides the reply with ReplyRule.
 /// - builds ExplainPrompt off the main actor, counting with the cleanup model's own
 ///   tokenizer, see ProjectsTokenCounter, and runs it through ProjectsModelQueue as a
@@ -510,8 +511,9 @@ final class ExplainService {
         /// Whether the folders of other projects were searched, or why not, by kind.
         nonisolated enum OtherProjects: String, Sendable {
             case searched
-            /// No passage of another project ranks above the best passage of the email's
-            /// project that a term matches, see `OtherProjectsRule.InProject.rankedAbove`.
+            /// No passage of another project that matches enough terms ranks above the best
+            /// passage of the email's project that a term matches, see
+            /// `OtherProjectsRule.InProject.rankedAbove`.
             case notNeeded = "not needed"
             /// There are no search terms, so the email's words search its project alone.
             case noTerms = "no terms"
@@ -552,10 +554,14 @@ final class ExplainService {
             /// One ranking of the passages of all the user's projects, with the query of the
             /// email's own project: its words and its terms. A passage of another project comes
             /// in only when it ranks above every passage of the email's project that a term
-            /// matches. Such a passage answers the terms better than anything the project
-            /// holds, while a project that holds what the email is about keeps its own files.
-            /// The passages come after the project's own, so the project keeps every passage
-            /// it would have without them.
+            /// matches, and matches `OtherProjectsRule.inProjectTerms` different terms. A
+            /// project that holds what the email is about keeps its own files. The rank alone
+            /// does not say that a passage answers the terms better: the fusion adds a share for
+            /// each list that holds a passage, and only passages with Chinese are in the two
+            /// trigram lists, so one that holds a rare word of the email, such as the name of a
+            /// city, can top all four lists and outrank a passage of the project that matches
+            /// four terms. The passages come after the project's own, which are those it would
+            /// have without them, and the budget trims them first, see ExplainPrompt.
             case rankedAbove
             /// The rule before: the folders of other projects are searched when fewer than this
             /// many of the project's own passages matched a term. Above
@@ -565,10 +571,19 @@ final class ExplainService {
 
         var inProject = InProject.rankedAbove
         /// The terms, of those that name no one and no date, that a passage of another project
+        /// must match for an email in a project with `InProject.rankedAbove`, each a different
+        /// term, as for `needsProjectTerms`. One word in common, such as a city, a contract or
+        /// an onboarding, brought another project's passage into one email of a project in six
+        /// in the synthetic set's retrieval supplement, most of them passages that answer
+        /// nothing in it.
+        var inProjectTerms = 2
+        /// The terms, of those that name no one and no date, that a passage of another project
         /// must match for an email in Needs a Project, each a different term. A word as common
-        /// as appointment, service or garden matches some file of almost every user, while a
-        /// file about the email's matter holds several of its terms. A term and its other
-        /// language count as two when a passage holds both.
+        /// as appointment, service or garden matches some file of almost every user. Each term
+        /// counts on its own, so a term and its other language count as two when a passage
+        /// holds both, and so do two words for the same thing. Three kept every negative of the
+        /// synthetic set's retrieval supplement out where two let one in, and cost passages
+        /// that match two of an email's terms.
         var needsProjectTerms = 3
         /// Whether the terms that only name a person or a date search the email's own project
         /// too. They never search another project's folders.
@@ -585,9 +600,9 @@ final class ExplainService {
     /// 4. In a project: the best passages for the email's words and terms, the newest files
     ///    when fewer than `ExplainPrompt.fillUpTo` come back, and the project's files. When
     ///    other projects are allowed, up to `otherProjectChunks` passages of their folders that
-    ///    rank above the project's own, after them, see
-    ///    `OtherProjectsRule.InProject.rankedAbove`, none of a file the project holds, so a
-    ///    folder added to two projects stays the email's own.
+    ///    rank above the project's own and match `OtherProjectsRule.inProjectTerms` different
+    ///    terms, after them, see `OtherProjectsRule.InProject.rankedAbove`, none of a file the
+    ///    project holds, so a folder added to two projects stays the email's own.
     /// 5. Without a project, with other projects allowed and terms: up to
     ///    `ExplainPrompt.chunkLimit` passages of all projects' folders, each matching
     ///    `OtherProjectsRule.needsProjectTerms` different terms.
@@ -659,7 +674,7 @@ final class ExplainService {
                     ranking.projects = [project.id] + others
                     let ranked = try await lookups.search(ranking)
                     let gate = ranked.firstIndex { $0.project == project.id && $0.matchedTerm } ?? ranked.endIndex
-                    candidates = ranked[..<gate].filter { matchesUsable($0) && isNew($0) }
+                    candidates = ranked[..<gate].filter { matchesUsable($0, least: rule.inProjectTerms) && isNew($0) }
                 case .ownTermMatches(let least):
                     if found.hits.count(where: \.matchedTerm) < least {
                         let hits = try await lookups.search(ChunkSearch.Query(text: query, terms: usable, projects: others, termsOnly: true, limit: searched))

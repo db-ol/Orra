@@ -1057,7 +1057,7 @@ struct ExplainServiceTests {
         var byName = Fixture.plan
         byName.matchedTerms = ["Iris Fang", "Wednesday"]
         var byProof = Fixture.otherHit("proof-notes.md", "Notes on the proof of the studio sign.")
-        byProof.matchedTerms = ["Iris Fang", "proof"]
+        byProof.matchedTerms = ["Iris Fang", "proof", "打样"]
         let fakes = Fakes(terms: terms, otherHits: [byName, byProof], answer: .success(Fixture.englishAnswer))
         let explanation = try await fakes.service().explain(Fixture.email())
         #expect(fakes.queryList.map(\.terms) == [terms, terms])
@@ -1089,7 +1089,7 @@ struct ExplainServiceTests {
         var project = Fixture.project
         project.domains = ["printworks.example", "print-works.example"]
         known.projects = [project, other]
-        let fakes = Fakes(known: known, terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
+        let fakes = Fakes(known: known, terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
         let explanation = try await fakes.service().explain(Fixture.email())
         #expect(explanation.draftCheck?.otherProjectNames == ["Studio move", "工作室搬迁", "Ken Ito", "kiln works"])
         let plain = try await Fakes(answer: .success(Fixture.englishAnswer)).service().explain(Fixture.email())
@@ -1114,7 +1114,7 @@ struct ExplainServiceTests {
         var matched = Fixture.quote
         matched.matchedTerm = true
         let others = (1...4).map { Fixture.otherHit("plan-\($0).pdf", "Plan \($0) of the studio.") }
-        let fakes = Fakes(hits: [matched], terms: ["plan"], otherHits: others, answer: .success(Fixture.englishAnswer))
+        let fakes = Fakes(hits: [matched], terms: ["plan", "studio"], otherHits: others, answer: .success(Fixture.englishAnswer))
         let explanation = try await fakes.service().explain(Fixture.email())
         #expect(fakes.queryList.count == 2)
         let own = try #require(fakes.queryList.first)
@@ -1135,7 +1135,7 @@ struct ExplainServiceTests {
             return hit
         }
         let unmatched = Fixture.otherHit("hall.pdf", "The hall of the studio.", matchedTerm: false)
-        let below = Fakes(hits: matched, terms: ["proof"], otherHits: [Fixture.plan], ranking: [unmatched, matched[0], Fixture.plan, matched[1]], answer: .success(Fixture.englishAnswer))
+        let below = Fakes(hits: matched, terms: ["proof", "plan"], otherHits: [Fixture.plan], ranking: [unmatched, matched[0], Fixture.plan, matched[1]], answer: .success(Fixture.englishAnswer))
         let explanation = try await below.service().explain(Fixture.email())
         #expect(below.queryList.count == 2)
         #expect(!explanation.sources.keys.contains(where: ExplainPrompt.isOtherFileSource))
@@ -1143,10 +1143,48 @@ struct ExplainServiceTests {
         #expect(found.otherProjects == .notNeeded)
         #expect(found.others.isEmpty)
         // Above the project's best, it comes in.
-        let above = Fakes(hits: matched, terms: ["proof"], otherHits: [Fixture.plan], ranking: [unmatched, Fixture.plan, matched[0]], answer: .success(Fixture.englishAnswer))
+        let above = Fakes(hits: matched, terms: ["proof", "plan"], otherHits: [Fixture.plan], ranking: [unmatched, Fixture.plan, matched[0]], answer: .success(Fixture.englishAnswer))
         let inProject = try await ExplainService.files(for: Fixture.email(), project: Fixture.project, known: Fixture.known, query: "proof", warnings: [], lookups: above.lookups)
         #expect(inProject.otherProjects == .searched)
         #expect(inProject.others.map(\.file) == [Fixture.plan.file])
+    }
+
+    /// A passage of the project that no term matches holds no other project out: the line
+    /// is the project's best passage that a term matches, wherever the ranking puts the rest.
+    @Test func anOwnPassageThatNoTermMatchesHoldsNoOtherProjectOut() async throws {
+        var matched = Fixture.hit("brief.md", "The proof of the brief.")
+        matched.matchedTerm = true
+        let unmatched = Fixture.hit("notes.md", "Notes of the meeting.")
+        let fakes = Fakes(hits: [unmatched, matched], terms: ["proof", "plan"], otherHits: [Fixture.plan], ranking: [unmatched, Fixture.plan, matched], answer: .success(Fixture.englishAnswer))
+        let found = try await ExplainService.files(for: Fixture.email(), project: Fixture.project, known: Fixture.known, query: "proof", warnings: [], lookups: fakes.lookups)
+        #expect(found.otherProjects == .searched)
+        #expect(found.others.map(\.file) == [Fixture.plan.file])
+    }
+
+    /// An email in a project gets a passage of another project only when two different terms
+    /// match it, whatever its rank, since one word in common, such as a city or a contract,
+    /// matches some file of most projects. A term that names someone counts for nothing.
+    @Test func aPassageThatOneTermMatchesStaysOutOfAnEmailInAProject() async throws {
+        var matched = Fixture.quote
+        matched.matchedTerm = true
+        matched.matchedTerms = ["proof"]
+        var one = Fixture.plan
+        one.matchedTerms = ["lobby", "Iris Fang"]
+        var two = Fixture.otherHit("hall.pdf", "The hall and the lobby of the studio.")
+        two.matchedTerms = ["floor plan", "lobby"]
+        let fakes = Fakes(hits: [matched], terms: ["floor plan", "lobby", "proof", "Iris Fang"], otherHits: [one, two], ranking: [one, two, matched], answer: .success(Fixture.englishAnswer))
+        let found = try await ExplainService.files(for: Fixture.email(), project: Fixture.project, known: Fixture.known, query: "proof", warnings: [], lookups: fakes.lookups)
+        #expect(found.others.map(\.file) == [two.file])
+        #expect(ExplainService.OtherProjectsRule().inProjectTerms == 2)
+        let any = try await ExplainService.files(
+            for: Fixture.email(), project: Fixture.project, known: Fixture.known, query: "proof", warnings: [], lookups: fakes.lookups,
+            rule: .init(inProjectTerms: 1))
+        #expect(any.others.map(\.file) == [one.file, two.file])
+        // With no passage that matches two, none comes in.
+        let alone = Fakes(hits: [matched], terms: ["floor plan", "lobby", "proof", "Iris Fang"], otherHits: [one], ranking: [one, matched], answer: .success(Fixture.englishAnswer))
+        let none = try await ExplainService.files(for: Fixture.email(), project: Fixture.project, known: Fixture.known, query: "proof", warnings: [], lookups: alone.lookups)
+        #expect(none.others.isEmpty)
+        #expect(none.otherProjects == .notNeeded)
     }
 
     /// A folder added to two projects never counts as another project: a passage of a file
@@ -1154,7 +1192,7 @@ struct ExplainServiceTests {
     @Test func aFileTheProjectHoldsIsNeverAnotherProjects() async throws {
         var shared = Fixture.otherHit("quote-v2.md", "Quote v2 as the studio keeps it.")
         shared.file = Fixture.quote.file
-        let fakes = Fakes(terms: ["quote"], otherHits: [shared, Fixture.plan], answer: .success(Fixture.englishAnswer))
+        let fakes = Fakes(terms: ["quote", "plan"], otherHits: [shared, Fixture.plan], answer: .success(Fixture.englishAnswer))
         let explanation = try await fakes.service().explain(Fixture.email())
         let others = explanation.sources.filter { ExplainPrompt.isOtherFileSource($0.key) }
         #expect(others.count == 1)
@@ -1169,7 +1207,7 @@ struct ExplainServiceTests {
     @Test func otherProjectsPassagesComeAfterTheProjectsSix() async throws {
         let six = (1...6).map { Fixture.hit("part-\($0).md", "Part \($0) of the brief.") }
         let others = (1...3).map { Fixture.otherHit("hall-\($0).pdf", "The hall plan \($0).") }
-        let fakes = Fakes(hits: six, terms: ["brief"], otherHits: others, answer: .success(Fixture.englishAnswer))
+        let fakes = Fakes(hits: six, terms: ["brief", "plan"], otherHits: others, answer: .success(Fixture.englishAnswer))
         let explanation = try await fakes.service().explain(Fixture.email())
         let ids = explanation.sources.keys.filter { $0.hasPrefix("F") || $0.hasPrefix("O") }.sorted()
         #expect(ids == ["F1", "F2", "F3", "F4", "F5", "F6", "O1", "O2"])
@@ -1179,7 +1217,7 @@ struct ExplainServiceTests {
     /// it takes their values and copied sentences out of the draft, and a point that takes an
     /// amount from one has a source.
     @Test func otherProjectsPassagesReachTheDraftCheckApart() async throws {
-        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
+        let fakes = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
         let explanation = try await fakes.service().explain(Fixture.email())
         let check = try #require(explanation.draftCheck)
         #expect(check.otherProjectTexts == [Fixture.plan.text])
@@ -1204,7 +1242,7 @@ struct ExplainServiceTests {
     func aWarningInOtherProjectWarningsKeepsOtherProjectsOut(_ hostile: HostileEmail) async throws {
         #expect(ExplainService.otherProjectWarnings.contains(hostile.warning))
         for project in [nil, Fixture.projectID] as [UUID?] {
-            let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
+            let fakes = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
             let explanation = try await fakes.service().explain(hostile.email(project: project))
             #expect(explanation.warningKinds.contains(hostile.warning), "\(hostile) gave \(explanation.warningKinds)")
             #expect(!fakes.queryList.contains { $0.termsOnly })
@@ -1217,7 +1255,7 @@ struct ExplainServiceTests {
                 #expect(fakes.queryList.isEmpty)
                 #expect(!fakes.callList.contains("terms"))
             } else {
-                #expect(fakes.queryList.map(\.terms) == [["floor plan"]])
+                #expect(fakes.queryList.map(\.terms) == [["floor plan", "lobby"]])
             }
         }
     }
@@ -1275,7 +1313,7 @@ struct ExplainServiceTests {
     /// from that prompt, which asks for no draft, and its draft from a second request of the
     /// user whose prompt is the one the email gets without other projects, word for word.
     @Test func theDraftComesFromASecondRequestWithoutOtherProjectsPassages() async throws {
-        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), .success(Fixture.draftWithoutThePlan))
+        let fakes = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), .success(Fixture.draftWithoutThePlan))
         let explanation = try await fakes.service().explain(Fixture.email())
         let requests = fakes.requestList
         #expect(requests.count == 2)
@@ -1287,7 +1325,7 @@ struct ExplainServiceTests {
         #expect(!second.contains("other_files") && !second.contains("O1") && !second.contains("north wall") && !second.contains("Studio move"))
         #expect(second.contains("Rule decision: a reply is due. Write the draft in English, to Iris Fang <iris.fang@printworks.example>."))
         // The prompt of the email had no other project been searched.
-        let alone = Fakes(terms: ["floor plan"], answer: .success(Fixture.englishAnswer))
+        let alone = Fakes(terms: ["floor plan", "lobby"], answer: .success(Fixture.englishAnswer))
         _ = try await alone.service().explain(Fixture.email())
         #expect(alone.requestList.map(\.prompt) == [second])
 
@@ -1316,7 +1354,7 @@ struct ExplainServiceTests {
     /// check counts all of them as the project's data.
     @Test func theDraftsPromptHoldsTheProjectsOwnPassagesOfTheFirst() async throws {
         let six = (1...6).map { Fixture.hit("part-\($0).md", "Part \($0) of the brief, code PB-\($0)00.") }
-        let fakes = Fakes(hits: six, terms: ["brief"], otherHits: [Fixture.plan, Fixture.otherHit("hall.pdf", "The hall plan.")], answer: .success(Fixture.explanationCitingThePlan), .success(Fixture.draftWithoutThePlan))
+        let fakes = Fakes(hits: six, terms: ["brief", "plan"], otherHits: [Fixture.plan, Fixture.otherHit("hall.pdf", "The hall plan.")], answer: .success(Fixture.explanationCitingThePlan), .success(Fixture.draftWithoutThePlan))
         let explanation = try await fakes.service().explain(Fixture.email())
         let first = try #require(fakes.requestList.first?.prompt)
         let second = try #require(fakes.requestList.last?.prompt)
@@ -1326,7 +1364,7 @@ struct ExplainServiceTests {
         let check = try #require(explanation.draftCheck)
         #expect(check.sourceTexts.contains(six[5].text))
 
-        let few = Fakes(hits: [Fixture.quote], newest: [Fixture.hit("new-1.md", "New one."), Fixture.hit("new-2.md", "New two.")], terms: ["floor plan"],
+        let few = Fakes(hits: [Fixture.quote], newest: [Fixture.hit("new-1.md", "New one."), Fixture.hit("new-2.md", "New two.")], terms: ["floor plan", "lobby"],
                         otherHits: [Fixture.plan, Fixture.otherHit("hall.pdf", "The hall plan.")], answer: .success(Fixture.explanationCitingThePlan), .success(Fixture.draftWithoutThePlan))
         _ = try await few.service().explain(Fixture.email())
         #expect(few.requestList.allSatisfy { $0.prompt.contains("New one.") && $0.prompt.contains("New two.") })
@@ -1336,7 +1374,7 @@ struct ExplainServiceTests {
     /// An email whose prompt holds no passage of another project gets one request, and its
     /// prompt is the one of the app before, word for word.
     @Test func anEmailWithoutOtherProjectsPassagesGetsOneRequestWithThePromptAsBefore() async throws {
-        for (terms, others) in [(nil, [Fixture.plan]), (["proof"], []), (["proof"], [Fixture.plan])] as [([String]?, [ChunkSearch.Hit])] {
+        for (terms, others) in [(nil, [Fixture.plan]), (["proof", "plan"], []), (["proof", "plan"], [Fixture.plan])] as [([String]?, [ChunkSearch.Hit])] {
             var matched = Fixture.quote
             matched.matchedTerm = true
             let ranking = [matched] + others
@@ -1356,7 +1394,7 @@ struct ExplainServiceTests {
     @Test func mailThatNeedsNoReplyGetsNoSecondRequest() async throws {
         var email = Fixture.email(from: ExplainPrompt.Person(name: "Bai Lu", address: Fixture.own))
         email.to = [Fixture.iris]
-        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
+        let fakes = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
         let explanation = try await fakes.service().explain(email)
         #expect(fakes.requestList.count == 1)
         #expect(explanation.reply == .noReply(.sentByUser))
@@ -1366,7 +1404,7 @@ struct ExplainServiceTests {
     /// Evaluations turn the draft apart off: one request whose prompt asks for the draft too,
     /// as before.
     @Test func withoutTheDraftApartOneRequestWritesTheDraftToo() async throws {
-        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
+        let fakes = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
         let explanation = try await fakes.service(draftApart: false).explain(Fixture.email())
         #expect(fakes.requestList.count == 1)
         let prompt = try #require(fakes.requestList.first?.prompt)
@@ -1381,12 +1419,12 @@ struct ExplainServiceTests {
     /// When the first request fails or is cancelled, nothing is saved and the draft's request
     /// is not sent, as with one request.
     @Test func aFirstRequestThatFailsOrIsCancelledSendsNoSecondAndSavesNothing() async throws {
-        let cancelled = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .failure(CancellationError()))
+        let cancelled = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .failure(CancellationError()))
         await #expect(throws: CancellationError.self) { try await cancelled.service().explain(Fixture.email()) }
         #expect(cancelled.requestList.count == 1)
         #expect(cancelled.savedList.isEmpty)
 
-        let failed = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .failure(RewriteError.notLoaded))
+        let failed = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .failure(RewriteError.notLoaded))
         await #expect(throws: RewriteError.notLoaded) { try await failed.service().explain(Fixture.email()) }
         #expect(failed.requestList.count == 1)
         #expect(failed.savedList.isEmpty)
@@ -1394,7 +1432,7 @@ struct ExplainServiceTests {
 
     /// A cancel of the draft's request, as by Forget Project, saves nothing.
     @Test func aCancelledDraftRequestSavesNothing() async throws {
-        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), .failure(CancellationError()))
+        let fakes = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), .failure(CancellationError()))
         await #expect(throws: CancellationError.self) { try await fakes.service().explain(Fixture.email()) }
         #expect(fakes.requestList.count == 2)
         #expect(fakes.savedList.isEmpty)
@@ -1403,7 +1441,7 @@ struct ExplainServiceTests {
     /// When only the draft's request fails, the explanation is saved without a draft, as
     /// when the model writes none, and the draft check is there for Explain Again.
     @Test func aDraftRequestThatFailsLeavesTheExplanationWithoutADraft() async throws {
-        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), .failure(RewriteError.jobDropped))
+        let fakes = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), .failure(RewriteError.jobDropped))
         let explanation = try await fakes.service().explain(Fixture.email())
         #expect(fakes.requestList.count == 2)
         #expect(explanation.points.map(\.sources) == [["this email"], ["O1"]])
@@ -1416,7 +1454,7 @@ struct ExplainServiceTests {
     /// A draft's prompt over the budget is not sent, and the explanation has no draft.
     @Test func aDraftPromptOverTheBudgetIsNotSent() async throws {
         let tokens: @Sendable (String) -> Int = { $0.contains("<other_files>") ? $0.count / 3 : 100_000 }
-        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), tokens: tokens)
+        let fakes = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), tokens: tokens)
         let explanation = try await fakes.service().explain(Fixture.email())
         #expect(fakes.requestList.count == 1)
         #expect(explanation.draft == .missing)
@@ -1426,7 +1464,7 @@ struct ExplainServiceTests {
     /// A draft's answer that lacks its draft says so among the problems of form, while the
     /// first answer's "No draft" is none.
     @Test func theFormOfTheDraftIsThatOfTheDraftsAnswer() async throws {
-        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), .success("- None\n\nPoints:\n- The second proof is ready. [this email]\n\nBefore you reply:\n- None\n"))
+        let fakes = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), .success("- None\n\nPoints:\n- The second proof is ready. [this email]\n\nBefore you reply:\n- None\n"))
         let explanation = try await fakes.service().explain(Fixture.email())
         #expect(explanation.draft == .missing)
         #expect(explanation.problems == [.missing(.draft)])

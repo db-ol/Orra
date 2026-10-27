@@ -1857,7 +1857,7 @@ struct ProjectsRuntimeTests {
         let harbor = Project(name: "Harbor", people: [Project.Person(name: "Mei Tan", address: "mei@harbor.example")])
         let folder = root.appendingPathComponent("Kiln", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try "Lamp fixtures for the studio lobby, hung along the north wall.".write(to: folder.appendingPathComponent("lamps.txt"), atomically: true, encoding: .utf8)
+        try "A lamp fixture for the studio lobby, hung along the north wall.".write(to: folder.appendingPathComponent("lamps.txt"), atomically: true, encoding: .utf8)
         let kiln = Project(name: "Kiln", folders: [try Project.bookmark(of: folder)])
         try await runtime.add(harbor)
         try await runtime.add(kiln)
