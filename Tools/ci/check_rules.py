@@ -797,6 +797,15 @@ END_OF_CONTENT_PLACE = re.compile(
 AT_THE_END = re.compile(
     r'\.\s*setDescriptor\s*\(\s*NSAppleEventDescriptor\s*\(\s*enumCode\s*:\s*kAEEnd\s*\)\s*,\s*forKeyword\s*:\s*keyAEPosition\s*\)'
 )
+# The name of the reply's id in the declaration of endOfContent(ofReply:).
+REPLY_PARAMETER = re.compile(r"\bfunc\s+endOfContent\s*\(\s*ofReply\s+(\w+)\s*:\s*Int\s*\)")
+# The content of outgoing message id <reply> of the application, kept in a constant, and the
+# one place of the insertion location that names it. {} stands for the reply's id.
+REPLY_CONTENT = (
+    r'\blet\s+(\w+)\s*=\s*MailEvents\s*\.\s*Specifier\s*\.\s*property\s*\(\s*' + _CODE_CALL.format("ctnt")
+    + r'\s*,\s*of\s*:\s*\.\s*id\s*\(\s*MailEvents\s*\.\s*Code\s*\.\s*outgoingMessage\s*,\s*{}\s*,\s*of\s*:\s*\.\s*application\s*\)\s*\)'
+)
+CONTENT_PLACE = r'\.\s*setDescriptor\s*\(\s*try\s+{}\s*\.\s*descriptor\s*\(\s*\)\s*,\s*forKeyword\s*:\s*keyAEObject\s*\)'
 FILE_PROPERTIES = re.compile(
     r'\.\s*setParam\s*\(\s*try\s+Self\s*\.\s*fileProperties\s*\(\s*\w+\s*\)\s*,\s*forKeyword\s*:\s*keyAEPropData\s*\)'
 )
@@ -805,6 +814,35 @@ ONLY_THE_FILE = re.compile(
 )
 # The positions of an insertion location other than the end.
 OTHER_POSITIONS = _rule(r"\bkAEBefore\b", r"\bkAEAfter\b", r"\bkAEBeginning\b", r"\bkAEReplace\b")
+# The attach case of appleEvent(target:) and the bodies of its two builders as rule 10 allows
+# them, compared without white space. A helper called from them, another parameter or another
+# object fails, and a change of these lines takes a change of these values too.
+PINNED_ATTACH_CASE = """
+    case .attach(let file, let reply, _):
+        event.setParam(NSAppleEventDescriptor(typeCode: MailEvents.code("atts")), forKeyword: keyAEObjectClass)
+        event.setParam(try Self.endOfContent(ofReply: reply), forKeyword: keyAEInsertHere)
+        event.setParam(try Self.fileProperties(file), forKeyword: keyAEPropData)
+"""
+PINNED_END_OF_CONTENT = """
+    let content = MailEvents.Specifier.property(MailEvents.code("ctnt"), of: .id(MailEvents.Code.outgoingMessage, reply, of: .application))
+    guard let location = NSAppleEventDescriptor.record().coerce(toDescriptorType: typeInsertionLoc) else {
+        throw MailEvents.Failure(code: errAECoercionFail)
+    }
+    location.setDescriptor(try content.descriptor(), forKeyword: keyAEObject)
+    location.setDescriptor(NSAppleEventDescriptor(enumCode: kAEEnd), forKeyword: keyAEPosition)
+    return location
+"""
+PINNED_FILE_PROPERTIES = """
+    guard file.isFileURL else {
+        throw MailEvents.Failure(code: errAECoercionFail)
+    }
+    let properties = NSAppleEventDescriptor.record()
+    properties.setDescriptor(NSAppleEventDescriptor(fileURL: file), forKeyword: MailEvents.code("atfn"))
+    return properties
+"""
+# appleEvent(target:) makes the event, fills it in one switch over the request and returns it,
+# with nothing else before or after the switch.
+MAKE_THE_EVENT = re.compile(r"\s*let\s+event\s*=\s*NSAppleEventDescriptor\s*\.\s*appleEvent\s*\(")
 
 SourceProblem = namedtuple("SourceProblem", "path line rule name")
 
@@ -1277,6 +1315,53 @@ def _inside(offset, spans):
     return any(start <= offset < end for start, end in spans)
 
 
+def _without_space(text):
+    return re.sub(r"\s+", "", text)
+
+
+def _case_blocks(code, start, end):
+    """The cases of a switch whose body runs from start to end: (start, end) of each, from its
+    case to the next one at the top level of the body."""
+    starts = []
+    depth = 0
+    for index in range(start, end):
+        character = code[index]
+        if character in "([{":
+            depth += 1
+        elif character in ")]}":
+            depth -= 1
+        elif depth == 0 and code.startswith("case", index) and _word_before(code, index)[0] == "" \
+                and not (code[index + 4:index + 5].isalnum() or code[index + 4:index + 5] == "_"):
+            starts.append(index)
+    return [(first, starts[number + 1] if number + 1 < len(starts) else end) for number, first in enumerate(starts)]
+
+
+def _switch_of_apple_event(code):
+    """The span of the body of the switch in appleEvent(target:), and whether the function
+    holds nothing but the making of the event, that switch and `return event`."""
+    bodies = _function_bodies(code, r"\bfunc\s+appleEvent\s*\(")
+    if len(bodies) != 1:
+        return None, False
+    start, end = bodies[0]
+    make = MAKE_THE_EVENT.match(code, start)
+    match = re.search(r"\bswitch\s+self\s*\{", code[start:end])
+    if match is None:
+        return None, False
+    opening = start + match.end() - 1
+    depth = 0
+    for index in range(opening, end):
+        if code[index] == "{":
+            depth += 1
+        elif code[index] == "}":
+            depth -= 1
+            if depth == 0:
+                arguments = _arguments(code, make.end() - 1) if make else None
+                made = make is not None and arguments is not None and code[make.end() + len(arguments) + 1:start + match.start()].strip() == ""
+                returned = re.fullmatch(r"\s*return\s+event\s*", code[index + 1:end]) is not None
+                return (opening + 1, index), made and returned
+    return None, False
+
+
 def _check_attach(text, code, uncommented, literals, problem):
     """The attach event of rule 10: make makes an attachment and nothing else, at the end
     of a reply's content only, with only its file."""
@@ -1298,10 +1383,31 @@ def _check_attach(text, code, uncommented, literals, problem):
     def words(name):
         return [match.start() for match in re.finditer(r"\b" + name + r"\b", code)]
 
+    # appleEvent(target:) builds the attach event in its attach case only, as pinned, and
+    # sets the count's class in its count case only.
+    switch, plain = _switch_of_apple_event(code)
+    attach_case = count_case = None
+    if switch is None:
+        problem(None, "appleEvent(target:) without its switch over the request")
+    else:
+        for block in _case_blocks(code, *switch):
+            if re.match(r"case\s+\.attach\b", code[block[0]:block[1]]):
+                attach_case = block
+            elif re.match(r"case\s+\.count\b", code[block[0]:block[1]]):
+                count_case = block
+        if attach_case is None or _without_space(uncommented[attach_case[0]:attach_case[1]]) != _without_space(PINNED_ATTACH_CASE):
+            problem(attach_case[0] if attach_case else switch[0], "the attach case of appleEvent(target:) differs from what rule 10 allows")
+        if not plain:
+            problem(switch[0], "appleEvent(target:) does more than make the event, fill it in its switch and return it")
+    for name, pinned in (("endOfContent", PINNED_END_OF_CONTENT), ("fileProperties", PINNED_FILE_PROPERTIES)):
+        bodies = _function_bodies(code, r"\bfunc\s+" + name + r"\s*\(")
+        if len(bodies) == 1 and _without_space(uncommented[bodies[0][0]:bodies[0][1]]) != _without_space(pinned):
+            problem(bodies[0][0], name + " differs from what rule 10 allows")
+
     # make makes only an attachment, and keyAEObjectClass names no other class but the one
     # the count event counts.
     attachment_class = once(ATTACHMENT_CLASS, uncommented, "make without the attachment class atts")
-    counted_class = spans(COUNTED_CLASS, uncommented)
+    counted_class = [span for span in spans(COUNTED_CLASS, uncommented) if count_case and _inside(span[0], [count_case])]
     for start, value in values:
         if value == "atts" and not _inside(start, attachment_class[:1]):
             problem(start, '"atts" outside the class of make')
@@ -1329,6 +1435,25 @@ def _check_attach(text, code, uncommented, literals, problem):
                 problem(offset, name + " outside the end of a reply's content")
     if not any(_inside(start, end_of_content[:1]) for start, _ in at_the_end):
         problem(None, "endOfContent(ofReply:) without the position at the end")
+    # The object of the place is the content of the reply, outgoing message id <reply> of the
+    # application, never of another message, and keyAEObject names it in one call only.
+    parameter = REPLY_PARAMETER.search(code)
+    contents = []
+    if parameter and end_of_content:
+        start, end = end_of_content[0]
+        body = uncommented[start:end]
+        reply_content = re.compile(REPLY_CONTENT.format(re.escape(parameter.group(1))))
+        contents = [match for match in reply_content.finditer(body)]
+    content_places = []
+    if len(contents) == 1:
+        start = end_of_content[0][0]
+        place_pattern = re.compile(CONTENT_PLACE.format(re.escape(contents[0].group(1))))
+        content_places = [(start + match.start(), start + match.end()) for match in place_pattern.finditer(uncommented[start:end_of_content[0][1]])]
+    if len(contents) != 1 or len(content_places) != 1:
+        problem(end_of_content[0][0] if end_of_content else None, "endOfContent(ofReply:) not at the content of outgoing message id reply")
+    for offset in words("keyAEObject"):
+        if not _inside(offset, content_places[:1]):
+            problem(offset, "keyAEObject outside the content of the reply")
     for start, value in values:
         if value == "ctnt" and not _inside(start, end_of_content[:1]):
             problem(start, '"ctnt", the code of content, outside endOfContent(ofReply:)')
