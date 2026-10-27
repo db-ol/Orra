@@ -67,8 +67,8 @@ struct MailStoreTests {
     @Test func theTablesAreTheSecondStepOfTheSchemaAndTheLaterStepsFollowInOrder() async throws {
         defer { cleanUp() }
         let store = try await openStore()
-        #expect(ProjectsDatabase.migrations.map(\.version) == [1, 2, 3, 4, 5])
-        #expect(try await store.database.run("PRAGMA user_version").first == [.integer(5)])
+        #expect(ProjectsDatabase.migrations.map(\.version) == [1, 2, 3, 4, 5, 6])
+        #expect(try await store.database.run("PRAGMA user_version").first == [.integer(6)])
         await store.close()
     }
 
