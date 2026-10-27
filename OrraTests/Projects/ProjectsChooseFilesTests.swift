@@ -276,8 +276,8 @@ struct ProjectsChooseFilesTests {
     // MARK: The window
 
     /// Explain Again in the sheet saves and closes the sheet first, and the Explain that
-    /// follows asks before it replaces a changed draft. Edit Project from Settings waits while
-    /// the sheet shows.
+    /// follows asks before it replaces a changed draft. Edit Project from Settings does not
+    /// open over the sheet, as over the window's other sheets and dialogs.
     @Test func explainAgainFromTheSheetAsksFirstForAChangedDraft() async throws {
         let projects = try await Self.projects()
         defer { projects.fixture.cleanUp() }
@@ -296,7 +296,7 @@ struct ProjectsChooseFilesTests {
         await model.reload()
         model.chooseFiles(for: email)
         #expect(model.choosingFiles?.id == email.messageID)
-        // Edit Project from Settings waits while the sheet shows.
+        // Edit Project from Settings does not open over the sheet.
         model.edit(projects.harbor.id)
         #expect(model.takeProjectToEdit(presenting: false) == nil)
 
