@@ -67,17 +67,21 @@ nonisolated enum MailPermission: Sendable {
     case denied
     /// -1744: macOS has not asked the user yet.
     case notAsked
-    /// -600: Mail is not running, so macOS cannot tell.
+    /// -600 while Mail does not run, so macOS cannot tell.
     case mailNotRunning
-    /// No answer within the time limit, or any other code.
+    /// No answer within the time limit, -600 from a Mail that still runs, or any other
+    /// code.
     case unknown
 
-    init(status: Int) {
+    /// What a status of the permission check means, given whether Mail runs. -600 from a
+    /// Mail that runs is no answer, as MailBridgeError reads it, so Settings never says to
+    /// open a Mail that is open.
+    init(status: Int, mailRunning: Bool) {
         self = switch status {
         case 0: .allowed
         case -1743: .denied
         case -1744: .notAsked
-        case -600: .mailNotRunning
+        case -600: mailRunning ? .unknown : .mailNotRunning
         default: .unknown
         }
     }
@@ -86,7 +90,7 @@ nonisolated enum MailPermission: Sendable {
 /// Why a call of MailBridge failed. Its description holds no mail data, so the log may
 /// show it.
 nonisolated enum MailBridgeError: Error, Equatable, Sendable {
-    /// Mail is not running. Orra never opens it.
+    /// Mail is not running. Orra opens it only when the user clicks Open Mail.
     case mailNotRunning
     /// Mail runs but did not take the event: -600 or -609 while its process is still there,
     /// which Mail on macOS 26 gives now and then.
@@ -279,7 +283,7 @@ nonisolated extension MailBridge {
             let permission: MailPermission
             switch result {
             case .success(let status):
-                permission = MailPermission(status: status)
+                permission = MailPermission(status: status, mailRunning: events.isRunning())
             case .failure where timedOut:
                 permission = .unknown
             case .failure:

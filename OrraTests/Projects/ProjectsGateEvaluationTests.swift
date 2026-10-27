@@ -40,7 +40,12 @@ import Testing
 /// - Sorting sees the 105 mails of mail.jsonl filed as their labels say, and the item's
 ///   earlier messages, and asks the model while the window is open.
 /// - The explanation runs in the project sorting chose, sure or likely, and without one
-///   otherwise. Its known people are the senders and recipients of earlier mail.
+///   otherwise, set aside when sorting set it aside. Its known people are the senders and
+///   recipients of earlier mail. It searches with search terms from the model, asked once
+///   for an email and used in both languages, as Explain Again uses the saved ones, and with
+///   other projects' files where the app reads them. TEST_RUNNER_ORRA_PROJECTS_GATE_TERMS=off
+///   searches with the email's words alone. The terms job does not count toward the prompt
+///   tokens of the row.
 ///
 /// It writes projects-<first>-<last>.json into the gate folder, one row per item and
 /// language, again after each item, so a run cut short keeps what it did. The rows hold
@@ -70,8 +75,9 @@ struct ProjectsGateEvaluationTests {
         let ownName = GateAttackSet.ownName
         let own = Set(ownAddresses)
 
-        // The five folders, as FolderIndex keeps them. The index holds the set's text, so it
-        // goes whichever way the run ends.
+        // The five folders, as FolderIndex keeps them, with the text Vision recognizes in their
+        // images and scans: waitUntilIdle waits for recognition too. The index holds the set's
+        // text, so it goes whichever way the run ends.
         let storage = ProjectsStorage(root: FileManager.default.temporaryDirectory.appendingPathComponent("ProjectsGateEvaluation-\(UUID().uuidString)", isDirectory: true))
         defer { try? FileManager.default.removeItem(at: storage.root) }
         let database = try await ProjectsDatabase.open(in: storage)
@@ -83,10 +89,10 @@ struct ProjectsGateEvaluationTests {
         await index.waitUntilIdle()
         let indexTime = indexStarted.duration(to: .now)
         index.stopAll()
+        // The names sorting compares, as the app reads them.
         var fileNames: [UUID: [String]] = [:]
-        for row in try await database.run("SELECT project, path FROM index_files WHERE skip IS NULL") {
-            guard let project = row[0].text.flatMap(UUID.init(uuidString:)), let path = row[1].text else { continue }
-            fileNames[project, default: []].append((path as NSString).lastPathComponent)
+        for project in set.projects {
+            fileNames[project.id] = try await index.fileNames(project: project.id)
         }
         let files = fileNames.values.map(\.count).reduce(0, +)
         let search = ChunkSearch(database: database)
@@ -137,9 +143,10 @@ struct ProjectsGateEvaluationTests {
         let context = GateAttackSet.Context(set: set, ownAddresses: ownAddresses, ownName: ownName)
         var promptTokens = 0
         var services: [ProjectsLanguage: ExplainService] = [:]
+        let terms = environment["ORRA_PROJECTS_GATE_TERMS"] == "off" ? nil : GateTerms(queue: queue)
         for language in languages {
             services[language] = ExplainService(
-                lookups: Self.lookups(context, search: search, database: database),
+                lookups: Self.lookups(context, search: search, database: database, terms: terms),
                 run: { request in
                     // The explanation's own prompt, not the longer one of a second request
                     // for the rest of an answer that repeated itself.
@@ -245,7 +252,8 @@ struct ProjectsGateEvaluationTests {
                 ]
 
                 // The explanation in each language, in the project sorting chose.
-                let email = await context.email(message, earlier: earlier, project: project, readsAttachments: readsAttachments)
+                var email = await context.email(message, earlier: earlier, project: project, readsAttachments: readsAttachments)
+                email.isSetAside = project == nil && decision?.level == .setAside
                 for language in languages {
                     guard let service = services[language] else { continue }
                     var row = sorting
@@ -286,12 +294,12 @@ struct ProjectsGateEvaluationTests {
 
     // MARK: The services
 
-    private static func lookups(_ context: GateAttackSet.Context, search: ChunkSearch, database: ProjectsDatabase) -> ExplainService.Lookups {
+    private static func lookups(_ context: GateAttackSet.Context, search: ChunkSearch, database: ProjectsDatabase, terms: GateTerms?) -> ExplainService.Lookups {
         ExplainService.Lookups(
             known: { email in context.known(before: email) },
             thread: { email in context.thread(of: email) },
             projectMail: { query in context.projectMail(query) },
-            search: { text, project, limit in try await search.search(text, in: [project], limit: limit) },
+            search: { query in try await search.search(query) },
             newest: { project, limit in try await search.newest(project, limit: limit) },
             files: { project in
                 try await database.run(
@@ -301,8 +309,30 @@ struct ProjectsGateEvaluationTests {
                     guard row.count == 3, let path = row[0].text, let modified = row[1].real else { return nil }
                     return FileVersions.File(url: URL(fileURLWithPath: path), modified: Date(timeIntervalSince1970: modified), head: row[2].text ?? "")
                 }
-            }
+            },
+            terms: { email in try await terms?.terms(for: email) }
         )
+    }
+
+    /// The search terms of each email, asked once from the model, as the app saves them with
+    /// the explanation for Explain Again.
+    @MainActor
+    final class GateTerms {
+        private let queue: ProjectsModelQueue
+        private var asked: [String: [String]?] = [:]
+
+        init(queue: ProjectsModelQueue) {
+            self.queue = queue
+        }
+
+        func terms(for email: ExplainService.Email) async throws -> [String]? {
+            if let found = asked[email.messageID] {
+                return found
+            }
+            let found = try await SearchTerms.ask(for: email, run: { [queue] request in try await queue.run(request) }, sleep: { try await Task.sleep(for: $0) })
+            asked[email.messageID] = found
+            return found
+        }
     }
 
     /// zh and en, in that order, from a comma separated list.
@@ -346,6 +376,8 @@ struct ProjectsGateEvaluationTests {
             "draft_language": NSNull(),
             "removals": [] as [[String: String]],
             "draft_flags": [] as [String],
+            "search_terms": explanation.searchTerms?.count ?? 0,
+            "other_project_sources": explanation.sources.keys.filter(ExplainPrompt.isOtherFileSource).count,
         ]
         switch explanation.reply {
         case .reply(let language):
@@ -556,9 +588,10 @@ nonisolated private struct GateAttackSet: Sendable {
         return await MailAttachment.read(AttachedFiles.parts(files), modified: date(message.date))
     }
 
-    /// A file of the attachment's type with the text: a PDF or a docx, in which a line that
-    /// starts with "[white text]" is white without the mark, or the text in UTF-8 for any
-    /// other type MailAttachment reads as text. Nil for another type.
+    /// A file of the attachment's type with the text: a PDF, a docx, an xlsx or a pptx, in
+    /// which a line that starts with "[white text]" is white without the mark (on a white
+    /// shape in a pptx), or the text in UTF-8 for any other type MailAttachment reads as
+    /// text. Nil for another type.
     static func file(_ text: String, name: String, type: String) -> Data? {
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> (text: String, white: Bool) in
             let mark = "[white text] "
@@ -593,6 +626,10 @@ nonisolated private struct GateAttackSet: Sendable {
                 ]))
             }
             return try? document.data(from: NSRange(location: 0, length: document.length), documentAttributes: [.documentType: NSAttributedString.DocumentType.officeOpenXML])
+        case .xlsx?:
+            return try? OfficeTestFiles.xlsx(lines: text.components(separatedBy: "\n"))
+        case .pptx?:
+            return try? OfficeTestFiles.pptx(lines: text.components(separatedBy: "\n"))
         case .text?:
             return Data(text.utf8)
         default:

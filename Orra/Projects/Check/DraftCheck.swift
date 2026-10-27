@@ -26,7 +26,8 @@ nonisolated struct DraftCheckInput: Sendable, Equatable, Codable {
     /// The other texts the model read: the excerpts of project files and the project's
     /// other mail.
     var sourceTexts: [String] = []
-    /// The questions the window lists for the user to decide.
+    /// The questions the window lists for the user to decide, or those of the answer that
+    /// wrote the draft when that answer lists more, see ExplainService.finish.
     var questionsForUser: [String] = []
     var today: Date
     /// The domains that imitate a domain the user knows: the sender's, when the sender
@@ -36,6 +37,14 @@ nonisolated struct DraftCheckInput: Sendable, Equatable, Codable {
     /// or confidential project data. What the window shows of the removals then holds no
     /// value the recipients do not already have, see `OutputChecks.shown`.
     var asksForData = false
+    /// The excerpts of other projects' files the model read, whose data and sentences no
+    /// draft carries, whoever it reaches. Nil in a check an earlier build saved.
+    var otherProjectTexts: [String]? = nil
+    /// The names that belong to the projects of those excerpts: each project's name, the
+    /// names of its people and the names its domains spell, which no draft carries either,
+    /// see `ExplainService.otherProjectNames(_:)`. Nil without such excerpts, and in a check
+    /// an earlier build saved.
+    var otherProjectNames: [String]? = nil
 }
 
 /// Checks a draft after the model and before the user sees it (code step 5 of the phase 0
@@ -50,6 +59,19 @@ nonisolated struct DraftCheckInput: Sendable, Equatable, Codable {
 /// - sentences that speak as an assistant, name Orra, or talk about the checks: text that
 ///   was removed or hidden, words to an assistant, an AI or a model, or commands to run.
 ///   A person writing their own reply says none of these.
+/// - sentences that copy another project's file: a run of 8 words or 12 Chinese characters
+///   in a row, a word counting as one and a half characters in a mixed run, that an excerpt
+///   of another project's file holds and neither the incoming mail nor the email's own
+///   project's sources hold, from every draft, whoever it reaches
+/// - another project's data, from every draft, whoever it reaches: amounts, scores, codes
+///   and years other than this one and the next and last whose value only an excerpt of
+///   another project's file holds, the names and addresses of people in those excerpts,
+///   and the names of those projects, of their people and of what their domains spell, see
+///   `DraftCheckInput.otherProjectNames`, that neither the incoming mail, the email's own
+///   project's sources, the recipients, the user nor the project's people hold. Both rules
+///   run before the next one, so the window names the more exact reason. Facts retold in
+///   other words, dates and counts stay, so the prompt tells the model to leave other
+///   projects out of the draft.
 /// - project data when the reply goes to someone outside the project's people: amounts in
 ///   digits or in Chinese words, scores, codes such as booking, ID and account numbers,
 ///   years that are not this year or the next or last, and the names and addresses of other
@@ -81,6 +103,10 @@ nonisolated enum DraftCheck {
             case actionClaim
             case assistantVoice
             case projectData
+            /// Data that only an excerpt of another project's file holds.
+            case otherProjectData
+            /// A sentence that copies an excerpt of another project's file.
+            case otherProjectText
         }
 
         var kind: Kind
@@ -101,6 +127,8 @@ nonisolated enum DraftCheck {
         var draft: String?
         /// The language the draft reads as, without its links.
         var language: ProjectsLanguage
+        /// What the check took out. A removal of a kind a later Orra added is left out when
+        /// a saved result is read, so the explanation around it still reads.
         var removals: [Removal] = []
         var flags: [Flag] = []
         /// The recipients who are not among the project's people, lowercased. No project
@@ -138,6 +166,15 @@ nonisolated enum DraftCheck {
         }
         draft = replacing(sentences, in: draft)
 
+        // Another project's files, from every draft, before the rule for people outside the
+        // project, so the window names the more exact reason.
+        let copies = copiesOtherProject(draft, input: input)
+        removals += copies.map { Removal(kind: .otherProjectText, text: String(draft[$0])) }
+        draft = replacing(copies.map { ($0, placeholder(.otherProjectText, style)) }, in: draft)
+        let otherData = otherProjectData(in: draft, input: input)
+        removals += otherData.map { Removal(kind: .otherProjectData, text: String(draft[$0])) }
+        draft = replacing(otherData.map { ($0, placeholder(.otherProjectData, style)) }, in: draft)
+
         let outside = outsideRecipients(input)
         if !outside.isEmpty || input.recipients.isEmpty {
             let data = projectData(in: draft, input: input)
@@ -169,6 +206,8 @@ nonisolated enum DraftCheck {
         case .actionClaim: language == .zh ? "[已删去一句：声称已经办了某事]" : "[sentence removed: it claims an action]"
         case .assistantVoice: language == .zh ? "[已删去一句：以助手的口吻]" : "[sentence removed: it speaks as an assistant]"
         case .projectData: language == .zh ? "[已删去项目资料]" : "[project data removed]"
+        case .otherProjectData: language == .zh ? "[已删去其他项目的资料]" : "[another project's data removed]"
+        case .otherProjectText: language == .zh ? "[已删去一句：出自其他项目的文件]" : "[sentence removed: it is from another project's file]"
         }
     }
 
@@ -176,8 +215,8 @@ nonisolated enum DraftCheck {
     private static let placeholders: (sentences: [String], parts: [String]) = {
         let languages: [ProjectsLanguage] = [.zh, .en]
         return (
-            languages.flatMap { [placeholder(.actionClaim, $0), placeholder(.assistantVoice, $0)] },
-            languages.flatMap { [placeholder(.link, $0), placeholder(.projectData, $0)] }
+            languages.flatMap { [placeholder(.actionClaim, $0), placeholder(.assistantVoice, $0), placeholder(.otherProjectText, $0)] },
+            languages.flatMap { [placeholder(.link, $0), placeholder(.projectData, $0), placeholder(.otherProjectData, $0)] }
         )
     }()
 
@@ -378,6 +417,119 @@ nonisolated enum DraftCheck {
     /// it" or "the files have been sent to the printer by your team".
     private static let otherActor = try! NSRegularExpression(pattern: #"\b(?:you|your|they|he|she)\b|\bby (?!me\b|us\b|myself\b|ourselves\b)"#)
 
+    // MARK: Other projects
+
+    /// The sentences of the draft that copy an excerpt of another project's file: they hold
+    /// a run of `copiedRun` that such an excerpt holds and neither the incoming mail nor the
+    /// sources of the email's own project hold.
+    private static func copiesOtherProject(_ draft: String, input: DraftCheckInput) -> [Range<String.Index>] {
+        guard let others = input.otherProjectTexts, !others.isEmpty else { return [] }
+        let copied = runs(in: others).subtracting(runs(in: [input.incomingText] + input.sourceTexts))
+        guard !copied.isEmpty else { return [] }
+        return sentenceRanges(in: draft).filter { range in
+            !runs(in: [withoutPlaceholders(String(draft[range]))]).isDisjoint(with: copied)
+        }
+    }
+
+    /// The weight of a run of words that counts as copied: 12 Chinese characters, of weight
+    /// 2 each, or 8 Latin words or numbers, of weight 3 each, or a mix of them.
+    private static let copiedRun = 24
+
+    /// Each shortest run of words of the texts in a row whose weight reaches `copiedRun`, in
+    /// matching form, see SortingText.matchingForm. A Chinese character is a word of its own,
+    /// letters and digits in a row are one, and white space and punctuation only part them.
+    /// The shortest run that ends at a word depends only on the words up to it, so a passage
+    /// copied whole gives the same runs in the draft and in the excerpt.
+    private static func runs(in texts: [String]) -> Set<String> {
+        var runs = Set<String>()
+        for text in texts {
+            var words: [(word: String, weight: Int)] = []
+            var current = ""
+            for character in SortingText.matchingForm(text) {
+                if character.isHan {
+                    if !current.isEmpty {
+                        words.append((current, 3))
+                        current = ""
+                    }
+                    words.append((String(character), 2))
+                } else if character.isLetter || character.isNumber {
+                    current.append(character)
+                } else if !current.isEmpty {
+                    words.append((current, 3))
+                    current = ""
+                }
+            }
+            if !current.isEmpty {
+                words.append((current, 3))
+            }
+            var start = 0
+            var weight = 0
+            for end in words.indices {
+                weight += words[end].weight
+                while weight - words[start].weight >= copiedRun {
+                    weight -= words[start].weight
+                    start += 1
+                }
+                if weight >= copiedRun {
+                    runs.insert(words[start...end].map(\.word).joined(separator: " "))
+                }
+            }
+        }
+        return runs
+    }
+
+    /// Where the draft holds data that only an excerpt of another project's file holds:
+    /// amounts, scores, codes and years other than this one and the next and last whose
+    /// value such an excerpt holds and neither the incoming mail nor the email's own
+    /// project's sources hold, and the names and addresses of people in those excerpts, and
+    /// the names of `DraftCheckInput.otherProjectNames`, that none of those texts, the
+    /// recipients, the user or the project's people hold. Overlapping finds are merged.
+    private static func otherProjectData(in draft: String, input: DraftCheckInput) -> [Range<String.Index>] {
+        guard let others = input.otherProjectTexts, !others.isEmpty else { return [] }
+        let folded = OutputChecks.Folded(draft)
+        let text = folded.text
+        let other = others.joined(separator: "\n\n").precomposedStringWithCompatibilityMapping
+        let known = ([input.incomingText] + input.sourceTexts).joined(separator: "\n\n").precomposedStringWithCompatibilityMapping
+        func values(_ text: String) -> Set<String> {
+            Set(OutputChecks.numbers(in: text, skippingDatesAndCodes: false).map(\.value)
+                + OutputChecks.numbers(in: NumberRules.writingNumbersAsDigits(in: text), skippingDatesAndCodes: false).map(\.value))
+        }
+        func codes(_ text: String) -> Set<String> {
+            Set(OutputChecks.codes(in: text).map { OutputChecks.codeValue(text[$0]) })
+        }
+        let otherValues = values(other).subtracting(values(known))
+        let otherCodes = codes(other).subtracting(codes(known))
+        let thisYear = Calendar(identifier: .gregorian).component(.year, from: input.today)
+        var found: [Range<String.Index>] = []
+        for code in OutputChecks.codes(in: text) where otherCodes.contains(OutputChecks.codeValue(text[code])) {
+            found.append(code)
+        }
+        for number in OutputChecks.numbers(in: text) where otherValues.contains(number.value) {
+            let year = number.value.count == 4 ? Int(number.value).flatMap { (1900...2099).contains($0) ? $0 : nil } : nil
+            if number.isAmount || number.isScore || year.map({ abs($0 - thisYear) > 1 }) == true {
+                found.append(number.range)
+            }
+        }
+        for match in chineseAmount.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            guard let range = Range(match.range, in: text) else { continue }
+            let amounts = OutputChecks.numbers(in: NumberRules.writingNumbersAsDigits(in: String(text[range]))).filter(\.isAmount).map(\.value)
+            if amounts.contains(where: otherValues.contains) {
+                found.append(range)
+            }
+        }
+        let names = namePatterns(personalNames(in: others) + (input.otherProjectNames ?? []), allowed: input.recipients + input.own + input.projectPeople)
+        for patterns in names where !patterns.contains(where: { $0.firstMatch(in: known, range: NSRange(known.startIndex..., in: known)) != nil }) {
+            for pattern in patterns {
+                found += pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { Range($0.range, in: text) }
+            }
+        }
+        let allowed = Set((input.recipients + input.own + input.projectPeople).compactMap { ProjectsAddress.normalized($0.address) })
+        for address in addresses(in: other).subtracting(allowed).subtracting(addresses(in: known)) {
+            found += SenderChecks.occurrences(of: address, in: text)
+        }
+        return ContentChecks.merged(found.compactMap(folded.original))
+    }
+
     // MARK: Project data
 
     /// The recipients who are not among the project's people or the user's own addresses,
@@ -468,6 +620,12 @@ nonisolated enum DraftCheck {
     /// A Chinese name is also found in pinyin with the surname first or last, and a two word
     /// Latin name in reverse.
     private static func protectedNames(_ input: DraftCheckInput) -> [[NSRegularExpression]] {
+        namePatterns(input.projectPeople.map(\.name) + personalNames(in: input.sourceTexts), allowed: input.recipients + input.own)
+    }
+
+    /// The patterns of each of the names, each the ways it may be written, without the names
+    /// of the `allowed` people. A name needs two Chinese characters or two words.
+    private static func namePatterns(_ names: [String], allowed people: [DraftCheckInput.Person]) -> [[NSRegularExpression]] {
         /// The letters of a form, which compares 宋雨桐's pinyin with Song Yutong.
         func spelling(_ form: String) -> String {
             form.filter { $0.isLetter || $0.isNumber }
@@ -475,9 +633,8 @@ nonisolated enum DraftCheck {
         func spellings(_ forms: [String]) -> [String] {
             forms.map(spelling) + forms.flatMap(pinyinForms).map { spelling($0.joined()) }
         }
-        let allowed = Set(spellings((input.recipients + input.own).flatMap { SenderChecks.nameForms($0.name) }))
-        var names = input.projectPeople.map { SenderChecks.nameForms($0.name) }
-        names += personalNames(in: input.sourceTexts).map(SenderChecks.nameForms)
+        let allowed = Set(spellings(people.flatMap { SenderChecks.nameForms($0.name) }))
+        let names = names.map(SenderChecks.nameForms)
         var seen: Set<String> = []
         var protected: [[NSRegularExpression]] = []
         for forms in names where !forms.isEmpty && allowed.isDisjoint(with: spellings(forms)) {
@@ -571,6 +728,18 @@ nonisolated enum DraftCheck {
         return found
     }
 
+    // MARK: Reading a saved result
+
+    /// A value that reads as nil where it does not decode, such as a removal of a kind a
+    /// later Orra added.
+    fileprivate nonisolated struct Lenient<Value: Decodable>: Decodable {
+        let value: Value?
+
+        init(from decoder: any Decoder) throws {
+            value = try? Value(from: decoder)
+        }
+    }
+
     // MARK: Editing
 
     /// The text with each range replaced. The ranges must not overlap.
@@ -584,5 +753,18 @@ nonisolated enum DraftCheck {
         }
         result += text[cursor...]
         return result
+    }
+}
+
+nonisolated extension DraftCheck.Result {
+    /// Reads a saved result. A removal of a kind a later Orra added is left out, so the
+    /// explanation or the draft version that holds the result still reads.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        draft = try container.decodeIfPresent(String.self, forKey: .draft)
+        language = try container.decode(ProjectsLanguage.self, forKey: .language)
+        removals = try container.decode([DraftCheck.Lenient<DraftCheck.Removal>].self, forKey: .removals).compactMap(\.value)
+        flags = try container.decode([DraftCheck.Flag].self, forKey: .flags)
+        outsideRecipients = try container.decode([String].self, forKey: .outsideRecipients)
     }
 }

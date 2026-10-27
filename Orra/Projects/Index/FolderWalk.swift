@@ -16,11 +16,17 @@ import Foundation
 ///   reached through a second path, or a copy of Mail's data.
 /// - Every path is resolved, symbolic links and `..` included, and a file whose real path
 ///   leaves the folder is skipped. Symbolic links and Finder aliases are never followed.
-/// - Hidden files, packages, .git, node_modules and archives are skipped, and so is every
-///   file FileTextExtractor does not read.
-/// - Before anything opens a file, files over 50 MB, dataless files and folders (an iCloud or
-///   other File Provider item whose data is not on this Mac) and iCloud files that are not
-///   downloaded are skipped, so macOS never downloads anything for the index.
+/// - Hidden files, packages, .git and node_modules are skipped. Every other regular file is
+///   listed with its kind, see `FileTextExtractor.Kind`: a document to read, an image, or a
+///   file known by its name only, such as an archive, a drawing or a video. Keynote,
+///   Numbers and Pages documents saved as packages are listed by name, and the walk never
+///   enters them.
+/// - Documents are listed up to one limit. Documents past it, images and files known by
+///   name are listed up to another, so a folder of photos never hides a document.
+/// - Before anything opens a file, dataless files and folders (an iCloud or other File
+///   Provider item whose data is not on this Mac) and iCloud files that are not downloaded
+///   are skipped, so macOS never downloads anything for the index. A document or image over
+///   50 MB is listed by its name only.
 nonisolated struct FolderWalk: Sendable {
     /// The largest file the walk lists.
     static let maximumFileSize: Int64 = 50_000_000
@@ -67,7 +73,9 @@ nonisolated struct FolderWalk: Sendable {
     /// A file the walk lists, at its real path.
     nonisolated struct File: Sendable, Equatable {
         var url: URL
-        var format: FileTextExtractor.Format
+        var kind: FileTextExtractor.Kind
+        /// The path of its folder inside the added folder, "" at the top.
+        var folder: String
         var size: Int64
         var modified: Date
     }
@@ -89,8 +97,12 @@ nonisolated struct FolderWalk: Sendable {
         var skipped: [Skip] = []
         /// Every skipped file and folder, listed or not, counted by reason.
         var skipCounts: [FileSkipReason: Int] = [:]
-        /// Whether the walk stopped at its limit of files.
+        /// Whether the folder holds more documents than the walk lists as documents. Those
+        /// past the limit are listed by name only, as `overFileLimit`.
         var reachedLimit = false
+        /// Whether the folder holds more files than the walk lists by name. The walk goes on
+        /// for documents after that, and stops once both limits are passed.
+        var reachedNameLimit = false
         /// Whether the walk stopped because its task was cancelled. The listing holds what
         /// the walk found until then.
         var wasCancelled = false
@@ -99,7 +111,10 @@ nonisolated struct FolderWalk: Sendable {
     /// The most skipped files and folders a listing names.
     static let maximumListedSkips = 1_000
     /// Skips a listing only counts, since a folder may hold many and they are expected.
-    static let countedSkips: Set<FileSkipReason> = [.hidden, .package, .gitFolder, .nodeModules, .archive, .unsupportedFormat]
+    static let countedSkips: Set<FileSkipReason> = [.hidden, .package, .gitFolder, .nodeModules]
+    /// The extensions of the folders the walk lists by name and never enters: Keynote,
+    /// Numbers and Pages documents saved as packages, which Finder shows as one file.
+    static let documentPackages: Set<String> = ["key", "numbers", "pages"]
 
     let places: Places
     let maximumFileSize: Int64
@@ -133,13 +148,14 @@ nonisolated struct FolderWalk: Sendable {
         return nil
     }
 
-    /// The files of `folder` and its folders, at most `limit` of them. Off the main actor,
-    /// since a large folder takes a while and the keyboard tap runs on the main thread. The
-    /// walk checks for cancellation once a folder.
+    /// The files of `folder` and its folders: at most `documents` documents, and at most
+    /// `names` documents past them, images and files known by name, together. Off the main
+    /// actor, since a large folder takes a while and the keyboard tap runs on the main
+    /// thread. The walk checks for cancellation once a folder.
     @concurrent
-    func list(_ folder: URL, limit: Int = .max) async throws(Refusal) -> Listing {
+    func list(_ folder: URL, documents: Int = .max, names: Int = .max) async throws(Refusal) -> Listing {
         switch resolve(folder) {
-        case .success(let root): return walk(from: root, limit: limit)
+        case .success(let root): return walk(from: root, documents: documents, names: names)
         case .failure(let refusal): throw refusal
         }
     }
@@ -242,8 +258,10 @@ nonisolated struct FolderWalk: Sendable {
         case skip(FileSkipReason, isFolder: Bool)
     }
 
-    private func walk(from root: String, limit: Int) -> Listing {
+    private func walk(from root: String, documents documentLimit: Int, names nameLimit: Int) -> Listing {
         var listing = Listing(folder: URL(fileURLWithPath: root, isDirectory: true))
+        var documentCount = 0
+        var nameCount = 0
         func skip(_ url: URL, _ reason: FileSkipReason) {
             listing.skipCounts[reason, default: 0] += 1
             if !Self.countedSkips.contains(reason), listing.skipped.count < Self.maximumListedSkips {
@@ -270,12 +288,23 @@ nonisolated struct FolderWalk: Sendable {
                 switch examine(path, inside: root, protected: protected) {
                 case .folder:
                     folders.append(path)
-                case .file(let file):
-                    guard listing.files.count < limit else {
+                case .file(var file):
+                    if case .text = file.kind {
+                        if documentCount < documentLimit {
+                            documentCount += 1
+                            listing.files.append(file)
+                            continue
+                        }
                         listing.reachedLimit = true
-                        break walking
+                        file.kind = .nameOnly(.overFileLimit)
                     }
-                    listing.files.append(file)
+                    if nameCount < nameLimit {
+                        nameCount += 1
+                        listing.files.append(file)
+                        continue
+                    }
+                    listing.reachedNameLimit = true
+                    if listing.reachedLimit { break walking }
                 case .skip(let reason, let isFolder):
                     skip(URL(fileURLWithPath: path, isDirectory: isFolder), reason)
                 }
@@ -307,22 +336,29 @@ nonisolated struct FolderWalk: Sendable {
                 return .skip(.protectedFolder, isFolder: true)
             }
             if isVolume(url) { return .skip(.volume, isFolder: true) }
-            if (try? url.resourceValues(forKeys: [.isPackageKey]))?.isPackage == true { return .skip(.package, isFolder: true) }
-            return .folder
+            // A Keynote, Numbers or Pages document by its extension, also on a Mac without
+            // the app that makes it a package.
+            if !Self.documentPackages.contains(url.pathExtension.lowercased()) {
+                guard (try? url.resourceValues(forKeys: [.isPackageKey]))?.isPackage == true else { return .folder }
+                return .skip(.package, isFolder: true)
+            }
+        } else {
+            guard type == S_IFREG else { return .skip(.unsupportedFormat, isFolder: false) }
+            if (try? url.resourceValues(forKeys: [.isAliasFileKey]))?.isAliasFile == true { return .skip(.alias, isFolder: false) }
         }
-        guard type == S_IFREG else { return .skip(.unsupportedFormat, isFolder: false) }
-        // The extension first, so a folder of photos costs no alias lookups.
-        let format: FileTextExtractor.Format
-        switch FileTextExtractor.format(ofExtension: url.pathExtension) {
-        case .success(let found): format = found
-        case .failure(let reason): return .skip(reason, isFolder: false)
+        var kind = isFolder ? FileTextExtractor.Kind.nameOnly(.unsupportedFormat) : FileTextExtractor.kind(ofExtension: url.pathExtension)
+        if case .nameOnly = kind {
+            // Never opened, so its size does not matter.
+        } else if Int64(info.st_size) > maximumFileSize {
+            kind = .nameOnly(.tooLarge)
         }
-        if (try? url.resourceValues(forKeys: [.isAliasFileKey]))?.isAliasFile == true { return .skip(.alias, isFolder: false) }
-        if Int64(info.st_size) > maximumFileSize { return .skip(.tooLarge, isFolder: false) }
-        if isDataless { return .skip(.dataless, isFolder: false) }
-        if !isDownloaded(url) { return .skip(.notDownloaded, isFolder: false) }
-        guard let real = Self.realPath(path), real.hasPrefix(root + "/") else { return .skip(.outsideFolder, isFolder: false) }
-        return .file(File(url: URL(fileURLWithPath: real), format: format, size: Int64(info.st_size), modified: Self.date(of: info)))
+        if isDataless { return .skip(.dataless, isFolder: isFolder) }
+        if !isDownloaded(url) { return .skip(.notDownloaded, isFolder: isFolder) }
+        guard let real = Self.realPath(path), real.hasPrefix(root + "/") else { return .skip(.outsideFolder, isFolder: isFolder) }
+        let inside = String(real.dropFirst(root.count + 1))
+        return .file(File(
+            url: URL(fileURLWithPath: real, isDirectory: isFolder), kind: kind, folder: (inside as NSString).deletingLastPathComponent,
+            size: Int64(info.st_size), modified: Self.date(of: info)))
     }
 
     // MARK: Helpers
@@ -350,9 +386,17 @@ nonisolated struct FolderWalk: Sendable {
     }
 
     /// `path` with every symbolic link and `..` resolved, nil when it does not exist.
-    private static func realPath(_ path: String) -> String? {
+    static func realPath(_ path: String) -> String? {
         guard let resolved = realpath(path, nil) else { return nil }
         defer { free(resolved) }
         return String(cString: resolved)
+    }
+
+    /// The real path of a folder, as the walk lists its files, or nil when it is not there.
+    /// Off the main actor, since it reads the folder's own metadata, which a share that
+    /// hangs can hold up, never what is inside.
+    @concurrent
+    static func realPath(of folder: URL) async -> URL? {
+        realPath(folder.path).map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
 }

@@ -64,6 +64,9 @@ final class ProjectsRuntime {
         var modelEnvironment: (_ memoryPressure: @escaping () -> ProjectsMemoryPressure.Level) -> ProjectsModelEnvironment
         /// Whether the cleanup model is on this Mac, read where it can be observed.
         var modelIsInstalled: () -> Bool
+        /// Where the cleanup model's download stands while the model is not on this Mac, for
+        /// the line under the mail list, read where it can be observed.
+        var modelDownloadStatus: () -> ModelDownloadStatus
         /// Try Loading Again: looks at the cleanup model's files, hashes included, and loads
         /// the model again, see TextCleanup.retryLoading().
         var retryLoadingModel: @Sendable () async -> Void
@@ -77,6 +80,11 @@ final class ProjectsRuntime {
         var watchFolders: FolderIndex.Watch
         /// Reads one file of a project folder, FileTextExtractor in the app.
         var readText: @Sendable (URL) async -> Result<FileTextResult, FileSkipReason>
+        /// Recognizes the text of an image or of scanned PDF pages in a project folder,
+        /// TextRecognizer in the app.
+        var recognizeText: FolderIndex.Recognize
+        /// Whether Low Power Mode is on and whether this Mac is hot, ProcessInfo's in the app.
+        var power: @Sendable () -> PowerState
         /// Where a project's folders are now, Project.resolve in the app.
         var resolveFolders: @Sendable ([Data]) async -> [URL]
         /// Opens the database, ProjectsDatabase.open in the app.
@@ -96,12 +104,15 @@ final class ProjectsRuntime {
             whenDictationStarts: @escaping (@escaping () -> Void) -> Void = { _ in },
             modelEnvironment: @escaping (_ memoryPressure: @escaping () -> ProjectsMemoryPressure.Level) -> ProjectsModelEnvironment,
             modelIsInstalled: @escaping () -> Bool,
+            modelDownloadStatus: @escaping () -> ModelDownloadStatus = { .none },
             retryLoadingModel: @escaping @Sendable () async -> Void = {},
             loadTokenCounter: @escaping @Sendable () async throws -> (@Sendable (String) -> Int)?,
             handoff: ReplyHandoff,
             watchesMemoryPressure: Bool = true,
             watchFolders: @escaping FolderIndex.Watch = FolderIndex.watchWithFolderEvents,
             readText: @escaping @Sendable (URL) async -> Result<FileTextResult, FileSkipReason> = ProjectsRuntime.readFile,
+            recognizeText: @escaping FolderIndex.Recognize = ProjectsRuntime.recognize,
+            power: @escaping @Sendable () -> PowerState = ProjectsRuntime.power,
             resolveFolders: @escaping @Sendable ([Data]) async -> [URL] = ProjectsRuntime.resolveFolders,
             openDatabase: @escaping @Sendable (ProjectsStorage) async throws -> ProjectsDatabase = ProjectsRuntime.openDatabase,
             now: @escaping @Sendable () -> Date = Date.init,
@@ -116,12 +127,15 @@ final class ProjectsRuntime {
             self.whenDictationStarts = whenDictationStarts
             self.modelEnvironment = modelEnvironment
             self.modelIsInstalled = modelIsInstalled
+            self.modelDownloadStatus = modelDownloadStatus
             self.retryLoadingModel = retryLoadingModel
             self.loadTokenCounter = loadTokenCounter
             self.handoff = handoff
             self.watchesMemoryPressure = watchesMemoryPressure
             self.watchFolders = watchFolders
             self.readText = readText
+            self.recognizeText = recognizeText
+            self.power = power
             self.resolveFolders = resolveFolders
             self.openDatabase = openDatabase
             self.now = now
@@ -133,6 +147,27 @@ final class ProjectsRuntime {
     @concurrent
     nonisolated static func readFile(_ url: URL) async -> Result<FileTextResult, FileSkipReason> {
         await FileTextExtractor().text(of: url)
+    }
+
+    /// Recognizes the text of a job's pages with TextRecognizer.
+    @concurrent
+    nonisolated static func recognize(_ job: RecognitionJob, mayGoOn: @escaping @Sendable () async -> Bool) async -> Result<RecognitionResult, FileSkipReason> {
+        await TextRecognizer().recognize(job, mayGoOn: mayGoOn)
+    }
+
+    /// The states of the Mac that make text recognition wait.
+    nonisolated struct PowerState: Sendable, Equatable {
+        var isLowPowerModeOn = false
+        /// The thermal state is serious or critical.
+        var isHot = false
+    }
+
+    /// Low Power Mode and the thermal state, as ProcessInfo says now.
+    nonisolated static func power() -> PowerState {
+        let info = ProcessInfo.processInfo
+        return PowerState(
+            isLowPowerModeOn: info.isLowPowerModeEnabled,
+            isHot: info.thermalState == .serious || info.thermalState == .critical)
     }
 
     /// Where a project's folders are now, with Project.resolve.
@@ -220,6 +255,19 @@ final class ProjectsRuntime {
         case notAllowed
         /// Mail could not give some mail, or what the scan read could not be saved.
         case failed
+    }
+
+    /// Where the cleanup model's download stands, for the line under the mail list while the
+    /// model is not on this Mac. The app maps it from the installer of TextCleanup.
+    nonisolated enum ModelDownloadStatus: Equatable, Sendable {
+        /// The model is on this Mac, or Orra still looks for it on disk.
+        case none
+        /// The model downloads, with the bytes so far and in all.
+        case downloading(bytes: Int64, total: Int64)
+        /// Orra checks the files it downloaded.
+        case verifying
+        /// The model is not on this Mac and no download runs, also after one failed.
+        case missing
     }
 
     /// What runs while Projects is on.
@@ -325,6 +373,10 @@ final class ProjectsRuntime {
     /// list the window then shows, so the speed of a busy test runner does not decide that
     /// list.
     @ObservationIgnored var sortingWaitLimit: Duration? = ProjectsRuntime.sortingWait
+    /// Reads the real path of a project folder for the email view, see
+    /// `folderRoots(of:)`, FolderWalk.realPath(of:) in the app. Tests hold it, as a folder on
+    /// a share that hangs would hold it.
+    @ObservationIgnored var readRealPath: @Sendable (URL) async -> URL? = FolderWalk.realPath(of:)
     @ObservationIgnored private var modelWasInstalled = false
     /// Projects whose index is at work, so sorting prepares again when one finishes.
     @ObservationIgnored private var indexing: Set<UUID> = []
@@ -344,14 +396,20 @@ final class ProjectsRuntime {
     /// The resolves of project folders under way, by their bookmarks, see
     /// `resolve(_:)`. They outlive a stop, since a resolve cannot be cancelled.
     @ObservationIgnored private var resolving: [[Data]: Task<[URL], Never>] = [:]
+    /// Where each folder bookmark last found its folder while Orra runs, so a folder that
+    /// is not available now, such as on a disk that is not connected, is also known by where
+    /// it was last, after the user renamed or moved it too, see `folderRoots(of:)`.
+    @ObservationIgnored private var lastFound: [Data: URL] = [:]
     /// The newest write of the text the user typed into each email's draft since Projects
     /// started, by Message-ID, which stopping waits for, see `saveEditedDraft(_:for:)`.
     @ObservationIgnored private var draftSaves: [String: Task<Bool, Never>] = [:]
 
-    /// A request of the user under way: how to end it, and a task that ends with it.
+    /// A request of the user under way: how to end it, a task that ends with it, and
+    /// whether it reads project files, as an explanation does, so Forget Project ends it.
     private struct UserRequest {
         let cancel: () -> Void
         let ended: Task<Void, Never>
+        var readsFiles = false
     }
 
     init(projects: ProjectsSwitch, dependencies: Dependencies) {
@@ -416,9 +474,11 @@ final class ProjectsRuntime {
         }
         modelWasInstalled = dependencies.modelIsInstalled()
         // The model work gives way at the press of a key, before the dictation reserves the
-        // model gate, see ProjectsModelQueue.dictationStarted.
+        // model gate, see ProjectsModelQueue.dictationStarted, and so does the page text
+        // recognition reads.
         dependencies.whenDictationStarts { [weak self] in
             self?.running?.queue.dictationStarted()
+            self?.running?.index.interruptRecognition()
         }
         followSwitch()
         followChoice()
@@ -557,10 +617,15 @@ final class ProjectsRuntime {
         }
         let store = MailStore(database: database)
         let list = ProjectList(storage: dependencies.storage)
+        // Before the index, whose text recognition waits while memory runs low. It starts
+        // watching below, once Projects runs.
+        let memory = ProjectsMemoryPressure()
         let index = FolderIndex(
             database: database,
             isDictating: dependencies.isDictating,
             readText: dependencies.readText,
+            recognize: dependencies.recognizeText,
+            recognitionPause: { [weak self] in self?.recognitionPause() },
             sleep: dependencies.sleep,
             watch: dependencies.watchFolders
         )
@@ -580,7 +645,6 @@ final class ProjectsRuntime {
             phase = .off
             return
         }
-        let memory = ProjectsMemoryPressure()
         if dependencies.watchesMemoryPressure {
             memory.start()
         }
@@ -1226,10 +1290,16 @@ final class ProjectsRuntime {
     }
 
     /// Forget Project: removes the project with its mail, drafts, counts and index, and
-    /// sorts again the mail the change reaches, since the project no longer counts among
-    /// the candidates. Its linked mailbox is not read further.
+    /// the explanations and drafts of other emails that hold excerpts of its files, and sorts
+    /// again the mail the change reaches, since the project no longer counts among the
+    /// candidates. Its linked mailbox is not read further. The explanations under way end
+    /// first, since one may hold excerpts of its files, which the store would not save
+    /// anyway, see MailStore.save.
     func forget(_ project: UUID) async throws {
         guard let running else { throw Failure.off }
+        for request in userRequests.values where request.readsFiles {
+            request.cancel()
+        }
         let before = running.list.project(project)
         let linked = linkedNames
         try await running.list.forget(project, mail: running.store, index: running.index)
@@ -1263,6 +1333,62 @@ final class ProjectsRuntime {
         await resolve(project.folders)
     }
 
+    /// A project's folders as they are now, for the files of an explanation in the email
+    /// view: the real path of each folder that is there, as the index keeps its files, and
+    /// where each folder whose bookmark finds nothing was, such as one on a disk that is not
+    /// connected: where the bookmark last found it while Orra runs, and the path it keeps
+    /// from when the user added the folder. The bookmarks resolve as for the index, see
+    /// `resolve(_:)`, and when some find nothing, each resolves alone to tell which. Then
+    /// the real paths are read one folder at a time. It reads the folders' own metadata
+    /// only, never what is inside them.
+    ///
+    /// Empty for a project the list does not hold. Nil while Projects is off, and when
+    /// Projects stopped, is turning off or the project's folders changed meanwhile, as in
+    /// `startIndex(_:resortAfter:)`, or the task that asked was cancelled, as when the list
+    /// closed: after every wait, before the next folder is read and before it returns, so no
+    /// folder is read after Projects turned off, for a folder the project no longer holds or
+    /// for a list that closed, also when one folder takes long. The view asks again once
+    /// the folders changed.
+    func folderRoots(of projectID: UUID) async -> ProjectsEmailFiles.Roots? {
+        // The switch itself, since `wantsOn` follows it a moment later.
+        guard projects.isOn, !projects.isDeleting, let list = running?.list else { return nil }
+        guard let project = list.project(projectID) else { return ProjectsEmailFiles.Roots() }
+        func isCurrent() -> Bool {
+            !Task.isCancelled && projects.isOn && !projects.isDeleting && running?.list === list
+                && list.project(projectID)?.folders == project.folders
+        }
+        var folders = await resolve(project.folders)
+        guard isCurrent() else { return nil }
+        var missing: [Data] = []
+        if folders.isEmpty {
+            missing = project.folders
+        } else if folders.count < project.folders.count {
+            folders = []
+            for bookmark in project.folders {
+                let found = await resolve([bookmark])
+                guard isCurrent() else { return nil }
+                folders += found
+                if found.isEmpty {
+                    missing.append(bookmark)
+                }
+            }
+        }
+        var roots: [URL] = []
+        for folder in folders {
+            if let root = await readRealPath(folder) {
+                roots.append(root)
+            }
+            guard isCurrent() else { return nil }
+        }
+        var unavailable: [URL] = []
+        for bookmark in missing {
+            for place in [lastFound[bookmark], Project.savedPath(of: bookmark)].compactMap({ $0 }) where !unavailable.contains(place) {
+                unavailable.append(place)
+            }
+        }
+        return ProjectsEmailFiles.Roots(folders: roots, unavailable: unavailable)
+    }
+
     /// Where these folders are now. A resolve of the same folders under way is waited for,
     /// not started again, so a share that hangs holds one thread for each set of folders,
     /// however often Projects is turned off and on meanwhile.
@@ -1276,6 +1402,13 @@ final class ProjectsRuntime {
         let folders = await resolve.value
         if resolving[bookmarks] == resolve {
             resolving[bookmarks] = nil
+        }
+        // The folders come in the order of their bookmarks, without those not found, so only
+        // a resolve that found every folder tells which bookmark found which.
+        if folders.count == bookmarks.count {
+            for (bookmark, folder) in zip(bookmarks, folders) {
+                lastFound[bookmark] = folder
+            }
         }
         return folders
     }
@@ -1541,30 +1674,39 @@ final class ProjectsRuntime {
     /// open, and only while the store keeps the email's text: the window offers no Explain
     /// without it, but Explain Message Selected in Mail may reach an email its list does not
     /// show. Throws what ExplainService throws, and CancellationError when Projects stops.
+    /// Closing the window lets it go on, and it holds the model from start to end, so the
+    /// model stays loaded between its requests for the search terms, the explanation and a
+    /// draft written apart, see ExplainService.explain(_:).
     func explain(_ messageID: String) async throws -> Explanation {
         guard let running else { throw Failure.off }
         guard let service = explainService else { throw Failure.windowClosed }
         let store = running.store
+        let model = running.model
         defer { mailChanged() }
-        return try await userRequest {
+        return try await userRequest(readsFiles: true) {
             guard let email = try await store.explainEmail(messageID) else { throw Failure.unknownEmail }
             guard try await store.hasText(messageID) else { throw Failure.noText }
+            model.holdModel()
+            defer { model.releaseModel() }
             return try await service.explain(email)
         }
     }
 
     /// Runs a request of the user, such as an explanation or a revision of the email view,
     /// in a task the runtime keeps. Turning Projects off or Delete All ends it, and waits
-    /// for it before the files close, so nothing of it runs or saves after that. Cancelling
-    /// the caller's task ends it too. A request that finds no model throws
-    /// Failure.modelNotLoaded while the model is on this Mac, so the window offers Try
-    /// Loading Again rather than a download.
-    func userRequest<T: Sendable>(_ work: @escaping @MainActor () async throws -> T) async throws -> T {
+    /// for it before the files close, so nothing of it runs or saves after that. Forget
+    /// Project ends one that `readsFiles`. Cancelling the caller's task ends it too. A
+    /// request that finds no model throws Failure.modelNotLoaded while the model is on this
+    /// Mac, so the window offers Try Loading Again rather than a download.
+    func userRequest<T: Sendable>(readsFiles: Bool = false, _ work: @escaping @MainActor () async throws -> T) async throws -> T {
         guard running != nil else { throw Failure.off }
         let task = Task { try await work() }
         let id = UUID()
-        userRequests[id] = UserRequest(cancel: { task.cancel() }, ended: Task { _ = await task.result })
+        userRequests[id] = UserRequest(cancel: { task.cancel() }, ended: Task { _ = await task.result }, readsFiles: readsFiles)
         defer { userRequests[id] = nil }
+        // Text recognition waits while a request of the user runs, and the page it reads
+        // gives way now.
+        running?.index.interruptRecognition()
         do {
             return try await withTaskCancellationHandler {
                 try await task.value
@@ -1579,6 +1721,22 @@ final class ProjectsRuntime {
     /// Whether a request of the user runs, for tests.
     var userRequestCount: Int {
         userRequests.count
+    }
+
+    /// Why the text recognition of the folder index waits now, nil when it may run: a
+    /// dictation, Live Captions, a request of the user, memory pressure that is not normal,
+    /// Low Power Mode, or a thermal state of serious or critical, in that order. Asked
+    /// before every page, see FolderIndex.
+    func recognitionPause() -> FolderIndex.RecognitionPause? {
+        if dependencies.isDictating() { return .dictation }
+        guard let running else { return nil }
+        if running.model.captionsOn() { return .captions }
+        if !userRequests.isEmpty { return .request }
+        if running.memory.level != .normal { return .memory }
+        let power = dependencies.power()
+        if power.isLowPowerModeOn { return .lowPower }
+        if power.isHot { return .heat }
+        return nil
     }
 
     /// The email's latest explanation, nil when there is none.
@@ -1681,6 +1839,8 @@ final class ProjectsRuntime {
         let store = running.store
         let search = running.search
         let index = running.index
+        let queue = running.queue
+        let sleep = dependencies.sleep
         return ExplainService.Lookups(
             known: { [weak self] email in
                 guard let self else { throw CancellationError() }
@@ -1688,10 +1848,27 @@ final class ProjectsRuntime {
             },
             thread: { email in try await store.threadMail(of: email) },
             projectMail: { query in try await store.projectMail(query) },
-            search: { text, project, limit in try await search.search(text, in: [project], limit: limit) },
+            search: { query in try await search.search(query) },
             newest: { project, limit in try await search.newest(project, limit: limit) },
-            files: { project in try await index.versionFiles(project: project) }
+            files: { project in try await index.versionFiles(project: project) },
+            terms: { email in try await Self.searchTerms(for: email, store: store, queue: queue, sleep: sleep) }
         )
+    }
+
+    /// The email's search terms: those saved with its explanation, so Explain Again, also
+    /// after the window or Orra closed, asks the model nothing, or else new ones from the
+    /// model, see SearchTerms.ask. The log says which, with counts only.
+    private nonisolated static func searchTerms(
+        for email: ExplainService.Email,
+        store: MailStore,
+        queue: ProjectsModelQueue,
+        sleep: @escaping @Sendable (Duration) async throws -> Void
+    ) async throws -> [String]? {
+        if let saved = try? await store.explanation(for: email.messageID)?.searchTerms, !saved.isEmpty {
+            Logger.projects.notice("Search terms: \(saved.count, privacy: .public) saved with the email's explanation")
+            return saved
+        }
+        return try await SearchTerms.ask(for: email, run: { request in try await queue.run(request) }, sleep: sleep)
     }
 
     private func known(before email: ExplainService.Email) async throws -> ExplainService.Known {

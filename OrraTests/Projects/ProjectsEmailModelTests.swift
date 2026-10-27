@@ -176,7 +176,8 @@ struct ProjectsEmailModelTests {
         reference: MailMessageRef? = MailMessageRef(id: 4, mailbox: .inbox),
         referenceFailure: MailBridgeError? = nil,
         handoffs: ProjectsEmailModel.Handoffs = ProjectsEmailModel.Handoffs(),
-        email original: ExplainService.Email? = nil
+        email original: ExplainService.Email? = nil,
+        projectNames: [UUID: String] = [:]
     ) -> ProjectsEmailModel {
         let fakes = fakes
         let model = ProjectsEmailModel(messageID: Self.id, actions: ProjectsEmailModel.Actions(
@@ -252,7 +253,8 @@ struct ProjectsEmailModelTests {
                     try? await Task.sleep(for: .milliseconds(5))
                 }
                 return ProjectsDraftDiff.segments(from: before, to: after)
-            }
+            },
+            projectName: { projectNames[$0] }
         ), handoffs: handoffs)
         // What the user types is saved at once.
         model.saveDelay = .zero
@@ -465,6 +467,35 @@ struct ProjectsEmailModelTests {
         #expect(ProjectsWindowText.source(model.sources["T1"]!).hasPrefix("Mei Tan, "))
         #expect(ProjectsEmailArea.SourceChip.isGone(.mail(messageID: "gone@harbor.example", sender: nil, date: nil)))
         #expect(!ProjectsEmailArea.SourceChip.isGone(.thisEmail))
+    }
+
+    /// An excerpt of another project's file carries that project's name while the list
+    /// holds it, and none once it is gone. A file the user chose for the email from another
+    /// project's folders carries its project too, while the email's own project's files
+    /// stay files of its own.
+    @Test func aSourceOfAnotherProjectCarriesItsNameOrNoneOnceItIsGone() async {
+        let kiln = UUID()
+        let gone = UUID()
+        var explanation = Self.explanation()
+        let plan = TextChunker.Chunk(file: URL(fileURLWithPath: "/Projects/Kiln/floor-plan.pdf"), page: 1, modified: Self.today, heading: nil, text: "Lobby floor plan.")
+        explanation.sources["O1"] = .file(plan, origin: ExplainPrompt.FileOrigin(reason: .match, project: kiln))
+        explanation.sources["O2"] = .file(plan, origin: ExplainPrompt.FileOrigin(reason: .match, project: gone))
+        explanation.sources["F2"] = .file(plan, origin: ExplainPrompt.FileOrigin(reason: .chosen, project: kiln))
+        explanation.sources["F3"] = .file(Self.file, origin: ExplainPrompt.FileOrigin(reason: .match, project: explanation.project))
+        explanation.sources["F4"] = .file(Self.file, origin: ExplainPrompt.FileOrigin(reason: .chosen, project: explanation.project))
+        explanation.points[0].sources += ["O1", "O2"]
+        let model = model(explanation: { explanation }, projectNames: [kiln: "Kiln studio"])
+        await model.load()
+        #expect(model.sources["O1"] == .otherProjectFile(plan, project: "Kiln studio"))
+        #expect(model.sources["O2"] == .otherProjectFile(plan, project: nil))
+        #expect(model.sources["F2"] == .otherProjectFile(plan, project: "Kiln studio"))
+        #expect(model.sources["F3"] == .file(Self.file))
+        #expect(model.sources["F4"] == .file(Self.file))
+        #expect(model.sources["F1"] == .file(Self.file))
+        #expect(!ProjectsEmailArea.SourceChip.isGone(.otherProjectFile(plan, project: nil)))
+        // The chosen file is the email's own for the line under the points.
+        explanation.points[0].sources = ["F2"]
+        #expect(!explanation.citesOtherProjectFile)
     }
 
     /// An attachment's chip shows its name, and the excerpt the model read.

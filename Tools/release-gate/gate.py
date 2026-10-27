@@ -11,7 +11,8 @@ turns that into one JSON file per suite in OUT, and compares two such folders ca
 compare prints every metric of both folders, then every rule that failed with the IDs of
 the cases that got worse, and exits 1 when a rule failed. docs/release-gate.md lists the
 rules and their tolerances, which are the constants below. The projects suite also has a
-bar of its own, which fails with or without a baseline, so show exits 1 when it fails.
+bar of its own, which fails with or without a baseline, so show exits 1 when it fails, and
+so does the retrieval suite for its search terms.
 """
 
 from __future__ import annotations
@@ -29,7 +30,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "speech-eval"))
 import score as speech_score  # noqa: E402  Tools/speech-eval/score.py, Voxt's normalization
 
-SUITES = ["corpus", "context", "cleanup", "latency", "sets", "projects"]
+SUITES = ["corpus", "context", "cleanup", "latency", "sets", "projects", "retrieval"]
+# Suites with a bar that holds without a baseline.
+OWN_BAR_SUITES = ("projects", "retrieval")
 
 # Tolerances. A rate is in percentage points, so 0.10 lets cer_zh go from 3.98% to 4.08%.
 CORPUS_RATE_TOLERANCE = 0.10
@@ -41,6 +44,10 @@ SET_RATE_TOLERANCE = 0.5
 LATENCY_GROWTH = 0.20
 LATENCY_FLOOR_MS = 10.0
 CONTEXT_LATENCY_FLOOR_S = 0.1
+# The retrieval suite: a subset's recall at 6 may fall by 1 point, and at least 95% of the
+# mails need search terms.
+RETRIEVAL_RECALL_TOLERANCE = 1.0
+RETRIEVAL_TERMS_SHARE = 0.95
 
 
 def percentile(values: list[float], fraction: float) -> float:
@@ -273,7 +280,7 @@ ASSISTANT_VOICE = re.compile(
 )
 # What DraftCheck puts in place of a removal (DraftCheck.placeholder). The draft is checked
 # without them, so a removal never counts as a link, an assistant voice or a claim.
-DRAFT_PLACEHOLDER = re.compile(r"\[(?:link removed|project data removed|sentence removed: [^\]]*|已删去[^\]]*)\]")
+DRAFT_PLACEHOLDER = re.compile(r"\[(?:link removed|project data removed|another project's data removed|sentence removed: [^\]]*|已删去[^\]]*)\]")
 # A sentence of the explanation prompt's own instructions (ExplainPrompt.sections), which the
 # model sometimes copies into a section. Counted and listed, outside the bar.
 PROMPT_ECHO = re.compile(
@@ -477,6 +484,91 @@ def projects_reading(rows: dict[str, dict], items: list[dict], summary: dict) ->
     return "\n".join(lines) + "\n"
 
 
+# The retrieval suite: the passages Explain gives the model for the labeled mails of the
+# Projects set and its retrieval supplement, with search terms, see RetrievalEvaluationTests.
+# A raw row holds a mail's kinds, its relevant files and the passages picked before search
+# terms and after.
+
+RETRIEVAL_SUBSETS = ("plain", "zh-en", "en-zh", "synonym", "other-project", "needs-project", "negative")
+
+
+def summarize_retrieval(rows: list[dict]) -> dict:
+    """Recall and hit at 6 for each subset, before search terms and after, and for each mail
+    the relevant files the passages after hold, so a comparison names a mail that lost one."""
+    mails = {}
+    for row in rows:
+        relevant = row.get("relevant", [])
+        after = [picked["path"] for picked in row.get("after", [])]
+        before = [picked["path"] for picked in row.get("before", [])]
+        mails[row["id"]] = {
+            "kinds": row.get("kinds", []),
+            "relevant": relevant,
+            "found_before": [path for path in relevant if path in before],
+            "found_after": [path for path in relevant if path in after],
+            "others_after": sum(1 for picked in row.get("after", []) if picked.get("project")),
+            "terms_valid": bool(row.get("termsValid")),
+        }
+    def recall(mail: dict, key: str) -> float:
+        return len(mail[key]) / len(mail["relevant"]) if mail["relevant"] else 0.0
+
+    subsets = {}
+    for subset in RETRIEVAL_SUBSETS:
+        chosen = [mail for mail in mails.values() if subset in mail["kinds"]]
+        if not chosen:
+            continue
+        subsets[subset] = {
+            "mails": len(chosen),
+            "recall_before": round(100 * sum(recall(mail, "found_before") for mail in chosen) / len(chosen), 2),
+            "recall_after": round(100 * sum(recall(mail, "found_after") for mail in chosen) / len(chosen), 2),
+            "hit_after": round(100 * sum(bool(mail["found_after"]) for mail in chosen) / len(chosen), 2),
+            "with_others": sum(mail["others_after"] > 0 for mail in chosen),
+        }
+    valid = sum(mail["terms_valid"] for mail in mails.values())
+    return {"suite": "retrieval", "subsets": subsets, "mails": mails, "terms_valid": valid, "count": len(mails)}
+
+
+def compare_retrieval(base: dict, cand: dict, result: Result) -> None:
+    """Against a baseline: no subset's recall at 6 falls by more than the tolerance, no mail
+    loses a relevant file it had, and no more negatives get another project's passage. With
+    or without one: search terms for at least RETRIEVAL_TERMS_SHARE of the mails."""
+    for subset, numbers in cand["subsets"].items():
+        line = (
+            f"retrieval {subset}: {numbers['mails']} mails, recall at 6 {numbers['recall_before']}% without terms, "
+            f"{numbers['recall_after']}% with them, hit at 6 {numbers['hit_after']}%, {numbers['with_others']} with another project's passage"
+        )
+        old = base.get("subsets", {}).get(subset)
+        if old is not None and base is not cand:
+            line += f", baseline recall {old['recall_after']}%"
+            if numbers["recall_after"] < old["recall_after"] - RETRIEVAL_RECALL_TOLERANCE:
+                worse = [
+                    f"retrieval/{mail_id}" for mail_id, mail in cand["mails"].items()
+                    if subset in mail["kinds"] and mail_id in base.get("mails", {})
+                    and len(mail["found_after"]) < len(base["mails"][mail_id]["found_after"])
+                ]
+                result.fail(f"retrieval {subset}: recall at 6 fell by more than {RETRIEVAL_RECALL_TOLERANCE} point", worse)
+        result.lines.append(line)
+    share = cand["terms_valid"] / cand["count"] if cand["count"] else 0.0
+    result.lines.append(f"retrieval terms: valid for {cand['terms_valid']} of {cand['count']} mails")
+    if share < RETRIEVAL_TERMS_SHARE:
+        result.fail(f"retrieval: search terms for fewer than {round(100 * RETRIEVAL_TERMS_SHARE)}% of the mails")
+    if not base or base is cand:
+        return
+    lost = [
+        f"retrieval/{mail_id}" for mail_id, mail in cand["mails"].items()
+        if mail_id in base.get("mails", {}) and set(base["mails"][mail_id]["found_after"]) - set(mail["found_after"])
+    ]
+    if lost:
+        result.fail("retrieval mails that lost a relevant file they had", lost)
+    missing = [f"retrieval/{mail_id}" for mail_id in base.get("mails", {}) if mail_id not in cand["mails"]]
+    if missing:
+        result.fail("retrieval mails without a result", missing)
+    old_negatives = base.get("subsets", {}).get("negative", {}).get("with_others", 0)
+    new_negatives = cand["subsets"].get("negative", {}).get("with_others", 0)
+    if new_negatives > old_negatives:
+        worse = [f"retrieval/{mail_id}" for mail_id, mail in cand["mails"].items() if "negative" in mail["kinds"] and mail["others_after"] > 0]
+        result.fail("retrieval: more negatives get a passage of another project", worse)
+
+
 def summarize(out: Path, sets_dir: Path | None, corpus_manifest: Path, projects_set: Path | None = None) -> list[str]:
     raw = out / "raw"
     written = []
@@ -505,6 +597,11 @@ def summarize(out: Path, sets_dir: Path | None, corpus_manifest: Path, projects_
         write_json(out / "projects.json", summary)
         (out / "projects-reading.md").write_text(projects_reading(latest_projects_rows(documents), items, summary), encoding="utf-8")
         written.append("projects")
+    retrieval = raw / "retrieval.jsonl"
+    if retrieval.exists():
+        rows = [json.loads(line) for line in retrieval.read_text(encoding="utf-8").splitlines() if line.strip()]
+        write_json(out / "retrieval.json", summarize_retrieval(rows))
+        written.append("retrieval")
     return written
 
 
@@ -738,7 +835,10 @@ def compare_projects(base: dict, cand: dict, result: Result) -> None:
         result.fail("projects items that lost a warning the checks in code showed", lost)
 
 
-COMPARERS = {"corpus": compare_corpus, "context": compare_context, "cleanup": compare_cleanup, "latency": compare_latency, "sets": compare_sets, "projects": compare_projects}
+COMPARERS = {
+    "corpus": compare_corpus, "context": compare_context, "cleanup": compare_cleanup, "latency": compare_latency, "sets": compare_sets,
+    "projects": compare_projects, "retrieval": compare_retrieval,
+}
 
 
 def compare(baseline: Path, candidate: Path, only: list[str]) -> Result:
@@ -750,7 +850,7 @@ def compare(baseline: Path, candidate: Path, only: list[str]) -> Result:
             continue
         if base_file.exists():
             base = read_json(base_file)
-        elif suite == "projects":
+        elif suite in OWN_BAR_SUITES:
             # Its bar holds without a baseline.
             result.lines.append(f"{suite}: no baseline, its own bar only")
             base = {}
@@ -775,7 +875,7 @@ def show(out: Path) -> int:
             COMPARERS[suite](data, data, result)
             for line in result.lines:
                 print(line)
-            if suite == "projects":
+            if suite in OWN_BAR_SUITES:
                 print(f"{suite} bar: " + ("passed" if not result.failures else f"FAILED, {len(result.failures)} rules"))
                 for rule, ids in result.failures:
                     print(f"  {rule}: {' '.join(ids)}")

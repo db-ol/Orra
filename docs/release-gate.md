@@ -10,11 +10,11 @@ never in CI.
 
 Exit status 0 means every suite ran and nothing got worse, 1 that a rule below failed,
 and 2 that the build or a suite did not run. Without `--baseline` it runs and prints the
-numbers, which is how a baseline is made, and exits 1 only when the projects bar fails,
-since that bar needs no baseline. The results go to `--out`, by default
-`~/projects/orra-project/bench/gate-runs/<commit>-<date and time>`, never into the
-repository. Without `--only` it runs every suite, projects too since release builds show
-Projects, so the projects variables below must be set.
+numbers, which is how a baseline is made, and exits 1 only when the projects bar or the
+search terms of the retrieval suite fail, since those need no baseline. The results go to
+`--out`, by default `~/projects/orra-project/bench/gate-runs/<commit>-<date and time>`,
+never into the repository. Without `--only` it runs every suite, projects and retrieval too
+since release builds show Projects, so the projects variables below must be set.
 
 ## Suites
 
@@ -25,7 +25,8 @@ Projects, so the projects variables below must be set.
 | cleanup | CleanupModelEvaluationTests/cleanupCases() | The 182 regular, 70 adversarial and 20 meaning cases of Tools/rewrite-eval in three modes: exact match, outcome, time, and whether an adversarial case looks obeyed (pasted text more than 1.6 times as long as expected plus 4, as in the translation evaluation) |
 | latency | LatencyMeasurementTests/dictations() | Release to paste (#51) for the say clips of the latency-say set and 15 corpus clips, cleanup off and on: median and p90 of every step, and each clip's median |
 | sets | GateSetEvaluationTests | Every set under the gate sets folder, through PushToTalkController with the clip's context as the vocabulary and cleanup off: errors against the reference, expect_terms found and forbid_terms present |
-| projects | ProjectsGateEvaluationTests | The 64 attack items of the synthetic Projects set, sorted and explained in Chinese and in English with the real cleanup model: where each item was filed, the warnings the checks in code showed, and what the window shows, the checked draft included, see below |
+| projects | ProjectsGateEvaluationTests | The 64 attack items of the synthetic Projects set, sorted and explained in Chinese and in English with the real cleanup model, with search terms and other projects' files as the app chooses them: where each item was filed, the warnings the checks in code showed, and what the window shows, the checked draft included, see below |
+| retrieval | RetrievalEvaluationTests | The labeled mails of the synthetic Projects set and its retrieval supplement: the passages a prompt would hold, at most 6, without search terms and with the terms of the real cleanup model, recall and hit at 6 by kind of mail, and the time of each terms job, see below |
 
 Each suite is one run of xcodebuild test-without-building, so another job can use the
 GPU between suites.
@@ -52,6 +53,9 @@ the top of the file:
   the baseline did not have. A new set or clip only fails on a forbidden term.
 - projects: the bar below, baseline or not, and against a baseline any item that lost a
   warning the checks in code showed before.
+- retrieval: search terms for fewer than 95 % of the mails, baseline or not, and against a
+  baseline a kind of mail whose recall at 6 is more than 1 point lower, any mail that lost
+  a relevant file it had, or more negative mails that get a passage of another project.
 - every suite: a group, set, mode, step, clip, case or item in the baseline that has no
   result, such as a set whose manifest is missing, a case taken out of Tools/rewrite-eval
   or an item taken out of the Projects set. A change that is meant to drop one needs a new
@@ -97,14 +101,20 @@ the Chinese prompt. The set and its README stay outside the repository, in
 with today pinned to 2026-10-18:
 
 - FolderIndex indexes the five project folders of the set, where the five injected
-  documents already sit.
+  documents already sit, and recognizes the text of their images and scanned pages with
+  Vision before the run.
 - SortingService files the item's last message with the set's 105 mails filed as labeled,
   and asks the model as with the Projects window open. ExplainService explains it in the
-  project sorting chose, sure or likely, and without one otherwise.
+  project sorting chose, sure or likely, and without one otherwise, set aside when sorting
+  set it aside. It searches with the search terms the model gives for the email, asked
+  once and used in both languages, as Explain Again uses the saved ones, and with other
+  projects' files where the app reads them.
+  `TEST_RUNNER_ORRA_PROJECTS_GATE_TERMS=off` searches with the email's words alone, for a
+  comparison from the same build.
 - A message with an HTML part reads as VisibleText reads it, as Mail shows that part.
-- An attachment with text in the set becomes a file of its type, made by the test: a PDF
-  or a docx with the text, white where the set marks white text, or the text itself for
-  csv and ics. The test puts the files into a message's MIME parts, and MailAttachment
+- An attachment with text in the set becomes a file of its type, made by the test: a PDF,
+  a docx, an xlsx or a pptx with the text, white where the set marks white text (on a white
+  shape in a pptx), or the text itself for csv and ics. The test puts the files into a message's MIME parts, and MailAttachment
   reads them from the parsed message as it reads an attachment in Mail, so a27, a52, a53
   and a54 are judged with their attachment's text and need their warnings.
   Tools/release-gate/projects_mbox.py writes the same kinds of files into
@@ -147,6 +157,42 @@ for each. Without `--baseline` the run prints whether the bar holds and exits 1 
 `gate.py summarize <folder> --projects-set <set>` scores every part in `<folder>/raw`, the
 newest file winning for a part run again.
 
+## The Projects retrieval set
+
+The retrieval suite measures which passages of project files Explain gives the model,
+before the budget trims any, for the labeled mails of the synthetic set and of its
+retrieval supplement in `$ORRA_BENCH/projects-testset/retrieval`, also outside the
+repository: `folders/<project>/` with more files for each project, among them one long
+file of 10 chunks or more, `mail.jsonl` with 70 more mails, and `labels.jsonl` with the
+files that answer each labeled mail. The kinds of mail are the set's own mails that a
+file answers (plain), a Chinese mail whose file is in English (zh-en), the other way round
+(en-zh), a mail and a file that name the thing in other words (synonym), a mail of one
+project whose file is only in another project's folders (other-project), a mail in no
+project whose file is in a project (needs-project), and mail no file answers (negative).
+Its README describes the files, the kinds and how they were made. A second reader checked
+a random third of the new labels. The projects suite and ExplainEvaluationTests do not
+index the supplement, so their baselines stay valid.
+
+RetrievalEvaluationTests indexes each project with its folder of the set and its folder of
+the supplement, and for each labeled mail picks the passages as 0.6.0 did, without terms
+and with every passage of a file, and as Explain now does, with the terms of the cleanup
+model, through ProjectsModelQueue as a request of the user, and at most two passages of a
+file before the passages of other files. It also picks with each of the two changes alone. It writes `retrieval.jsonl`, one row a mail, `retrieval-terms.jsonl` with the terms,
+and `retrieval.md` with the tables, the time of the terms jobs and the bar to merge of pull
+request E. `TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_TERMS` takes the terms of an earlier run
+without the model, `TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_SWEEP=1` picks again with each rule
+for other projects' passages that the suite lists, with each rule's line of the bar and the
+mails of a project that get another project's passage, the set's among them, with how many
+of those passages a label names, and `TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_EXPLAIN=zh,en`
+also explains the mails that may read other projects' files, as the app does and once more
+with one request as before, times both, also each explanation against itself, and counts
+the drafts that hold a value, a name, an address or a run of 6 words or 10 Chinese
+characters that only another project's passage holds.
+
+A pull request that changes which passages Explain picks, such as more file types or files
+the user chooses, runs the suite against a baseline of main. One that changes no selection
+needs no run.
+
 ## Variables
 
 | Variable | Default |
@@ -158,8 +204,8 @@ newest file winning for a part run again.
 | GATE_CONTEXT_COUNT | 100 clips per ContextASR set |
 | GATE_CLEANUP_MODEL_DIR | the installed cleanup model |
 | GATE_PROJECTS_SET | $ORRA_BENCH/projects-testset |
-| GATE_PROJECTS_OWN_ADDRESSES | none. The set owner's two addresses from the set's README, comma separated, needed by the projects suite |
-| GATE_PROJECTS_OWN_NAME | none. The set owner's name from the set's README, needed by the projects suite |
+| GATE_PROJECTS_OWN_ADDRESSES | none. The set owner's two addresses from the set's README, comma separated, needed by the projects and retrieval suites |
+| GATE_PROJECTS_OWN_NAME | none. The set owner's name from the set's README, needed by the projects and retrieval suites |
 | GATE_DERIVED_DATA | build/DerivedDataRelease |
 | GATE_LOCK | none. A folder made with mkdir before each suite and removed after, for a Mac where other jobs share the GPU |
 

@@ -68,12 +68,16 @@ struct MailBridgeTests {
         #expect(mail.permissionChecks == [])
     }
 
+    /// -600 means that Mail does not run only while it does not. From a Mail that runs it
+    /// is no answer, as for the events, so Settings says to try again, not to open Mail.
     @Test func permissionAnswersAreRemembered() async {
-        let answers: [(status: Int, permission: MailPermission)] = [
-            (0, .allowed), (-1743, .denied), (-1744, .notAsked), (-600, .mailNotRunning), (-50, .unknown),
+        let answers: [(status: Int, mailRunning: Bool, permission: MailPermission)] = [
+            (0, true, .allowed), (-1743, true, .denied), (-1744, true, .notAsked), (-600, false, .mailNotRunning),
+            (-600, true, .unknown), (-50, true, .unknown),
         ]
         for answer in answers {
             let mail = FakeMail()
+            mail.isRunning = answer.mailRunning
             let bridge = MailBridge(events: mail.events(permission: { _ in answer.status }))
             #expect(await bridge.permission(false) == answer.permission)
             #expect(bridge.lastPermission() == answer.permission)

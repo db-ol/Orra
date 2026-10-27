@@ -98,6 +98,15 @@ struct ExplainAnswerTests {
         #expect(answer.unknownSources.isEmpty)
     }
 
+    /// An excerpt of another project's file is a source of its own, O1 and up. An O id the
+    /// prompt does not have is flagged as any other.
+    @Test func anotherProjectsIDIsASource() {
+        let answer = ExplainAnswer("要点：\n- 平面图在 Kiln studio 的文件里 [O1]\n- 灯具位置见【o 2】和 [F1]\n- 另一份文件 [O3]", sources: ["本邮件", "F1", "O1", "O2"])
+        #expect(answer.points.map(\.sources) == [["O1"], ["O2", "F1"], []])
+        #expect(answer.points.first?.text == "平面图在 Kiln studio 的文件里")
+        #expect(answer.unknownSources == ["O3"])
+    }
+
     @Test func theEmailLabelFollowsThePromptsTable() {
         let answer = read("Points:\n- The proof is late [本邮件]", Self.englishSources)
         #expect(answer.points.first?.sources == ["this email"])

@@ -136,6 +136,50 @@ struct TextChunkerTests {
         #expect(chunks.reduce(0) { $0 + $1.text.components(separatedBy: "invoice").count - 1 } >= 20_000)
     }
 
+    /// A slide or a sheet stands alone: its chunks take no heading from the page before,
+    /// where a PDF page's take it. A sheet's chunks keep its name, and recognized text says
+    /// so.
+    @Test func slidesAndSheetsTakeNoHeadingFromThePageBefore() {
+        let pages = [
+            FileTextResult.Page(number: 1, text: "# Lobby lamps\n\nTwelve lamps.\n\nNotes:\nAsk about brass.", isStandAlone: true),
+            FileTextResult.Page(number: 2, text: "Posters arrive on Friday.", isStandAlone: true),
+            FileTextResult.Page(number: nil, text: "# Lamps: Item | Qty\n| Lobby lamps | 12 |", sheet: "Lamps", isStandAlone: true),
+            FileTextResult.Page(number: 3, text: "Scanned delivery note.", isRecognized: true),
+        ]
+        let chunks = TextChunker(size: 30, overlap: 5).chunks(of: FileTextResult(pages: pages, hiddenRuns: 0, modified: Self.modified, isCut: false), file: Self.file)
+        #expect(chunks.filter { $0.page == 2 }.allSatisfy { $0.heading == nil })
+        #expect(chunks.contains { $0.page == 1 && $0.heading == "Notes" })
+        let sheet = chunks.filter { $0.sheet == "Lamps" }
+        #expect(!sheet.isEmpty && sheet.allSatisfy { $0.heading == "Lamps: Item | Qty" && $0.page == nil })
+        // A page that does not stand alone keeps the heading before it, as a PDF page does.
+        #expect(chunks.filter { $0.page == 3 }.allSatisfy { $0.heading == "Lamps: Item | Qty" && $0.recognized == true })
+        #expect(chunks.filter { $0.page != 3 }.allSatisfy { $0.recognized == nil })
+    }
+
+    /// The rows of a sheet, as OfficeXMLText writes them, never read as headings, whatever
+    /// their first cell holds, so every chunk of a sheet keeps the sheet's name and columns.
+    @Test func theRowsOfASheetNeverReadAsHeadings() async throws {
+        let rows = [["Item", "Qty"]] + (1...40).map { ["1.\($0) Lobby lamps, brass", "12"] } + [["Total:"], ["二、付款"]]
+        let data = try OfficeTestFiles.xlsx([OfficeTestFiles.Sheet("Lamps", rows: rows)])
+        let result = try await FileTextExtractor().text(of: data, format: .xlsx, modified: Self.modified).get()
+        let chunks = TextChunker(size: 200, overlap: 30).chunks(of: result, file: URL(fileURLWithPath: "/Projects/budget.xlsx"))
+        #expect(chunks.count > 3)
+        #expect(chunks.allSatisfy { $0.heading == "Lamps: Item | Qty" && $0.sheet == "Lamps" && $0.page == nil })
+    }
+
+    /// A chunk without a sheet and not recognized is saved as before, so 0.6.0 reads it, and
+    /// a chunk 0.6.0 saved reads without them.
+    @Test func aChunkWithoutTheNewMarksIsSavedAsBefore() throws {
+        let plain = TextChunker.Chunk(file: Self.file, page: 2, modified: Self.modified, heading: "Lamps", text: "Twelve lamps.")
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(plain)) as? [String: Any]
+        #expect(Set(json?.keys.map { $0 } ?? []) == ["file", "page", "modified", "heading", "text"])
+        #expect(try JSONDecoder().decode(TextChunker.Chunk.self, from: JSONEncoder().encode(plain)) == plain)
+        var marked = plain
+        marked.sheet = "Lamps"
+        marked.recognized = true
+        #expect(try JSONDecoder().decode(TextChunker.Chunk.self, from: JSONEncoder().encode(marked)) == marked)
+    }
+
     // MARK: Helpers
 
     private static let file = URL(fileURLWithPath: "/Projects/Calendar/notes.md")

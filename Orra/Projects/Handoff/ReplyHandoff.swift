@@ -11,8 +11,9 @@ import os
 /// process, not through an Apple Event of its own (decision 19), and the user presses
 /// Command V. When the window closes while Mail makes the reply, the reply window still
 /// opens, but the clipboard and Mail stay as they are. While Mail does not run, Open Reply
-/// only copies and says so, since Orra never opens Mail. When the reply fails, the draft
-/// stays on the clipboard. Copy only puts the draft on the clipboard.
+/// only copies and says so, since Orra opens Mail only when the user clicks Open Mail. When
+/// the reply fails, the draft stays on the clipboard. Copy only puts the draft on the
+/// clipboard.
 ///
 /// Between the reply and the second copy, Mail adds the files the user ticked for the
 /// reply, one event a file in their order, each at the end of that reply, see
@@ -47,7 +48,7 @@ struct ReplyHandoff {
         /// before Mail was asked, such as when the window closed.
         case copied
         /// The draft is on the clipboard, but Mail does not run, so there is no reply
-        /// window. Orra never opens Mail.
+        /// window. Orra opens Mail only when the user clicks Open Mail.
         case copiedMailNotRunning
         /// The draft is on the clipboard, but Mail did not make the reply, for this reason,
         /// such as `denied` while the user does not allow Orra to control Mail, or `notFound`

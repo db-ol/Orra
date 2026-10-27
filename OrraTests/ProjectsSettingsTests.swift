@@ -115,17 +115,19 @@ struct ProjectsSettingsTests {
         #expect(mail.listings == 2)
     }
 
-    /// While Mail does not run, the click asks nothing and says to open Mail first. Orra
-    /// never opens it.
+    /// While Mail does not run, Allow Mail Access… is gray and the line says to open Mail
+    /// first, before any click. A click that gets through asks nothing, and nothing here opens
+    /// Mail.
     @Test func whileMailIsClosedTheClickSaysToOpenItFirst() async {
         defer { cleanUp() }
         mail.isRunning = false
         let access = access()
         await access.show()
+        #expect(!access.canAsk)
+        #expect(access.line == "Open Mail first. Orra can check or ask for access only while Mail is open.")
         access.allowClicked()
         #expect(!access.isExplaining)
-        #expect(access.note == .openMailFirst)
-        #expect(access.line == "Open Mail first. Orra never opens it.")
+        #expect(access.note == nil)
         await access.ask()
         #expect(mail.asks.isEmpty)
         #expect(mail.listings == 0)
@@ -134,10 +136,12 @@ struct ProjectsSettingsTests {
         mail.isRunning = true
         await access.refresh()
         #expect(access.mailIsRunning)
+        #expect(access.canAsk)
         #expect(access.line == nil)
     }
 
-    /// Mail quits while the explanation shows: Continue asks nothing.
+    /// Mail quits while the explanation shows: Continue asks nothing, and the line says to
+    /// open Mail.
     @Test func mailQuittingBeforeContinueAsksNothing() async {
         defer { cleanUp() }
         let access = access()
@@ -146,7 +150,44 @@ struct ProjectsSettingsTests {
         mail.isRunning = false
         await access.ask()
         #expect(mail.asks.isEmpty)
-        #expect(access.note == .openMailFirst)
+        #expect(access.note == nil)
+        #expect(access.line == "Open Mail first. Orra can check or ask for access only while Mail is open.")
+    }
+
+    /// After a restart with Mail closed, the bridge has learned nothing. A user who confirmed
+    /// mailboxes allowed access before, since Start Reading Mail confirms only then, so the
+    /// page asks to open Mail to check the access, never to allow it again. Once Mail runs,
+    /// the listing learns the answer without asking macOS.
+    @Test func aReturningUserWithMailClosedOpensMailToCheck() async {
+        defer { cleanUp() }
+        let choice = MailChoice(defaults: defaults, suggestsInboxAndSent: false)
+        choice.choose([Self.archive])
+        choice.confirm()
+        mail.isRunning = false
+        mail.remembered = nil
+        let access = MailAccess(bridge: mail.bridge, choice: choice, isOn: { true })
+        await access.show()
+        #expect(access.access == .unknown)
+        #expect(access.line == "Open Mail to check access.")
+        #expect(mail.listings == 0)
+        // The user opens Mail.
+        mail.isRunning = true
+        await access.mailLaunched(retryAfter: .zero)
+        #expect(access.access == .allowed)
+        #expect(access.line == nil)
+        #expect(mail.asks.isEmpty)
+        // The same after a no in System Settings, which the listing learns as well.
+        let refused = MailAccess(bridge: mail.bridge, choice: choice, isOn: { true })
+        mail.isRunning = false
+        mail.remembered = nil
+        await refused.show()
+        #expect(refused.line == "Open Mail to check access.")
+        mail.isRunning = true
+        mail.listingError = .denied
+        await refused.mailLaunched(retryAfter: .zero)
+        #expect(refused.access == .denied)
+        #expect(refused.line == Self.deniedLine)
+        #expect(mail.asks.isEmpty)
     }
 
     /// -1743: one line that leads to Privacy & Security, Automation, and no button that
@@ -201,6 +242,22 @@ struct ProjectsSettingsTests {
         #expect(access.isExplaining)
     }
 
+    /// A permission check that says Mail does not run while Mail still runs, as -600 from a
+    /// busy Mail may: the page says to try again, never to open the Mail that is open.
+    @Test func aMinus600WhileMailRunsAsksToTryAgain() async {
+        defer { cleanUp() }
+        mail.answer = .mailNotRunning
+        mail.remembered = .notAsked
+        let access = access()
+        access.allowClicked()
+        await access.ask()
+        #expect(mail.asks == [true])
+        #expect(access.mailIsRunning)
+        #expect(access.access == .unknown)
+        #expect(access.note == .noAnswer)
+        #expect(access.line == "macOS gave no answer. Try again.")
+    }
+
     /// macOS took longer than the limit, and the user answered its prompt later. The next
     /// look learns the answer from the listing, and the line about no answer goes, so it
     /// never hides the way to System Settings.
@@ -229,12 +286,21 @@ struct ProjectsSettingsTests {
         }
     }
 
-    /// After a no, the line leads to System Settings whatever the page noted before.
+    /// After a no, the line leads to System Settings whatever the page noted before and
+    /// whether Mail runs. While Mail is closed and the access is not known, the line says to
+    /// open Mail, first or to check the access.
     @Test func aNoComesBeforeAnyNote() {
-        #expect(MailAccess.line(access: .denied, note: .noAnswer) == Self.deniedLine)
-        #expect(MailAccess.line(access: .denied, note: .openMailFirst) == Self.deniedLine)
-        #expect(MailAccess.line(access: .allowed, note: .noAnswer) == nil)
-        #expect(MailAccess.line(access: .unknown, note: nil) == nil)
+        for running in [false, true] {
+            for confirmed in [false, true] {
+                #expect(MailAccess.line(access: .denied, note: .noAnswer, mailIsRunning: running, confirmed: confirmed) == Self.deniedLine)
+                #expect(MailAccess.line(access: .denied, note: nil, mailIsRunning: running, confirmed: confirmed) == Self.deniedLine)
+                #expect(MailAccess.line(access: .allowed, note: .noAnswer, mailIsRunning: running, confirmed: confirmed) == nil)
+            }
+        }
+        #expect(MailAccess.line(access: .unknown, note: nil, mailIsRunning: true, confirmed: false) == nil)
+        #expect(MailAccess.line(access: .unknown, note: .noAnswer, mailIsRunning: true, confirmed: true) == "macOS gave no answer. Try again.")
+        #expect(MailAccess.line(access: .unknown, note: .noAnswer, mailIsRunning: false, confirmed: false) == "Open Mail first. Orra can check or ask for access only while Mail is open.")
+        #expect(MailAccess.line(access: .unknown, note: nil, mailIsRunning: false, confirmed: true) == "Open Mail to check access.")
     }
 
     @Test func accessFollowsWhatTheBridgeLearned() {
@@ -336,13 +402,14 @@ struct ProjectsSettingsTests {
         #expect(!access.isExplaining)
         #expect(access.choice.mailboxes == [Self.archive])
         #expect(access.rows == [Self.archive])
-        // A listing Mail did not answer, and a click while Mail is closed.
+        // A listing Mail did not answer, and a question macOS did not answer.
         mail.listingError = .timedOut
         await access.show()
         #expect(access.listFailed)
-        mail.isRunning = false
+        mail.answer = .unknown
         access.allowClicked()
-        #expect(access.note == .openMailFirst)
+        await access.ask()
+        #expect(access.note == .noAnswer)
         access.projectsTurnedOff()
         #expect(!access.listFailed)
         #expect(access.note == nil)
@@ -485,6 +552,82 @@ struct ProjectsSettingsTests {
         #expect(after.saved == 1)
         #expect(saved.map(\.messageID) == ["m1@studio.example"])
         #expect(mail.asks.isEmpty)
+    }
+
+    /// Start Reading Mail is gray until Orra may read Mail and a mailbox is ticked, and the
+    /// line beside it says which comes first.
+    @Test func startReadingMailSaysWhyItIsGray() async {
+        defer { cleanUp() }
+        #expect(MailAccess.startBlocker(access: .unknown, ticked: true) == .access)
+        #expect(MailAccess.startBlocker(access: .denied, ticked: false) == .access)
+        #expect(MailAccess.startBlocker(access: .allowed, ticked: false) == .mailbox)
+        #expect(MailAccess.startBlocker(access: .allowed, ticked: true) == nil)
+        #expect(ProjectsSettings.startLine(.access) == "Allow Mail access first.")
+        #expect(ProjectsSettings.startLine(.mailbox) == "Tick at least one mailbox first.")
+        #expect(ProjectsSettings.startLine(nil) == "Nothing is read before you click Start Reading Mail.")
+
+        mail.remembered = .notAsked
+        mail.listingError = .notAsked
+        let access = access()
+        await access.show()
+        #expect(access.startBlocker == .access)
+        access.allowClicked()
+        await access.ask()
+        #expect(access.access == .allowed)
+        #expect(access.startBlocker == .mailbox)
+        #expect(!access.canStartReading)
+        access.choose(Self.archive, true)
+        #expect(access.startBlocker == nil)
+        #expect(access.canStartReading)
+    }
+
+    // MARK: Set Up Projects
+
+    /// Each step of the checklist in each of its states, and the current step: the first of
+    /// the first four that waits for the user. A step that runs, such as the download, waits
+    /// for Orra, so the next one not done is current then. The optional last step never is.
+    @Test func theSetupStepsFollowTheirState() {
+        typealias Setup = ProjectsSettings.Setup
+        let folder = URL(fileURLWithPath: "/tmp/model")
+        func setup(model: ModelInstaller.State = .installed(folder), engine: TextCleanup.EngineState = .ready, mail running: Bool = true, access: MailAccess.Access = .allowed, asking: Bool = false, confirmed: Bool = false, projects: Bool = false) -> Setup {
+            Setup(model: model, engine: engine, mailIsRunning: running, access: access, isAsking: asking, confirmed: confirmed, hasProjects: projects)
+        }
+
+        // Step 1, the cleanup model.
+        #expect(setup().model == .done)
+        #expect(setup(engine: .unloadedWhileIdle).model == .done)
+        #expect(setup(engine: .failed).model == .todo)
+        #expect(setup(model: .checking).model == .inProgress)
+        #expect(setup(model: .downloading(bytes: 5, source: nil)).model == .inProgress)
+        #expect(setup(model: .verifying).model == .inProgress)
+        #expect(setup(model: .missing(bytesPresent: 0)).model == .todo)
+        #expect(setup(model: .failed(.offline)).model == .todo)
+        // Step 2, Mail.
+        #expect(setup(mail: true).mail == .done)
+        #expect(setup(mail: false).mail == .todo)
+        // Step 3, Mail access.
+        #expect(setup(access: .allowed).access == .done)
+        #expect(setup(access: .unknown).access == .todo)
+        #expect(setup(access: .unknown, asking: true).access == .inProgress)
+        #expect(setup(access: .denied).access == .todo)
+        // Step 4, the mailboxes, and step 5, a first project.
+        #expect(setup().mailboxes == .todo)
+        #expect(setup(confirmed: true).mailboxes == .done)
+        #expect(setup().project == .todo)
+        #expect(setup(projects: true).project == .done)
+
+        // The current step.
+        #expect(setup(model: .missing(bytesPresent: 0), mail: false, access: .unknown).current == .model)
+        #expect(setup(model: .downloading(bytes: 5, source: nil), mail: false, access: .unknown).current == .mail)
+        #expect(setup(model: .downloading(bytes: 5, source: nil), mail: true, access: .unknown).current == .access)
+        #expect(setup(model: .verifying, access: .unknown, asking: true).current == .mailboxes)
+        #expect(setup(engine: .failed).current == .model)
+        #expect(setup(access: .denied).current == .access)
+        #expect(setup().current == .mailboxes)
+        #expect(setup(projects: true).current == .mailboxes)
+        // Every step that waits is done, so none is current, also without a project.
+        #expect(setup(confirmed: true).current == nil)
+        #expect(setup(model: .downloading(bytes: 5, source: nil), confirmed: true).current == nil)
     }
 
     // MARK: The Projects window

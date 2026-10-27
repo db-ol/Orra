@@ -74,6 +74,11 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     after a swap of the keys, and with the talk key in Press to start and stop, Dictation
     with cleanup on and in Japanese, Translation off, on, in Spanish and with its key in
     Hold, and Meeting Interpretation with translation off and on, which CI never does.
+    Since 2026-10-26 it also checks the pages How to Use Projects opens in each language,
+    and renders Set Up Projects in each of its states at the window's first width and at
+    its smallest, as renderTheProjectsSetup. ProjectsSettingsTests covers the states of the
+    checklist's steps and its current step, the line under Mail access with Mail closed,
+    for a new and a returning user, and why Start Reading Mail is gray.
   - StatusMenuTests reads the top level of the menu SwiftUI makes of the menu bar menu,
     without showing it: Live Captions, off, right under the Meeting Interpretation
     heading with a divider above and below and no submenu, no two dividers next to each
@@ -83,7 +88,9 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     as text after the name, with no key equivalent. Since 2026-10-20 it also checks that
     Open Projects Window shows with its icon below Meeting Interpretation only while
     Projects is on, with the count of mail waiting for a reply, and that the Dock menu
-    offers the same item at the same times.
+    offers the same item at the same times. Since 2026-10-26 it also checks Set Up
+    Projects… with the same icon in its place while Projects is off, only on a Mac with the
+    memory Projects needs.
   - ProjectsWindowViewTests, added on 2026-10-20, checks the marks and the date of a mail
     row in the Projects window, and the project setup's checks of people and domains.
     With TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS set to a folder, it renders the
@@ -92,7 +99,30 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     that Hide Explanation lasts for the window until the next Explain, and what VoiceOver
     reads for the state of a disclosure row, and it renders How to Use Projects, and the
     window at its smallest size with an explained email and that email view 200 points
-    wide.
+    wide. For 0.6.1 it also checks that the lines above and under the mail list keep the
+    columns inside the window, at its first size and its smallest, the words of the line
+    about the cleanup model for each state of the model's installer, and How to Use as the
+    window builds it, with Open Mail only while Mail is closed and Suggested Projects named
+    only once the sidebar shows one, and it renders Open Mail under the line that says Mail
+    is not open, in How to Use with Mail closed, and the line about the cleanup model. It
+    also renders Project Files for This Explanation open at 480 and 200 points with its
+    other states (projects-email-files), the rows of a deck and a workbook with their
+    slide and sheet chips (projects-email-files-office), and the popover of a file's chip
+    (projects-excerpt), and checks that Edit Project… there keeps the email selected.
+  - ProjectsEmailFilesTests, added on 2026-10-26, checks Project Files for This Explanation
+    with made up files: why each file excerpt was in the prompt, as the explanation saves
+    it and Orra 0.6.0 reads it, also with a reason a later Orra adds, each file once in the
+    order of the prompt with its citation and warnings, the words of the list, chips that
+    tell two excerpts of one page, slide or sheet apart, chips and popover lines that name
+    a deck's slide and a workbook's sheet, that the email view reads the folders only when
+    the list asks, and where a file is in the folders of its project, a folder that is not
+    available included, also inside one that is, and that the list reads the folders again
+    for another email. ProjectsRuntimeTests checks the folders' real paths, a bookmark that
+    finds nothing, a renamed folder that is gone, and that no folder is read once Projects
+    turned off or the project let go of the folder while its bookmark resolved or while
+    another folder was read, nor once the list closed.
+    ExplainPromptTests and ExplainServiceTests check that why a file is in the prompt
+    changes nothing in it.
   - ProjectSuggestionsTests, ProjectSuggestionPromptTests, ProjectSuggestionServiceTests and
     ProjectsSuggestedSectionTests, added on 2026-10-20, cover Suggested Projects with
     made up mail and a fake model: the groups, what each would take, the prompt and its
@@ -113,6 +143,24 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS. The opt in ExplainEvaluationTests takes
     TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_IDS for a few mails and
     TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_TEXT=own for each mail's own text as the app keeps it.
+  - SearchTermsTests, ChunkSearchTests, ExplainServiceTests, ExplainPromptTests,
+    ExplainAnswerTests, DraftCheckTests, MailStoreTests, ProjectsRuntimeTests,
+    ProjectsEmailModelTests and ProjectsWindowViewTests, since 2026-10-26, cover search
+    terms and the files of other projects with made up mail and a fake model: the terms
+    prompt and its parser, the time limit that lets Explain go on at once while the job
+    ends later, the term lists of the search and their fusion, which mail searches other
+    projects and which never does, hostile mail through the real checks, <other_files>
+    with its ids, rules and trimming, the draft check's two rules for other projects' data
+    and copied sentences, a saved check of 0.6.0, an explanation that names a forgotten
+    project, Forget Project during an explanation, and the chip, the note and the excerpt
+    of another project's file. ProjectsWindowViewTests renders
+    projects-email-other-projects, projects-email-other-projects-200 and
+    projects-excerpt-other-project with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS. The opt
+    in RetrievalEvaluationTests measures the passages Explain picks for the labeled mails of
+    the synthetic set and its retrieval supplement, without and with the model's search
+    terms, see docs/release-gate.md. ExplainEvaluationTests and ProjectsGateEvaluationTests
+    search with the terms too, and TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_TERMS=off or
+    TEST_RUNNER_ORRA_PROJECTS_GATE_TERMS=off run them without, from the same build.
   - LiveCaptionsShortcutTests, added on 2026-10-19, covers the Live Captions shortcut with
     a fake in place of the hot key API, so no real shortcut is registered: which
     combinations it can be (a key with Control or Command, or F1 to F20 alone or with
@@ -507,8 +555,9 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     after it), the bar's bytes of both models, the step's lines and buttons in English
     and Chinese, and the step the guide talks about.
   - WelcomeSuggestionTests covers the three rows the welcome window suggests once Orra is
-    ready: that they show only with setup complete, their lines and buttons in English
-    and Chinese, the translation line in the translation key's mode since 2026-10-19, the
+    ready, and since 2026-10-26 Projects as a fourth only where it can be turned on: that
+    they show only with setup complete, their lines and buttons in English and Chinese,
+    the translation line in the translation key's mode since 2026-10-19, the
     meeting row's line on Meeting Interpretation in Settings and in the Orra menu, On in
     place of the button for a feature that is on, no On and no button while cleanup is on
     and its model is not on the Mac, and the page of Settings each button opens.
@@ -519,7 +568,10 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     literal in the language of the environment's locale, and that
     closing the window restarts Orra only with setup complete, no dictation running, a
     language picked in the window other than the one it started with, and no other Orra
-    window open.
+    window open. Since 2026-10-26 it also checks the words of each step's state that
+    VoiceOver reads after the step's title, in Chinese, Japanese and Spanish. A view hosted
+    in a test gives none of SwiftUI's accessibility elements, so VoiceOver itself on the
+    steps is checked by hand.
   - TranscriptGuardTests and ChineseTextTests cover loop cutting that leaves phone numbers
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
@@ -1776,7 +1828,10 @@ choice. Put all of it back afterwards:
   Meeting Interpretation (since 2026-10-17), in front, also when Settings was open on
   another tab, and the welcome window stays open. Done still closes the window. Before
   the last step is done, the rows do not show. In 简体中文 the heading is "还可以试试" and
-  the rows are 整理, 翻译 and 会议同传.
+  the rows are 整理, 翻译 and 会议同传. Since 2026-10-26, not verified yet, a release build
+  on a Mac with 16 GB of memory or more shows Projects as a fourth row, with "A preview. It
+  works with the Mail app on this Mac." and Set Up in Settings…, which opens Settings on
+  Projects. While Projects is on, the row shows On. On a smaller Mac it does not show.
 
 Getting Started in the menu, added on 2026-10-17, not verified yet. The menu always has
 the item that opens the welcome window, so Orra is ready and Try next stay in reach after
@@ -3269,8 +3324,8 @@ release build too, and the other Projects sections below check the details in a 
   “Always assign mail from … to …?”, and Add Rule files the sender's next email there. The
   project page lists the rule, and Remove Rule… takes it off after asking.
 - [ ] Explain an email of that project: Warnings, What it says with source chips, Before
-  you reply and the draft. A file's chip shows the passage with its page inside Orra, an
-  attachment's chip its passage, and an earlier email's chip that email. Nothing opens
+  you reply and the draft. A file's chip shows the saved excerpt with its page inside Orra,
+  an attachment's chip its passage, and an earlier email's chip that email. Nothing opens
   outside Orra. The email itself follows the draft under Original Email, and
   Hide Explanation puts it first. It shows To, Cc, the attachments, each forwarded message
   under its own header and Quoted Text folded.
@@ -3324,8 +3379,10 @@ mail.
   text from Info.plist, in English, Chinese, Japanese and Spanish. Allowing it lists Orra
   under Privacy & Security, Automation, with Mail turned on, and the page lists Mail's
   mailboxes.
-- [ ] Allow Mail Access… with Mail closed says to open Mail first, asks nothing and leaves
-  Mail closed.
+- [ ] Turn Projects on with Mail closed. Under the switch, Set Up Projects shows. Step 2 has
+  Open Mail and step 3 a gray Allow Mail Access… with the line that says to open Mail
+  first. Nothing is asked, the log shows no Open Mail line, and Mail stays closed until
+  the click on Open Mail.
 - [ ] Don't Allow, or Mail turned off for Orra in that list: Settings > Projects shows one
   line that leads to Privacy & Security, Automation, and the log shows -1743. Orra never
   asks again by itself. To see the prompt again, quit Orra and run
@@ -3419,6 +3476,46 @@ Projects Data and Start Reading Mail again first.
   message in one stop, and names the Forwarded Message group.
 - [ ] Forward one synthetic mail to yourself from Mail and let Projects read it. The
   email view shows it as a forwarded message, and its explanation uses what it says.
+
+Project Files for This Explanation, added on 2026-10-26, not verified yet. Check in a Debug
+build with the synthetic mail imported and the five projects with their folders, as in the
+test guide, in English, then in 简体中文, 日本語 and Español.
+
+- [ ] Explain an email of a project. Under What it says a folded row reads Project Files for
+  This Explanation with a number. Open it: each file shows once, with its folder inside the
+  project folder that holds it, Cited in explanation or Not cited in explanation, and a
+  reason line, Found by search for a file that matched the email. A point's file chip and
+  the file's chip in the list show the same Saved excerpt, page N.
+- [ ] Explain a short email whose words are in no file of its project. Some rows say One of
+  the project's newest files, added because search found few matches.
+- [ ] Explain the email of the attack items in the test guide whose project file speaks to
+  an assistant. When the explanation used that file, its row shows "A line in a project
+  file speaks to an assistant.", its saved excerpt still shows that line, and the excerpt
+  ends with "The model read it without the lines listed under Taken out before the model
+  read it."
+- [ ] Explain an email in Needs a Project. Its Project Files for This Explanation shows (0),
+  the line about assigning, and Assign to Project. Assign it to a project: the email leaves
+  Needs a Project without its explanation. In that project's list, select it and click
+  Explain, and the files of that project show.
+- [ ] Edit Project… in the list opens the project's sheet, and the email stays selected.
+  Remove a folder and save. Its rows say Not in the project's folders now with the folder,
+  until Explain Again. Add the folder back. Indexing… shows under the list until the sweep
+  ends, and Explain Again lists its files again.
+- [ ] Add a folder on a disk image or a USB disk to a project, explain an email that uses
+  one of its files, then eject the disk. Opened again, the list shows that file's row with
+  its folder and Its project folder is not available now, not Not in the project's folders
+  now.
+- [ ] An email explained before the update shows its files without a reason line.
+- [ ] VoiceOver: the header reads its words with Collapsed or Expanded, and note whether it
+  says heading. Each row is one stop with name, folder, citation and reason. Each chip says
+  the file and the page, slide or sheet. Escape closes the popover, and VoiceOver is back on
+  the chip.
+- [ ] At 760 by 420 with an explained email selected, the open list fits the 200 point
+  column with no sideways scroll, the chips and buttons stack, and the window keeps its
+  size.
+- [ ] Clicking a file name or a folder opens nothing. Both can be selected and copied.
+- [ ] The log names no file: /usr/bin/log show --last 10m --predicate 'subsystem ==
+  "io.github.db-ol.Orra"' shows no file or folder name of the set.
 
 The words of the Projects window by what Orra knows, added on 2026-10-24, not verified
 yet. Check in a Debug build with the synthetic mail imported, as in the test guide, in
@@ -3783,6 +3880,180 @@ English and 简体中文, and the toolbar and the email view in 日本語 and Es
 - [ ] Report a Problem asks, above the title, to leave out mail text, names, email addresses
   and screenshots of mail for a problem in Projects. The bug report form on GitHub has an
   Area field with Projects (Preview).
+
+Search terms and other projects' files, added on 2026-10-26, not verified yet. Check in a
+Debug build with the synthetic mail imported and the five projects with their folders, as
+in the test guide, in English and then in 简体中文:
+
+- [ ] Add an English file about lamps to a project's folder, then explain a Chinese email
+  about them. A point cites the English file.
+- [ ] Explain an email in Needs a Project about a document of a project. Its chip names the
+  project in brackets, the line under the points says that such files are for you only and
+  that the draft was written without them, and the excerpt says From the folders of with
+  the project's name. For an email that needs no reply the line says only that they are for
+  you. The log says that the draft was written by a request without other
+  projects' passages. The draft holds nothing of that file, also in other words, such as
+  a date or a count.
+- [ ] Dictate while such an explanation runs, also between its two requests. The dictation
+  pastes as fast as usual, and the explanation goes on after it, with its draft.
+- [ ] Close the window while such an explanation runs, with cleanup and translation off.
+  Open it again once the log says the email was explained: the email has its explanation
+  and its draft, and the log shows no unload and load of the cleanup model between its
+  requests.
+- [ ] Assign that email to the project and click Explain Again. The chip has no brackets
+  now, and the draft may use the file.
+- [ ] Explain an email of one project about a file that only another project's folders
+  hold. A point cites that file with its project in brackets, and Project Files for This
+  Explanation lists the project's own files first and that file after them.
+- [ ] An email in Needs a Project with a warning about its sender, or with a line to an
+  assistant, gets no file chips.
+- [ ] Explain Again on an explained email starts the explanation without asking the model
+  for terms, also after closing the window and after quitting Orra. The log says "Search
+  terms: … saved with the email's explanation".
+- [ ] Dictate while Explain asks for terms. The line under the mail list says that Projects
+  is paused, and the dictation pastes as fast as usual. With a dictation longer than 15
+  seconds, Explain goes on without terms, and the log says so.
+- [ ] Forget a project whose file an email of another project cited. The alert names the
+  explanations and drafts of other emails, and that email's explanation and draft are gone.
+  Forget a project while another email is explained: the explanation stops, and Explain
+  shows again.
+- [ ] At 760 points wide, a chip of another project's file stands on its own line and keeps
+  the project's name at its end. With VoiceOver it reads "…, from the project …".
+- [ ] Turn the cleanup model off in Settings while Explain asks for terms. The line says the
+  model is missing, as for Explain without terms.
+
+Set Up Projects, Open Mail and first use, added on 2026-10-26 for 0.6.1, not verified yet.
+Tests never open Mail, never show the macOS prompt and never run VoiceOver, so these are
+checked by hand in a Debug build on a Mac with 16 GB of memory or more, with an account in
+Mail. Watch the log with
+`/usr/bin/log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "projects-mail"'`.
+
+- [ ] Quit Mail, run `tccutil reset AppleEvents io.github.db-ol.Orra`, choose Delete All
+  Projects Data… and turn Projects off. Settings > Projects says under the switch that
+  Projects works with the Mail app, and shows Privacy details and How to Use Projects. How
+  to Use Projects opens the Projects section of the user guide in the browser, in English
+  and with Orra in Chinese.
+- [ ] The menu bar menu shows Set Up Projects… with the briefcase, which opens Settings on
+  Projects. Getting Started… shows Projects in Try next with Set Up in Settings…, which
+  opens the same page.
+- [ ] Turn Projects on. The switch stays under the pointer, Set Up Projects shows under it,
+  step 2 has Open Mail and step 3 a gray Allow Mail Access…. Mail stays closed until the
+  click.
+- [ ] Click Open Mail. Mail opens in front, with no alert and no prompt, also on macOS 15.6.
+  Back in Orra, step 2 has its check mark, and the log shows "Open Mail clicked" and the
+  listing failing with -1744, with no permission check.
+- [ ] Click Allow Mail Access…. The alert ends with Click Allow. Continue shows the macOS
+  prompt, whose button is Allow in English, 允许 in Chinese, 許可 in Japanese and Permitir
+  in Spanish, as the alert says. Allow gives step 3 its check mark and lists the
+  mailboxes in step 4.
+- [ ] Untick every mailbox: Start Reading Mail is gray with "Tick at least one mailbox
+  first.". Tick one and click it: the Projects window opens, and Settings shows the
+  Projects window section first, then the switch, Model, Mail and Mailboxes.
+- [ ] Quit Orra and Mail, open Orra and go to Settings > Projects. Mail access shows Open
+  Mail and "Open Mail to check access.", no Allow button. Open Mail: the row turns to
+  Allowed with no prompt.
+- [ ] In the Projects window, quit Mail. The list says Mail is not open, with Open Mail.
+  Click it: Mail opens, then Reading mail… shows. At 760 by 420 points the button fits
+  under the line.
+- [ ] Before Start Reading Mail, with Mail closed, the first step of How to Use shows Open
+  Mail beside Open Projects Settings…, and at 760 by 420 points one under the other. The
+  step about projects does not name Suggested Projects until the sidebar shows them.
+- [ ] Cancel the cleanup model's download in Settings. The Projects window says under the
+  list that the model is not on this Mac yet, with Settings…. Download it: the line shows
+  the percentage, then goes once the model is on this Mac.
+- [ ] With a long line under the list or the offer of a rule above it, at the window's
+  first size and at its smallest, every column keeps its top and bottom in the window.
+- [ ] New Project shows the line under People about the people you exchange mail with.
+- [ ] With VoiceOver, each step reads its title, its state (Done, In progress or Not done
+  yet) and heading, in Settings and in the welcome window, and the headings rotor goes
+  from step to step. Focus stays where it was when Mail opens and when a step gets its
+  check mark.
+- [ ] A -600 answer while Mail runs cannot be made on demand. When the log shows
+  "Permission check, asked true, answered -600" with Mail open, Settings says that macOS
+  gave no answer, not to open Mail.
+
+More file types and the names of every file in project folders, added on 2026-10-26, not
+verified yet. ZipArchiveTests, OfficeXMLTextTests, FolderWalkTests, FolderIndexTests,
+FileNameSearchTests and MailAttachmentTests check the readers, the walk, the names and the
+upgrade of an index 0.6.0 wrote with files built by the tests, among them thousands of broken
+ones. Files from Excel, PowerPoint, Numbers, Keynote and WPS are not among them. Check in a
+Debug build with Projects on, a project whose folder holds the files below, and the index
+watched with `/usr/bin/log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND
+category == "projects-index"'`, which shows counts and times, never a name. This change adds
+step 6 to the Projects database, so an older build cannot open the data afterwards, see
+Projects in a Debug build in docs/development.md.
+
+- [ ] Put an xlsx saved by Excel and one exported by Numbers or WPS, a pptx with speaker
+  notes saved by PowerPoint and one exported by Keynote, a csv, a dwg, a zip, a video and a
+  Keynote document saved as a package into the folder. Files with text counts the xlsx,
+  pptx and csv files, Files found by name only counts the dwg, the zip, the video and the
+  Keynote document, and Why Files Were Skipped lists none of them.
+- [ ] Explain an email that names a value only the xlsx holds, and one that names a value
+  only a slide's speaker notes hold. Each comes back as a source. The sheet's chip reads
+  "budget.xlsx, sheet “Lamps”" and the slide's "deck.pptx, slide 3", and their popovers say
+  Saved excerpt, sheet “Lamps” with the sheet's columns, or Saved excerpt, slide 3. Under
+  Project Files for This Explanation, their chips read Sheet “Lamps” and Slide 3.
+- [ ] An xlsx with a hidden sheet, a hidden row and white text, and a pptx with a hidden slide
+  and a hidden shape, are listed under Files with Hidden Text, and no explanation shows
+  their hidden text.
+- [ ] Rename the dwg and move it into another folder of the project. A minute later it is
+  still counted once. Delete it, and the count drops.
+- [ ] With 0.6.0, index a folder with a scanned PDF, an xlsx and a docx, then update to this
+  build. The log's first sweep reads the xlsx and not the docx, and the scanned PDF is
+  recognized after it.
+- [ ] With an iCloud Drive folder set to Optimize Mac Storage, an evicted dwg is not
+  downloaded, as Finder keeps its cloud icon. It counts under Skipped, and Why Files Were
+  Skipped lists it as Not downloaded to this Mac. If Projects knew it before it was evicted,
+  it still counts under Files found by name only too.
+- [ ] An email with an xlsx attachment and one with a pptx attachment show them as read under
+  Original Email, and their explanations can cite them.
+- [ ] VoiceOver on the project page reads "Files found by name only" with its number. At 760
+  by 420, every line of the Index section wraps and none is cut, in all four languages.
+- [ ] In 简体中文, the Index section reads 仅能按文件名找到的文件, and a slide's chip reads
+  “deck.pptx，第 3 张幻灯片”.
+
+Text recognition in images and scanned PDF pages, added on 2026-10-26, not verified yet.
+TextRecognitionTests and FolderIndexTests check the pages read, the caps, the order, the
+hidden text, the page time, the pauses before every page and during a page, the pages kept
+across a restart, a file given up after two jobs that never ended, which is read again
+once it changes, and the languages Vision is asked for, those of Chinese, English,
+Japanese and Spanish that it reads, with a stand in for Vision. VisionTextRecognitionTests
+reads one image with Vision, only with TEST_RUNNER_ORRA_RECOGNITION=1, since on the
+virtual machine of CI Vision could not read it and the test took 55 s to skip itself.
+TextRecognitionMeasurementTests measures Vision on synthetic scans and images. No scan
+from a scanner app or photo from an iPhone is among them. Check in a Debug build with
+Projects on and the index watched with the log stream above.
+
+- [ ] Put a scanned PDF from a scanner app or Notes, a PDF with text and one scanned page, an
+  iPhone HEIC photo of a printed page, a PNG screenshot and a photo without text into the
+  folder. The project page says "Recognizing text in images and scans… N left" until it is
+  done. Then Files with text counts the scans, the screenshot and the photo of the page,
+  and Files found by name only the photo without text.
+- [ ] Explain an email that names a value only the scan holds. It comes back as a source,
+  and the popover of its chip says "Recognized from an image, so words and numbers may be
+  wrong."
+- [ ] While "Recognizing text in images and scans…" shows, dictate ten times. Each paste is as
+  fast as with recognition done, and the log shows that a job of recognition stopped at
+  each key press.
+- [ ] Put the PDF plot of a large drawing whose text was drawn as lines, so it has no text
+  layer, into the folder, and dictate while its page is recognized. Each paste is as fast
+  as with recognition done. A page whose drawing takes longer than 20 s shows in the log as
+  timed out, once, and is not drawn again.
+- [ ] Turn on Live Captions and click Explain while recognition runs. The log shows no page
+  recognized until captions end and the explanation is done.
+- [ ] Turn on Low Power Mode in System Settings, Battery. Within a minute the page says "Text
+  recognition waits while Low Power Mode is on." and the count stops. Turn it off, and
+  within a minute it goes on.
+- [ ] Turn Wi-Fi off and add an image with text. Its text is found.
+- [ ] On macOS 15.6, put a scan with Chinese and English text and one with Japanese and
+  Spanish text into the folder. The Chinese and English words are found, and the log shows
+  no failed page. Orra asks Vision only for the languages it says it reads there.
+- [ ] Quit Orra while a long scan is recognized, open it again, and the log shows the scan
+  goes on after the pages it had read.
+- [ ] Activity Monitor shows Orra's memory during recognition. Note the peak.
+- [ ] VoiceOver on the project page reads the progress line once, as one line. At 760 by
+  420, the progress and pause lines wrap and none is cut, in all four languages.
+- [ ] In 简体中文, the progress line reads 正在识别图片和扫描件中的文字…还剩 N 个.
 
 ## Not implemented
 

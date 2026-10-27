@@ -488,7 +488,7 @@ nonisolated struct PromptHygiene: Sendable, Equatable, Codable {
     /// as </email>. Tags a badly filled form letter may hold, such as <user> or <email>,
     /// are left alone.
     private static let templateTokens = try! NSRegularExpression(
-        pattern: #"<\|[^|<>\n]{1,40}\|>|</?think>|\[/?INST\]|<</?SYS>>|<(?:start|end)_of_turn>|</?(?:system|assistant|instructions?)\s*>|</(?:email|thread|files?|checks|project_mail|project|message|mail)\s*>|<(?:checks|project_mail)\s*>"#,
+        pattern: #"<\|[^|<>\n]{1,40}\|>|</?think>|\[/?INST\]|<</?SYS>>|<(?:start|end)_of_turn>|</?(?:system|assistant|instructions?)\s*>|</(?:email|thread|other_files|files?|checks|project_mail|project|message|mail)\s*>|<(?:checks|project_mail|other_files)\s*>"#,
         options: [.caseInsensitive]
     )
 

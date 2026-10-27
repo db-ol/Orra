@@ -3,7 +3,8 @@ import Testing
 @testable import Orra
 
 /// What the welcome window suggests once Orra is ready: when it shows, the three rows in
-/// English and Chinese, and the button or On for each.
+/// English and Chinese, Projects as a fourth where it can be turned on, and the button or On
+/// for each.
 struct WelcomeSuggestionTests {
     private let english = Locale(identifier: "en")
     private let chinese = Locale(identifier: "zh-Hans")
@@ -51,10 +52,35 @@ struct WelcomeSuggestionTests {
         #expect(both.map(\.button) == [nil, nil, "Set Up in Settings…"])
     }
 
-    /// Cleanup is set up on Dictation, translation on Translation, and meeting
-    /// interpretation on Meeting Interpretation.
+    /// Cleanup is set up on Dictation, translation on Translation, meeting interpretation
+    /// on Meeting Interpretation, and Projects on Projects.
     @MainActor @Test func eachButtonOpensThePageOfItsFeature() {
-        #expect(WelcomeSuggestion.Kind.allCases.map(\.settingsTab) == [.dictation, .translation, .meeting])
+        #expect(WelcomeSuggestion.Kind.allCases.map(\.settingsTab) == [.dictation, .translation, .meeting, .projects])
+    }
+
+    /// Projects is the last row on a Mac where it can be turned on: a build that shows it,
+    /// with the memory it needs. It says that it is a preview that needs the Mail app, and
+    /// shows On while it is on. Elsewhere the three rows stay.
+    @Test func projectsShowsOnlyWhereItCanBeTurnedOn() {
+        #expect(WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, projectsAvailable: false, locale: english).map(\.kind) == [.cleanup, .translation, .meeting])
+        let rows = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, projectsAvailable: true, locale: english)
+        #expect(rows.map(\.kind) == [.cleanup, .translation, .meeting, .projects])
+        let projects = rows[3]
+        #expect(projects.title == "Projects")
+        #expect(projects.line == "Sorts your mail into projects and explains each email with the files of your projects.")
+        #expect(projects.note == "A preview. It works with the Mail app on this Mac.")
+        #expect(projects.button == "Set Up in Settings…")
+        #expect(!projects.isOn)
+        #expect(projects.symbol == "briefcase")
+        #expect(Set(rows.map(\.symbol)).count == 4)
+        let on = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, projectsAvailable: true, projectsOn: true, locale: english)[3]
+        #expect(on.isOn)
+        #expect(on.button == nil)
+        let inChinese = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, projectsAvailable: true, locale: chinese)[3]
+        #expect(inChinese.title == "项目")
+        #expect(inChinese.line == "把你的邮件分到各个项目里，并结合你各个项目里的文件解释每封邮件。")
+        #expect(inChinese.note == "预览版，适用于这台 Mac 上的“邮件” App。")
+        #expect(inChinese.button == "前往设置…")
     }
 
     /// Step 1 offers the cleanup model's download then, so the row neither says On nor

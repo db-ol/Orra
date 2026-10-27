@@ -178,6 +178,9 @@ struct SettingsView: View {
     /// Opens the Projects window with Edit Project for a project, from a linked mailbox on
     /// the Projects page, nil where the page is shown without it.
     var editProject: ((UUID) -> Void)? = nil
+    /// Opens the Mail app on the user's click, from Open Mail on the Projects page, nil where
+    /// the page is shown without it.
+    var openMail: (() -> Void)? = nil
     @State private var tab = SettingsTab.general
     /// The part of the page to scroll to, until the page has scrolled there.
     @State private var scrollTarget: SettingsSection?
@@ -245,7 +248,7 @@ struct SettingsView: View {
             VocabularySettings(pushToTalk: pushToTalk, learning: learning)
         case .projects:
             if let projects {
-                ProjectsSettings(projects: projects, cleanup: cleanup, mail: projectsMail, openWindow: openProjectsWindow, editProject: editProject)
+                ProjectsSettings(projects: projects, cleanup: cleanup, mail: projectsMail, openWindow: openProjectsWindow, editProject: editProject, openMail: openMail)
             }
         case .about:
             AboutSettings(models: models, pushToTalk: pushToTalk, updater: updater)

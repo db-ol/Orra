@@ -34,6 +34,11 @@ import Testing
 /// names and types. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_ATTACHMENTS=names reads them all as
 /// names and types, as Orra did before it read attachments, for a baseline from the same
 /// build.
+///
+/// It searches with search terms from the model and with other projects' files where the
+/// app reads them, see ExplainService. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_TERMS=off searches
+/// with each mail's words alone, for a run without them from the same build. The terms job does not count toward the prompt tokens of a row. The runner
+/// does not sort, so no mail is set aside.
 @Suite(.serialized, .enabled(if: ExplainEvaluationSet.folder != nil && !ExplainEvaluationSet.ownAddresses.isEmpty && RewriteTestModel.folder != nil))
 @MainActor
 struct ExplainEvaluationTests {
@@ -61,6 +66,7 @@ struct ExplainEvaluationTests {
         let chosen = picked.isEmpty ? Array(mails.dropFirst(first - 1).prefix(count)) : mails.filter { picked.contains($0.id) }
         try #require(!chosen.isEmpty)
         let ownText = environment["ORRA_PROJECTS_EXPLAIN_TEXT"] == "own"
+        let asksForTerms = environment["ORRA_PROJECTS_EXPLAIN_TERMS"] != "off"
 
         // The projects, with their files indexed in a folder of their own.
         let ids = Dictionary(uniqueKeysWithValues: setProjects.enumerated().map { index, project in
@@ -152,7 +158,7 @@ struct ExplainEvaluationTests {
                     .sorted { $0.1 > $1.1 }
                 return ranked.prefix(query.limit).map { Self.promptMail($0.0) }
             },
-            search: { text, project, limit in try await search.search(text, in: [project], limit: limit) },
+            search: { query in try await search.search(query) },
             newest: { project, limit in try await search.newest(project, limit: limit) },
             files: { project in
                 try await database.run(
@@ -162,6 +168,10 @@ struct ExplainEvaluationTests {
                     guard row.count == 3, let path = row[0].text, let modified = row[1].real else { return nil }
                     return FileVersions.File(url: URL(fileURLWithPath: path), modified: Date(timeIntervalSince1970: modified), head: row[2].text ?? "")
                 }
+            },
+            terms: { email in
+                guard asksForTerms else { return nil }
+                return try await SearchTerms.ask(for: email, run: { request in try await queue.run(request) }, sleep: { try await Task.sleep(for: $0) })
             }
         )
         var promptTokens = 0
@@ -184,7 +194,7 @@ struct ExplainEvaluationTests {
 
         // Written after each mail, so a run stopped early keeps what it explained.
         let part = picked.isEmpty ? "\(String(format: "%03d", first))-\(String(format: "%03d", first + chosen.count - 1))" : "picked"
-        let name = "explain-\(language.rawValue)-\(part)" + (ownText ? "-own" : "")
+        let name = "explain-\(language.rawValue)-\(part)" + (ownText ? "-own" : "") + (asksForTerms ? "" : "-noterms")
         let report = try Self.file(out.appendingPathComponent(name + ".md"))
         let rows = try Self.file(out.appendingPathComponent(name + ".jsonl"))
         defer {
@@ -398,9 +408,29 @@ struct ExplainEvaluationTests {
         case .expired:
             draft = "expired"
         }
+        // Each file excerpt the model got, with why it was in the prompt and whether a point
+        // cites it.
+        let files = explanation.sources
+            .compactMap { id, source -> (id: String, chunk: TextChunker.Chunk, origin: ExplainPrompt.FileOrigin?)? in
+                guard case .file(let chunk, let origin) = source else { return nil }
+                return (id, chunk, origin)
+            }
+            .sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending }
+            .map { file -> [String: Any] in
+                [
+                    "id": file.id,
+                    "name": file.chunk.file.lastPathComponent,
+                    "page": file.chunk.page.map { $0 as Any } ?? NSNull(),
+                    "reason": file.origin?.reason.map { $0.rawValue as Any } ?? NSNull(),
+                    "cited": explanation.points.contains { $0.sources.contains(file.id) },
+                ]
+            }
         let object: [String: Any] = [
             "id": mail.id,
             "attachments_read": explanation.sources.keys.filter { $0.hasPrefix("A") }.count,
+            "search_terms": explanation.searchTerms?.count ?? 0,
+            "files": files,
+            "other_project_files": explanation.sources.keys.filter(ExplainPrompt.isOtherFileSource).sorted(),
             "seconds": time / .seconds(1),
             "prompt_tokens": promptTokens,
             "reply": describe(explanation.reply),
