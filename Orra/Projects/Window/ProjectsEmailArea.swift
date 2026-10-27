@@ -629,8 +629,9 @@ extension ProjectsEmailArea {
         }
     }
 
-    /// The text behind a chip: a file's excerpt with its page and heading, the excerpt of an
-    /// attachment the model read, or the email's own text.
+    /// The text behind a chip: a file's excerpt with its page, slide or sheet and heading,
+    /// and whether its text was recognized, the excerpt of an attachment the model read, or
+    /// the email's own text.
     struct Excerpt: View {
         let source: ProjectsEmailModel.Source
         let emailText: String
@@ -642,9 +643,15 @@ extension ProjectsEmailArea {
                     case .file(let chunk):
                         Text(verbatim: chunk.file.lastPathComponent)
                             .font(.headline)
-                        if let page = chunk.page {
-                            Text("Page \(page)")
+                        if let place = ProjectsWindowText.place(of: chunk) {
+                            Text(verbatim: ProjectsWindowText.place(place))
                                 .foregroundStyle(.secondary)
+                        }
+                        if let recognized = ProjectsWindowText.recognized(chunk) {
+                            Text(verbatim: recognized)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         if let heading = chunk.heading, !heading.isEmpty {
                             Text(verbatim: heading)

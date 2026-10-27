@@ -819,6 +819,25 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsWindowText.rule(.subjectCode("PO-12")) == "Mail with PO-12 in the subject")
     }
 
+    /// A source chip names its excerpt's place, a PDF's page, a deck's slide or a workbook's
+    /// sheet, and VoiceOver reads the same. Recognized text says that its words may be wrong.
+    @Test func aChipNamesThePageSlideOrSheetOfItsExcerpt() {
+        func chunk(_ name: String, page: Int? = nil, sheet: String? = nil, recognized: Bool? = nil) -> TextChunker.Chunk {
+            TextChunker.Chunk(file: URL(fileURLWithPath: "/Harbor lobby/\(name)"), page: page, modified: .now, heading: nil, text: "Lamps", sheet: sheet, recognized: recognized)
+        }
+        #expect(ProjectsWindowText.source(.file(chunk("schedule.pdf", page: 2))) == "schedule.pdf, page 2")
+        #expect(ProjectsWindowText.source(.file(chunk("deck.pptx", page: 3))) == "deck.pptx, slide 3")
+        #expect(ProjectsWindowText.source(.file(chunk("Show.PPSX", page: 1))) == "Show.PPSX, slide 1")
+        #expect(ProjectsWindowText.source(.file(chunk("budget.xlsx", sheet: "Lamps 2026"))) == "budget.xlsx, sheet “Lamps 2026”")
+        #expect(ProjectsWindowText.source(.file(chunk("brief.docx"))) == "brief.docx")
+        #expect(ProjectsWindowText.sourceLabel(.file(chunk("deck.pptx", page: 3))) == "deck.pptx, slide 3")
+        #expect(ProjectsWindowText.place(of: chunk("scan.pdf", page: 4, recognized: true)) == .page(4))
+        #expect(ProjectsWindowText.place(of: chunk("brief.docx")) == nil)
+        #expect([ProjectsWindowText.Place.page(2), .slide(3), .sheet("Lamps")].map(ProjectsWindowText.place) == ["Page 2", "Slide 3", "Sheet “Lamps”"])
+        #expect(ProjectsWindowText.recognized(chunk("scan.pdf", page: 4, recognized: true)) == "Recognized from an image, so words and numbers may be wrong.")
+        #expect(ProjectsWindowText.recognized(chunk("schedule.pdf", page: 2)) == nil)
+    }
+
     /// The lines about mail: a pass that reads, with what it saved so far, and what stopped
     /// the last one, each in its own words.
     @Test func everyStateOfTheScanHasWords() {
@@ -841,7 +860,12 @@ struct ProjectsWindowViewTests {
         let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["ORRA_PROJECTS_WINDOW_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let language = Bundle.main.preferredLocalizations.first ?? "en"
-        let fixture = try await Fixture()
+        // A workbook with text, a drawing and an image known by name, and an old Word file
+        // that cannot be read, for the project page.
+        let fixture = try await Fixture(files: [
+            ("budget.xlsx", try OfficeTestFiles.xlsx(lines: ["Lobby lamps", "12"])), ("plan.dwg", Data("drawing".utf8)),
+            ("lobby.jpg", Data("photo".utf8)), ("old.doc", Data("x".utf8)),
+        ], indexed: 2)
         defer { fixture.cleanUp() }
         let runtime = fixture.runtime
         let listModel = ProjectsWindowModel(runtime: runtime)
@@ -889,6 +913,42 @@ struct ProjectsWindowViewTests {
 
         let project = try #require(runtime.projectList.first)
         try await render(ProjectsProjectPage(runtime: runtime, project: project, edit: {}, forget: {}, removeRule: { _ in }), size: NSSize(width: 520, height: 900), to: folder.appendingPathComponent("\(language)-projects-page.png"))
+        // As wide as the third column of the window at its smallest size.
+        try await render(ProjectsProjectPage(runtime: runtime, project: project, edit: {}, forget: {}, removeRule: { _ in }), size: NSSize(width: 200, height: 1_500), to: folder.appendingPathComponent("\(language)-projects-page-200.png"))
+        // The window with the project chosen and no email selected, at its first and its
+        // smallest size.
+        let projectModel = ProjectsWindowModel(runtime: runtime)
+        projectModel.place = .project(project.id)
+        try await render(ProjectsWindowView(runtime: runtime, model: projectModel, openSettings: {}), size: ProjectsWindow.defaultSize, to: folder.appendingPathComponent("\(language)-projects-window-page.png"))
+        try await render(ProjectsWindowView(runtime: runtime, model: projectModel, openSettings: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-window-760-page.png"))
+        // The Index section with every line it can show, the list of skipped files open, at
+        // both widths.
+        var limits = FolderIndex.Report(indexed: 4_812, chunks: 90_000, textBytes: 200_000_000, skipped: [.hidden: 12, .symbolicLink: 1], isIndexing: true, nameOnly: 20_377)
+        limits.reachedFileLimit = true
+        limits.reachedNameLimit = true
+        limits.reachedTextLimit = true
+        let skippedFiles = [
+            FolderIndex.SkippedFile(url: URL(fileURLWithPath: "/Harbor lobby/Contract signed copy, final version.pdf"), reason: .locked),
+            FolderIndex.SkippedFile(url: URL(fileURLWithPath: "/Harbor lobby/link to drawings"), reason: .symbolicLink),
+        ]
+        let index = Form {
+            Section("Index") {
+                ProjectsProjectPage.IndexState(report: limits, skipped: skippedFiles, showsSkipped: true)
+            }
+        }
+        .formStyle(.grouped)
+        try await render(index, size: NSSize(width: 520, height: 520), to: folder.appendingPathComponent("\(language)-projects-index-limits.png"))
+        try await render(index, size: NSSize(width: 200, height: 1_100), to: folder.appendingPathComponent("\(language)-projects-index-limits-200.png"))
+        // The excerpts of a slide with recognized text and of a sheet, as their chips show them.
+        let excerpts = VStack(alignment: .leading, spacing: 0) {
+            ProjectsEmailArea.Excerpt(source: .file(TextChunker.Chunk(
+                file: URL(fileURLWithPath: "/Harbor lobby/lamps.pptx"), page: 3, modified: Self.today, heading: "Lobby lamps",
+                text: "Twelve brass lamps arrive in week 47.", recognized: true)), emailText: "")
+            ProjectsEmailArea.Excerpt(source: .file(TextChunker.Chunk(
+                file: URL(fileURLWithPath: "/Harbor lobby/budget.xlsx"), modified: Self.today, heading: "Lamps: Item | Qty | Price",
+                text: "| Lobby lamps | 12 | 86000 |", sheet: "Lamps")), emailText: "")
+        }
+        try await render(excerpts, size: NSSize(width: 420, height: 640), to: folder.appendingPathComponent("\(language)-projects-excerpts.png"))
 
         var draft = ProjectsSetupView.Draft(project)
         draft.people.append(ProjectsSetupView.Draft.Person(name: "Lu", address: "lu at kiln"))
@@ -1115,7 +1175,10 @@ struct ProjectsWindowViewTests {
         let dictation: Dictation
         let runtime: ProjectsRuntime
 
-        init() async throws {
+        /// - Parameters:
+        ///   - files: more files in the project's folder, by name.
+        ///   - indexed: the files with text the project's index holds once it is ready.
+        init(files: [(name: String, data: Data)] = [], indexed: Int = 1) async throws {
             let dictation = Dictation()
             self.dictation = dictation
             defaults = try #require(UserDefaults(suiteName: suite))
@@ -1179,6 +1242,9 @@ struct ProjectsWindowViewTests {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             try "The lobby lamps arrive on 22 November.".write(to: folder.appendingPathComponent("schedule.txt"), atomically: true, encoding: .utf8)
             try "x".write(to: folder.appendingPathComponent("budget.xlsx"), atomically: true, encoding: .utf8)
+            for file in files {
+                try file.data.write(to: folder.appendingPathComponent(file.name))
+            }
             try await runtime.add(Project(
                 name: "Harbor lobby", description: "Renovation of the harbor office lobby. The other side writes in English.",
                 folders: [try Project.bookmark(of: folder)],
@@ -1186,7 +1252,7 @@ struct ProjectsWindowViewTests {
                 domains: ["harbor.example"],
                 rules: [Project.Rule(kind: .sender, value: "lu@kiln.example")],
                 mailboxes: ["Work/Clients/Harbor"]))
-            for _ in 0..<2_000 where runtime.indexReport(runtime.projectList[0].id)?.indexed != 1 {
+            for _ in 0..<2_000 where runtime.indexReport(runtime.projectList[0].id).map({ $0.indexed != indexed || $0.isIndexing }) ?? true {
                 try await Task.sleep(for: .milliseconds(5))
             }
         }

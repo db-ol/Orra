@@ -422,12 +422,52 @@ nonisolated enum ProjectsWindowText {
         case .mail:
             return String(localized: "An earlier email")
         case .file(let chunk):
-            let name = chunk.file.lastPathComponent
-            guard let page = chunk.page else { return name }
-            return String(localized: "\(name), page \(page)")
+            return file(chunk.file.lastPathComponent, at: place(of: chunk))
         case .attachment(let name, _):
             return name
         }
+    }
+
+    /// Where an excerpt lies in its file: a page of a PDF, a slide of a deck or a sheet of a
+    /// workbook. Every label of an excerpt names its place through `place(of:)`, so a slide
+    /// or a sheet never reads as a page.
+    nonisolated enum Place: Equatable {
+        case page(Int)
+        case slide(Int)
+        case sheet(String)
+    }
+
+    /// The place of an excerpt, nil for a file without pages, such as a docx. A chunk's page
+    /// is a slide in a pptx or ppsx.
+    static func place(of chunk: TextChunker.Chunk) -> Place? {
+        if let sheet = chunk.sheet, !sheet.isEmpty { return .sheet(sheet) }
+        guard let page = chunk.page else { return nil }
+        return ["pptx", "ppsx"].contains(chunk.file.pathExtension.lowercased()) ? .slide(page) : .page(page)
+    }
+
+    /// A place on a line of its own, such as Page 2, Slide 3 or Sheet “Budget”.
+    static func place(_ place: Place) -> String {
+        switch place {
+        case .page(let page): String(localized: "Page \(page)")
+        case .slide(let slide): String(localized: "Slide \(slide)")
+        case .sheet(let sheet): String(localized: "Sheet “\(sheet)”")
+        }
+    }
+
+    /// A file's name with the place of an excerpt in it, such as schedule.pdf, page 2.
+    static func file(_ name: String, at place: Place?) -> String {
+        switch place {
+        case nil: name
+        case .page(let page)?: String(localized: "\(name), page \(page)")
+        case .slide(let slide)?: String(localized: "\(name), slide \(slide)")
+        case .sheet(let sheet)?: String(localized: "\(name), sheet “\(sheet)”")
+        }
+    }
+
+    /// The note under the place of an excerpt whose text was recognized in an image or on a
+    /// scanned page, nil for any other.
+    static func recognized(_ chunk: TextChunker.Chunk) -> String? {
+        chunk.recognized == true ? String(localized: "Recognized from an image, so words and numbers may be wrong.") : nil
     }
 
     /// What VoiceOver reads for a source's chip: its text, and for an attachment that it is
