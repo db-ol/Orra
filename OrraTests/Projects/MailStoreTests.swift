@@ -64,12 +64,14 @@ struct MailStoreTests {
     // MARK: Saving
 
     /// The tables are the second step, the text of attachments the third, whether an email
-    /// was too large to read the fourth, and the text the user typed into drafts the fifth.
+    /// was too large to read the fourth, the text the user typed into drafts the fifth, and the
+    /// files the user chose for an email the seventh, after the index's sixth.
     @Test func theTablesAreTheSecondStepOfTheSchemaAndTheLaterStepsFollowInOrder() async throws {
         defer { cleanUp() }
         let store = try await openStore()
-        #expect(ProjectsDatabase.migrations.map(\.version) == [1, 2, 3, 4, 5, 6])
-        #expect(try await store.database.run("PRAGMA user_version").first == [.integer(6)])
+        #expect(ProjectsDatabase.migrations.map(\.version) == [1, 2, 3, 4, 5, 6, 7])
+        #expect(ProjectsDatabase.migrations.last?.sql == MailStore.chosenFilesMigration.sql)
+        #expect(try await store.database.run("PRAGMA user_version").first == [.integer(7)])
         await store.close()
     }
 
@@ -1227,6 +1229,75 @@ struct MailStoreTests {
         await #expect(throws: ProjectsDatabase.Failure.self) {
             try await store.counts()
         }
+    }
+
+    // MARK: Chosen files
+
+    @Test func aChoiceOfFilesIsKeptForItsEmailUntilItIsReplacedOrCleared() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([
+            Self.message("a@test.example", from: "kim@quay.example"),
+            Self.message("b@test.example", from: "kim@quay.example", day: 1),
+        ], ownAddresses: [Self.work], at: Self.date(2))
+        let plan = MailStore.ChosenFile(project: Self.harbor, path: "/Projects/Harbor/plan's \"final\".pdf")
+        let budget = MailStore.ChosenFile(project: Self.maple, path: "/Projects/Maple/budget\\2026.xlsx")
+        #expect(try await store.saveChosenFiles([plan, budget], for: "a@test.example"))
+        #expect(Set(try await store.chosenFiles(of: "a@test.example")) == [plan, budget])
+        #expect(try await store.chosenFiles(of: "b@test.example").isEmpty)
+        // A new choice takes the place of the one before.
+        #expect(try await store.saveChosenFiles([budget], for: "a@test.example"))
+        #expect(try await store.chosenFiles(of: "a@test.example") == [budget])
+        // At most six files, each path once, and none of a project the store does not hold.
+        let many = (1...8).map { MailStore.ChosenFile(project: Self.harbor, path: "/Projects/Harbor/file-\($0).md") }
+        let gone = MailStore.ChosenFile(project: UUID(), path: "/Projects/Gone/notes.md")
+        #expect(try await store.saveChosenFiles([gone, many[0], many[0]] + many, for: "b@test.example"))
+        #expect(try await store.chosenFiles(of: "b@test.example").map(\.path) == many.prefix(5).map(\.path))
+        // An empty choice is Return to Automatic Selection.
+        #expect(try await store.saveChosenFiles([], for: "a@test.example"))
+        #expect(try await store.chosenFiles(of: "a@test.example").isEmpty)
+        // An email the store does not hold keeps nothing.
+        #expect(try await store.saveChosenFiles([plan], for: "unknown@test.example") == false)
+        #expect(try await store.database.run("SELECT count(*) FROM mail_chosen_files") == [[.integer(5)]])
+        await store.close()
+    }
+
+    /// Forget Project takes the files of its folders out of every email's choice, and goes
+    /// with the email's own rows when it forgets the email's project. A move keeps the choice.
+    @Test func forgettingAProjectTakesItsFilesOutOfEveryChoiceAndAMoveKeepsIt() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([
+            Self.message("harbor@test.example", from: "song.yutong@harborlights.example"),
+            Self.message("maple@test.example", from: "owen@pike-build.example", day: 1),
+        ], ownAddresses: [Self.work], at: Self.date(2))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]), for: "harbor@test.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.maple, level: .sure, reasons: [.person]), for: "maple@test.example"))
+        let plan = MailStore.ChosenFile(project: Self.harbor, path: "/Projects/Harbor/plan.pdf")
+        let tiles = MailStore.ChosenFile(project: Self.maple, path: "/Projects/Maple/tiles.md")
+        #expect(try await store.saveChosenFiles([plan, tiles], for: "harbor@test.example"))
+        #expect(try await store.saveChosenFiles([tiles], for: "maple@test.example"))
+        #expect(try await store.move("harbor@test.example", to: nil))
+        #expect(Set(try await store.chosenFiles(of: "harbor@test.example")) == [plan, tiles])
+        #expect(try await store.move("harbor@test.example", to: Self.maple))
+        #expect(Set(try await store.chosenFiles(of: "harbor@test.example")) == [plan, tiles])
+
+        try await store.forget(project: Self.harbor)
+        #expect(try await store.chosenFiles(of: "harbor@test.example") == [tiles])
+        try await store.forget(project: Self.maple)
+        #expect(try await store.database.run("SELECT count(*) FROM mail_chosen_files") == [[.integer(0)]])
+        await store.close()
+    }
+
+    @Test func keepTakesTheFilesOfAProjectTheListDoesNotHoldOutOfTheChoices() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([Self.message("a@test.example", from: "kim@quay.example")], ownAddresses: [Self.work], at: Self.date(1))
+        let plan = MailStore.ChosenFile(project: Self.harbor, path: "/Projects/Harbor/plan.pdf")
+        #expect(try await store.saveChosenFiles([plan, MailStore.ChosenFile(project: Self.maple, path: "/Projects/Maple/tiles.md")], for: "a@test.example"))
+        #expect(try await store.keep(projects: [Self.harbor]) == [Self.maple])
+        #expect(try await store.chosenFiles(of: "a@test.example") == [plan])
+        await store.close()
     }
 
     // MARK: Other projects' files

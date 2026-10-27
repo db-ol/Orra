@@ -216,6 +216,12 @@ nonisolated struct ExplainPrompt: Sendable {
     /// The excerpts search gives at most, and the ones the newest files fill up to.
     static let chunkLimit = 6
     static let fillUpTo = 3
+    /// The files the user may choose for an email, the share of `chunkLimit` their excerpts
+    /// take at most while more than one file is chosen, and the excerpts of one chosen file at
+    /// most.
+    static let chosenFileLimit = 6
+    static let chosenChunkShare = 4
+    static let chosenChunksPerFile = 3
     /// The tokens the excerpts of the attachments take at most together, a fixed share of
     /// the budget, split evenly between them.
     static let attachmentShare = 2_048

@@ -133,8 +133,8 @@ struct ProjectsDatabaseTests {
         await early.close()
 
         let database = try await ProjectsDatabase.open(in: storage)
-        #expect(try await database.run("PRAGMA user_version").first == [.integer(6)])
-        #expect(ProjectsDatabase.migrations.last?.version == 6)
+        #expect(try await database.run("PRAGMA user_version").first == [.integer(7)])
+        #expect(ProjectsDatabase.migrations.map(\.version).suffix(2) == [6, 7])
         let marked = try await database.run("SELECT path, skip, recognize, folder FROM index_files ORDER BY path")
         #expect(marked == [
             [.text("/p/Report.PDF"), .null, .integer(1), .null],
@@ -153,6 +153,53 @@ struct ProjectsDatabaseTests {
         try await database.run("INSERT INTO index_recognition_pages (file, page, size, modified, outcome) SELECT id, 2, 1, 1, 'blank' FROM index_files WHERE path = '/p/scan.pdf'")
         try await database.run("DELETE FROM index_files WHERE path = '/p/scan.pdf'")
         #expect(try await database.run("SELECT count(*) FROM index_recognition_pages") == [[.integer(0)]])
+        await database.close()
+    }
+
+    /// Step 7 adds the files the user chose for each email. A database at step 6 gains them,
+    /// and an email's choices go with the email and with the project of each file.
+    @Test func stepSevenKeepsTheChosenFilesWithTheirEmailAndProject() async throws {
+        defer { cleanUp() }
+        let early = try await ProjectsDatabase.open(in: storage, migrations: Array(ProjectsDatabase.migrations.prefix(6)))
+        #expect(try await early.run("PRAGMA user_version").first == [.integer(6)])
+        await early.close()
+
+        let database = try await ProjectsDatabase.open(in: storage)
+        #expect(try await database.run("PRAGMA user_version").first == [.integer(7)])
+        let tables = try await database.run("SELECT name FROM sqlite_schema WHERE type IN ('table', 'index') ORDER BY name").compactMap { $0.first?.text }
+        #expect(tables.contains("mail_chosen_files") && tables.contains("mail_chosen_files_by_project"))
+        for project in ["harbor", "kiln"] {
+            try await database.run("INSERT INTO mail_projects (id) VALUES (?)", [.text(project)])
+        }
+        func addEmail(_ id: String) async throws -> Int64 {
+            try await database.run("""
+                INSERT INTO mail_messages (message_id, date, saved, sender_name, sender, subject, subject_key, thread_root, in_reply_to, refs, attachments, hidden_text, warnings)
+                VALUES (?1, 1, 1, '', 'kim@quay.example', 'Plans', 'plans', ?1, '[]', '[]', '[]', '[]', '[]') RETURNING id
+                """, [.text(id)]).first?.first?.integer ?? -1
+        }
+        func choose(_ message: Int64, _ files: [(String, String)]) async throws {
+            for (project, path) in files {
+                try await database.run("INSERT INTO mail_chosen_files (message, project, path) VALUES (?, ?, ?)", [.integer(message), .text(project), .text(path)])
+            }
+        }
+        func chosen() async throws -> [String] {
+            try await database.run("SELECT path FROM mail_chosen_files ORDER BY path").compactMap { $0.first?.text }
+        }
+        let first = try await addEmail("a@test.example")
+        let second = try await addEmail("b@test.example")
+        try await choose(first, [("harbor", "/p/plan.pdf"), ("kiln", "/k/lamps.md")])
+        try await choose(second, [("harbor", "/p/budget.xlsx")])
+        // One row for each file of an email.
+        await #expect(throws: ProjectsDatabase.Failure.self) {
+            try await choose(first, [("kiln", "/p/plan.pdf")])
+        }
+        try await database.run("DELETE FROM mail_projects WHERE id = 'kiln'")
+        #expect(try await chosen() == ["/p/budget.xlsx", "/p/plan.pdf"])
+        try await database.run("DELETE FROM mail_messages WHERE id = ?", [.integer(first)])
+        #expect(try await chosen() == ["/p/budget.xlsx"])
+        try await database.run("DELETE FROM mail_projects WHERE id = 'harbor'")
+        #expect(try await chosen().isEmpty)
+        #expect(try await database.run("SELECT count(*) FROM mail_messages WHERE id = ?", [.integer(second)]) == [[.integer(1)]])
         await database.close()
     }
 

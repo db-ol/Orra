@@ -1783,8 +1783,18 @@ final class FolderIndex {
     /// place held before is replaced. A renamed file's chunks get the words of its new name.
     /// The moved rows lose their name entries, which the next sweep writes again with their
     /// new names and folders. A rename whose old place holds nothing, such as one a sweep
-    /// already took in, changes nothing. Returns whether text was removed.
+    /// already took in, changes nothing in the index. Returns whether text was removed.
+    ///
+    /// The files of the project that the user chose for emails follow the rename too, also
+    /// when the index holds nothing at the old place, see `MailStore.chosenFilesMigration`.
+    /// An email that chose both the old and the new place keeps one of them.
     private static func applyRename(_ rename: FolderEvents.Rename, project: UUID, in database: isolated ProjectsDatabase) throws -> Bool {
+        let moving: [Value] = [.text(project.uuidString), .text(rename.to), .text(rename.from)]
+        try database.run("""
+            DELETE FROM mail_chosen_files WHERE project = ?1 AND \(atOrUnder("?3"))
+                AND EXISTS (SELECT 1 FROM mail_chosen_files o WHERE o.message = mail_chosen_files.message AND o.path = ?2 || substr(mail_chosen_files.path, length(?3) + 1))
+            """, moving)
+        try database.run("UPDATE mail_chosen_files SET path = ?2 || substr(path, length(?3) + 1) WHERE project = ?1 AND \(atOrUnder("?3"))", moving)
         let old: [Value] = [.text(project.uuidString), .text(rename.from)]
         guard try !database.run("SELECT 1 FROM index_files WHERE project = ?1 AND \(atOrUnder("?2")) LIMIT 1", old).isEmpty else { return false }
         // What the new place held goes. The moved rows lose their name entries, so text goes

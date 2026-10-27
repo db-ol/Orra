@@ -495,6 +495,52 @@ struct FolderIndexTests {
         }
     }
 
+    /// The files the user chose for an email follow a rename of the file or of a folder above
+    /// it, in the project whose folders moved only. An email that chose both the old and the
+    /// new place keeps one of them.
+    @Test func aRenameMovesTheChosenFilesOfItsProjectOnly() async throws {
+        try await withFixture { fixture in
+            try fixture.write("notes.txt", "The print run is 500 calendars.")
+            try fixture.write("sub/plan.md", "灯具采购计划。")
+            await fixture.start()
+            let store = MailStore(database: fixture.database)
+            try await store.add(project: fixture.alpha)
+            try await store.add(project: fixture.beta)
+            try await store.save([
+                MailStore.Message(messageID: "a@test.example", date: .now, sender: MailStore.Person(address: "kim@quay.example"), text: "Plans", visibleText: "Plans"),
+                MailStore.Message(messageID: "b@test.example", date: .now, sender: MailStore.Person(address: "kim@quay.example"), text: "Notes", visibleText: "Notes"),
+            ], ownAddresses: [], at: .now)
+            let folder = fixture.folder
+            #expect(try await store.saveChosenFiles([
+                MailStore.ChosenFile(project: fixture.alpha, path: folder + "/notes.txt"),
+                MailStore.ChosenFile(project: fixture.alpha, path: folder + "/sub/plan.md"),
+                // The same folder in another project, which saw no rename.
+                MailStore.ChosenFile(project: fixture.beta, path: folder + "/sub/lamps.md"),
+            ], for: "a@test.example"))
+            #expect(try await store.saveChosenFiles([
+                MailStore.ChosenFile(project: fixture.alpha, path: folder + "/notes.txt"),
+                MailStore.ChosenFile(project: fixture.alpha, path: folder + "/Print notes.txt"),
+            ], for: "b@test.example"))
+
+            try FileManager.default.moveItem(atPath: folder + "/notes.txt", toPath: folder + "/Print notes.txt")
+            try FileManager.default.moveItem(atPath: folder + "/sub", toPath: folder + "/plans")
+            await fixture.deliver(FolderEvents.Changes(renamed: [
+                FolderEvents.Rename(from: folder + "/notes.txt", to: folder + "/Print notes.txt"),
+                FolderEvents.Rename(from: folder + "/sub", to: folder + "/plans"),
+            ]))
+            #expect(Set(try await store.chosenFiles(of: "a@test.example")) == [
+                MailStore.ChosenFile(project: fixture.alpha, path: folder + "/Print notes.txt"),
+                MailStore.ChosenFile(project: fixture.alpha, path: folder + "/plans/plan.md"),
+                MailStore.ChosenFile(project: fixture.beta, path: folder + "/sub/lamps.md"),
+            ])
+            #expect(try await store.chosenFiles(of: "b@test.example") == [MailStore.ChosenFile(project: fixture.alpha, path: folder + "/Print notes.txt")])
+            // A rename the index already took in still moves a choice left at the old place.
+            #expect(try await store.saveChosenFiles([MailStore.ChosenFile(project: fixture.alpha, path: folder + "/plans/old.md")], for: "b@test.example"))
+            await fixture.deliver(FolderEvents.Changes(renamed: [FolderEvents.Rename(from: folder + "/plans/old.md", to: folder + "/plans/new.md")]))
+            #expect(try await store.chosenFiles(of: "b@test.example") == [MailStore.ChosenFile(project: fixture.alpha, path: folder + "/plans/new.md")])
+        }
+    }
+
     /// A rename a sweep already took in, such as one replayed from the stored event, finds
     /// nothing at its old path and leaves the new path as it is.
     @Test func aRenameWhoseOldPathHoldsNothingChangesNothing() async throws {
