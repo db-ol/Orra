@@ -17,6 +17,9 @@ struct DraftCheckAttachmentsTests {
         "The numbers are in the attachment.",
         "I am sending the plan as an attachment.",
         "Enclosed is the invoice.",
+        "I attached the floor plan.",
+        "The floor plan is attached.",
+        "The drawings are attached.",
         "附上平面图，请查收。",
         "随信附上报价单。",
         "附件是最新的施工图。",
@@ -57,6 +60,12 @@ struct DraftCheckAttachmentsTests {
         "El archivo que me adjuntaste no abre.",
         "Por favor adjunta el plano.",
         "Adjunte la factura, por favor.",
+        "The floor plan is not attached yet.",
+        "I did not attach the plan.",
+        "没有附上文件。",
+        "请不要附上平面图。",
+        "我忘了附上平面图。",
+        "No adjunto el contrato.",
         "The samples ship on Friday, 23 October.",
         "样品周五发出。",
     ])
@@ -94,5 +103,8 @@ struct DraftCheckAttachmentsTests {
         let long = String(repeating: "Thanks for the attached plan. ", count: 2_000) + "Attached is the floor plan."
         #expect(DraftCheck.attachmentClaims(in: long).isEmpty)
         #expect(DraftCheck.attachmentClaims(in: "Attached is the floor plan. " + long).count == 1)
+        // A run of combining marks counts by its scalars, so it holds no more work.
+        let marks = "a" + String(repeating: "\u{0301}", count: 100_000) + " Attached is the floor plan."
+        #expect(DraftCheck.attachmentClaims(in: marks).isEmpty)
     }
 }

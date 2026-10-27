@@ -17,7 +17,7 @@ nonisolated extension DraftCheck {
     /// its own still counts. The patterns read the matching form of SortingText and are
     /// bounded, and the first `claimedLength` characters are read.
     static func attachmentClaims(in draft: String) -> [String] {
-        let text = String(SortingText.withoutFormatCharacters(draft).prefix(claimedLength))
+        let text = SortingText.withoutFormatCharacters(String(String.UnicodeScalarView(draft.unicodeScalars.prefix(claimedLength))))
         return sentenceRanges(in: text).compactMap { range in
             let sentence = String(text[range])
             var form = SortingText.matchingForm(sentence)
@@ -28,7 +28,8 @@ nonisolated extension DraftCheck {
         }
     }
 
-    /// How much of a draft the claim check reads. A reply is far shorter.
+    /// How much of a draft the claim check reads, in scalars, before anything else reads it.
+    /// A reply is far shorter.
     static let claimedLength = 20_000
 
     /// Words that say a file is attached to the draft, in its matching form.
@@ -36,7 +37,8 @@ nonisolated extension DraftCheck {
         // English
         #"\battached (?:is|are|please find|you will find|you['’]ll find|herewith|to this (?:e-?mail|message|mail))\b"#,
         #"\b(?:please )?(?:find|see) (?:the )?(?:attached|enclosed)\b"#,
-        #"\b(?:i|we)(?:['’]ve| have)(?: also| just| now)? (?:attached|enclosed)\b"#,
+        #"\b(?:i|we)(?:['’]ve| have)?(?: also| just| now)? (?:attached|enclosed)\b"#,
+        #"\b(?:is|are)(?: also| now)? (?:attached|enclosed)\b"#,
         #"\b(?:i['’]m|i am|we['’]re|we are) (?:also |now )?(?:attaching|enclosing)\b"#,
         #"\bsee (?:the )?attachments?\b|\bin the attachments?\b|\bas (?:an )?attachments?\b"#,
         #"\benclosed (?:is|are|please find)\b|\bplease find enclosed\b"#,
@@ -63,10 +65,13 @@ nonisolated extension DraftCheck {
         #"收到(?:了)?(?:您|你|贵司)(?:们)?的附件"#,
         #"(?:您|你|贵司)(?:们)?(?:的|发来的)附件"#,
         #"(?:请|麻烦|劳烦|烦请|能否|可否|是否|能不能|可不可以|记得)(?:您|你)?(?:们)?(?:再|也)?附上"#,
+        // What was not attached, or must not be.
+        #"(?:没有|没|未|并未|不要|不用|别|勿|无需|不必|忘了|忘记)(?:再|也)?附上"#,
         // Japanese
         #"ご添付いただ|添付していただ|添付してください|添付をお願い|(?:いただいた|頂いた|くださった|下さった)添付"#,
         // Spanish
         #"\bque (?:me |nos |le |les )?adjunt(?:aste|asteis|aron|[oó]|aba|abas)\b"#,
+        #"\bno (?:te |le |les |os )?(?:adjunto|adjuntamos|(?:he|hemos) adjuntado|van? adjunt[oa]s?)\b"#,
         #"\b(?:tu|tus|su|sus|vuestro|vuestra|vuestros|vuestras)(?: [a-záéíóúñ]+){0,2} adjunt[oa]s?\b"#,
         #"\bgracias por (?:el|la|los|las|tu|tus|su|sus|enviar|mandar|compartir)\b[^.!?]{0,40}?\badjunt[oa]s?\b"#,
     ])
