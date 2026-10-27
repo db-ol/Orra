@@ -85,10 +85,11 @@ actor ProjectsDatabase {
     /// The schema, in order. First the index of the project folders, see FolderIndex, then
     /// the tables of MailStore, see `MailStore.migration`, the text of attachments, see
     /// `MailStore.attachmentTextMigration`, whether an email was too large to read, see
-    /// `MailStore.tooLargeMigration`, and the text the user typed into drafts, see
-    /// `MailStore.editedDraftMigration`.
+    /// `MailStore.tooLargeMigration`, the text the user typed into drafts, see
+    /// `MailStore.editedDraftMigration`, and the names of every file and what text
+    /// recognition needs, see `FolderIndex.fileTypesMigration`.
     ///
-    /// - index_files: one row for each file the index read, with its text or with why it
+    /// - index_files: one row for each file the index lists, with its text or with why it
     ///   gives none, and the size and modification date it had, so it is read again only
     ///   after it changes.
     /// - index_chunks: the chunks of a file's text.
@@ -99,6 +100,10 @@ actor ProjectsDatabase {
     ///   a run of three characters matches where the words were split another way, again
     ///   with the file's name in a column of its own.
     /// - index_watch: the last folder event of a project that the index took in.
+    /// - index_file_names and index_file_name_trigrams: the words of each file's name and
+    ///   folder, see FileNameSearch, apart from the chunks.
+    /// - index_recognition_pages: the pages text recognition tried, see
+    ///   `FolderIndex.fileTypesMigration`.
     nonisolated static let migrations: [Migration] = [
         Migration(version: 1, sql: """
             CREATE TABLE index_files (
@@ -136,6 +141,7 @@ actor ProjectsDatabase {
         MailStore.attachmentTextMigration,
         MailStore.tooLargeMigration,
         MailStore.editedDraftMigration,
+        FolderIndex.fileTypesMigration,
     ]
 
     /// The database file.

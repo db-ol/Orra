@@ -12,16 +12,24 @@ import Foundation
 ///   so a sentence cut in two is whole in one of them. A chunk that starts at a heading
 ///   repeats nothing.
 /// - Each chunk keeps its file, its page, the file's modification date and the heading above
-///   its first line, which may sit on an earlier page.
+///   its first line, which may sit on an earlier page, but never on another slide or sheet.
+///   A chunk of a sheet keeps the sheet's name, and a chunk of recognized text says so.
 nonisolated struct TextChunker: Sendable {
     nonisolated struct Chunk: Sendable, Equatable, Codable {
         var file: URL
-        /// The page number in a PDF, nil for the other formats.
+        /// The page number in a PDF and the slide number in a deck, nil for the other
+        /// formats.
         var page: Int?
         var modified: Date
         /// The heading above the chunk's first line, nil before the file's first heading.
         var heading: String?
         var text: String
+        /// The name of the chunk's sheet in a workbook, nil for the other formats.
+        var sheet: String?
+        /// True when the text was recognized in an image or on a scanned page, so its words
+        /// and numbers may be wrong. Nil otherwise, so an explanation saved without it
+        /// reads as before.
+        var recognized: Bool?
     }
 
     /// The most characters in a chunk.
@@ -33,12 +41,17 @@ nonisolated struct TextChunker: Sendable {
         var chunks: [Chunk] = []
         var heading: String?
         for page in text.pages {
+            if page.isStandAlone {
+                heading = nil
+            }
             var current = ""
             var currentCount = 0
             var currentHeading = heading
             func close() {
                 if currentCount > 0 {
-                    chunks.append(Chunk(file: file, page: page.number, modified: text.modified, heading: currentHeading, text: current))
+                    chunks.append(Chunk(
+                        file: file, page: page.number, modified: text.modified, heading: currentHeading, text: current,
+                        sheet: page.sheet, recognized: page.isRecognized ? true : nil))
                 }
                 current = ""
                 currentCount = 0

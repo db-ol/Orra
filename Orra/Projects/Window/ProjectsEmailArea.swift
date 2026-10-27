@@ -11,10 +11,10 @@ import SwiftUI
 /// - the warnings, always with those the code found, and what was taken out of the text
 ///   before the model read it
 /// - What it says: the points, each with chips for its sources, or a line that it has
-///   none. A file's chip shows the excerpt the explanation saved, with its page, inside
-///   Orra, an attachment's chip the excerpt the model read, and an earlier email's chip
-///   shows that email in the window (decision 20). Nothing opens outside Orra. A line says
-///   when Projects could not read an attachment.
+///   none. A file's chip shows the excerpt the explanation saved, with its page, slide or
+///   sheet, inside Orra, an attachment's chip the excerpt the model read, and an earlier
+///   email's chip shows that email in the window (decision 20). Nothing opens outside Orra.
+///   A line says when Projects could not read an attachment.
 /// - Project Files for This Explanation, folded: each project file the explanation gave the
 ///   model, with Edit Project…, see FilesSection
 /// - Before you reply: the questions only the user can answer
@@ -555,10 +555,10 @@ extension ProjectsEmailArea {
 // MARK: Source chips
 
 extension ProjectsEmailArea {
-    /// The chips of a point's sources. A file's chip shows its excerpt with its page in a
-    /// popover, an attachment's chip the excerpt the model read, this email's chip its text,
-    /// and an earlier email's chip shows that email in the window (decision 20). The chips go
-    /// one under another in a column too narrow for a row.
+    /// The chips of a point's sources. A file's chip shows its saved excerpt with its page,
+    /// slide or sheet in a popover, an attachment's chip the excerpt the model read, this
+    /// email's chip its text, and an earlier email's chip shows that email in the window
+    /// (decision 20). The chips go one under another in a column too narrow for a row.
     struct SourceChips: View {
         let ids: [String]
         let model: ProjectsWindowModel
@@ -634,10 +634,10 @@ extension ProjectsEmailArea {
         }
     }
 
-    /// The text behind a chip: a file's excerpt as the explanation saved it, with its page
-    /// and heading, the excerpt of an attachment the model read, or the email's own text. A
-    /// file's saved excerpt keeps the lines the hygiene took out before the model read it,
-    /// so it says so when it holds any.
+    /// The text behind a chip: a file's excerpt as the explanation saved it, with its page,
+    /// slide or sheet and heading, and whether its text was recognized, the excerpt of an
+    /// attachment the model read, or the email's own text. A file's saved excerpt keeps the
+    /// lines the hygiene took out before the model read it, so it says so when it holds any.
     struct Excerpt: View {
         let source: ProjectsEmailModel.Source
         let emailText: String
@@ -654,6 +654,12 @@ extension ProjectsEmailArea {
                         Text(verbatim: ProjectsWindowText.savedExcerpt(chunk))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        if let recognized = ProjectsWindowText.recognized(chunk) {
+                            Text(verbatim: recognized)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         if let heading = chunk.heading, !heading.isEmpty {
                             Text(verbatim: heading)
                                 .font(.subheadline.weight(.semibold))

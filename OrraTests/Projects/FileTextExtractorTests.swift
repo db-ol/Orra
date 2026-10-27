@@ -88,9 +88,9 @@ struct FileTextExtractorTests {
         defer { folder.remove() }
         let cell = #"<w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="1F3864"/></w:tcPr>"#
             + #"<w:p><w:r><w:rPr><w:color w:val="FFFFFF"/></w:rPr><w:t>Header in a shaded cell</w:t></w:r></w:p></w:tc>"#
-        let body = Self.paragraph("Visible first.") + "<w:tbl><w:tr>\(cell)</w:tr></w:tbl>"
-            + Self.paragraph("Vanished words.", properties: "<w:vanish/>") + Self.paragraph("Visible last.")
-        let file = try folder.write("brief.docx", try Self.docx(body: body))
+        let body = OfficeTestFiles.paragraph("Visible first.") + "<w:tbl><w:tr>\(cell)</w:tr></w:tbl>"
+            + OfficeTestFiles.paragraph("Vanished words.", properties: "<w:vanish/>") + OfficeTestFiles.paragraph("Visible last.")
+        let file = try folder.write("brief.docx", try OfficeTestFiles.docx(body: body))
         let result = try await FileTextExtractor().text(of: file).get()
         let text = try #require(result.pages.first?.text)
         #expect(text.contains("Visible first.") && text.contains("Visible last."))
@@ -106,8 +106,8 @@ struct FileTextExtractorTests {
     @Test func capsWhatADocxUnpacksTo() async throws {
         let folder = try Folder()
         defer { folder.remove() }
-        let body = String(repeating: Self.paragraph("The print run is 500 calendars."), count: 400)
-        let data = try Self.docx(body: body)
+        let body = String(repeating: OfficeTestFiles.paragraph("The print run is 500 calendars."), count: 400)
+        let data = try OfficeTestFiles.docx(body: body)
         let file = try folder.write("brief.docx", data)
         #expect(data.count < 10_000)
         let small = FileTextExtractor(limits: FileTextExtractor.Limits(officeBytes: 10_000))
@@ -120,11 +120,11 @@ struct FileTextExtractorTests {
     @Test func refusesZipFilesItCannotMeasure() async throws {
         let folder = try Folder()
         defer { folder.remove() }
-        let docx = try Self.docx(body: Self.paragraph("The print run is 500 calendars."))
-        let end = try #require(Self.lastRange(of: [0x50, 0x4B, 0x05, 0x06], in: docx))
+        let docx = try OfficeTestFiles.docx(body: OfficeTestFiles.paragraph("The print run is 500 calendars."))
+        let end = try #require(OfficeTestFiles.lastRange(of: [0x50, 0x4B, 0x05, 0x06], in: docx))
         // An encrypted part.
         var encrypted = docx
-        let directory = try #require(Self.lastRange(of: [0x50, 0x4B, 0x01, 0x02], in: docx))
+        let directory = try #require(OfficeTestFiles.lastRange(of: [0x50, 0x4B, 0x01, 0x02], in: docx))
         encrypted[directory.lowerBound + 8] |= 1
         // A second end record, in a comment of the first.
         var twoEnds = docx
@@ -242,18 +242,37 @@ struct FileTextExtractorTests {
         #expect(text?.contains("<img src=") == true)
     }
 
+    /// What each extension means: a document in a format, an image, or a file known by its
+    /// name only.
+    @Test func eachExtensionHasItsKind() {
+        let kinds: [(String, FileTextExtractor.Kind)] = [
+            ("pdf", .text(.pdf)), ("DOCX", .text(.docx)), ("xlsx", .text(.xlsx)), ("xlsm", .text(.xlsx)), ("pptx", .text(.pptx)),
+            ("ppsx", .text(.pptx)), ("csv", .text(.text)), ("tsv", .text(.text)), ("md", .text(.text)), ("jpg", .image),
+            ("HEIC", .image), ("tiff", .image), ("webp", .image), ("zip", .nameOnly(.archive)), ("dwg", .nameOnly(.unsupportedFormat)),
+            ("dxf", .nameOnly(.unsupportedFormat)), ("mp4", .nameOnly(.unsupportedFormat)), ("key", .nameOnly(.unsupportedFormat)),
+            ("", .nameOnly(.unsupportedFormat)),
+        ]
+        for (fileExtension, kind) in kinds {
+            #expect(FileTextExtractor.kind(ofExtension: fileExtension) == kind, "\(fileExtension)")
+        }
+    }
+
     @Test func skipsWhatItDoesNotRead() async throws {
         let folder = try Folder()
         defer { folder.remove() }
         let extractor = FileTextExtractor()
         let reasons: [(String, FileSkipReason)] = [
-            ("budget.xlsx", .spreadsheetOrSlides), ("deck.pptx", .spreadsheetOrSlides), ("backup.zip", .archive),
-            ("photo.jpg", .unsupportedFormat),
+            ("budget.xlsx", .unreadable), ("deck.pptx", .unreadable), ("backup.zip", .archive),
+            ("photo.jpg", .waitsForRecognition), ("plan.dwg", .unsupportedFormat),
         ]
         for (name, reason) in reasons {
             let file = try folder.write(name, Data("PK\u{3}\u{4} not really".utf8))
             #expect(await extractor.text(of: file) == .failure(reason), "\(name)")
         }
+        let budget = try folder.write("budget.xlsx", try OfficeTestFiles.xlsx(lines: ["Lobby lamps", "12"]))
+        #expect(try await extractor.text(of: budget).get().pages.first?.text.contains("Lobby lamps") == true)
+        let deck = try folder.write("deck.pptx", try OfficeTestFiles.pptx(lines: ["Lobby lamps"]))
+        #expect(try await extractor.text(of: deck).get().pages.first?.text.contains("Lobby lamps") == true)
         #expect(await extractor.text(of: folder.url("missing.md")) == .failure(.noAccess))
         #expect(await extractor.text(of: try folder.write("empty.txt", Data())) == .failure(.noText))
         let binary = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52])
@@ -304,10 +323,38 @@ struct FileTextExtractorTests {
         defer { folder.remove() }
         let locked = try folder.pdf("locked.pdf", pages: [[Line("Salary review.")]], password: "example")
         #expect(await FileTextExtractor().text(of: locked) == .failure(.locked))
+        // A scan gives no text, and lists its pages for recognition.
         let scanned = try folder.pdf("scan.pdf", pages: [[Line("", onDarkBox: true)]])
-        #expect(await FileTextExtractor().text(of: scanned) == .failure(.noText))
+        let scan = try await FileTextExtractor().text(of: scanned).get()
+        #expect(scan.pages.isEmpty)
+        #expect(scan.pagesWithoutText == [1])
         let broken = try folder.write("broken.pdf", Data("%PDF-1.7 and nothing else".utf8))
         #expect(await FileTextExtractor().text(of: broken) == .failure(.unreadable))
+    }
+
+    /// A page whose text layer holds fewer than 20 letters or digits, such as a scanned page
+    /// with a page number, is listed for recognition, with its text kept. A page with text is
+    /// not.
+    @Test func aPDFListsItsPagesWithoutText() async throws {
+        let folder = try Folder()
+        defer { folder.remove() }
+        let file = try folder.pdf("mixed.pdf", pages: [
+            [Line("Quote for the 2027 calendar, printed in November.")],
+            [Line("", onDarkBox: true), Line("Page 2")],
+            [Line("第三页：纸张、装订和交货日期都在这里写明了，共二十多个字。")],
+        ])
+        let result = try await FileTextExtractor().text(of: file).get()
+        #expect(result.pagesWithoutText == [2])
+        #expect(result.pages.map(\.number) == [1, 2, 3])
+        #expect(result.pages[1].text.contains("Page 2"))
+    }
+
+    /// csv and tsv are text.
+    @Test func readsCSVAsText() async throws {
+        let folder = try Folder()
+        defer { folder.remove() }
+        let file = try folder.write("lamps.csv", Data("Item,Qty\nLobby lamps,12\n灯具,12\n".utf8))
+        #expect(try await FileTextExtractor().text(of: file).get().pages == [FileTextResult.Page(number: nil, text: "Item,Qty\nLobby lamps,12\n灯具,12\n")])
     }
 
     /// The time is checked after each page. Here each look at the clock moves it 4 s on.
@@ -473,64 +520,6 @@ struct FileTextExtractorTests {
     }
 
     private static let html = Data(#"<html><body><p>Hello</p><img src="https://images.example/a.png"></body></html>"#.utf8)
-
-    /// A Word paragraph with one run.
-    private static func paragraph(_ text: String, properties: String = "") -> String {
-        "<w:p><w:r><w:rPr>\(properties)</w:rPr><w:t>\(text)</w:t></w:r></w:p>"
-    }
-
-    /// A docx built by hand, with its parts deflated as Word does, since AppKit's writer
-    /// cannot write cell shading or Word's hidden text.
-    private static func docx(body: String) throws -> Data {
-        let types = #"<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">"#
-            + #"<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>"#
-            + #"<Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" "#
-            + #"ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#
-        let relationships = #"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#
-            + #"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" "#
-            + #"Target="word/document.xml"/></Relationships>"#
-        let document = #"<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#
-            + "<w:body>\(body)</w:body></w:document>"
-        return try zip([("[Content_Types].xml", types), ("_rels/.rels", relationships), ("word/document.xml", document)])
-    }
-
-    /// A ZIP file of deflated parts.
-    private static func zip(_ parts: [(name: String, text: String)]) throws -> Data {
-        func bytes<Number: FixedWidthInteger>(_ number: Number) -> Data {
-            withUnsafeBytes(of: number.littleEndian) { Data($0) }
-        }
-        var file = Data()
-        var directory = Data()
-        for part in parts {
-            let data = Data(part.text.utf8)
-            let packed = try (data as NSData).compressed(using: .zlib) as Data
-            let name = Data(part.name.utf8)
-            // Version 2.0, no flags, deflate, no time, the CRC and both sizes.
-            let fields = bytes(UInt16(20)) + bytes(UInt16(0)) + bytes(UInt16(8)) + bytes(UInt32(0)) + bytes(crc32(data))
-                + bytes(UInt32(packed.count)) + bytes(UInt32(data.count)) + bytes(UInt16(name.count)) + bytes(UInt16(0))
-            directory += bytes(UInt32(0x0201_4B50)) + bytes(UInt16(20)) + fields + bytes(UInt16(0)) + bytes(UInt16(0))
-                + bytes(UInt16(0)) + bytes(UInt32(0)) + bytes(UInt32(file.count)) + name
-            file += bytes(UInt32(0x0403_4B50)) + fields + name + packed
-        }
-        let start = file.count
-        file += directory
-        file += bytes(UInt32(0x0605_4B50)) + bytes(UInt32(0)) + bytes(UInt16(parts.count)) + bytes(UInt16(parts.count))
-            + bytes(UInt32(directory.count)) + bytes(UInt32(start)) + bytes(UInt16(0))
-        return file
-    }
-
-    private static func crc32(_ data: Data) -> UInt32 {
-        var crc: UInt32 = 0xFFFF_FFFF
-        for byte in data {
-            crc ^= UInt32(byte)
-            for _ in 0..<8 { crc = crc & 1 == 1 ? (crc >> 1) ^ 0xEDB8_8320 : crc >> 1 }
-        }
-        return ~crc
-    }
-
-    private static func lastRange(of pattern: [UInt8], in data: Data) -> Range<Int>? {
-        data.lastRange(of: Data(pattern)).map { $0.lowerBound..<$0.upperBound }
-    }
 
     /// A clock that moves on by `step` each time it is read.
     private final class SteppingClock: Sendable {

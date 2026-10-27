@@ -19,7 +19,7 @@ struct ChunkSearchTests {
     @discardableResult
     private func add(
         _ texts: [String], file: String, project: UUID, modified: Double = 1_760_000_000, hiddenRuns: Int = 0,
-        page: Int? = nil, heading: String? = nil, to database: ProjectsDatabase
+        page: Int? = nil, heading: String? = nil, sheet: String? = nil, recognized: Bool = false, to database: ProjectsDatabase
     ) async throws -> [Int64] {
         try await database.transaction { database in
             try database.run(
@@ -29,9 +29,10 @@ struct ChunkSearchTests {
             var ids: [Int64] = []
             for text in texts {
                 try database.run(
-                    "INSERT INTO index_chunks (file, project, page, heading, modified, text, chinese) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO index_chunks (file, project, page, heading, modified, text, chinese, sheet, recognized) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     [.integer(fileID), .text(project.uuidString), page.map { .integer(Int64($0)) } ?? .null,
-                     heading.map { .text($0) } ?? .null, .real(modified), .text(text), .integer(ChunkSearch.hasChinese(text) ? 1 : 0)])
+                     heading.map { .text($0) } ?? .null, .real(modified), .text(text), .integer(ChunkSearch.hasChinese(text) ? 1 : 0),
+                     sheet.map { .text($0) } ?? .null, .integer(recognized ? 1 : 0)])
                 let id = database.lastInsertedRow
                 let name = (file as NSString).deletingPathExtension
                 try database.run(
@@ -195,6 +196,26 @@ struct ChunkSearchTests {
         #expect(hit.text == "The print run is 500 calendars.")
         #expect(hit.fileHiddenRuns == 2)
         #expect(hit.score > 0)
+        #expect(hit.sheet == nil && !hit.recognized)
+        await database.close()
+    }
+
+    /// A sheet's chunk carries its sheet, a slide's its number as its page, and recognized
+    /// text says so. Each is found by a word in it.
+    @Test func hitsCarryTheirSheetAndWhetherTheirTextWasRecognized() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        let sheet = try await add(["| Lobby lamps | 12 | 86000 |"], file: "budget.xlsx", project: alpha, heading: "Lamps: Item | Qty | Price", sheet: "Lamps", to: database)
+        let slide = try await add(["Brass lamps arrive in week 47."], file: "deck.pptx", project: alpha, page: 3, to: database)
+        let scan = try await add(["Delivery note for 12 posters."], file: "scan.pdf", project: alpha, page: 2, recognized: true, to: database)
+        let search = ChunkSearch(database: database)
+        let lamps = try #require(try await search.search("86000").first)
+        #expect(lamps.chunk == sheet[0] && lamps.sheet == "Lamps" && lamps.page == nil && !lamps.recognized)
+        let brass = try #require(try await search.search("brass").first)
+        #expect(brass.chunk == slide[0] && brass.page == 3 && brass.sheet == nil)
+        let posters = try #require(try await search.search("posters").first)
+        #expect(posters.chunk == scan[0] && posters.recognized)
+        #expect(try await search.newest(alpha, limit: 3).map(\.recognized) == [false, false, true])
         await database.close()
     }
 

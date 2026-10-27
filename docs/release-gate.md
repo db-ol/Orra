@@ -102,9 +102,9 @@ with today pinned to 2026-10-18:
   and asks the model as with the Projects window open. ExplainService explains it in the
   project sorting chose, sure or likely, and without one otherwise.
 - A message with an HTML part reads as VisibleText reads it, as Mail shows that part.
-- An attachment with text in the set becomes a file of its type, made by the test: a PDF
-  or a docx with the text, white where the set marks white text, or the text itself for
-  csv and ics. The test puts the files into a message's MIME parts, and MailAttachment
+- An attachment with text in the set becomes a file of its type, made by the test: a PDF,
+  a docx, an xlsx or a pptx with the text, white where the set marks white text (on a white
+  shape in a pptx), or the text itself for csv and ics. The test puts the files into a message's MIME parts, and MailAttachment
   reads them from the parsed message as it reads an attachment in Mail, so a27, a52, a53
   and a54 are judged with their attachment's text and need their warnings.
   Tools/release-gate/projects_mbox.py writes the same kinds of files into

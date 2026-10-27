@@ -106,13 +106,15 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     only once the sidebar shows one, and it renders Open Mail under the line that says Mail
     is not open, in How to Use with Mail closed, and the line about the cleanup model. It
     also renders Project Files for This Explanation open at 480 and 200 points with its
-    other states (projects-email-files), and the popover of a file's chip
+    other states (projects-email-files), the rows of a deck and a workbook with their
+    slide and sheet chips (projects-email-files-office), and the popover of a file's chip
     (projects-excerpt), and checks that Edit Project… there keeps the email selected.
   - ProjectsEmailFilesTests, added on 2026-10-26, checks Project Files for This Explanation
     with made up files: why each file excerpt was in the prompt, as the explanation saves
     it and Orra 0.6.0 reads it, also with a reason a later Orra adds, each file once in the
     order of the prompt with its citation and warnings, the words of the list, chips that
-    tell two excerpts of one page apart, that the email view reads the folders only when
+    tell two excerpts of one page, slide or sheet apart, chips and popover lines that name
+    a deck's slide and a workbook's sheet, that the email view reads the folders only when
     the list asks, and where a file is in the folders of its project, a folder that is not
     available included, also inside one that is, and that the list reads the folders again
     for another email. ProjectsRuntimeTests checks the folders' real paths, a bookmark that
@@ -3488,7 +3490,8 @@ test guide, in English, then in 简体中文, 日本語 and Español.
 - [ ] An email explained before the update shows its files without a reason line.
 - [ ] VoiceOver: the header reads its words with Collapsed or Expanded, and note whether it
   says heading. Each row is one stop with name, folder, citation and reason. Each chip says
-  the file and the page. Escape closes the popover, and VoiceOver is back on the chip.
+  the file and the page, slide or sheet. Escape closes the popover, and VoiceOver is back on
+  the chip.
 - [ ] At 760 by 420 with an explained email selected, the open list fits the 200 point
   column with no sideways scroll, the chips and buttons stack, and the window keeps its
   size.
@@ -3909,6 +3912,47 @@ Mail. Watch the log with
 - [ ] A -600 answer while Mail runs cannot be made on demand. When the log shows
   "Permission check, asked true, answered -600" with Mail open, Settings says that macOS
   gave no answer, not to open Mail.
+
+More file types and the names of every file in project folders, added on 2026-10-26, not
+verified yet. ZipArchiveTests, OfficeXMLTextTests, FolderWalkTests, FolderIndexTests,
+FileNameSearchTests and MailAttachmentTests check the readers, the walk, the names and the
+upgrade of an index 0.6.0 wrote with files built by the tests, among them thousands of broken
+ones. Files from Excel, PowerPoint, Numbers, Keynote and WPS are not among them. Check in a
+Debug build with Projects on, a project whose folder holds the files below, and the index
+watched with `/usr/bin/log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND
+category == "projects-index"'`, which shows counts and times, never a name. This change adds
+step 6 to the Projects database, so an older build cannot open the data afterwards, see
+Projects in a Debug build in docs/development.md. Images and scanned PDF pages wait for text
+recognition, which a later change adds, so they show in no count yet.
+
+- [ ] Put an xlsx saved by Excel and one exported by Numbers or WPS, a pptx with speaker
+  notes saved by PowerPoint and one exported by Keynote, a csv, a dwg, a zip, a video and a
+  Keynote document saved as a package into the folder. Files with text counts the xlsx,
+  pptx and csv files, Files found by name only counts the dwg, the zip, the video and the
+  Keynote document, and Why Files Were Skipped lists none of them.
+- [ ] Explain an email that names a value only the xlsx holds, and one that names a value
+  only a slide's speaker notes hold. Each comes back as a source. The sheet's chip reads
+  "budget.xlsx, sheet “Lamps”" and the slide's "deck.pptx, slide 3", and their popovers say
+  Saved excerpt, sheet “Lamps” with the sheet's columns, or Saved excerpt, slide 3. Under
+  Project Files for This Explanation, their chips read Sheet “Lamps” and Slide 3.
+- [ ] An xlsx with a hidden sheet, a hidden row and white text, and a pptx with a hidden slide
+  and a hidden shape, are listed under Files with Hidden Text, and no explanation shows
+  their hidden text.
+- [ ] Rename the dwg and move it into another folder of the project. A minute later it is
+  still counted once. Delete it, and the count drops.
+- [ ] With 0.6.0, index a folder with a scanned PDF, an xlsx and a docx, then update to this
+  build. The log's first sweep reads the xlsx and not the docx, and the scanned PDF leaves
+  Why Files Were Skipped, since it waits for text recognition.
+- [ ] With an iCloud Drive folder set to Optimize Mac Storage, an evicted dwg is not
+  downloaded, as Finder keeps its cloud icon. It counts under Skipped, and Why Files Were
+  Skipped lists it as Not downloaded to this Mac. If Projects knew it before it was evicted,
+  it still counts under Files found by name only too.
+- [ ] An email with an xlsx attachment and one with a pptx attachment show them as read under
+  Original Email, and their explanations can cite them.
+- [ ] VoiceOver on the project page reads "Files found by name only" with its number. At 760
+  by 420, every line of the Index section wraps and none is cut, in all four languages.
+- [ ] In 简体中文, the Index section reads 仅能按文件名找到的文件, and a slide's chip reads
+  “deck.pptx，第 3 张幻灯片”.
 
 ## Not implemented
 

@@ -3,10 +3,15 @@ import Foundation
 import PDFKit
 
 /// Why a file in a project folder gives no text for the index. FolderWalk skips a file or a
-/// folder for one of the reasons up to `noAccess` before anything opens it.
-/// FileTextExtractor checks a file's reasons again before it reads, and adds the reasons
-/// after `noAccess`. The raw values stay the same from release to release, so the index can
-/// store them.
+/// folder for one of the reasons up to `noAccess` before anything opens it, except an
+/// archive, a file of a format Projects does not read and a file over its size limit, which
+/// it lists by name only. FileTextExtractor checks a file's reasons again before it reads,
+/// and adds the reasons from `noAccess` to `cancelled`. The index adds the last three.
+///
+/// A row of the index holds no reason when it holds the file's text, else one of: archive,
+/// tooLarge, unsupportedFormat, unreadable, locked, tooSlow, noText, waitsForRecognition,
+/// imageWithoutText and overFileLimit. The raw values stay the same from release to
+/// release, so the index can store them.
 nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable {
     /// A name that starts with a period, or a file Finder hides.
     case hidden
@@ -16,7 +21,8 @@ nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable 
     case gitFolder
     /// A node_modules folder.
     case nodeModules
-    /// A zip file, a disk image or another archive. Archives are never opened.
+    /// A zip file, a disk image or another archive, known by its name only. Archives are
+    /// never opened.
     case archive
     /// A symbolic link, which is never followed.
     case symbolicLink
@@ -38,11 +44,9 @@ nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable 
     case dataless
     /// An iCloud file whose newest version is not downloaded.
     case notDownloaded
-    /// A format Projects does not read.
+    /// A format Projects does not read, such as a drawing or a video, known by its name
+    /// only. Also anything that is not a regular file, such as a named pipe.
     case unsupportedFormat
-    /// An Excel or PowerPoint file (xlsx or pptx). Reading them needs a ZIP reader, which
-    /// Orra does not have.
-    case spreadsheetOrSlides
     /// A file or folder Orra may not read, or one that went away.
     case noAccess
     /// Content that does not match the file's extension, or that its reader cannot read.
@@ -51,20 +55,38 @@ nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable 
     case locked
     /// A PDF that took longer than its time limit to read.
     case tooSlow
-    /// A file without text, such as a scanned PDF.
+    /// A file without text, such as a PDF whose only text is hidden, or a scan whose pages
+    /// gave no text when they were recognized.
     case noText
     /// The read stopped because its task was cancelled, so nothing is known about the file.
     /// The index does not store this reason.
     case cancelled
+    /// An image, or a PDF whose pages hold no text layer, whose text has not been
+    /// recognized yet.
+    case waitsForRecognition
+    /// An image in which recognition found no text.
+    case imageWithoutText
+    /// A document or an image past the number of files the index reads for a project, or a
+    /// document past the text it keeps for one, known by its name only, see
+    /// FolderIndex.Limits.
+    case overFileLimit
 }
 
 /// The text of one file, page by page.
 nonisolated struct FileTextResult: Sendable, Equatable {
     nonisolated struct Page: Sendable, Equatable {
-        /// The page number in a PDF, from 1. Nil for the other formats, which have no
-        /// fixed pages.
+        /// The page number in a PDF and the slide number in a deck, from 1. Nil for the
+        /// other formats, which have no fixed pages.
         var number: Int?
         var text: String
+        /// The name of the sheet in a workbook, which is a page with no number.
+        var sheet: String? = nil
+        /// Whether the text was recognized in an image or on a scanned page, so its words
+        /// and numbers may be wrong.
+        var isRecognized = false
+        /// Whether the page stands alone, as a slide or a sheet does, so its chunks take
+        /// no heading from the pages before it, see TextChunker.
+        var isStandAlone = false
     }
 
     /// The pages that hold text, in order. None only for bytes whose only text was hidden,
@@ -78,12 +100,16 @@ nonisolated struct FileTextResult: Sendable, Equatable {
     var hiddenRuns: Int
     /// The file's modification date when it was read.
     var modified: Date
-    /// Whether pages past `FileTextExtractor.Limits.pdfPages` were left out.
+    /// Whether pages past `FileTextExtractor.Limits.pdfPages` were left out, or the later
+    /// sheets, rows or slides of an xlsx or pptx.
     var isCut: Bool
+    /// The PDF pages whose text layer holds fewer than `FileTextExtractor.textLayerCharacters`
+    /// letters or digits, such as scanned pages, whose text only recognition can read.
+    var pagesWithoutText: [Int] = []
 }
 
-/// Reads the text of one file in a project folder: PDF, docx, doc, rtf, odt, md and txt.
-/// MailAttachment reads the bytes of an email's attachments with it too.
+/// Reads the text of one file in a project folder: PDF, docx, doc, rtf, odt, xlsx, pptx, md,
+/// txt, csv and tsv. MailAttachment reads the bytes of an email's attachments with it too.
 ///
 /// The files may come from anyone and are read in Orra's own process, so:
 /// - A file is read only after a check of its type, flags and size, through a descriptor
@@ -92,25 +118,46 @@ nonisolated struct FileTextResult: Sendable, Equatable {
 ///   extension, and always with the document type of that extension. Never with automatic
 ///   detection and never as HTML, so a .doc that holds HTML is unreadable and never reaches
 ///   WebKit.
-/// - One call reads an Office or text file whole and cannot be stopped, so their size is
-///   capped before the call. For docx and odt, which are ZIP files, the sizes their parts
-///   unpack to are capped too. A PDF is read page by page, with the time and cancellation
-///   checked after each page and the number of pages capped.
+/// - One call reads a Word, RTF, OpenDocument or text file whole and cannot be stopped, so
+///   their size is capped before the call. For docx and odt, which are ZIP files, the sizes
+///   their parts unpack to are capped too. A PDF is read page by page, with the time and
+///   cancellation checked after each page and the number of pages capped. An xlsx or pptx
+///   is read part by part with ZipArchive and OfficeXMLText, never by AppKit, with the time
+///   and cancellation checked as it goes.
 /// - Hidden text is dropped and counted, see `FileTextResult.hiddenRuns`.
 nonisolated struct FileTextExtractor: Sendable {
     /// The formats it reads.
     nonisolated enum Format: Sendable, CaseIterable {
         case pdf, docx, doc, rtf, odt
-        /// md and txt.
+        /// xlsx and xlsm.
+        case xlsx
+        /// pptx and ppsx.
+        case pptx
+        /// md, txt, csv and tsv.
         case text
     }
+
+    /// What the index does with a file, by its extension.
+    nonisolated enum Kind: Sendable, Equatable {
+        /// A document whose text it reads in this format.
+        case text(Format)
+        /// An image, whose text only recognition can read.
+        case image
+        /// A file it knows by its name only, and why.
+        case nameOnly(FileSkipReason)
+    }
+
+    /// The letters and digits a PDF page's text layer holds at least, below which the page
+    /// may be a scan whose text only recognition can read.
+    static let textLayerCharacters = 20
 
     /// The limits for one file. All of them are guesses.
     nonisolated struct Limits: Sendable {
         /// Any file, the same as FolderWalk's.
         var fileBytes = FolderWalk.maximumFileSize
         /// docx, doc, rtf and odt. For docx and odt it also caps the sizes of their parts
-        /// unpacked, added up, since AppKit unpacks them in memory.
+        /// unpacked, added up, since AppKit unpacks them in memory, and for xlsx and pptx the
+        /// parts read, see OfficeXMLText.
         var officeBytes: Int64 = 20_000_000
         /// md and txt.
         var textBytes: Int64 = 10_000_000
@@ -118,6 +165,11 @@ nonisolated struct FileTextExtractor: Sendable {
         var pdfPages = 2_000
         /// The time a PDF may take. A PDF over it is skipped as `tooSlow`.
         var pdfTime: Duration = .seconds(10)
+        /// The time an xlsx or pptx may take, whose parts are read in steps that can stop.
+        var officeTime: Duration = .seconds(10)
+        /// The characters of text an xlsx or pptx gives, hidden text aside, as its pages hold
+        /// them. Later rows, sheets and slides are left out.
+        var officeCharacters = 1_000_000
     }
 
     let limits: Limits
@@ -154,18 +206,21 @@ nonisolated struct FileTextExtractor: Sendable {
         return extract(data, format: format, modified: modified, keepsHiddenOnly: true)
     }
 
-    /// What a file extension means: the format to read, or why such a file is skipped.
-    static func format(ofExtension fileExtension: String) -> Result<Format, FileSkipReason> {
+    /// What a file extension means: a document to read in a format, an image, or a file
+    /// known by its name only.
+    static func kind(ofExtension fileExtension: String) -> Kind {
         switch fileExtension.lowercased() {
-        case "pdf": .success(.pdf)
-        case "docx": .success(.docx)
-        case "doc": .success(.doc)
-        case "rtf": .success(.rtf)
-        case "odt": .success(.odt)
-        case "md", "txt": .success(.text)
-        case "xlsx", "pptx": .failure(.spreadsheetOrSlides)
-        case let other where archiveExtensions.contains(other): .failure(.archive)
-        default: .failure(.unsupportedFormat)
+        case "pdf": .text(.pdf)
+        case "docx": .text(.docx)
+        case "doc": .text(.doc)
+        case "rtf": .text(.rtf)
+        case "odt": .text(.odt)
+        case "xlsx", "xlsm": .text(.xlsx)
+        case "pptx", "ppsx": .text(.pptx)
+        case "md", "txt", "csv", "tsv": .text(.text)
+        case "png", "jpg", "jpeg", "heic", "heif", "tif", "tiff", "gif", "bmp", "webp": .image
+        case let other where archiveExtensions.contains(other): .nameOnly(.archive)
+        default: .nameOnly(.unsupportedFormat)
         }
     }
 
@@ -177,9 +232,10 @@ nonisolated struct FileTextExtractor: Sendable {
     private func read(_ file: URL) -> Result<FileTextResult, FileSkipReason> {
         guard !Task.isCancelled else { return .failure(.cancelled) }
         let format: Format
-        switch Self.format(ofExtension: file.pathExtension) {
-        case .success(let found): format = found
-        case .failure(let reason): return .failure(reason)
+        switch Self.kind(ofExtension: file.pathExtension) {
+        case .text(let found): format = found
+        case .image: return .failure(.waitsForRecognition)
+        case .nameOnly(let reason): return .failure(reason)
         }
         let data: Data
         let modified: Date
@@ -193,22 +249,27 @@ nonisolated struct FileTextExtractor: Sendable {
     /// The most bytes a file of the format may have.
     private func limit(of format: Format) -> Int64 {
         switch format {
-        case .pdf: limits.fileBytes
+        // A deck is mostly pictures, which are never unpacked, so an xlsx or pptx may be as
+        // large as any file. The parts it reads are capped.
+        case .pdf, .xlsx, .pptx: limits.fileBytes
         case .text: min(limits.fileBytes, limits.textBytes)
         case .docx, .doc, .rtf, .odt: min(limits.fileBytes, limits.officeBytes)
         }
     }
 
     /// The text of a file's bytes, read as `format`. Without visible text it gives `noText`,
-    /// or with `keepsHiddenOnly` a result without pages when hidden runs were dropped.
+    /// or with `keepsHiddenOnly` a result without pages when hidden runs were dropped. A PDF
+    /// with pages whose text layer is empty gives a result that lists them, with or without
+    /// pages, since recognition may read them.
     private func extract(_ data: Data, format: Format, modified: Date, keepsHiddenOnly: Bool = false) -> Result<FileTextResult, FileSkipReason> {
         var pages: [FileTextResult.Page]
         var hiddenRuns = 0
         var isCut = false
+        var pagesWithoutText: [Int] = []
         switch format {
         case .pdf:
             switch pdfText(data) {
-            case .success(let read): (pages, hiddenRuns, isCut) = read
+            case .success(let read): (pages, hiddenRuns, isCut, pagesWithoutText) = read
             case .failure(let reason): return .failure(reason)
             }
         case .docx, .doc, .rtf, .odt:
@@ -218,15 +279,34 @@ nonisolated struct FileTextExtractor: Sendable {
                 hiddenRuns = read.hiddenRuns
             case .failure(let reason): return .failure(reason)
             }
+        case .xlsx, .pptx:
+            guard data.starts(with: Self.zipSignature) else { return .failure(.unreadable) }
+            let archive: ZipArchive
+            do {
+                archive = try ZipArchive(data)
+            } catch {
+                return .failure(error)
+            }
+            let read = format == .xlsx
+                ? OfficeXMLText.workbook(archive, limits: limits, now: now)
+                : OfficeXMLText.presentation(archive, limits: limits, now: now)
+            switch read {
+            case .success(let read): (pages, hiddenRuns, isCut) = read
+            case .failure(let reason): return .failure(reason)
+            }
         case .text:
             guard let text = Self.decoded(data) else { return .failure(.unreadable) }
             pages = [FileTextResult.Page(number: nil, text: text)]
         }
 
-        pages = pages.map { FileTextResult.Page(number: $0.number, text: Self.normalized($0.text)) }
-            .filter { !$0.text.allSatisfy(\.isWhitespace) }
-        guard !pages.isEmpty || (keepsHiddenOnly && hiddenRuns > 0) else { return .failure(.noText) }
-        return .success(FileTextResult(pages: pages, hiddenRuns: hiddenRuns, modified: modified, isCut: isCut))
+        pages = pages.map { page in
+            var page = page
+            page.text = Self.normalized(page.text)
+            return page
+        }
+        .filter { !$0.text.allSatisfy(\.isWhitespace) }
+        guard !pages.isEmpty || (keepsHiddenOnly && hiddenRuns > 0) || !pagesWithoutText.isEmpty else { return .failure(.noText) }
+        return .success(FileTextResult(pages: pages, hiddenRuns: hiddenRuns, modified: modified, isCut: isCut, pagesWithoutText: pagesWithoutText))
     }
 
     // MARK: Reading the bytes
@@ -288,44 +368,54 @@ nonisolated struct FileTextExtractor: Sendable {
 
     // MARK: PDF
 
-    private func pdfText(_ data: Data) -> Result<([FileTextResult.Page], Int, Bool), FileSkipReason> {
+    private func pdfText(_ data: Data) -> Result<([FileTextResult.Page], Int, Bool, [Int]), FileSkipReason> {
         let start = now()
         guard let document = PDFDocument(data: data) else { return .failure(.unreadable) }
         guard !document.isLocked else { return .failure(.locked) }
         let count = min(document.pageCount, limits.pdfPages)
         var pages: [FileTextResult.Page] = []
         var hiddenRuns = 0
+        var pagesWithoutText: [Int] = []
         for index in 0..<count {
-            let read: (text: String, hiddenRuns: Int)? = autoreleasepool {
+            let read: (text: String, hiddenRuns: Int, layer: Int)? = autoreleasepool {
                 document.page(at: index).map(Self.visibleText(of:))
             }
             if let read {
                 pages.append(FileTextResult.Page(number: index + 1, text: read.text))
                 hiddenRuns += read.hiddenRuns
             }
+            if (read?.layer ?? 0) < Self.textLayerCharacters {
+                pagesWithoutText.append(index + 1)
+            }
             if Task.isCancelled { return .failure(.cancelled) }
             if start.duration(to: now()) > limits.pdfTime { return .failure(.tooSlow) }
         }
-        return .success((pages, hiddenRuns, document.pageCount > count))
+        return .success((pages, hiddenRuns, document.pageCount > count, pagesWithoutText))
     }
 
-    /// The text of a PDF page without its hidden runs. PDFKit gives the size of each run but
-    /// not whether it is drawn: it reports transparent text as opaque, and says nothing of
+    /// The text of a PDF page without its hidden runs, and the letters and digits of its
+    /// whole text layer, hidden runs included. PDFKit gives the size of each run but not
+    /// whether it is drawn: it reports transparent text as opaque, and says nothing of
     /// invisible text (render mode 3) or of a shape drawn over text. So the page is drawn,
     /// and a line counts as hidden where it leaves no ink. A scan's invisible text layer lies
     /// on the scan's ink and is kept. Text drawn over other text is not found.
-    private static func visibleText(of page: PDFPage) -> (text: String, hiddenRuns: Int) {
-        guard let document = page.attributedString else { return (page.string ?? "", 0) }
+    private static func visibleText(of page: PDFPage) -> (text: String, hiddenRuns: Int, layer: Int) {
+        guard let document = page.attributedString else {
+            let text = page.string ?? ""
+            return (text, 0, lettersAndDigits(in: text))
+        }
+        let layer = lettersAndDigits(in: document.string)
         guard let drawing = PageDrawing(page) else {
             // Without a drawing, light and transparent text counts as hidden.
-            return visible(document) { attributes, _ in
+            let read = visible(document) { attributes, _ in
                 if isTiny(attributes) { return true }
                 guard let color = RGB(attributes[.foregroundColor] as? NSColor ?? .black) else { return false }
                 return color.isTransparent || color.isLight
             }
+            return (read.text, read.hiddenRuns, layer)
         }
         let string = document.string as NSString
-        return visible(document) { attributes, range in
+        let read = visible(document) { attributes, range in
             if isTiny(attributes) { return true }
             guard let box = page.selection(for: range)?.bounds(for: page) else { return false }
             // Punctuation alone leaves too little ink to judge, and hides nothing.
@@ -334,6 +424,11 @@ nonisolated struct FileTextExtractor: Sendable {
             let size = (attributes[.font] as? NSFont)?.pointSize ?? box.height
             return !drawing.showsInk(in: box, characters: characters, size: size)
         }
+        return (read.text, read.hiddenRuns, layer)
+    }
+
+    private static func lettersAndDigits(in text: String) -> Int {
+        text.count { $0.isLetter || $0.isNumber }
     }
 
     /// A PDF page drawn at up to one pixel a point, to see where text leaves ink.
@@ -435,11 +530,21 @@ nonisolated struct FileTextExtractor: Sendable {
         case .odt: (signature, documentType) = (Self.zipSignature, .openDocument)
         case .doc: (signature, documentType) = ([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1], .docFormat)
         case .rtf: (signature, documentType) = (Array(#"{\rtf"#.utf8), .rtf)
-        case .pdf, .text: return .failure(.unsupportedFormat)
+        case .pdf, .xlsx, .pptx, .text: return .failure(.unsupportedFormat)
         }
         guard data.starts(with: signature) else { return .failure(.unreadable) }
-        if signature == Self.zipSignature, let reason = Self.zipRefusal(data, unpackedLimit: min(limits.fileBytes, limits.officeBytes)) {
-            return .failure(reason)
+        if signature == Self.zipSignature {
+            // AppKit unpacks each part in memory, at the size the ZIP's central directory
+            // gives for it, and fails on a part that unpacks larger (local test), so those
+            // sizes added up cap what it unpacks. A ZIP whose directory could show this check
+            // one thing and AppKit another is unreadable, see ZipArchive.
+            let archive: ZipArchive
+            do {
+                archive = try ZipArchive(data)
+            } catch {
+                return .failure(error)
+            }
+            if archive.unpackedSize > min(limits.fileBytes, limits.officeBytes) { return .failure(.tooLarge) }
         }
         let readable = format == .rtf ? Self.markingHiddenText(inRTF: data) : data
         var attributes: NSDictionary?
@@ -451,44 +556,6 @@ nonisolated struct FileTextExtractor: Sendable {
     }
 
     private static let zipSignature: [UInt8] = [0x50, 0x4B, 0x03, 0x04]
-
-    /// Why the parts of a docx or odt must not be unpacked, or nil when they may. AppKit
-    /// unpacks each part in memory, at the size the ZIP's central directory gives for it, and
-    /// fails on a part that unpacks larger (local test), so those sizes added up cap what it
-    /// unpacks. A file with more than one central directory, encrypted parts, ZIP64 sizes or
-    /// a compression other than deflate is unreadable.
-    private static func zipRefusal(_ data: Data, unpackedLimit: Int64) -> FileSkipReason? {
-        data.withUnsafeBytes { bytes -> FileSkipReason? in
-            func number(_ offset: Int, _ size: Int) -> Int {
-                (0..<size).reduce(0) { $0 | Int(bytes[offset + $1]) << (8 * $1) }
-            }
-            // The end of the central directory: 22 bytes, then a comment of up to 65,535
-            // bytes that runs to the end of the file.
-            let lowest = max(0, bytes.count - 22 - 65_535)
-            let ends = stride(from: bytes.count - 22, through: lowest, by: -1).filter { offset in
-                number(offset, 4) == 0x0605_4B50 && offset + 22 + number(offset + 20, 2) == bytes.count
-            }
-            guard ends.count == 1, let end = ends.first else { return .unreadable }
-            let entries = number(end + 10, 2), directorySize = number(end + 12, 4), directoryStart = number(end + 16, 4)
-            // One disk, no ZIP64, and the directory just before its end.
-            guard number(end + 4, 4) == 0, number(end + 8, 2) == entries, entries != 0xFFFF,
-                  directoryStart + directorySize == end else { return .unreadable }
-            var offset = directoryStart
-            var unpacked: Int64 = 0
-            for _ in 0..<entries {
-                guard offset + 46 <= end, number(offset, 4) == 0x0201_4B50 else { return .unreadable }
-                let flags = number(offset + 8, 2), method = number(offset + 10, 2)
-                let packedSize = number(offset + 20, 4), size = number(offset + 24, 4)
-                guard flags & 1 == 0, method == 0 || method == 8, packedSize != 0xFFFF_FFFF, size != 0xFFFF_FFFF else {
-                    return .unreadable
-                }
-                unpacked += Int64(size)
-                if unpacked > unpackedLimit { return .tooLarge }
-                offset += 46 + number(offset + 28, 2) + number(offset + 30, 2) + number(offset + 32, 2)
-            }
-            return offset == end ? nil : .unreadable
-        }
-    }
 
     /// The kerning that marks Word's hidden text in RTF, in points. No real document uses it.
     private static let hiddenKerning = -1_000.0

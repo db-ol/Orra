@@ -81,8 +81,8 @@ struct ProjectsDatabaseTests {
         // macOS 15 has SQLite 3.43 or later, so FTS5 drops deleted rows at once.
         #expect(sqlite3_libversion_number() >= ProjectsDatabase.secureDeleteVersion)
         #expect(database.hasFullTextSecureDelete)
-        for table in ["index_chunk_words", "index_chunk_trigrams"] {
-            #expect(try await database.run("SELECT v FROM \(table)_config WHERE k = 'secure-delete'") == [[.integer(1)]])
+        for table in ["index_chunk_words", "index_chunk_trigrams", "index_file_names", "index_file_name_trigrams"] {
+            #expect(try await database.run("SELECT v FROM \(table)_config WHERE k = 'secure-delete'") == [[.integer(1)]], "\(table)")
         }
         await database.close()
     }
@@ -116,6 +116,43 @@ struct ProjectsDatabaseTests {
         }
         try await database.compactAfterDeletes()
         #expect(bytesOnDisk(database).range(of: Data(secret.utf8)) == nil)
+        await database.close()
+    }
+
+    /// Step 6 adds the columns and tables of more file types and of text recognition, and
+    /// marks the PDFs 0.6.0 stored, those with text and the scans it held as without text, for
+    /// recognition. Every other row stays as it was.
+    @Test func stepSixMarksThePDFsOfAnEarlierIndex() async throws {
+        defer { cleanUp() }
+        let early = try await ProjectsDatabase.open(in: storage, migrations: Array(ProjectsDatabase.migrations.prefix(5)))
+        let rows: [(String, String?)] = [("/p/Report.PDF", nil), ("/p/scan.pdf", "noText"), ("/p/locked.pdf", "locked"), ("/p/brief.docx", nil), ("/p/empty.txt", "noText")]
+        for (path, skip) in rows {
+            try await early.run(
+                "INSERT INTO index_files (project, path, size, modified, skip) VALUES ('p', ?, 1, 1, ?)", [.text(path), skip.map { .text($0) } ?? .null])
+        }
+        await early.close()
+
+        let database = try await ProjectsDatabase.open(in: storage)
+        #expect(try await database.run("PRAGMA user_version").first == [.integer(6)])
+        #expect(ProjectsDatabase.migrations.last?.version == 6)
+        let marked = try await database.run("SELECT path, skip, recognize, folder FROM index_files ORDER BY path")
+        #expect(marked == [
+            [.text("/p/Report.PDF"), .null, .integer(1), .null],
+            [.text("/p/brief.docx"), .null, .integer(0), .null],
+            [.text("/p/empty.txt"), .text("noText"), .integer(0), .null],
+            [.text("/p/locked.pdf"), .text("locked"), .integer(0), .null],
+            [.text("/p/scan.pdf"), .text("waitsForRecognition"), .integer(1), .null],
+        ])
+        let columns = try await database.run("SELECT name FROM pragma_table_info('index_chunks') ORDER BY name").compactMap { $0.first?.text }
+        #expect(columns.contains("sheet") && columns.contains("recognized"))
+        let tables = try await database.run("SELECT name FROM sqlite_schema WHERE type IN ('table', 'index') ORDER BY name").compactMap { $0.first?.text }
+        for name in ["index_file_names", "index_file_name_trigrams", "index_recognition_pages", "index_files_waiting"] {
+            #expect(tables.contains(name), "\(name)")
+        }
+        // A file's tried pages go with its row.
+        try await database.run("INSERT INTO index_recognition_pages (file, page, size, modified, outcome) SELECT id, 2, 1, 1, 'blank' FROM index_files WHERE path = '/p/scan.pdf'")
+        try await database.run("DELETE FROM index_files WHERE path = '/p/scan.pdf'")
+        #expect(try await database.run("SELECT count(*) FROM index_recognition_pages") == [[.integer(0)]])
         await database.close()
     }
 

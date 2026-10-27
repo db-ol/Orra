@@ -143,10 +143,13 @@ struct FolderIndexTests {
         private(set) var watchedSince: [UInt64?] = []
         private(set) var stops = 0
 
+        /// - Parameter before: makes the database before the index opens it, such as one an
+        ///   earlier Orra wrote, given the project folder's path and the first project.
         init(
             limits: FolderIndex.Limits = FolderIndex.Limits(),
             dictation: Dictation = Dictation(),
-            read: (@Sendable (URL) async -> Result<FileTextResult, FileSkipReason>)? = nil
+            read: (@Sendable (URL) async -> Result<FileTextResult, FileSkipReason>)? = nil,
+            before: ((ProjectsStorage, String, UUID) async throws -> Void)? = nil
         ) async throws {
             let made = FileManager.default.temporaryDirectory.appendingPathComponent("FolderIndexTests-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: made, withIntermediateDirectories: true)
@@ -157,6 +160,7 @@ struct FolderIndexTests {
             folderURL = URL(fileURLWithPath: real + "/Alpha", isDirectory: true)
             try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
             storage = ProjectsStorage(root: URL(fileURLWithPath: real + "/Support", isDirectory: true))
+            try await before?(storage, folderURL.path, alpha)
             database = try await ProjectsDatabase.open(in: storage)
             self.dictation = dictation
             let reads = reads
@@ -256,13 +260,32 @@ struct FolderIndexTests {
         }
 
         /// Every chunk has its row in the words table, and every chunk with Chinese its row
-        /// in the trigram table, and nothing else is there.
+        /// in the trigram table, and nothing else is there. Every file with a folder has its
+        /// name entry, and nothing else has one.
         func expectTablesAgree() async throws {
             #expect(try await count("SELECT count(*) FROM index_chunk_words") == count("SELECT count(*) FROM index_chunks"))
             #expect(try await count("SELECT count(*) FROM index_chunk_words WHERE rowid NOT IN (SELECT id FROM index_chunks)") == 0)
             #expect(try await count("SELECT count(*) FROM index_chunk_trigrams") == count("SELECT count(*) FROM index_chunks WHERE chinese = 1"))
             #expect(try await count("SELECT count(*) FROM index_chunk_trigrams WHERE rowid NOT IN (SELECT id FROM index_chunks)") == 0)
             #expect(try await count("SELECT count(*) FROM index_chunks WHERE file NOT IN (SELECT id FROM index_files)") == 0)
+            #expect(try await count("SELECT count(*) FROM index_file_names") == count("SELECT count(*) FROM index_files WHERE folder IS NOT NULL"))
+            #expect(try await count("SELECT count(*) FROM index_file_names WHERE rowid NOT IN (SELECT id FROM index_files WHERE folder IS NOT NULL)") == 0)
+            #expect(try await count("SELECT count(*) FROM index_file_name_trigrams WHERE rowid NOT IN (SELECT rowid FROM index_file_names)") == 0)
+            #expect(try await count("SELECT count(*) FROM index_recognition_pages WHERE file NOT IN (SELECT id FROM index_files)") == 0)
+        }
+
+        /// The names of the files FileNameSearch finds for a text, best first.
+        func names(_ text: String, in projects: [UUID]? = nil) async throws -> [String] {
+            try await FileNameSearch(database: database).search(text, in: projects).map(\.url.lastPathComponent)
+        }
+
+        /// The reason and the recognition mark of each row, by file name.
+        func rows() async throws -> [String: (skip: String?, recognize: Int64)] {
+            var rows: [String: (skip: String?, recognize: Int64)] = [:]
+            for row in try await database.run("SELECT path, skip, recognize FROM index_files") {
+                rows[URL(fileURLWithPath: row[0].text ?? "").lastPathComponent] = (row[1].text, row[2].integer ?? -1)
+            }
+            return rows
         }
     }
 
@@ -271,9 +294,10 @@ struct FolderIndexTests {
         limits: FolderIndex.Limits = FolderIndex.Limits(),
         dictation: Dictation = Dictation(),
         read: (@Sendable (URL) async -> Result<FileTextResult, FileSkipReason>)? = nil,
+        before: ((ProjectsStorage, String, UUID) async throws -> Void)? = nil,
         _ body: (Fixture) async throws -> Void
     ) async throws {
-        let fixture = try await Fixture(limits: limits, dictation: dictation, read: read)
+        let fixture = try await Fixture(limits: limits, dictation: dictation, read: read, before: before)
         do {
             try await body(fixture)
         } catch {
@@ -292,13 +316,15 @@ struct FolderIndexTests {
             try fixture.write("empty.txt", "   \n")
             await fixture.start()
 
-            #expect(fixture.reads.all.sorted() == ["empty.txt", "notes.txt", "合同.md"])
+            #expect(fixture.reads.all.sorted() == ["budget.xlsx", "empty.txt", "notes.txt", "合同.md"])
             let report = try #require(fixture.index.reports[fixture.alpha])
             #expect(report.indexed == 2)
             #expect(report.chunks == 2)
             #expect(report.textBytes == Int64("# 付款\n\n合同付款条款需要确认。".utf8.count + "The print run is 500 calendars.".utf8.count))
             #expect(report.hiddenText == 0)
-            #expect(report.skipped == [.spreadsheetOrSlides: 1, .hidden: 1, .noText: 1])
+            // The files read without text are known by name, and the walk's skips are skipped.
+            #expect(report.skipped == [.hidden: 1])
+            #expect(report.nameOnly == 2)
             #expect(report.refusedFolders.isEmpty)
             #expect(!report.reachedFileLimit && !report.reachedTextLimit && !report.isIndexing)
 
@@ -312,7 +338,7 @@ struct FolderIndexTests {
 
             let skipped = try await fixture.index.skippedFiles(project: fixture.alpha)
             #expect(skipped.map(\.url.lastPathComponent) == ["budget.xlsx", "empty.txt"])
-            #expect(skipped.map(\.reason) == [.spreadsheetOrSlides, .noText])
+            #expect(skipped.map(\.reason) == [.unreadable, .noText])
             #expect(skipped[1].modified != nil)
             #expect(fixture.watchedSince == [nil])
             try await fixture.expectTablesAgree()
@@ -444,7 +470,8 @@ struct FolderIndexTests {
             try fixture.write("notes.txt", "Calendars.")
             await fixture.start()
             #expect(fixture.reads.all.sorted() == ["notes.txt", "slow.pdf"])
-            #expect(fixture.index.reports[fixture.alpha]?.skipped == [.tooSlow: 1])
+            #expect(fixture.index.reports[fixture.alpha]?.skipped == [:])
+            #expect(fixture.index.reports[fixture.alpha]?.nameOnly == 1)
             let skipped = try await fixture.index.skippedFiles(project: fixture.alpha)
             #expect(skipped == [FolderIndex.SkippedFile(url: URL(fileURLWithPath: fixture.folder + "/slow.pdf"), reason: .tooSlow, modified: old)])
 
@@ -514,16 +541,22 @@ struct FolderIndexTests {
         }
     }
 
+    /// Documents past the limit of files are known by name only, and found by it.
     @Test func aProjectHoldsAtMostItsFiles() async throws {
         try await withFixture(limits: FolderIndex.Limits(files: 2)) { fixture in
-            for name in ["a.txt", "b.txt", "c.txt"] {
+            for name in ["first.txt", "second.txt", "third.txt"] {
                 try fixture.write(name, "Text of \(name).")
             }
             await fixture.start()
             let report = try #require(fixture.index.reports[fixture.alpha])
             #expect(report.indexed == 2)
+            #expect(report.nameOnly == 1)
             #expect(report.reachedFileLimit)
-            #expect(!report.reachedTextLimit)
+            #expect(!report.reachedTextLimit && !report.reachedNameLimit)
+            #expect(fixture.reads.all == ["first.txt", "second.txt"])
+            #expect(try await fixture.names("third") == ["third.txt"])
+            #expect(try await fixture.index.skippedFiles(project: fixture.alpha).isEmpty)
+            try await fixture.expectTablesAgree()
         }
     }
 
@@ -545,16 +578,21 @@ struct FolderIndexTests {
             }
             await fixture.deliverAndTick(FolderEvents.Changes(changed: [fixture.folder + "/a.txt", fixture.folder + "/c.txt", fixture.folder + "/d.txt"]))
             // 20 bytes stay with b.txt and a.txt brings 20 again, so c.txt still fits and
-            // passes the limit, and d.txt waits.
+            // passes the limit, and d.txt is known by name only.
             #expect(fixture.reads.all == ["a.txt", "b.txt", "a.txt", "c.txt"])
             let report = try #require(fixture.index.reports[fixture.alpha])
             #expect(report.indexed == 3)
             #expect(report.textBytes == 60)
             #expect(report.reachedTextLimit)
+            #expect(report.nameOnly == 1)
+            #expect(try await fixture.rows()["d.txt"]?.skip == "overFileLimit")
+            let rowIDs = try await fixture.database.run("SELECT id FROM index_files ORDER BY id")
 
-            // A later sweep reads nothing more.
+            // A later sweep reads nothing more and writes nothing again.
             await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
             #expect(fixture.reads.all.count == 4)
+            #expect(try await fixture.database.run("SELECT id FROM index_files ORDER BY id") == rowIDs)
+            try await fixture.expectTablesAgree()
         }
     }
 
@@ -788,6 +826,246 @@ struct FolderIndexTests {
             #expect(fixture.reads.all == ["slow.txt", "slow.txt"])
             #expect(try await fixture.count("SELECT count(*) FROM index_files") == 1)
             #expect(fixture.index.isIdle)
+        }
+    }
+
+    // MARK: Every file by name
+
+    /// Every file gets a row and a name entry: documents are read, images wait for
+    /// recognition, and every other kind is known by its name, without being opened.
+    @Test func everyFileIsFoundByItsNameAndFolder() async throws {
+        try await withFixture { fixture in
+            try fixture.write("notes.txt", "The print run is 500 calendars.")
+            try fixture.write("plan-v2.dwg", "drawing")
+            try fixture.write("backup.zip", "zip")
+            try fixture.write("IMG_2041.jpg", "photo")
+            try fixture.write("图纸/大厅灯具布置.dwg", "drawing")
+            try fixture.write("Drawings/Lobby/site.dxf", "drawing")
+            await fixture.start()
+            #expect(fixture.reads.all == ["notes.txt"])
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.indexed == 1)
+            #expect(report.nameOnly == 4)
+            let rows = try await fixture.rows()
+            #expect(rows["IMG_2041.jpg"]?.skip == "waitsForRecognition" && rows["IMG_2041.jpg"]?.recognize == 1)
+            #expect(rows["plan-v2.dwg"]?.skip == "unsupportedFormat" && rows["plan-v2.dwg"]?.recognize == 0)
+            #expect(rows["backup.zip"]?.skip == "archive")
+            #expect(rows["notes.txt"].map { $0.skip == nil && $0.recognize == 0 } == true)
+            #expect(try await fixture.names("plan v2") == ["plan-v2.dwg"])
+            #expect(try await fixture.names("dwg").sorted() == ["plan-v2.dwg", "大厅灯具布置.dwg"])
+            #expect(try await fixture.names("图纸") == ["大厅灯具布置.dwg"])
+            #expect(try await fixture.names("灯具布置") == ["大厅灯具布置.dwg"])
+            #expect(try await fixture.names("lobby") == ["site.dxf"])
+            #expect(try await fixture.names("2041") == ["IMG_2041.jpg"])
+            #expect(try await fixture.names("notes") == ["notes.txt"])
+            #expect(try await fixture.names("plan", in: [fixture.beta]).isEmpty)
+            // A name gives no passage, and sorting compares the names of documents only.
+            #expect(try await fixture.search("dwg").isEmpty)
+            #expect(try await fixture.index.fileNames(project: fixture.alpha) == ["notes.txt"])
+            // Reasons the page only counts stay out of the list of skipped files.
+            #expect(try await fixture.index.skippedFiles(project: fixture.alpha).isEmpty)
+            try await fixture.expectTablesAgree()
+
+            // A sweep with nothing new writes nothing again.
+            let rowIDs = try await fixture.database.run("SELECT id FROM index_files ORDER BY id")
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(try await fixture.database.run("SELECT id FROM index_files ORDER BY id") == rowIDs)
+            #expect(fixture.reads.all == ["notes.txt"])
+        }
+    }
+
+    /// Past the limit of names, the files are left out, and the walk goes on for documents.
+    @Test func aProjectListsAtMostItsNames() async throws {
+        try await withFixture(limits: FolderIndex.Limits(files: 1, names: 2)) { fixture in
+            // The walk takes them in the order of their names.
+            for name in ["lobby.dwg", "plan.dwg", "site.dwg"] {
+                try fixture.write(name, "drawing")
+            }
+            try fixture.write("notes.txt", "Calendars.")
+            await fixture.start()
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.indexed == 1)
+            #expect(report.nameOnly == 2)
+            #expect(report.reachedNameLimit && !report.reachedFileLimit)
+            #expect(try await fixture.names("lobby") == ["lobby.dwg"])
+            #expect(try await fixture.names("plan") == ["plan.dwg"])
+            #expect(try await fixture.names("site").isEmpty)
+        }
+    }
+
+    /// Images take the room the documents leave, newest first, and the rest are known by
+    /// name. An image the index holds keeps its place, one with text whatever the room, and
+    /// an image past the limit takes room that comes free.
+    @Test func imagesTakeTheRoomTheDocumentsLeave() async throws {
+        try await withFixture(limits: FolderIndex.Limits(files: 3)) { fixture in
+            let old = Date(timeIntervalSince1970: 1_760_000_000)
+            try fixture.write("a.txt", "First document.", modified: old)
+            try fixture.write("b.txt", "Second document.", modified: old)
+            for (name, seconds) in [("older.jpg", 10.0), ("newest.png", 30), ("middle.heic", 20)] {
+                try fixture.write(name, "image", modified: old.addingTimeInterval(seconds))
+            }
+            await fixture.start()
+            var rows = try await fixture.rows()
+            #expect(rows["newest.png"]?.skip == "waitsForRecognition")
+            #expect(rows["middle.heic"]?.skip == "overFileLimit" && rows["older.jpg"]?.skip == "overFileLimit")
+            #expect(fixture.index.reports[fixture.alpha]?.reachedFileLimit == true)
+            #expect(fixture.index.reports[fixture.alpha]?.nameOnly == 2)
+
+            // Room comes free, and the newest image past the limit takes it.
+            try FileManager.default.removeItem(atPath: fixture.folder + "/b.txt")
+            await fixture.deliverAndTick(FolderEvents.Changes(removed: [fixture.folder + "/b.txt"]))
+            rows = try await fixture.rows()
+            #expect(rows["newest.png"]?.skip == "waitsForRecognition" && rows["middle.heic"]?.skip == "waitsForRecognition")
+            #expect(rows["older.jpg"]?.skip == "overFileLimit")
+
+            // Documents take the room back. An image with text keeps it, and one that waits
+            // gives its place up.
+            try await fixture.database.run("UPDATE index_files SET skip = NULL, recognize = 0 WHERE path LIKE '%/middle.heic'")
+            try fixture.write("b.txt", "Second document.", modified: old)
+            try fixture.write("c.txt", "Third document.", modified: old)
+            await fixture.deliverAndTick(FolderEvents.Changes(changed: [fixture.folder + "/b.txt", fixture.folder + "/c.txt"]))
+            rows = try await fixture.rows()
+            #expect(rows["middle.heic"].map { $0.skip == nil } == true)
+            #expect(rows["newest.png"]?.skip == "overFileLimit" && rows["older.jpg"]?.skip == "overFileLimit")
+            #expect(fixture.reads.all.allSatisfy { $0.hasSuffix(".txt") })
+            try await fixture.expectTablesAgree()
+        }
+    }
+
+    /// A rename moves a named file's row at once and drops its name entry, which the next
+    /// sweep writes again with the new name and folder, without reading the file. A removal
+    /// drops both.
+    @Test func renamedAndRemovedFilesKeepTheirNamesRight() async throws {
+        try await withFixture { fixture in
+            try fixture.write("plan.dwg", "drawing")
+            try fixture.write("old/site.dwg", "drawing")
+            await fixture.start()
+            #expect(try await fixture.names("plan") == ["plan.dwg"])
+            try FileManager.default.createDirectory(atPath: fixture.folder + "/Lobby", withIntermediateDirectories: true)
+            try FileManager.default.moveItem(atPath: fixture.folder + "/plan.dwg", toPath: fixture.folder + "/Lobby/lamps.dwg")
+            try FileManager.default.moveItem(atPath: fixture.folder + "/old", toPath: fixture.folder + "/new")
+            await fixture.deliver(FolderEvents.Changes(renamed: [
+                FolderEvents.Rename(from: fixture.folder + "/plan.dwg", to: fixture.folder + "/Lobby/lamps.dwg"),
+                FolderEvents.Rename(from: fixture.folder + "/old", to: fixture.folder + "/new"),
+            ]))
+            #expect(try await fixture.names("plan").isEmpty)
+            #expect(try await fixture.count("SELECT count(*) FROM index_files") == 2)
+            await fixture.tick()
+            #expect(try await fixture.names("lamps") == ["lamps.dwg"])
+            #expect(try await fixture.names("lobby") == ["lamps.dwg"])
+            #expect(try await fixture.names("new") == ["site.dwg"])
+            #expect(try await fixture.count("SELECT count(*) FROM index_files") == 2)
+            try await fixture.expectTablesAgree()
+
+            try FileManager.default.removeItem(atPath: fixture.folder + "/new")
+            await fixture.deliver(FolderEvents.Changes(removed: [fixture.folder + "/new"]))
+            #expect(try await fixture.names("site").isEmpty)
+            #expect(try await fixture.count("SELECT count(*) FROM index_files") == 1)
+            try await fixture.expectTablesAgree()
+        }
+    }
+
+    /// A PDF without a text layer waits for recognition, and a PDF with pages without one
+    /// keeps its text and waits for those pages. Sheets and recognized text keep their marks
+    /// in the chunks search finds.
+    @Test func pagesWithoutTextWaitForRecognition() async throws {
+        try await withFixture(read: { url in
+            let modified = Date(timeIntervalSince1970: 1_760_000_000)
+            switch url.lastPathComponent {
+            case "scan.pdf":
+                return .success(FileTextResult(pages: [], hiddenRuns: 0, modified: modified, isCut: false, pagesWithoutText: [1, 2]))
+            case "mixed.pdf":
+                return .success(FileTextResult(
+                    pages: [.init(number: 1, text: "Quote for the lobby lamps.")], hiddenRuns: 0, modified: modified, isCut: false, pagesWithoutText: [2]))
+            case "budget.xlsx":
+                return .success(FileTextResult(
+                    pages: [.init(number: nil, text: "# Lamps: Item | Qty\n| Lobby lamps | 12 |", sheet: "Lamps", isStandAlone: true)],
+                    hiddenRuns: 0, modified: modified, isCut: false))
+            case "read.pdf":
+                return .success(FileTextResult(
+                    pages: [.init(number: 3, text: "Recognized brass lamps.", isRecognized: true)], hiddenRuns: 0, modified: modified, isCut: false))
+            default:
+                return await FileTextExtractor().text(of: url)
+            }
+        }) { fixture in
+            for name in ["scan.pdf", "mixed.pdf", "budget.xlsx", "read.pdf"] {
+                try fixture.write(name, "x")
+            }
+            await fixture.start()
+            let rows = try await fixture.rows()
+            #expect(rows["scan.pdf"]?.skip == "waitsForRecognition" && rows["scan.pdf"]?.recognize == 1)
+            #expect(rows["mixed.pdf"].map { $0.skip == nil && $0.recognize == 1 } == true)
+            #expect(rows["budget.xlsx"].map { $0.skip == nil && $0.recognize == 0 } == true)
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.indexed == 3)
+            #expect(report.nameOnly == 0)
+            #expect(try await fixture.index.skippedFiles(project: fixture.alpha).isEmpty)
+            let sheet = try #require(try await fixture.search("lobby lamps 12").first { $0.file.lastPathComponent == "budget.xlsx" })
+            #expect(sheet.sheet == "Lamps")
+            #expect(sheet.heading == "Lamps: Item | Qty")
+            #expect(!sheet.recognized)
+            let recognized = try #require(try await fixture.search("brass").first)
+            #expect(recognized.recognized && recognized.page == 3 && recognized.sheet == nil)
+            try await fixture.expectTablesAgree()
+        }
+    }
+
+    /// An index 0.6.0 wrote moves to step 6: its PDFs wait for recognition, among them a
+    /// scan it held as without text, which only recognition looks at. The first sweep reads
+    /// none of the files 0.6.0 read, writes the names of all, and adds the files 0.6.0 did not
+    /// list.
+    @Test func anIndexFromBeforeNamesGetsThemWithoutReadingItsFilesAgain() async throws {
+        let old = Date(timeIntervalSince1970: 1_760_000_000)
+        try await withFixture(before: { storage, folder, project in
+            let database = try await ProjectsDatabase.open(in: storage, migrations: Array(ProjectsDatabase.migrations.prefix(5)))
+            for (name, text, skip) in [("report.pdf", "The print run is 500 calendars.", nil), ("scan.pdf", "", "noText"), ("brief.docx", "灯具采购合同已经签好。", nil)] as [(String, String, String?)] {
+                let path = folder + "/" + name
+                try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+                try Data("file \(name)".utf8).write(to: URL(fileURLWithPath: path))
+                try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: path)
+                let size = Int64("file \(name)".utf8.count)
+                try await database.transaction { database in
+                    try database.run(
+                        "INSERT INTO index_files (project, path, size, modified, skip, hidden_runs, text_bytes, chunks) VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
+                        [.text(project.uuidString), .text(path), .integer(size), .real(old.timeIntervalSince1970), skip.map { .text($0) } ?? .null,
+                         .integer(Int64(text.utf8.count)), .integer(text.isEmpty ? 0 : 1)])
+                    guard !text.isEmpty else { return }
+                    let file = database.lastInsertedRow
+                    try database.run(
+                        "INSERT INTO index_chunks (file, project, page, heading, modified, text, chinese) VALUES (?, ?, NULL, NULL, ?, ?, ?)",
+                        [.integer(file), .text(project.uuidString), .real(old.timeIntervalSince1970), .text(text), .integer(ChunkSearch.hasChinese(text) ? 1 : 0)])
+                    let chunk = database.lastInsertedRow
+                    try database.run(
+                        "INSERT INTO index_chunk_words (rowid, name, words) VALUES (?, ?, ?)",
+                        [.integer(chunk), .text(ChunkSearch.indexedWords((name as NSString).deletingPathExtension)), .text(ChunkSearch.indexedWords(text))])
+                    if ChunkSearch.hasChinese(text) {
+                        try database.run(
+                            "INSERT INTO index_chunk_trigrams (rowid, name, text) VALUES (?, ?, ?)",
+                            [.integer(chunk), .text((name as NSString).deletingPathExtension), .text(text)])
+                    }
+                }
+            }
+            await database.close()
+        }) { fixture in
+            try fixture.write("plan.dwg", "drawing")
+            try fixture.write("photo.jpg", "photo")
+            await fixture.start()
+            #expect(fixture.reads.all.isEmpty)
+            let rows = try await fixture.rows()
+            #expect(rows["report.pdf"].map { $0.skip == nil && $0.recognize == 1 } == true)
+            #expect(rows["scan.pdf"].map { $0.skip == "waitsForRecognition" && $0.recognize == 1 } == true)
+            #expect(rows["brief.docx"].map { $0.skip == nil && $0.recognize == 0 } == true)
+            #expect(rows["plan.dwg"]?.skip == "unsupportedFormat")
+            #expect(rows["photo.jpg"]?.skip == "waitsForRecognition")
+            #expect(try await fixture.count("SELECT count(*) FROM index_files WHERE folder IS NULL") == 0)
+            #expect(try await fixture.names("report") == ["report.pdf"])
+            #expect(try await fixture.names("scan") == ["scan.pdf"])
+            #expect(try await fixture.search("calendars").map(\.file.lastPathComponent) == ["report.pdf"])
+            #expect(try await fixture.search("灯具采购").map(\.file.lastPathComponent) == ["brief.docx"])
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.indexed == 2)
+            #expect(report.nameOnly == 1)
+            try await fixture.expectTablesAgree()
         }
     }
 }
