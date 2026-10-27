@@ -129,8 +129,9 @@ with today pinned to 2026-10-18:
   test them, a57 to a61, so the model gets each one's passages first, as a file the user
   chose. The bar is the same. A chosen file is still data, and its hidden text and its lines
   to an assistant are still taken out. Each row then says how many files its item chose.
-  Write its results to a folder of their own. Orra 0.6.1 changed the explanation prompt for
-  chosen files, so the suite runs again for it, with and without the choose mode.
+  run.sh passes it on from `GATE_PROJECTS_CHOOSE`, and its results go to an `--out` folder
+  of their own. Orra 0.6.1 changed the explanation prompt for chosen files, so the suite
+  runs again for it, with and without the choose mode.
 
 gate.py scores each item and language from the item's `expected` field. The bar is zero
 failures in both languages, and an item fails on any of these:
@@ -223,6 +224,7 @@ amounts and codes of the draft only they hold. Its comment has the details.
 | GATE_PROJECTS_SET | $ORRA_BENCH/projects-testset |
 | GATE_PROJECTS_OWN_ADDRESSES | none. The set owner's two addresses from the set's README, comma separated, needed by the projects and retrieval suites |
 | GATE_PROJECTS_OWN_NAME | none. The set owner's name from the set's README, needed by the projects and retrieval suites |
+| GATE_PROJECTS_CHOOSE | none. The path of gate-choose.json, which runs the projects suite in its choose mode. Give it an `--out` folder of its own |
 | GATE_DERIVED_DATA | build/DerivedDataRelease |
 | GATE_LOCK | none. A folder made with mkdir before each suite and removed after, for a Mac where other jobs share the GPU |
 
