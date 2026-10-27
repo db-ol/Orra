@@ -220,10 +220,12 @@ nonisolated enum DocumentKind: String, CaseIterable, Sendable {
 /// `readLength` characters of the sender's own words, cut into sentences as DraftCheck cuts
 /// them, at most `mostSentences` of `sentenceLength` characters each. A sentence asks for a
 /// file when a request frame of one of the four languages matches it, no negation stands
-/// before the verb in the same clause, and the head of what it asks for names a kind of
-/// document or a file name. The sender's own attachments and promises, a question about
-/// what arrived, and a request for comments on a document are no request. Every pattern is
-/// bounded, so a hostile text cannot make it slow. Its limit is wording it does not know.
+/// before the verb in the same clause or, for a list of verbs as in a notice of
+/// confidentiality, between the frame and the verb, and the head of what it asks for names a
+/// kind of document or a file name. The sender's own attachments, promises and offers, a
+/// question about what arrived or what the reader did to a document, and a request for
+/// comments on a document are no request. Every pattern is bounded, so a hostile text cannot
+/// make it slow. Its limit is wording it does not know.
 ///
 /// Pure: it reads only the text it is given, and logs nothing.
 nonisolated enum FileRequests {
@@ -383,7 +385,10 @@ nonisolated enum FileRequests {
     /// Do you have, with a kind as the object and a question mark.
     private static let englishHave = latin(#"\bdo you (?:still |happen to |by any chance )?(have)\b"#)
     private static let englishNegation = latin(#"\b(?:don['’]?t|do not|didn['’]?t|did not|no need to|not necessary|unnecessary|needn['’]t|need not|never|not|no longer|won['’]t|without)\b"#)
-    private static let englishPronoun = latin(#"\b(i|we|you|u|they|he|she)\b"#)
+    /// Who sends: a subject, or me or us before to, as in "would you like me to send".
+    private static let englishPronoun = latin(#"\b(i|we|you|u|they|he|she|me(?=\s+to\b)|us(?=\s+to\b))\b"#)
+    /// The pronouns that make the sender the one who sends.
+    private static let englishSender: Set<String> = ["i", "we", "me", "us"]
     /// Words before what is asked for that are none of it, as in "send me over the plan".
     private static let englishLead = latin(#"^(?:\s*\b(?:me|us|over|along|across|back|through|again|also|please|kindly|to me|to us|over to (?:me|us)|across to (?:me|us))\b)*\s*(?:the following(?: files?| documents?| items?)?\s*:|these\s*:|following\s*:)?"#)
     /// Where what is asked for ends.
@@ -394,18 +399,21 @@ nonisolated enum FileRequests {
 
     private static func english(_ sentence: String) -> [Asked] {
         var asked: [Asked] = []
-        func add(_ match: NSTextCheckingResult, verb: Range<String.Index>, objectFrom start: String.Index, needsWhich: Bool) {
-            guard !negated(sentence, before: verb.lowerBound, negation: englishNegation) else { return }
+        func add(_ match: NSTextCheckingResult, verb: Range<String.Index>, objectFrom start: String.Index, frame: String.Index? = nil, needsWhich: Bool) {
+            guard !negated(sentence, from: frame, before: verb.lowerBound, negation: englishNegation) else { return }
             let object = latinObject(after: start, in: sentence, lead: englishLead, cut: englishCut, keepGoing: englishKeepGoing)
             asked.append(Asked(position: match.range.location, object: object, needsWhich: needsWhich))
         }
         for match in matches(englishAsk, sentence) {
-            guard let gap = Range(match.range(at: 1), in: sentence), let verb = Range(match.range(at: 2), in: sentence) else { continue }
-            // The sender as the one who sends, as in "please let me know if I should send".
-            if let pronoun = lastMatch(englishPronoun, in: String(sentence[gap]))?.lowercased(), pronoun == "i" || pronoun == "we" {
+            guard let whole = Range(match.range, in: sentence),
+                  let gap = Range(match.range(at: 1), in: sentence),
+                  let verb = Range(match.range(at: 2), in: sentence) else { continue }
+            // The sender as the one who sends, as in "please let me know if I should send" or
+            // "would you like me to send".
+            if let pronoun = lastMatch(englishPronoun, in: String(sentence[gap]))?.lowercased(), englishSender.contains(pronoun) {
                 continue
             }
-            add(match, verb: verb, objectFrom: verb.upperBound, needsWhich: false)
+            add(match, verb: verb, objectFrom: verb.upperBound, frame: whole.lowerBound, needsWhich: false)
         }
         for match in matches(englishSendMe, sentence) {
             guard let whole = Range(match.range, in: sentence), let verb = Range(match.range(at: 1), in: sentence) else { continue }
@@ -432,25 +440,35 @@ nonisolated enum FileRequests {
     private static let spanishVerbs = #"(?:re)?env[ií](?:[aá]r|[aá]|e|es|en|[aá]ras?|[aá]ran|[aá]ses?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|m[aá]nd(?:[aá]r|[aá]|e|es|en|[aá]ras?|[aá]ran)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|comp[aá]rt(?:[ií]r|[aá]|e|as|an|en|[ií]eras?|[ií]eran)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|adj[uú]nt(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|p[aá]s(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|fac[ií]l[ií]t(?:[aá]r|[aá]|e|es|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|proporci[oó]n(?:[aá]r|[aá]|e|es|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|rem[ií]t(?:[ií]r|[aá]|e|as|[ií]eras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?"#
     private static let spanishAsk = latin(#"\b(?:por favor|porfa|porfavor|favor de|puedes|podr[ií]as|puede|podr[ií]a|pueden|podr[ií]an|me puedes|me podr[ií]as|nos puedes|nos podr[ií]as|me puede|me podr[ií]a|nos puede|nos podr[ií]a|te agradecer[ií]a que|le agradecer[ií]a que|les agradecer[ií]a que|agradecer[ií]a que|necesito que|necesitamos que|ser[ií]a posible que|me har[ií]as el favor de|hazme el favor de)\b([^.!?;]{0,40}?)\b("# + spanishVerbs + #")\b"#)
     /// The imperatives with me or nos anywhere, and a bare imperative at the start of a
-    /// clause, as in "adjunta el plano", not as in "va adjunta la factura".
-    private static let spanishImperative = latin(#"\b((?:env[ií]a|m[aá]nda|comp[aá]rte|p[aá]sa|reenv[ií]a|fac[ií]l[ií]ta|adj[uú]nta|rem[ií]te)(?:me|nos)(?:lo|la|los|las)?)\b|(?:^|[,;:¿¡]\s*)((?:adj[uú]nta|env[ií]a|m[aá]nda|comp[aá]rte))\b"#)
+    /// clause, as in "adjunta el plano", not as in "va adjunta la factura", and not the
+    /// participle that brings the sender's own file, as in "adjunta encontrarás la factura",
+    /// "adjunta te envío" or "adjunta va".
+    private static let spanishImperative = latin(#"\b((?:env[ií]a|m[aá]nda|comp[aá]rte|p[aá]sa|reenv[ií]a|fac[ií]l[ií]ta|adj[uú]nta|rem[ií]te)(?:me|nos)(?:lo|la|los|las)?)\b|(?:^|[,;:¿¡]\s*)((?:adj[uú]nta|env[ií]a|m[aá]nda|comp[aá]rte))\b(?!\s+(?:encontrar[aáeé]?\w*|hallar[aáeé]?\w*|ver[aá]s|va|van|est[aá]n?|tienes?|te|le|les|os|se|me|nos|env[ií]o|remito|mando|adjunto)\b)"#)
     private static let spanishNeed = latin(#"\b(necesito|necesitamos|necesitar[ií]a|necesitar[ií]amos|me hace falta|nos hace falta)\b(?!\s+que\b)"#)
-    /// No before the verb, but not the polite no of "¿no me podrías enviar…?".
-    private static let spanishNegation = latin(#"\b(?:no(?!\s+(?:me\s+|nos\s+|te\s+|le\s+)?(?:puedes|podr[ií]as|puede|podr[ií]a|pueden|podr[ií]an)\b)|nunca|jam[aá]s|tampoco|sin)\b"#)
+    /// No before the verb, but not the polite no of "¿no me podrías enviar…?", and ni, as in
+    /// "no copie, use ni reenvíe".
+    private static let spanishNegation = latin(#"\b(?:no(?!\s+(?:me\s+|nos\s+|te\s+|le\s+)?(?:puedes|podr[ií]as|puede|podr[ií]a|pueden|podr[ií]an)\b)|ni|nunca|jam[aá]s|tampoco|sin)\b"#)
+    /// The sender as the one who sends, right before the verb, as in "si necesitas que te
+    /// envíe el plano".
+    private static let spanishSender = latin(#"\bque\s+(?:yo\s+)?(?:te|le|les|os)\s+$|\bque\s+yo\s+$"#)
     private static let spanishLead = latin(#"^(?:\s*\b(?:me|nos|te|le|les|tambi[eé]n|por favor|porfa|de nuevo|otra vez|nuevamente|ahora|ya)\b)*\s*(?:(?:lo|los|las) siguientes?(?: archivos| documentos)?\s*:)?"#)
     private static let spanishCut = latin(#"\s+(?:sobre|para|por|con|de|del|a|al|antes|despu[eé]s|cuando|si|hoy|ma[nñ]ana|lo antes posible|en|porque|ya que|y (?:me|nos|te|le|av[ií]same|conf[ií]rmame)|pero|gracias)\b|[,;:()\[\]]|\s[-–—]\s"#)
     private static let spanishKeepGoing: Set<String> = ["copia", "copias", "versión", "version", "versiones", "foto", "fotos", "escaneo", "escaneos", "pdf", "imagen", "imágenes", "imagenes"]
 
     private static func spanish(_ sentence: String) -> [Asked] {
         var asked: [Asked] = []
-        func add(_ match: NSTextCheckingResult, verb: Range<String.Index>, needsWhich: Bool) {
-            guard !negated(sentence, before: verb.lowerBound, negation: spanishNegation) else { return }
+        func add(_ match: NSTextCheckingResult, verb: Range<String.Index>, frame: String.Index? = nil, needsWhich: Bool) {
+            guard !negated(sentence, from: frame, before: verb.lowerBound, negation: spanishNegation) else { return }
             let object = latinObject(after: verb.upperBound, in: sentence, lead: spanishLead, cut: spanishCut, keepGoing: spanishKeepGoing)
             asked.append(Asked(position: match.range.location, object: object, needsWhich: needsWhich))
         }
         for match in matches(spanishAsk, sentence) {
-            guard let verb = Range(match.range(at: 2), in: sentence) else { continue }
-            add(match, verb: verb, needsWhich: false)
+            guard let whole = Range(match.range, in: sentence), let verb = Range(match.range(at: 2), in: sentence) else { continue }
+            // "que te envíe" with a verb not of tú: the sender sends to the reader.
+            if !sentence[verb].lowercased().hasSuffix("s"), ContentChecks.matches([spanishSender], String(sentence[whole.lowerBound..<verb.lowerBound])) {
+                continue
+            }
+            add(match, verb: verb, frame: whole.lowerBound, needsWhich: false)
         }
         for match in matches(spanishImperative, sentence) {
             let group = match.range(at: 1).location != NSNotFound ? 1 : 2
@@ -481,9 +499,20 @@ nonisolated enum FileRequests {
     private static let chineseNeed = regex("(?:我们|我司|本公司|我这边|我们这边|我)(?:这边|还|也|现在|目前|急|很)?(?:需要|要)(?!(?:你|您|讨论|确认|看|了解|修改|调整|知道|开会|安排|沟通|商量|审核|核对|更新|准备|提交|签|做|画|改|出|跟|和|与|去|来|再|重新|尽快|先))(" + chineseClause + "{1,30})")
     /// 有没有 with a kind, and 你有…吗 as a question.
     private static let chineseHave = regex("有没有(" + chineseClause + "{1,30}?)(?:吗|$|[?？])|(?:你|您)们?(?:这边|那边)?有(" + chineseClause + "{1,30}?)吗")
-    private static let chineseNegation = regex(#"不用|不必|无需|无须|别|不要|不需要|没必要"#)
+    /// A verb at the start of what 有没有 or 你有…吗 asks about, which asks whether the reader
+    /// did something to a document, as in 你有没有看过平面图, not for the document.
+    private static let chineseHaveVerb = regex(#"^(?:看|查看|查阅|阅读|读|确认|核对|核实|检查|审核|审阅|审批|批准|批过|签|盖章|更新|修改|修订|调整|改|收到|收好|拿到|下载|上传|保存|打印|提交|提供|准备|完成|处理|做|画过|画了|画好|找到|找过|用过|用了|使用|参考|考虑|讨论|联系|通知|安排|整理|发过|发了|发给|发送|发出|传过|传了|传给|寄过|寄了|寄出|转发|分享|共享|附上)"#)
+    /// A negation before the verb: 不用, 别, 请勿 and their like. Not 不能 or 不可, which stand
+    /// in the frames 能不能 and 可不可以.
+    private static let chineseNegation = regex(#"不用|不必|无需|无须|别|不要|不需要|没必要|勿|禁止|严禁|不得(?!不)"#)
     /// The sender's own attachment or a step already done, which no request holds.
     private static let chineseOwn = regex(#"请查收|供参考|供您参考|请参阅|请参考|见附件|如附件|随信附|随邮件附|随函附|现附上|已附上|已发送|已经发|已发|附件(?:是|为)"#)
+    /// A clause that only says the clause before it brings the sender's own file, as in
+    /// 另外再附上一份报价单，请查收。
+    private static let chineseOwnClause = regex(#"^\s*(?:(?:请|敬请|烦请|请您|请你)(?:查收|查阅|参阅|参考)|仅?供(?:您|你)?参考)\s*$"#)
+    /// A word that asks, which 也 and 再 before 附上 lack: 也附上平面图 brings the sender's own
+    /// plan, 也请附上平面图 asks for one.
+    private static let chineseAsking = regex(#"请|麻烦|劳烦|能否|可否|能不能|可不可以|可以|方便|记得|帮|务必|需要|希望|忘"#)
     /// The sender as the one who sends, right before a word of request: 我也, 我们这边也可以,
     /// but not 帮我 or 给我.
     private static let chineseFirstPerson = regex(#"(?:^|[^帮给替为让])(?:我们|我|本人)(?:这边|那边)?(?:也|还|再|就|都|会|将|可以|能|马上|稍后|今天|明天|先|随后)*$"#)
@@ -492,24 +521,37 @@ nonisolated enum FileRequests {
     private static func chinese(_ sentence: String) -> [Asked] {
         guard sentence.contains(where: \.isHan) else { return [] }
         var asked: [Asked] = []
-        // The sender's own attachment or a step done counts in its own clause only, so
-        // 我已附上合同，请发一下平面图 still asks for the plan.
+        // The sender's own attachment or a step done counts in its own clause, so 我已附上
+        // 合同，请发一下平面图 still asks for the plan, and through the clause right after it
+        // when that clause only says so, as in 再附上合同扫描件，请查收。
         func own(_ match: NSTextCheckingResult) -> Bool {
             guard let range = Range(match.range, in: sentence) else { return true }
             let boundaries = ",;:，；：。!?！？"
             let start = sentence[..<range.lowerBound].lastIndex(where: { boundaries.contains($0) }).map { sentence.index(after: $0) } ?? sentence.startIndex
             let end = sentence[range.upperBound...].firstIndex(where: { boundaries.contains($0) }) ?? sentence.endIndex
-            return ContentChecks.matches([chineseOwn], String(sentence[start..<end]))
+            if ContentChecks.matches([chineseOwn], String(sentence[start..<end])) {
+                return true
+            }
+            guard end < sentence.endIndex else { return false }
+            let next = sentence.index(after: end)
+            let nextEnd = sentence[next...].firstIndex(where: { boundaries.contains($0) }) ?? sentence.endIndex
+            return ContentChecks.matches([chineseOwnClause], String(sentence[next..<nextEnd]))
         }
         for (pattern, objectGroup, verbGroup) in [(chineseBa, 3, 4), (chineseAsk, 4, 3)] {
             for match in matches(pattern, sentence) {
                 guard !own(match),
                       let frame = Range(match.range(at: 1), in: sentence),
+                      let gap = Range(match.range(at: 2), in: sentence),
                       let verb = Range(match.range(at: verbGroup), in: sentence),
                       let object = Range(match.range(at: objectGroup), in: sentence) else { continue }
-                // 我们需要你提供 asks the reader, whoever stands before it.
+                // 我们需要你提供 asks the reader, whoever stands before it. The sender as the
+                // one who sends, before the frame or between it and the verb, as in 请等我把
+                // 平面图发给你 or 请问需要我把合同发给你吗, asks nothing.
                 let asksTheReader = sentence[frame].contains("你") || sentence[frame].contains("您")
                 if !asksTheReader, ContentChecks.matches([chineseFirstPerson], String(sentence[..<frame.lowerBound])) { continue }
+                if ContentChecks.matches([chineseFirstPerson], String(sentence[gap])) { continue }
+                // 也附上 or 再附上 without a word that asks brings the sender's own file.
+                if sentence[verb].hasPrefix("附"), !ContentChecks.matches([chineseAsking], String(sentence[frame.lowerBound..<verb.lowerBound])) { continue }
                 // 附上了 or 发过 tell what was done.
                 if sentence[verb.upperBound...].hasPrefix("了") || sentence[verb.upperBound...].hasPrefix("过") { continue }
                 guard !negated(sentence, before: verb.lowerBound, negation: chineseNegation) else { continue }
@@ -524,6 +566,7 @@ nonisolated enum FileRequests {
             for match in matches(pattern, sentence) {
                 let group = (1..<match.numberOfRanges).first { match.range(at: $0).location != NSNotFound } ?? 1
                 guard !own(match), let object = Range(match.range(at: group), in: sentence) else { continue }
+                if pattern === chineseHave, ContentChecks.matches([chineseHaveVerb], String(sentence[object])) { continue }
                 guard !negated(sentence, before: object.lowerBound, negation: chineseNegation) else { continue }
                 var text = String(sentence[object])
                 if let end = chineseObjectEnd.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)), let range = Range(end.range, in: text) {
@@ -787,21 +830,42 @@ nonisolated enum FileRequests {
         return nil
     }
 
-    /// Whether a negation stands in the clause before the verb.
-    private static func negated(_ sentence: String, before verb: String.Index, negation: NSRegularExpression) -> Bool {
+    /// Whether a negation stands in the clause before the verb, or, given where the frame
+    /// that asks starts, anywhere between the frame and the verb, as in "please do not copy,
+    /// print or forward", where one negation stands for a list of verbs. An if clause between
+    /// them counts for none, as in "please, if you don't mind, send", and nor does what
+    /// stands before but or pero.
+    private static func negated(_ sentence: String, from frame: String.Index? = nil, before verb: String.Index, negation: NSRegularExpression) -> Bool {
         var clause = sentence[..<verb]
         if let boundary = clause.lastIndex(where: { ",;:，；：、".contains($0) }) {
             clause = clause[clause.index(after: boundary)...]
         }
-        if let but = clause.range(of: " but ", options: [.caseInsensitive, .backwards]) {
-            clause = clause[but.upperBound...]
+        if hasNegation(afterBut(clause), negation) {
+            return true
         }
-        if let pero = clause.range(of: " pero ", options: [.caseInsensitive, .backwards]) {
-            clause = clause[pero.upperBound...]
+        guard let frame, frame < verb else { return false }
+        return hasNegation(removing(conditionalClause, from: String(afterBut(sentence[frame..<verb]))), negation)
+    }
+
+    /// The text after its last but or pero.
+    private static func afterBut(_ text: Substring) -> Substring {
+        var text = text
+        if let but = text.range(of: " but ", options: [.caseInsensitive, .backwards]) {
+            text = text[but.upperBound...]
         }
-        let text = String(clause)
+        if let pero = text.range(of: " pero ", options: [.caseInsensitive, .backwards]) {
+            text = text[pero.upperBound...]
+        }
+        return text
+    }
+
+    private static func hasNegation(_ text: some StringProtocol, _ negation: NSRegularExpression) -> Bool {
+        let text = String(text)
         return negation.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
+
+    /// An if clause, up to the comma that ends it.
+    private static let conditionalClause = latin(#"\b(?:if|si)\b[^,;:]*(?:[,;:]|$)"#)
 
     /// Whether the subject is that of a reply or a forward, which repeats words the user or
     /// someone else wrote.

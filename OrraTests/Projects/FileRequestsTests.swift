@@ -161,9 +161,42 @@ struct FileRequestsTests {
             "Te envío el plano mañana.",
             "Por favor, confirma que envié el contrato.",
             "Por favor, confirma que mandé el contrato.",
+            // Attachments that the sender brings after 也 or 再, or with a clause that only
+            // says so after them, and the participle adjunta.
+            "另外再附上一份报价单，请查收。",
+            "另外也附上报价单，供参考。",
+            "再附上合同扫描件，请查收。",
+            "随信也附上平面图。",
+            "这里也附上平面图。",
+            "Adjunta encontrarás la factura.",
+            "Adjunta te envío la factura.",
+            "Adjunta va la cotización.",
         ])
         // The sender's own attachment counts in its own clause only.
         #expect(Self.found("我已附上合同，请发一下平面图。").first?.documentKinds == [.floorPlan])
+        // A word that asks makes 也附上 a request.
+        #expect(Self.found("也请附上平面图。").first?.documentKinds == [.floorPlan])
+    }
+
+    /// The sender offers to send, with me or us before the verb, a first person between the
+    /// frame and the verb, or que te envíe.
+    @Test func theSendersOffersAreNoRequests() {
+        Self.expectNone([
+            "Would you like me to send the floor plan?",
+            "Please let me know if you need me to send the floor plan.",
+            "Please let us know if you would like us to send the drawings.",
+            "Can you confirm you still need me to send the contract?",
+            "Can you remind me to send the floor plan?",
+            "请等我把平面图发给你。",
+            "请问需要我把合同发给你吗？",
+            "请问我可以把平面图发给你吗？",
+            "请确认后我再把平面图发给你。",
+            "Por favor, avísame si necesitas que te envíe el plano.",
+            "Por favor, dime si quieres que te mande el plano.",
+        ])
+        // Help me, and que le envíes with a verb of tú, still ask the reader.
+        #expect(Self.found("请帮我把平面图发给他。").first?.documentKinds == [.floorPlan])
+        #expect(Self.found("Necesito que le envíes el plano a Juan.").first?.object == "el plano")
     }
 
     @Test func negationsAreNoRequests() {
@@ -177,7 +210,42 @@ struct FileRequestsTests {
             "資料を送らないでください",
             "No me envíes el plano todavía.",
             "No hace falta que me envíes el plano.",
+            // One negation for a list of verbs, 请勿 and ni.
+            "Please do not copy, print or forward the attachments.",
+            "If you are not the intended recipient, please do not copy, distribute or forward this email or its attachments.",
+            "Please do not use, copy or share the attached contract.",
+            "本邮件及其附件含有保密信息，请勿转发附件。",
+            "请勿把合同发给别人。",
+            "麻烦勿转发合同。",
+            "Por favor no copie, use ni reenvíe este documento.",
         ])
+        // A negation in an if clause between the frame and the verb negates nothing.
+        #expect(Self.found("Please, if you don't mind, send the floor plan.").first?.documentKinds == [.floorPlan])
+    }
+
+    /// A notice of confidentiality under the sender's words, which forbids sending, asks for
+    /// nothing.
+    @Test func aNoticeOfConfidentialityAsksForNothing() {
+        Self.expectNone([
+            "Hi Lin,\n\nThanks for the update. The samples look good and we can go ahead on Friday.\n\nBest regards,\nMei\n\nCONFIDENTIALITY NOTICE: This email and any attachments are confidential. If you are not the intended recipient, please do not copy, distribute or forward this email or its attachments.",
+            "王经理您好：\n\n样品已收到，我们周五开工。\n\n谢谢！\n李明\n\n本邮件及其附件含有保密信息，请勿转发附件。",
+            "Hola Lin:\n\nGracias, el viernes empezamos.\n\nSaludos,\nAna\n\nAVISO: Este mensaje y sus anexos son confidenciales. Si usted no es el destinatario, por favor no copie, use ni reenvíe este documento.",
+        ])
+    }
+
+    /// 有没有 or 你有…吗 before a verb asks whether the reader did something to a document,
+    /// not for it. A kind that starts like such a verb, as 发票 or 画册, is still asked for.
+    @Test func aQuestionAboutWhatTheReaderDidIsNoRequest() {
+        Self.expectNone([
+            "你有没有看过平面图？",
+            "你们有没有确认平面图？",
+            "有没有更新平面图？",
+            "您有看过合同吗？",
+            "你有没有修改平面图？",
+            "你有没有收到平面图？",
+        ])
+        #expect(Self.found("有没有发票？").first?.documentKinds == [.invoice])
+        #expect(Self.found("你们有画册吗？").first?.documentKinds == [.catalog])
     }
 
     @Test func questionsAboutWhatArrivedAndOtherAsksAreNoRequests() {
