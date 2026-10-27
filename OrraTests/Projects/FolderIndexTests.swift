@@ -4,8 +4,9 @@ import Testing
 @testable import Orra
 
 /// The index of project folders, on files made in a temporary folder, with a database in a
-/// temporary root, stand ins for the folder events and the dictation, and a sleep that only
-/// yields. The tests call the timer's tick themselves. No time decides a result.
+/// temporary root, stand ins for the folder events, the dictation and text recognition, and
+/// a sleep that only yields. The tests call the timer's tick themselves. No time decides a
+/// result.
 @MainActor
 @Suite(.timeLimit(.minutes(1)))
 struct FolderIndexTests {
@@ -42,6 +43,34 @@ struct FolderIndexTests {
 
         var checks: Int {
             asked.withLock { $0 }
+        }
+    }
+
+    /// Why recognition waits besides a dictation, as ProjectsRuntime would say, which a test
+    /// changes.
+    final class Pause: Sendable {
+        private let value: Mutex<FolderIndex.RecognitionPause?>
+
+        init(_ pause: FolderIndex.RecognitionPause? = nil) {
+            value = Mutex(pause)
+        }
+
+        var now: FolderIndex.RecognitionPause? {
+            get { value.withLock { $0 } }
+            set { value.withLock { $0 = newValue } }
+        }
+    }
+
+    /// The jobs text recognition got, in order.
+    final class Jobs: Sendable {
+        let all = Mutex<[RecognitionJob]>([])
+
+        var names: [String] {
+            all.withLock { $0.map(\.file.lastPathComponent) }
+        }
+
+        var count: Int {
+            all.withLock { $0.count }
         }
     }
 
@@ -132,9 +161,13 @@ struct FolderIndexTests {
         let storage: ProjectsStorage
         let database: ProjectsDatabase
         let reads = Reads()
+        let jobs = Jobs()
         let dataless = Dataless()
         let dictation: Dictation
+        let pause: Pause
         private(set) var index: FolderIndex!
+        private let limits: FolderIndex.Limits
+        private let reader: @Sendable (URL) async -> Result<FileTextResult, FileSkipReason>
         /// Called at each short sleep, such as a wait for a dictation.
         var onSleep: (() async -> Void)?
         private(set) var sleeps = 0
@@ -143,12 +176,17 @@ struct FolderIndexTests {
         private(set) var watchedSince: [UInt64?] = []
         private(set) var stops = 0
 
-        /// - Parameter before: makes the database before the index opens it, such as one an
-        ///   earlier Orra wrote, given the project folder's path and the first project.
+        /// - Parameters:
+        ///   - recognize: text recognition's stand in. Without one, recognition waits as in
+        ///     Low Power Mode, so the files that wait for it stay as the sweep left them.
+        ///   - before: makes the database before the index opens it, such as one an earlier
+        ///     Orra wrote, given the project folder's path and the first project.
         init(
             limits: FolderIndex.Limits = FolderIndex.Limits(),
             dictation: Dictation = Dictation(),
             read: (@Sendable (URL) async -> Result<FileTextResult, FileSkipReason>)? = nil,
+            recognize: FolderIndex.Recognize? = nil,
+            pause: Pause = Pause(),
             before: ((ProjectsStorage, String, UUID) async throws -> Void)? = nil
         ) async throws {
             let made = FileManager.default.temporaryDirectory.appendingPathComponent("FolderIndexTests-\(UUID().uuidString)", isDirectory: true)
@@ -163,9 +201,33 @@ struct FolderIndexTests {
             try await before?(storage, folderURL.path, alpha)
             database = try await ProjectsDatabase.open(in: storage)
             self.dictation = dictation
+            self.limits = limits
+            reader = read ?? { await FileTextExtractor().text(of: $0) }
+            if let recognize {
+                self.pause = pause
+                makeIndex(recognize: recognize)
+            } else {
+                self.pause = Pause(.lowPower)
+                makeIndex { _, _ in
+                    Issue.record("Recognition ran in a test without its stand in")
+                    return .success(RecognitionResult())
+                }
+            }
+        }
+
+        /// A new index on the same database and folder, as after Orra started again.
+        func restart(recognize: @escaping FolderIndex.Recognize) {
+            index.stopAll()
+            makeIndex(recognize: recognize)
+        }
+
+        private func makeIndex(recognize: @escaping FolderIndex.Recognize) {
             let reads = reads
+            let jobs = jobs
             let dataless = dataless
-            let reader = read ?? { await FileTextExtractor().text(of: $0) }
+            let dictation = dictation
+            let pause = pause
+            let reader = reader
             index = FolderIndex(
                 database: database,
                 isDictating: { dictation.isOn },
@@ -177,6 +239,11 @@ struct FolderIndexTests {
                     reads.names.withLock { $0.append(url.lastPathComponent) }
                     return await reader(url)
                 },
+                recognize: { job, mayGoOn in
+                    jobs.all.withLock { $0.append(job) }
+                    return await recognize(job, mayGoOn)
+                },
+                recognitionPause: { pause.now },
                 sleep: { [weak self] duration in
                     if duration >= FolderIndex.sweepGap {
                         try await Task.sleep(for: duration)
@@ -294,10 +361,12 @@ struct FolderIndexTests {
         limits: FolderIndex.Limits = FolderIndex.Limits(),
         dictation: Dictation = Dictation(),
         read: (@Sendable (URL) async -> Result<FileTextResult, FileSkipReason>)? = nil,
+        recognize: FolderIndex.Recognize? = nil,
+        pause: Pause = Pause(),
         before: ((ProjectsStorage, String, UUID) async throws -> Void)? = nil,
         _ body: (Fixture) async throws -> Void
     ) async throws {
-        let fixture = try await Fixture(limits: limits, dictation: dictation, read: read, before: before)
+        let fixture = try await Fixture(limits: limits, dictation: dictation, read: read, recognize: recognize, pause: pause, before: before)
         do {
             try await body(fixture)
         } catch {
@@ -1063,6 +1132,360 @@ struct FolderIndexTests {
             #expect(report.indexed == 2)
             #expect(report.nameOnly == 1)
             try await fixture.expectTablesAgree()
+        }
+    }
+
+    // MARK: Text recognition
+
+    /// What a stand in for recognition gives back: the pages tried, with their text or none
+    /// for a blank page, an image of one frame as page 0.
+    private nonisolated static func recognized(_ tried: [(page: Int, text: String?)], isDone: Bool = true, hiddenRuns: Int = 0) -> Result<RecognitionResult, FileSkipReason> {
+        var result = RecognitionResult(hiddenRuns: hiddenRuns, isDone: isDone)
+        for (page, text) in tried {
+            result.tried[page] = text == nil ? .blank : .text
+            if let text {
+                result.pages.append(FileTextResult.Page(number: page == 0 ? nil : page, text: text, isRecognized: true))
+            }
+        }
+        return .success(result)
+    }
+
+    /// The pages recognition tried for a file, with how each went.
+    private func triedPages(_ name: String, _ fixture: Fixture) async throws -> [Int: String] {
+        var pages: [Int: String] = [:]
+        for row in try await fixture.database.run(
+            "SELECT p.page, p.outcome FROM index_recognition_pages p JOIN index_files f ON f.id = p.file WHERE f.path LIKE ?", [.text("%/" + name)]) {
+            pages[Int(row[0].integer ?? -1)] = row[1].text
+        }
+        return pages
+    }
+
+    /// A read of PDFs as the sweep gives them: a scan without a text layer, and a PDF with
+    /// text and one page without, by name. Any other file is read as it is.
+    private nonisolated static func readingScans(_ scans: [String: [Int]], withText: [String: [Int]] = [:]) -> @Sendable (URL) async -> Result<FileTextResult, FileSkipReason> {
+        { url in
+            let modified = Date(timeIntervalSince1970: 1_760_000_000)
+            if let pages = scans[url.lastPathComponent] {
+                return .success(FileTextResult(pages: [], hiddenRuns: 0, modified: modified, isCut: false, pagesWithoutText: pages))
+            }
+            if let pages = withText[url.lastPathComponent] {
+                return .success(FileTextResult(
+                    pages: [.init(number: 1, text: "Quote for the lobby lamps.")], hiddenRuns: 0, modified: modified, isCut: false, pagesWithoutText: pages))
+            }
+            return await FileTextExtractor().text(of: url)
+        }
+    }
+
+    /// Recognition starts once the sweep read the documents, PDFs first and the newest
+    /// first, then images. Recognized text is found by search, marked as recognized, with
+    /// its page, and the pages tried are kept with how they went. A later sweep reads
+    /// nothing again and recognizes nothing again.
+    @Test func recognitionReadsWhatWaitsOnceTheSweepIsDone() async throws {
+        let order = Mutex<[String]>([])
+        let read = Self.readingScans(["scan.pdf": [1, 2]], withText: ["mixed.pdf": [2]])
+        try await withFixture(read: { url in
+            order.withLock { $0.append("read " + url.lastPathComponent) }
+            return await read(url)
+        }, recognize: { job, _ in
+            order.withLock { $0.append("recognize " + job.file.lastPathComponent) }
+            switch job.file.lastPathComponent {
+            case "scan.pdf": return Self.recognized([(1, "灯具报价单 HR-558120"), (2, nil)])
+            case "mixed.pdf": return Self.recognized([(2, "Recognized delivery in week 47")])
+            default: return Self.recognized([(0, "Brass lamps for the lobby")])
+            }
+        }) { fixture in
+            let old = Date(timeIntervalSince1970: 1_760_000_000)
+            try fixture.write("notes.txt", "The print run is 500 calendars.", modified: old)
+            try fixture.write("scan.pdf", "x", modified: old)
+            try fixture.write("mixed.pdf", "x", modified: old.addingTimeInterval(60))
+            try fixture.write("sign.jpg", "x", modified: old.addingTimeInterval(120))
+            await fixture.start()
+            #expect(order.withLock { $0 }.suffix(3) == ["recognize mixed.pdf", "recognize scan.pdf", "recognize sign.jpg"])
+            #expect(order.withLock { $0 }.prefix(3).allSatisfy { $0.hasPrefix("read ") })
+            #expect(fixture.jobs.all.withLock { $0 }.allSatisfy { $0.done.isEmpty && $0.pages == FolderIndex.recognitionPages })
+            let rows = try await fixture.rows()
+            #expect(rows.values.allSatisfy { $0.skip == nil && $0.recognize == 0 })
+
+            let sign = try #require(try await fixture.search("brass").first)
+            #expect(sign.file.lastPathComponent == "sign.jpg" && sign.recognized && sign.page == nil)
+            let mixed = try #require(try await fixture.search("delivery").first)
+            #expect(mixed.file.lastPathComponent == "mixed.pdf" && mixed.recognized && mixed.page == 2)
+            let scan = try #require(try await fixture.search("报价单").first)
+            #expect(scan.file.lastPathComponent == "scan.pdf" && scan.recognized && scan.page == 1)
+            #expect(try await fixture.search("lobby lamps").first.map { !$0.recognized } == true)
+            #expect(try await triedPages("scan.pdf", fixture) == [1: "text", 2: "blank"])
+            #expect(try await triedPages("sign.jpg", fixture) == [0: "text"])
+
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.indexed == 4 && report.nameOnly == 0)
+            #expect(report.recognitionLeft == 0 && report.recognitionPause == nil && !report.isIndexing)
+            try await fixture.expectTablesAgree()
+
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(fixture.jobs.count == 3)
+            #expect(fixture.reads.all.count == 3)
+        }
+    }
+
+    /// Blank pages are kept as tried, so a scan whose pages hold nothing moves on and ends as
+    /// holding no text, and an image without text says so. Neither is recognized again.
+    @Test func blankPagesAreKeptSoTheFileMovesOn() async throws {
+        try await withFixture(read: Self.readingScans(["scan.pdf": [1, 2, 3]]), recognize: { job, _ in
+            switch (job.file.lastPathComponent, job.done) {
+            case ("scan.pdf", []): Self.recognized([(1, nil), (2, nil)], isDone: false)
+            case ("scan.pdf", [1, 2]): Self.recognized([(3, nil)])
+            case ("photo.jpg", []): Self.recognized([(0, nil)])
+            default: .failure(.unreadable)
+            }
+        }) { fixture in
+            try fixture.write("scan.pdf", "x")
+            try fixture.write("photo.jpg", "x")
+            await fixture.start()
+            #expect(fixture.jobs.names == ["scan.pdf", "scan.pdf", "photo.jpg"])
+            let rows = try await fixture.rows()
+            #expect(rows["scan.pdf"].map { $0.skip == "noText" && $0.recognize == 0 } == true)
+            #expect(rows["photo.jpg"].map { $0.skip == "imageWithoutText" && $0.recognize == 0 } == true)
+            #expect(try await triedPages("scan.pdf", fixture) == [1: "blank", 2: "blank", 3: "blank"])
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.indexed == 0 && report.nameOnly == 2 && report.recognitionLeft == 0)
+            // A scan without text is worth telling, an image without text is only counted.
+            #expect(try await fixture.index.skippedFiles(project: fixture.alpha).map(\.reason) == [.noText])
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(fixture.jobs.count == 3)
+        }
+    }
+
+    /// A page that ran out of time is kept as timed out and the file moves on. A file whose
+    /// every page ran out of time is too slow, and one that has text keeps it.
+    @Test func timedOutPagesAreKeptAndATooSlowFileStopsWaiting() async throws {
+        try await withFixture(read: Self.readingScans(["scan.pdf": [1, 2]], withText: ["mixed.pdf": [2]]), recognize: { job, _ in
+            switch job.file.lastPathComponent {
+            case "scan.pdf":
+                var result = RecognitionResult(isDone: true)
+                result.tried = [1: .timedOut, 2: .text]
+                result.pages = [FileTextResult.Page(number: 2, text: "Lamps arrive in week 47", isRecognized: true)]
+                return .success(result)
+            default: return .failure(.tooSlow)
+            }
+        }) { fixture in
+            for name in ["scan.pdf", "mixed.pdf", "slow.png"] {
+                try fixture.write(name, "x")
+            }
+            await fixture.start()
+            let rows = try await fixture.rows()
+            #expect(rows["scan.pdf"].map { $0.skip == nil && $0.recognize == 0 } == true)
+            #expect(try await triedPages("scan.pdf", fixture) == [1: "timedOut", 2: "text"])
+            #expect(rows["mixed.pdf"].map { $0.skip == nil && $0.recognize == 0 } == true)
+            #expect(rows["slow.png"].map { $0.skip == "tooSlow" && $0.recognize == 0 } == true)
+            #expect(try await fixture.index.skippedFiles(project: fixture.alpha).map(\.url.lastPathComponent) == ["slow.png"])
+            #expect(try await fixture.search("lamps").map(\.file.lastPathComponent).contains("scan.pdf"))
+            #expect(fixture.index.reports[fixture.alpha]?.indexed == 2)
+        }
+    }
+
+    /// The pages tried are kept as each job ends, so after a restart recognition goes on
+    /// where it stopped. The page under way at the stop was not kept and is read again.
+    @Test func aRestartGoesOnWhereRecognitionStopped() async throws {
+        let hold = TextRecognitionTests.Hold()
+        try await withFixture(read: Self.readingScans(["scan.pdf": [1, 2, 3, 4, 5]]), recognize: { job, _ in
+            guard job.done.isEmpty else {
+                // The second job runs until Orra quits.
+                await hold.untilCancelled()
+                return .success(RecognitionResult())
+            }
+            return Self.recognized([(1, "Page one of the scan"), (2, nil)], isDone: false)
+        }) { fixture in
+            try fixture.write("scan.pdf", "x")
+            fixture.index.start(project: fixture.alpha, folders: [fixture.folderURL])
+            await hold.untilBegun()
+            #expect(try await triedPages("scan.pdf", fixture) == [1: "text", 2: "blank"])
+
+            fixture.restart { job, _ in
+                job.done == [1, 2] ? Self.recognized([(3, "Page three"), (4, nil), (5, "Page five")]) : .failure(.unreadable)
+            }
+            #expect(hold.cancelled == 1)
+            await fixture.start()
+            #expect(fixture.jobs.all.withLock { $0.map(\.done) } == [[], [1, 2], [1, 2]])
+            #expect(fixture.reads.all == ["scan.pdf"])
+            #expect(try await triedPages("scan.pdf", fixture) == [1: "text", 2: "blank", 3: "text", 4: "blank", 5: "text"])
+            let rows = try await fixture.rows()
+            #expect(rows["scan.pdf"].map { $0.skip == nil && $0.recognize == 0 } == true)
+            #expect(try await fixture.search("page").map(\.page).sorted { ($0 ?? 0) < ($1 ?? 0) } == [1, 3, 5])
+            try await fixture.expectTablesAgree()
+        }
+    }
+
+    /// The press of a key stops the page under way, which is read again once the dictation
+    /// ends, and nothing is written while it runs.
+    @Test func aKeyPressStopsThePageUnderWayWhichIsReadAgain() async throws {
+        let hold = TextRecognitionTests.Hold()
+        let dictation = Dictation()
+        try await withFixture(dictation: dictation, recognize: { job, _ in
+            if hold.cancelled == 0 {
+                await hold.untilCancelled()
+                return .success(RecognitionResult())
+            }
+            return Self.recognized([(0, "Brass lamps")])
+        }) { fixture in
+            try fixture.write("sign.png", "x")
+            fixture.index.start(project: fixture.alpha, folders: [fixture.folderURL])
+            await hold.untilBegun()
+            fixture.dictating = true
+            fixture.index.interruptRecognition()
+            var chunksWhileDictating: Int64 = -1
+            fixture.onSleep = { [unowned fixture] in
+                chunksWhileDictating = max(chunksWhileDictating, (try? await fixture.count("SELECT count(*) FROM index_chunks")) ?? -1)
+                if fixture.sleeps == 3 {
+                    fixture.dictating = false
+                }
+            }
+            await fixture.index.waitUntilIdle()
+            #expect(hold.cancelled == 1)
+            #expect(chunksWhileDictating == 0)
+            #expect(fixture.jobs.all.withLock { $0.map(\.done) } == [[], []])
+            #expect(try await fixture.search("brass").count == 1)
+            #expect(try await triedPages("sign.png", fixture) == [0: "text"])
+        }
+    }
+
+    /// Each pause holds recognition before its first page. A short one only delays it,
+    /// without a word on the page. A lasting one ends the pass, the page says why, and the
+    /// next tick of the timer after it ends goes on.
+    @Test(arguments: [FolderIndex.RecognitionPause.captions, .request, .memory, .lowPower, .heat])
+    func eachPauseHoldsRecognition(_ reason: FolderIndex.RecognitionPause) async throws {
+        let pause = Pause(reason)
+        let pausedAtAJob = Mutex(false)
+        try await withFixture(recognize: { _, mayGoOn in
+            pausedAtAJob.withLock { $0 = $0 || pause.now != nil }
+            return await mayGoOn() ? Self.recognized([(0, "Brass lamps")]) : .success(RecognitionResult())
+        }, pause: pause) { fixture in
+            try fixture.write("sign.png", "x")
+            if reason.isLasting {
+                await fixture.start()
+                #expect(fixture.jobs.count == 0)
+                #expect(fixture.index.reports[fixture.alpha]?.recognitionPause == reason)
+                #expect(fixture.index.reports[fixture.alpha]?.recognitionLeft == 1)
+                pause.now = nil
+                await fixture.tick()
+            } else {
+                fixture.onSleep = { [unowned fixture] in
+                    if fixture.sleeps == 3 {
+                        pause.now = nil
+                    }
+                }
+                await fixture.start()
+                #expect(fixture.sleeps >= 3)
+            }
+            #expect(!pausedAtAJob.withLock { $0 })
+            #expect(fixture.jobs.count == 1)
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.recognitionLeft == 0 && report.recognitionPause == nil && report.indexed == 1)
+        }
+    }
+
+    /// A pause that begins during a page stops that page within a poll of the clock, and the
+    /// page is read again after the pause.
+    @Test func aPauseThatBeginsDuringAPageStopsIt() async throws {
+        let hold = TextRecognitionTests.Hold()
+        let pause = Pause()
+        try await withFixture(recognize: { _, _ in
+            if hold.cancelled == 0 {
+                await hold.untilCancelled()
+                return .success(RecognitionResult())
+            }
+            return Self.recognized([(0, "Brass lamps")])
+        }, pause: pause) { fixture in
+            try fixture.write("sign.png", "x")
+            fixture.onSleep = { [unowned fixture] in
+                if fixture.sleeps == 2 {
+                    pause.now = nil
+                }
+            }
+            fixture.index.start(project: fixture.alpha, folders: [fixture.folderURL])
+            await hold.untilBegun()
+            pause.now = .captions
+            await fixture.index.waitUntilIdle()
+            #expect(hold.cancelled == 1)
+            #expect(fixture.jobs.count == 2)
+            #expect(try await fixture.search("brass").count == 1)
+        }
+    }
+
+    /// A file that changed after the sweep gives nothing, and waits for the sweep that reads
+    /// it again. Its new version starts with no page tried.
+    @Test func aFileThatChangedWaitsForTheNextSweep() async throws {
+        try await withFixture(recognize: { job, _ in
+            job.size == 1 ? .success(RecognitionResult(fileChanged: true)) : Self.recognized([(0, "Brass lamps")])
+        }) { fixture in
+            let old = Date(timeIntervalSince1970: 1_760_000_000)
+            try fixture.write("sign.png", "x", modified: old)
+            await fixture.start()
+            #expect(fixture.jobs.count == 1)
+            #expect(try await fixture.rows()["sign.png"]?.skip == "waitsForRecognition")
+            #expect(fixture.index.reports[fixture.alpha]?.recognitionLeft == 0)
+            #expect(fixture.index.isIdle)
+
+            try fixture.write("sign.png", "new picture", modified: old.addingTimeInterval(60))
+            await fixture.deliverAndTick(FolderEvents.Changes(changed: [fixture.folder + "/sign.png"]))
+            #expect(fixture.jobs.all.withLock { $0.map(\.size) } == [1, 11])
+            #expect(try await fixture.rows()["sign.png"].map { $0.skip == nil && $0.recognize == 0 } == true)
+            #expect(try await triedPages("sign.png", fixture) == [0: "text"])
+            try await fixture.expectTablesAgree()
+        }
+    }
+
+    /// A file recognition cannot read now, such as one without access, waits for the next
+    /// sweep and is listed with why, and the counts leave it out until then.
+    @Test func aFileThatCannotBeReadNowWaitsForTheNextSweep() async throws {
+        try await withFixture(recognize: { _, _ in .failure(.noAccess) }) { fixture in
+            try fixture.write("sign.png", "x")
+            await fixture.start()
+            #expect(fixture.jobs.count == 1)
+            #expect(try await fixture.rows()["sign.png"]?.skip == "waitsForRecognition")
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.skipped == [.noAccess: 1] && report.recognitionLeft == 0)
+            #expect(try await fixture.index.skippedFiles(project: fixture.alpha).map(\.reason) == [.noAccess])
+            await fixture.tick()
+            #expect(fixture.jobs.count == 1)
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(fixture.jobs.count == 2)
+        }
+    }
+
+    /// Forgetting a project while a page of it is read stops that page, waits for it, and
+    /// removes everything, the pages tried included.
+    @Test func forgetStopsThePageUnderWayAndRemovesAll() async throws {
+        let hold = TextRecognitionTests.Hold()
+        try await withFixture(read: Self.readingScans(["scan.pdf": [1, 2, 3]]), recognize: { job, _ in
+            guard job.done.isEmpty else {
+                await hold.untilCancelled()
+                return .success(RecognitionResult())
+            }
+            return Self.recognized([(1, "Page one")], isDone: false)
+        }) { fixture in
+            try fixture.write("scan.pdf", "x")
+            fixture.index.start(project: fixture.alpha, folders: [fixture.folderURL])
+            await hold.untilBegun()
+            try await fixture.index.forget(project: fixture.alpha)
+            #expect(hold.cancelled == 1)
+            #expect(try await fixture.count("SELECT count(*) FROM index_files") == 0)
+            #expect(try await fixture.count("SELECT count(*) FROM index_recognition_pages") == 0)
+            try await fixture.expectTablesAgree()
+            #expect(fixture.index.isIdle)
+        }
+    }
+
+    /// Once a project's text reaches its limit, recognition of the project stops, and the
+    /// page says the limit was reached rather than counting what waits.
+    @Test func theTextLimitStopsRecognition() async throws {
+        try await withFixture(limits: FolderIndex.Limits(textBytes: 20), recognize: { _, _ in Self.recognized([(0, "Brass lamps")]) }) { fixture in
+            try fixture.write("notes.txt", "The print run is 500 calendars.")
+            try fixture.write("sign.png", "x")
+            await fixture.start()
+            #expect(fixture.jobs.count == 0)
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.reachedTextLimit && report.recognitionLeft == 0)
+            #expect(try await fixture.rows()["sign.png"]?.skip == "waitsForRecognition")
         }
     }
 }

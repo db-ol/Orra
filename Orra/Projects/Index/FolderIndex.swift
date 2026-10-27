@@ -29,6 +29,16 @@ extension Logger {
 ///   drops its text.
 /// - It waits while a dictation is under way, before the walk, before each file and before
 ///   each write.
+/// - Images and PDF pages without a text layer wait for text recognition, see
+///   TextRecognizer, which runs only while no sweep waits: projects in turn, in each PDFs
+///   first, then images, the newest first, in jobs of up to `recognitionPages` pages. Before
+///   every page it waits while a dictation is under way, while Live Captions run, while a
+///   request of the user runs, and it ends its pass while memory runs low, in Low Power Mode
+///   and while the Mac is hot, see `RecognitionPause`. A key press or a request of the user
+///   stops the page under way at once, and any other pause within `pollInterval`. Each page
+///   tried is kept with the file's size and date and how it went, so blank, timed out and
+///   failed pages are not tried again, a restart goes on where it stopped, and a changed
+///   file starts over. Recognized text is kept like any text, marked as recognized.
 /// - A project holds at most 5,000 documents and images, documents first, and 20,000 more
 ///   files by name, and about 200 MB of text. Images the index holds keep their place, and
 ///   new ones take the room the documents leave, newest first. The rest are known by name.
@@ -52,7 +62,7 @@ final class FolderIndex {
     /// The limits of one project.
     nonisolated struct Limits: Sendable, Equatable {
         /// Documents and images, documents first. The pages recognition reads in one file
-        /// are the recognizer's limit.
+        /// are the recognizer's limit, see `TextRecognizer.Limits.pagesPerFile`.
         var files = 5_000
         /// Files known by name only, besides `files`: documents and images past it, and
         /// every other kind of file.
@@ -86,7 +96,40 @@ final class FolderIndex {
         var nameOnly = 0
         /// Whether the folders hold more files than the index lists by name.
         var reachedNameLimit = false
+        /// Images and PDFs whose text recognition has pages left. None once the project
+        /// reached its text limit, since recognition stops then.
+        var recognitionLeft = 0
+        /// Why recognition waits, when it waits for a lasting reason the page says: memory,
+        /// Low Power Mode or heat. Nil while it runs or waits for a short pause.
+        var recognitionPause: RecognitionPause?
     }
+
+    /// Why text recognition waits. A dictation, Live Captions and a request of the user pass
+    /// soon. The others may last, and the project page says so.
+    nonisolated enum RecognitionPause: String, Sendable, Equatable, CaseIterable {
+        case dictation
+        case captions
+        /// A request of the user in the Projects window, such as an explanation.
+        case request
+        /// The memory pressure of the Mac is not normal.
+        case memory
+        case lowPower
+        /// The thermal state of the Mac is serious or critical.
+        case heat
+
+        /// Whether the pause may last, so recognition ends its pass and the project page
+        /// says why it waits.
+        var isLasting: Bool {
+            switch self {
+            case .dictation, .captions, .request: false
+            case .memory, .lowPower, .heat: true
+            }
+        }
+    }
+
+    /// Recognizes the text of a job's pages, see TextRecognizer, asking before every page
+    /// whether it may go on.
+    typealias Recognize = @Sendable (RecognitionJob, _ mayGoOn: @escaping @Sendable () async -> Bool) async -> Result<RecognitionResult, FileSkipReason>
 
     /// A file that gives no text, and why.
     nonisolated struct SkippedFile: Sendable, Equatable {
@@ -115,8 +158,12 @@ final class FolderIndex {
     nonisolated static let sweepGap: Duration = .seconds(60)
     /// Every this many ticks, every project is swept, an hour (a guess).
     nonisolated static let ticksPerFullSweep = 60
-    /// How often a wait for the end of a dictation looks again.
+    /// How often a wait for the end of a dictation looks again, and how often a page under
+    /// way looks whether a pause began.
     nonisolated static let pollInterval: Duration = .milliseconds(100)
+    /// The most pages one job of recognition tries, after which its result is written and
+    /// the index looks whether a sweep waits (a guess).
+    nonisolated static let recognitionPages = 10
 
     /// The reports of the started projects.
     private(set) var reports: [UUID: Report] = [:]
@@ -129,6 +176,8 @@ final class FolderIndex {
     @ObservationIgnored private let chunker = TextChunker()
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
     @ObservationIgnored private let watch: Watch
+    @ObservationIgnored private let recognize: Recognize
+    @ObservationIgnored private let recognitionPause: () -> RecognitionPause?
 
     /// A started project.
     private struct Watched {
@@ -144,6 +193,9 @@ final class FolderIndex {
         var stopWatching: (() -> Void)?
         /// What the last sweep found that the database does not keep.
         var facts = SweepFacts()
+        /// Rows recognition leaves until the next sweep: a file it could not read for a
+        /// reason that can pass, such as no access, or one that changed after the sweep.
+        var recognitionSkips: Set<Int64> = []
     }
 
     private nonisolated struct SweepFacts: Sendable {
@@ -170,11 +222,32 @@ final class FolderIndex {
     @ObservationIgnored private var idleWaiters: [CheckedContinuation<Void, Never>] = []
     /// Waits for the worker to leave its project, see forget(project:).
     @ObservationIgnored private var leaveWaiters: [CheckedContinuation<Void, Never>] = []
+    /// Whether the worker is at text recognition: a job, or a wait for a short pause.
+    @ObservationIgnored private var isRecognizing = false
+    /// The job of recognition under way.
+    @ObservationIgnored private var recognition: RecognitionTask?
+    /// The project recognition read last, so projects take turns.
+    @ObservationIgnored private var lastRecognized: UUID?
+    /// The lasting pause recognition waits for, which the reports show.
+    @ObservationIgnored private var lastingPause: RecognitionPause?
+
+    /// A job of recognition under way, which a key press, a request of the user, a pause or
+    /// a stop of its project cancels.
+    private struct RecognitionTask {
+        var project: UUID
+        var task: Task<Result<RecognitionResult, FileSkipReason>, Never>
+        /// Whether the index cancelled it, so the pages it did not try are tried again.
+        var wasInterrupted = false
+    }
 
     /// - Parameters:
     ///   - isDictating: true from the press of the talk key or the translation key until the
     ///     dictation is pasted or cancelled, see EngineTurns.isDictating.
     ///   - readText: reads one file, FileTextExtractor's by default. Tests pass a stand in.
+    ///   - recognize: recognizes the text of a job's pages, TextRecognizer's by default.
+    ///     Tests pass a stand in.
+    ///   - recognitionPause: why recognition waits besides a dictation, nil when it may run.
+    ///     ProjectsRuntime's says, see `ProjectsRuntime.recognitionPause()`. None by default.
     ///   - sleep: waits for a time. Tests pass one that does not.
     init(
         database: ProjectsDatabase,
@@ -182,6 +255,8 @@ final class FolderIndex {
         limits: Limits = Limits(),
         walk: FolderWalk = FolderWalk(),
         readText: @escaping @Sendable (URL) async -> Result<FileTextResult, FileSkipReason> = { await FileTextExtractor().text(of: $0) },
+        recognize: @escaping Recognize = { await TextRecognizer().recognize($0, mayGoOn: $1) },
+        recognitionPause: @escaping () -> RecognitionPause? = { nil },
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         watch: @escaping Watch = FolderIndex.watchWithFolderEvents
     ) {
@@ -190,6 +265,8 @@ final class FolderIndex {
         self.limits = limits
         self.walk = walk
         self.readText = readText
+        self.recognize = recognize
+        self.recognitionPause = recognitionPause
         self.sleep = sleep
         self.watch = watch
     }
@@ -202,6 +279,7 @@ final class FolderIndex {
         }
         worker?.cancel()
         stoppedWorker?.cancel()
+        recognition?.task.cancel()
         timer?.cancel()
         wake?.finish()
     }
@@ -213,6 +291,7 @@ final class FolderIndex {
     func start(project id: UUID, folders: [URL]) {
         if let watched = projects[id], watched.folders == folders { return }
         stopWatching(id)
+        stopRecognition(of: id)
         generations += 1
         projects[id] = Watched(folders: folders, generation: generations)
         reports[id, default: Report()].isIndexing = true
@@ -223,6 +302,7 @@ final class FolderIndex {
     /// Stops indexing a project. What the index holds for it stays.
     func stop(project id: UUID) {
         stopWatching(id)
+        stopRecognition(of: id)
         projects[id] = nil
         reports[id] = nil
         if projects.isEmpty {
@@ -243,8 +323,9 @@ final class FolderIndex {
     /// Stops a project and removes everything the index holds for it.
     func forget(project id: UUID) async throws {
         stop(project: id)
-        // A file being read for it is written before the worker sees the stop. This waits
-        // for that file even when the calling task is cancelled.
+        // A file being read for it is written before the worker sees the stop, and the page
+        // recognition reads for it stops. This waits for them even when the calling task is
+        // cancelled.
         while working == id {
             await withCheckedContinuation { leaveWaiters.append($0) }
         }
@@ -259,16 +340,27 @@ final class FolderIndex {
         Logger.projectsIndex.notice("Index forgot a project")
     }
 
-    /// Returns once no project waits for work. Changes that wait for the next tick do not
-    /// count. For tests, and for code that must see the result of a start.
+    /// Returns once no project waits for work, text recognition included. Changes that wait
+    /// for the next tick do not count, and neither does recognition that waits for a lasting
+    /// pause, such as Low Power Mode. For tests, and for code that must see the result of a
+    /// start.
     func waitUntilIdle() async {
         guard !isIdle else { return }
         await withCheckedContinuation { idleWaiters.append($0) }
     }
 
-    /// Whether no project waits for work.
+    /// Whether no project waits for work, text recognition included.
     var isIdle: Bool {
-        working == nil && !projects.values.contains { $0.sweepDue || !$0.pending.isEmpty }
+        working == nil && !isRecognizing && !projects.values.contains { $0.sweepDue || !$0.pending.isEmpty }
+    }
+
+    /// Stops the page recognition reads now, at the press of the talk key or the translation
+    /// key and when a request of the user starts, so recognition never runs beside them. The
+    /// page is read again once the pause ends.
+    func interruptRecognition() {
+        guard recognition != nil else { return }
+        recognition?.wasInterrupted = true
+        recognition?.task.cancel()
     }
 
     /// Sweeps the projects whose folders changed since their last sweep. The timer calls it
@@ -277,6 +369,7 @@ final class FolderIndex {
         for (id, watched) in projects where watched.changedSinceSweep {
             projects[id]?.sweepDue = true
         }
+        lookAgainAtRecognition()
         wake?.yield()
     }
 
@@ -370,6 +463,7 @@ final class FolderIndex {
 
     private func stopWorker() {
         worker?.cancel()
+        recognition?.task.cancel()
         timer?.cancel()
         wake?.finish()
         if let worker {
@@ -378,7 +472,9 @@ final class FolderIndex {
         worker = nil
         timer = nil
         wake = nil
-        // `working` stays until the stopped worker leaves its file, see forget(project:).
+        // A stopped worker recognizes nothing more. `working` stays until it leaves its file,
+        // see forget(project:).
+        isRecognizing = false
         resumeIdleWaiters()
     }
 
@@ -387,11 +483,27 @@ final class FolderIndex {
         projects[id]?.stopWatching = nil
     }
 
+    /// Cancels the job of recognition of a project that stops or starts again.
+    private func stopRecognition(of id: UUID) {
+        if recognition?.project == id {
+            recognition?.task.cancel()
+        }
+    }
+
     private func sweepAll() {
         for id in projects.keys {
             projects[id]?.sweepDue = true
         }
+        lookAgainAtRecognition()
         wake?.yield()
+    }
+
+    /// The worker looks again at a lasting pause of recognition at each tick, so the index
+    /// counts as busy until it looked.
+    private func lookAgainAtRecognition() {
+        if lastingPause != nil, worker != nil {
+            isRecognizing = true
+        }
     }
 
     private func received(_ changes: FolderEvents.Changes, project id: UUID, generation: Int) {
@@ -405,19 +517,31 @@ final class FolderIndex {
         !Task.isCancelled && projects[id]?.generation == generation
     }
 
+    /// Sweeps the projects that wait for one, and recognizes text while none does, until
+    /// nothing is left to do now.
     private func work() async {
-        while !Task.isCancelled, let id = nextProject() {
-            working = id
-            await process(id)
-            working = nil
-            lastWorked = id
-            let waiters = leaveWaiters
-            leaveWaiters = []
-            for waiter in waiters {
-                waiter.resume()
+        while !Task.isCancelled {
+            if let id = nextProject() {
+                working = id
+                await process(id)
+                leave(id)
+                lastWorked = id
+            } else if await !recognizeNext() {
+                break
             }
         }
+        isRecognizing = false
         resumeIdleWaiters()
+    }
+
+    /// The worker left its project, so a forget that waits for it goes on.
+    private func leave(_ id: UUID) {
+        working = nil
+        let waiters = leaveWaiters
+        leaveWaiters = []
+        for waiter in waiters {
+            waiter.resume()
+        }
     }
 
     /// The next project with work, in turn, so a project whose folders keep changing never
@@ -446,6 +570,9 @@ final class FolderIndex {
         watched.sweepDue = false
         if sweepDue {
             watched.changedSinceSweep = false
+            // A sweep writes the rows of changed files again, so recognition tries the rows
+            // it left once more.
+            watched.recognitionSkips = []
         }
         projects[id] = watched
         reports[id]?.isIndexing = true
@@ -896,18 +1023,327 @@ final class FolderIndex {
         }
     }
 
+    // MARK: Recognition
+
+    /// A row that waits for recognition, as the pass found it.
+    private nonisolated struct Waiting: Sendable {
+        var project: UUID
+        var generation: Int
+        var row: Int64
+        var path: String
+        var size: Int64
+        /// Seconds since 1970, as the row holds it.
+        var modified: Double
+        /// The pages tried before for this size and date of the file.
+        var done: Set<Int>
+    }
+
+    /// Reasons a whole file fails recognition for, which its row keeps until the file
+    /// changes. Any other reason can pass, such as no access, and the row waits for the next
+    /// sweep.
+    nonisolated static let recognitionFailures: Set<FileSkipReason> = [.unreadable, .tooLarge, .tooSlow, .locked]
+
+    /// Why recognition waits now, a dictation first, nil when it may run.
+    private func currentPause() -> RecognitionPause? {
+        isDictating() ? .dictation : recognitionPause()
+    }
+
+    /// Whether a project waits for a sweep or for changes the worker has not taken in, which
+    /// go before recognition.
+    private var sweepWaits: Bool {
+        projects.values.contains { $0.sweepDue || !$0.pending.isEmpty }
+    }
+
+    /// Runs the next job of text recognition, or waits while a short pause lasts. Returns
+    /// false when nothing is left to do now: no file waits, the files that wait are left
+    /// until the next sweep, or recognition waits for a lasting pause, which the next tick
+    /// of the timer looks at again. It runs only while no sweep waits, see `work()`.
+    private func recognizeNext() async -> Bool {
+        isRecognizing = true
+        guard !projects.isEmpty, let next = await nextRecognition() else {
+            showLastingPause(nil)
+            isRecognizing = false
+            return false
+        }
+        if let pause = currentPause() {
+            guard !pause.isLasting else {
+                showLastingPause(pause)
+                isRecognizing = false
+                return false
+            }
+            await waitWhilePaused()
+            return true
+        }
+        showLastingPause(nil)
+        guard !sweepWaits else { return true }
+        await run(next)
+        return true
+    }
+
+    /// Waits while a short pause lasts, until a sweep waits or the pause turns lasting.
+    private func waitWhilePaused() async {
+        while let pause = currentPause(), !pause.isLasting, !sweepWaits, !projects.isEmpty, !Task.isCancelled {
+            try? await sleep(Self.pollInterval)
+        }
+    }
+
+    /// Shows the lasting pause recognition waits for on the reports of the projects with
+    /// files left, or takes it away.
+    private func showLastingPause(_ pause: RecognitionPause?) {
+        guard pause != lastingPause else { return }
+        lastingPause = pause
+        for id in Array(reports.keys) {
+            let shown = (reports[id]?.recognitionLeft ?? 0) > 0 ? pause : nil
+            if reports[id]?.recognitionPause != shown {
+                reports[id]?.recognitionPause = shown
+            }
+        }
+    }
+
+    /// The next row that waits for recognition. The projects take turns, and in a project
+    /// PDFs go before images, the newest first. Rows left until the next sweep are left out,
+    /// and so is a project whose text reached its limit.
+    private func nextRecognition() async -> Waiting? {
+        let ids = projects.keys.sorted { $0.uuidString < $1.uuidString }
+        let first = lastRecognized.flatMap { last in ids.firstIndex { $0.uuidString > last.uuidString } } ?? 0
+        for id in ids[first...] + ids[..<first] {
+            guard let watched = projects[id] else { continue }
+            do {
+                if let next = try await nextRecognition(in: id, watched: watched) {
+                    return next
+                }
+            } catch let failure as ProjectsDatabase.Failure {
+                Logger.projectsIndex.error("Recognition failed at \(failure.step.rawValue, privacy: .public) with SQLite error \(failure.code, privacy: .public)")
+            } catch {
+                Logger.projectsIndex.error("Recognition failed with error \((error as NSError).code, privacy: .public)")
+            }
+        }
+        return nil
+    }
+
+    private func nextRecognition(in id: UUID, watched: Watched) async throws -> Waiting? {
+        let project = Value.text(id.uuidString)
+        let textBytes = try await database.run("SELECT coalesce(sum(text_bytes), 0) FROM index_files WHERE project = ?", [project]).first?.first?.integer ?? 0
+        guard textBytes < limits.textBytes else {
+            // Recognition stops here, and the page says the text limit was reached.
+            if reports[id].map({ $0.recognitionLeft > 0 || !$0.reachedTextLimit }) ?? false {
+                await refreshReport(id, generation: watched.generation, isIndexing: reports[id]?.isIndexing ?? false)
+            }
+            return nil
+        }
+        guard let row = try await database.run("""
+            SELECT id, path, size, modified FROM index_files
+            WHERE project = ?1 AND recognize = 1 AND id NOT IN (SELECT value FROM json_each(?2))
+            ORDER BY path LIKE '%.pdf' DESC, modified DESC, id LIMIT 1
+            """, [project, .text(Self.jsonArray(watched.recognitionSkips))]).first,
+              row.count == 4, let file = row[0].integer, let path = row[1].text, let size = row[2].integer, let modified = row[3].real
+        else { return nil }
+        let done = try await database.run(
+            "SELECT page FROM index_recognition_pages WHERE file = ? AND size = ? AND modified = ?",
+            [.integer(file), .integer(size), .real(modified)]
+        ).compactMap { $0.first?.integer.map(Int.init) }
+        return Waiting(project: id, generation: watched.generation, row: file, path: path, size: size, modified: modified, done: Set(done))
+    }
+
+    /// Whether the job of a project may read its next page: no pause, no sweep waits, and
+    /// the project still runs as it did.
+    private func mayRecognize(_ id: UUID, generation: Int) -> Bool {
+        projects[id]?.generation == generation && currentPause() == nil && !sweepWaits
+    }
+
+    /// Runs one job of recognition on a row in a task of its own, which a key press, a
+    /// request of the user, a pause or a stop of the project cancels, and writes what it
+    /// read.
+    private func run(_ next: Waiting) async {
+        let id = next.project
+        guard isCurrent(id, next.generation) else { return }
+        working = id
+        defer {
+            leave(id)
+            lastRecognized = id
+        }
+        let kind: RecognitionJob.Kind = FileTextExtractor.kind(ofExtension: (next.path as NSString).pathExtension) == .text(.pdf) ? .pdf : .image
+        let job = RecognitionJob(
+            file: URL(fileURLWithPath: next.path), kind: kind, size: next.size, modified: next.modified, done: next.done,
+            pages: Self.recognitionPages)
+        let mayGoOn: @Sendable () async -> Bool = { [weak self] in
+            await self?.mayRecognize(id, generation: next.generation) ?? false
+        }
+        let started = ContinuousClock.now
+        let recognize = self.recognize
+        let task = Task.detached(priority: .background) {
+            await recognize(job, mayGoOn)
+        }
+        recognition = RecognitionTask(project: id, task: task)
+        let watcher = watchForPauses(project: id, generation: next.generation)
+        let result = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        watcher.cancel()
+        let wasInterrupted = recognition?.wasInterrupted ?? false
+        recognition = nil
+        guard isCurrent(id, next.generation) else { return }
+        await store(result, of: next, job: job, wasInterrupted: wasInterrupted, started: started)
+    }
+
+    /// Cancels the job under way once a pause begins or its project stops, looking every
+    /// `pollInterval`, so a page under way gives way to Live Captions or memory pressure
+    /// too, not only to the press of a key and a request of the user, which cancel it at
+    /// once. The time decides only how soon, so it is the clock's own.
+    private func watchForPauses(project id: UUID, generation: Int) -> Task<Void, Never> {
+        Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.pollInterval)
+                guard !Task.isCancelled, let self else { return }
+                if self.currentPause() != nil || self.projects[id]?.generation != generation {
+                    self.interruptRecognition()
+                    return
+                }
+            }
+        }
+    }
+
+    /// Leaves a row until the next sweep of its project.
+    private func leaveUntilSweep(_ row: Int64, project id: UUID) {
+        projects[id]?.recognitionSkips.insert(row)
+    }
+
+    /// Writes what a job read, once no dictation is under way, in one transaction and only
+    /// while the row is still the job's file: the chunks of the recognized pages, the pages
+    /// tried, its text and hidden runs, and whether pages are left. A file that failed as a
+    /// whole stops waiting and keeps any text it has. A reason that can pass, a file that
+    /// changed, and a job that made no progress without being stopped leave the row until
+    /// the next sweep.
+    private func store(
+        _ result: Result<RecognitionResult, FileSkipReason>, of next: Waiting, job: RecognitionJob, wasInterrupted: Bool,
+        started: ContinuousClock.Instant
+    ) async {
+        let id = next.project
+        if wasInterrupted {
+            let tried = (try? result.get())?.tried.count ?? 0
+            Logger.projectsIndex.notice("Recognition gave way to a pause after \(tried, privacy: .public) pages of a file")
+        }
+        let read: RecognitionResult
+        switch result {
+        case .success(let success):
+            read = success
+        case .failure(let reason) where Self.recognitionFailures.contains(reason):
+            await waitWhileDictating()
+            guard isCurrent(id, next.generation) else { return }
+            do {
+                try await database.transaction { [row = next.row, size = next.size, modified = next.modified] database in
+                    // A file with text keeps it, and stops waiting.
+                    _ = try database.run(
+                        "UPDATE index_files SET recognize = 0, skip = CASE WHEN skip IS NULL THEN NULL ELSE ? END WHERE id = ? AND size = ? AND modified = ? AND recognize = 1",
+                        [.text(reason.rawValue), .integer(row), .integer(size), .real(modified)])
+                }
+            } catch {
+                Self.logRecognitionFailure(error)
+            }
+            Logger.projectsIndex.notice("Index could not recognize the text of a file: \(reason.rawValue, privacy: .public)")
+            await refreshReport(id, generation: next.generation, isIndexing: reports[id]?.isIndexing ?? false)
+            return
+        case .failure(let reason):
+            leaveUntilSweep(next.row, project: id)
+            projects[id]?.facts.skipped[reason, default: 0] += 1
+            if let facts = projects[id]?.facts, facts.skippedFiles.count < FolderWalk.maximumListedSkips {
+                projects[id]?.facts.skippedFiles.append(SkippedFile(url: job.file, reason: reason, modified: Date(timeIntervalSince1970: next.modified)))
+            }
+            await refreshReport(id, generation: next.generation, isIndexing: reports[id]?.isIndexing ?? false)
+            return
+        }
+        let madeNoProgress = read.tried.isEmpty && !read.isDone
+        if read.fileChanged || (madeNoProgress && !wasInterrupted && currentPause() == nil && !sweepWaits) {
+            leaveUntilSweep(next.row, project: id)
+            await refreshReport(id, generation: next.generation, isIndexing: reports[id]?.isIndexing ?? false)
+            return
+        }
+        guard !madeNoProgress else { return }
+        let prepared = await Self.recognizedChunks(read, file: job.file, modified: next.modified, chunker: chunker)
+        await waitWhileDictating()
+        guard isCurrent(id, next.generation) else { return }
+        let isPDF = job.kind == .pdf
+        do {
+            try await database.transaction { [row = next.row, size = next.size, modified = next.modified] database in
+                // Only while the row is still the job's file, as the sweep left it.
+                guard try !database.run(
+                    "SELECT 1 FROM index_files WHERE id = ?1 AND project = ?2 AND size = ?3 AND modified = ?4 AND recognize = 1",
+                    [.integer(row), .text(id.uuidString), .integer(size), .real(modified)]).isEmpty else { return }
+                try Self.insert(prepared.chunks, file: row, project: id, name: prepared.name, in: database)
+                try database.run("DELETE FROM index_recognition_pages WHERE file = ? AND (size != ? OR modified != ?)", [.integer(row), .integer(size), .real(modified)])
+                for (page, outcome) in read.tried {
+                    try database.run(
+                        "INSERT OR REPLACE INTO index_recognition_pages (file, page, size, modified, outcome) VALUES (?, ?, ?, ?, ?)",
+                        [.integer(row), .integer(Int64(page)), .integer(size), .real(modified), .text(outcome.rawValue)])
+                }
+                try database.run(
+                    "UPDATE index_files SET text_bytes = text_bytes + ?, chunks = chunks + ?, hidden_runs = hidden_runs + ? WHERE id = ?",
+                    [.integer(prepared.textBytes), .integer(Int64(prepared.chunks.count)), .integer(Int64(read.hiddenRuns)), .integer(row)])
+                // The file has text once any page gave some. Without, it waits while pages
+                // are left, and then holds no text.
+                let hasText = try database.run("SELECT text_bytes > 0 OR chunks > 0 FROM index_files WHERE id = ?", [.integer(row)]).first?.first?.integer == 1
+                let skip: FileSkipReason? = hasText ? nil : !read.isDone ? .waitsForRecognition : isPDF ? .noText : .imageWithoutText
+                try database.run(
+                    "UPDATE index_files SET skip = ?, recognize = ? WHERE id = ?",
+                    [skip.map { .text($0.rawValue) } ?? .null, .integer(read.isDone ? 0 : 1), .integer(row)])
+            }
+        } catch {
+            Self.logRecognitionFailure(error)
+        }
+        let outcomes = read.tried.values
+        let milliseconds = started.duration(to: .now) / .milliseconds(1)
+        Logger.projectsIndex.notice(
+            "Index recognized \(read.tried.count, privacy: .public) pages of a file in \(Int(milliseconds), privacy: .public) ms: \(outcomes.count { $0 == .text }, privacy: .public) with text, \(outcomes.count { $0 == .blank }, privacy: .public) blank, \(outcomes.count { $0 == .timedOut }, privacy: .public) timed out, \(outcomes.count { $0 == .failed }, privacy: .public) failed, \(read.hiddenRuns, privacy: .public) hidden runs, \(read.isDone ? "done" : "pages left", privacy: .public)")
+        await refreshReport(id, generation: next.generation, isIndexing: reports[id]?.isIndexing ?? false)
+    }
+
+    private nonisolated static func logRecognitionFailure(_ error: any Error) {
+        if let failure = error as? ProjectsDatabase.Failure {
+            Logger.projectsIndex.error("Recognition failed at \(failure.step.rawValue, privacy: .public) with SQLite error \(failure.code, privacy: .public)")
+        } else {
+            Logger.projectsIndex.error("Recognition failed with error \((error as NSError).code, privacy: .public)")
+        }
+    }
+
+    /// The chunks of recognized pages with their words, the words of the file's name, and
+    /// the bytes of their text. Off the main actor, since NLTokenizer takes a while.
+    @concurrent
+    private nonisolated static func recognizedChunks(
+        _ read: RecognitionResult, file: URL, modified: Double, chunker: TextChunker
+    ) async -> (chunks: [Prepared.Chunk], name: ChunkName, textBytes: Int64) {
+        let text = FileTextResult(pages: read.pages, hiddenRuns: read.hiddenRuns, modified: Date(timeIntervalSince1970: modified), isCut: false)
+        return (chunks(of: text, file: file, chunker: chunker), ChunkName(file), read.pages.reduce(0) { $0 + Int64($1.text.utf8.count) })
+    }
+
+    /// Reads the counts of a project's report again. The files left for recognition leave
+    /// out those it leaves until the next sweep, and are none once the project's text
+    /// reached its limit, since recognition stops then.
     private func refreshReport(_ id: UUID, generation: Int, isIndexing: Bool) async {
+        let skips = projects[id]?.recognitionSkips ?? []
         guard let totals = try? await database.run("""
                 SELECT sum(CASE WHEN skip IS NULL THEN 1 ELSE 0 END), sum(CASE WHEN skip IS NULL AND hidden_runs > 0 THEN 1 ELSE 0 END),
-                sum(chunks), sum(text_bytes), sum(CASE WHEN skip IS NOT NULL AND skip != ?2 THEN 1 ELSE 0 END)
+                sum(chunks), sum(text_bytes), sum(CASE WHEN skip IS NOT NULL AND skip != ?2 THEN 1 ELSE 0 END),
+                sum(CASE WHEN recognize = 1 AND id NOT IN (SELECT value FROM json_each(?3)) THEN 1 ELSE 0 END)
                 FROM index_files WHERE project = ?1
-                """, [.text(id.uuidString), .text(FileSkipReason.waitsForRecognition.rawValue)]).first,
-              let watched = projects[id], watched.generation == generation, totals.count == 5 else { return }
+                """, [.text(id.uuidString), .text(FileSkipReason.waitsForRecognition.rawValue), .text(Self.jsonArray(skips))]).first,
+              let watched = projects[id], watched.generation == generation, totals.count == 6 else { return }
+        let textBytes = totals[3].integer ?? 0
+        let waiting = Int(totals[5].integer ?? 0)
+        let isFull = textBytes >= limits.textBytes
+        let left = isFull ? 0 : waiting
         reports[id] = Report(
-            indexed: Int(totals[0].integer ?? 0), chunks: Int(totals[2].integer ?? 0), textBytes: totals[3].integer ?? 0,
+            indexed: Int(totals[0].integer ?? 0), chunks: Int(totals[2].integer ?? 0), textBytes: textBytes,
             hiddenText: Int(totals[1].integer ?? 0), skipped: watched.facts.skipped, refusedFolders: watched.facts.refusedFolders,
-            reachedFileLimit: watched.facts.reachedFileLimit, reachedTextLimit: watched.facts.reachedTextLimit,
-            isIndexing: isIndexing, nameOnly: Int(totals[4].integer ?? 0), reachedNameLimit: watched.facts.reachedNameLimit)
+            reachedFileLimit: watched.facts.reachedFileLimit, reachedTextLimit: watched.facts.reachedTextLimit || (isFull && waiting > 0),
+            isIndexing: isIndexing, nameOnly: Int(totals[4].integer ?? 0), reachedNameLimit: watched.facts.reachedNameLimit,
+            recognitionLeft: left, recognitionPause: left > 0 ? lastingPause : nil)
+    }
+
+    /// A JSON array of row IDs, for json_each.
+    private nonisolated static func jsonArray(_ rows: Set<Int64>) -> String {
+        "[" + rows.sorted().map(String.init).joined(separator: ",") + "]"
     }
 
     /// Writes the name entries that rows lack, those of an index from before names and
@@ -997,8 +1433,7 @@ final class FolderIndex {
         var recognize = false
         var name = NameEntry()
         /// The file name as the chunk tables hold it.
-        var nameWords = ""
-        var nameTrigramText = ""
+        var chunkName = ChunkName()
         var hiddenRuns = 0
         var textBytes: Int64 = 0
         var chunks: [Chunk] = []
@@ -1010,6 +1445,21 @@ final class FolderIndex {
             size = file.size
             modified = file.modified
             self.skip = skip
+        }
+    }
+
+    /// The words of a file's name, as the chunk tables hold them with each chunk, since the
+    /// name says what the file is about.
+    private nonisolated struct ChunkName: Sendable {
+        var words = ""
+        var trigramText = ""
+
+        init() {}
+
+        init(_ file: URL) {
+            let name = FolderIndex.searchableName(file)
+            words = ChunkSearch.indexedWords(name)
+            trigramText = ChunkSearch.indexedTrigramText(name)
         }
     }
 
@@ -1076,10 +1526,15 @@ final class FolderIndex {
         prepared.name = entries.entry(path: prepared.path, folder: file.folder)
         prepared.hiddenRuns = text.hiddenRuns
         prepared.textBytes = text.pages.reduce(0) { $0 + Int64($1.text.utf8.count) }
-        let name = searchableName(file.url)
-        prepared.nameWords = ChunkSearch.indexedWords(name)
-        prepared.nameTrigramText = ChunkSearch.indexedTrigramText(name)
-        prepared.chunks = chunker.chunks(of: text, file: file.url).map { chunk in
+        prepared.chunkName = ChunkName(file.url)
+        prepared.chunks = chunks(of: text, file: file.url, chunker: chunker)
+        return prepared
+    }
+
+    /// The chunks of a file's text with their words. The heading counts as words of each
+    /// chunk under it.
+    private nonisolated static func chunks(of text: FileTextResult, file: URL, chunker: TextChunker) -> [Prepared.Chunk] {
+        chunker.chunks(of: text, file: file).map { chunk in
             var searchable = chunk.text
             if let heading = chunk.heading, !chunk.text.hasPrefix(heading) {
                 searchable = heading + "\n" + searchable
@@ -1090,7 +1545,6 @@ final class FolderIndex {
                 trigramText: ChunkSearch.hasChinese(chunk.text) ? ChunkSearch.indexedTrigramText(searchable) : nil,
                 sheet: chunk.sheet, recognized: chunk.recognized == true)
         }
-        return prepared
     }
 
     /// Makes rows ready to be written without a read: files known by name, and images that
@@ -1128,26 +1582,31 @@ final class FolderIndex {
              .integer(Int64(prepared.hiddenRuns)), .integer(prepared.textBytes), .integer(Int64(prepared.chunks.count)),
              .text(prepared.folder), .integer(prepared.recognize ? 1 : 0)])
         let file = database.lastInsertedRow
-        for chunk in prepared.chunks {
+        try insert(prepared.chunks, file: file, project: prepared.project, name: prepared.chunkName, in: database)
+        try writeName(prepared.name, row: file, in: database)
+        return removed
+    }
+
+    /// Inserts chunks of a file's row with their rows in the two full text tables.
+    private static func insert(_ chunks: [Prepared.Chunk], file: Int64, project: UUID, name: ChunkName, in database: isolated ProjectsDatabase) throws {
+        for chunk in chunks {
             let page: Value = chunk.page.map { .integer(Int64($0)) } ?? .null
             let heading: Value = chunk.heading.map { .text($0) } ?? .null
             let sheet: Value = chunk.sheet.map { .text($0) } ?? .null
             try database.run(
                 "INSERT INTO index_chunks (file, project, page, heading, modified, text, chinese, sheet, recognized) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [.integer(file), project, page, heading, .real(chunk.modified.timeIntervalSince1970), .text(chunk.text),
+                [.integer(file), .text(project.uuidString), page, heading, .real(chunk.modified.timeIntervalSince1970), .text(chunk.text),
                  .integer(chunk.trigramText == nil ? 0 : 1), sheet, .integer(chunk.recognized ? 1 : 0)])
             let row = database.lastInsertedRow
             try database.run(
                 "INSERT INTO index_chunk_words (rowid, name, words) VALUES (?, ?, ?)",
-                [.integer(row), .text(prepared.nameWords), .text(chunk.words)])
+                [.integer(row), .text(name.words), .text(chunk.words)])
             if let trigramText = chunk.trigramText {
                 try database.run(
                     "INSERT INTO index_chunk_trigrams (rowid, name, text) VALUES (?, ?, ?)",
-                    [.integer(row), .text(prepared.nameTrigramText), .text(trigramText)])
+                    [.integer(row), .text(name.trigramText), .text(trigramText)])
             }
         }
-        try writeName(prepared.name, row: file, in: database)
-        return removed
     }
 
     /// Writes the name entry of a row, in place of any it had.
