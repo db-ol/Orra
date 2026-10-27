@@ -24,6 +24,7 @@ struct ProjectsRuntimeTests {
     let mail = FakeMail()
     let model = FakeModel()
     let tokenizer = TokenizerLoads()
+    let machine = Machine()
 
     init() throws {
         defaults = try #require(UserDefaults(suiteName: suite))
@@ -41,9 +42,10 @@ struct ProjectsRuntimeTests {
     /// The runtime with fakes, and its switch and mailbox choice. `installed` says whether
     /// the cleanup model is on this Mac, `countsTokens` gives the explain service a
     /// tokenizer, `openFails` makes the start fail at the database, `folders` stands in for
-    /// how the index reaches project folders, `keyDown` for the presses of the talk key, and
-    /// `retryLoading` for Try Loading Again.
-    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+    /// how the index reaches project folders, `keyDown` for the presses of the talk key,
+    /// `retryLoading` for Try Loading Again, and `recognize` for text recognition, which by
+    /// default finds no text. The dictation, Low Power Mode and heat come from `machine`.
+    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, recognize: FolderIndex.Recognize? = nil) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
         let projects = ProjectsSwitch(defaults: defaults, isVisible: isVisible, physicalMemory: 32 << 30, storage: storage)
         if isOn {
             projects.turnOn()
@@ -65,7 +67,7 @@ struct ProjectsRuntimeTests {
             choice: choice,
             ownerOverride: { SortingService.Owner(addresses: [Self.own], name: "Me") },
             language: .en,
-            isDictating: { false },
+            isDictating: { [machine] in machine.isDictating },
             whenDictationStarts: { [keyDown] handler in keyDown?.handlers.append(handler) },
             modelEnvironment: { _ in model.environment },
             modelIsInstalled: { installed.value },
@@ -75,6 +77,8 @@ struct ProjectsRuntimeTests {
             watchesMemoryPressure: false,
             watchFolders: watchFolders,
             readText: readText,
+            recognizeText: recognize ?? { _, _ in .success(RecognitionResult(isDone: true)) },
+            power: { [machine] in machine.power },
             resolveFolders: resolveFolders,
             openDatabase: { storage in
                 opens?.add()
@@ -90,8 +94,8 @@ struct ProjectsRuntimeTests {
         return (runtime, projects, choice)
     }
 
-    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, sourceLocation: SourceLocation = #_sourceLocation) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
-        let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown, retryLoading: retryLoading)
+    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, recognize: FolderIndex.Recognize? = nil, sourceLocation: SourceLocation = #_sourceLocation) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+        let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown, retryLoading: retryLoading, recognize: recognize)
         made.0.follow()
         try await waitUntil({ made.0.phase == .on }, sourceLocation: sourceLocation)
         return made
@@ -1456,6 +1460,67 @@ struct ProjectsRuntimeTests {
         keyDown.press()
         try await waitUntil { model.ended.value == 1 && model.jobs.value == 2 }
         runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Text recognition waits for a dictation, Live Captions, a request of the user, memory
+    /// pressure, Low Power Mode and heat, and says the first that holds, so a pause that
+    /// passes soon is never hidden behind a lasting one.
+    @Test func recognitionWaitsForEachPauseInItsOrder() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        #expect(runtime.recognitionPause() == nil)
+        machine.isDictating = true
+        model.captionsOn.withLock { $0 = true }
+        #expect(runtime.recognitionPause() == .dictation)
+        machine.isDictating = false
+        #expect(runtime.recognitionPause() == .captions)
+        model.captionsOn.withLock { $0 = false }
+
+        let request = Task { try await runtime.userRequest { try await Task.sleep(for: .seconds(3_600)) } }
+        try await waitUntil { runtime.userRequestCount == 1 }
+        #expect(runtime.recognitionPause() == .request)
+        request.cancel()
+        try await waitUntil { runtime.userRequestCount == 0 }
+
+        let memory = try #require(runtime.running?.memory)
+        memory.update(.warning)
+        #expect(runtime.recognitionPause() == .memory)
+        memory.update(.normal)
+        machine.power = ProjectsRuntime.PowerState(isLowPowerModeOn: true, isHot: true)
+        #expect(runtime.recognitionPause() == .lowPower)
+        machine.power = ProjectsRuntime.PowerState(isLowPowerModeOn: false, isHot: true)
+        #expect(runtime.recognitionPause() == .heat)
+        machine.power = ProjectsRuntime.PowerState()
+        #expect(runtime.recognitionPause() == nil)
+        #expect(FolderIndex.RecognitionPause.allCases.filter(\.isLasting) == [.memory, .lowPower, .heat])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// The press of a key and the start of a request of the user stop the page recognition
+    /// reads at once, so it never runs beside them.
+    @Test func theKeyDownAndARequestStopThePageUnderWay() async throws {
+        defer { cleanUp() }
+        let hold = TextRecognitionTests.Hold()
+        let keyDown = KeyDown()
+        let (runtime, projects, _) = try await started(keyDown: keyDown, recognize: { _, _ in
+            await hold.untilCancelled()
+            return .success(RecognitionResult())
+        })
+        let folder = root.appendingPathComponent("Harbor", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("picture".utf8).write(to: folder.appendingPathComponent("sign.png"))
+        try await runtime.add(Project(name: "Harbor", folders: [try Project.bookmark(of: folder)]))
+        await hold.untilBegun()
+        keyDown.press()
+        #expect(hold.cancelled == 1)
+        // Without a dictation under way the page is read again at once.
+        await hold.untilBegun(2)
+        let request = Task { try await runtime.userRequest { try await Task.sleep(for: .seconds(3_600)) } }
+        try await waitUntil { hold.cancelled == 2 }
+        request.cancel()
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
     }
@@ -2843,6 +2908,23 @@ struct ProjectsRuntimeTests {
         }
     }
 
+    /// Whether a dictation is under way, and Low Power Mode and the heat of the Mac, which a
+    /// test changes.
+    final class Machine: Sendable {
+        private let dictating = Mutex(false)
+        private let state = Mutex(ProjectsRuntime.PowerState())
+
+        var isDictating: Bool {
+            get { dictating.withLock { $0 } }
+            set { dictating.withLock { $0 = newValue } }
+        }
+
+        var power: ProjectsRuntime.PowerState {
+            get { state.withLock { $0 } }
+            set { state.withLock { $0 = newValue } }
+        }
+    }
+
     /// The presses of the talk key, as EngineTurns.whenDictationStarts hands them on.
     final class KeyDown {
         var handlers: [() -> Void] = []
@@ -2961,6 +3043,7 @@ struct ProjectsRuntimeTests {
         let ended = Count()
         let isThere = Mutex(false)
         let blocks = Mutex(false)
+        let captionsOn = Mutex(false)
 
         @MainActor var environment: ProjectsModelEnvironment {
             ProjectsModelEnvironment(
@@ -2980,7 +3063,7 @@ struct ProjectsRuntimeTests {
                 writeBurst: { _, _ in RewriteEngine.BurstRun(written: 4, finished: true, ran: .zero) },
                 endJob: { _ in #"P1", "reason": "fits"}"# },
                 isDictating: { false },
-                captionsOn: { false },
+                captionsOn: { [self] in captionsOn.withLock { $0 } },
                 memoryPressure: { .normal },
                 voiceLoaded: { false },
                 physicalMemory: 32 << 30,
