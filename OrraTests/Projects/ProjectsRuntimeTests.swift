@@ -3146,6 +3146,94 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    // MARK: Files for a reply
+
+    /// A project with a folder of the lamp email's files, indexed.
+    private func harborWithFiles(_ runtime: ProjectsRuntime) async throws -> (project: Project, folder: URL) {
+        let harbor = try folder("Harbor lobby", holding: "notes.txt")
+        try "Floor plan of the lobby, revision 3.".write(to: harbor.appending(path: "floor-plan-v3.txt"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: harbor.appending(path: "Slides.key"), withIntermediateDirectories: true)
+        let project = Project(name: "Harbor", folders: [try Project.bookmark(of: harbor)])
+        try await runtime.add(project)
+        try await waitUntil { runtime.indexReport(project.id).map { !$0.isIndexing && $0.indexed > 0 } == true }
+        return (project, URL(fileURLWithPath: try #require(FolderWalk.realPath(harbor.path)), isDirectory: true))
+    }
+
+    /// The files a request may mean come from the index of the projects' folders, after any
+    /// dictation, and none while Projects is off.
+    @Test func aRequestFindsItsFilesAfterTheDictation() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let (project, folder) = try await harborWithFiles(runtime)
+        let request = try #require(FileRequests.find(in: "Please send the floor plan.", subject: "").first)
+        let found = await runtime.requestedFiles(for: request, emailProject: project.id, scope: nil)
+        #expect(found.map(\.url) == [folder.appending(path: "floor-plan-v3.txt")])
+        #expect(found.map(\.project) == [project.id])
+
+        machine.isDictating = true
+        let waiting = Task { await runtime.requestedFiles(for: request, emailProject: project.id, scope: [project.id]) }
+        try await Task.sleep(for: ProjectsRuntime.dictationCheck * 3)
+        machine.isDictating = false
+        #expect(await waiting.value.count == 1)
+
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+        #expect(await runtime.requestedFiles(for: request, emailProject: project.id, scope: nil).isEmpty)
+    }
+
+    /// A file goes into a reply only when the index holds it in a folder a project holds now:
+    /// a file Projects has not read, a file outside the folders and a package are refused,
+    /// and so is everything while Projects is off.
+    @Test func aReplyTakesOnlyAFileTheIndexHolds() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let (project, folder) = try await harborWithFiles(runtime)
+        let plan = folder.appending(path: "floor-plan-v3.txt")
+        let taken = try await runtime.replyFile(at: plan, first: project.id).get()
+        #expect(taken.url == plan)
+        #expect(taken.projects == [project.id])
+        // Through a link to its folder, the file is the same file at its real path.
+        let link = root.appending(path: "Link to Harbor")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: folder)
+        #expect(try await runtime.replyFile(at: link.appending(path: "floor-plan-v3.txt"), first: nil).get().url == plan)
+
+        // The folder events are off in the tests, so the index never lists a new file.
+        let unread = folder.appending(path: "new.txt")
+        try "New".write(to: unread, atomically: true, encoding: .utf8)
+        #expect(await runtime.replyFile(at: unread, first: project.id) == .failure(.notInAddedFolder))
+        let outside = try self.folder("Elsewhere", holding: "other.txt").appending(path: "other.txt")
+        #expect(await runtime.replyFile(at: outside, first: project.id) == .failure(.notInAddedFolder))
+        #expect(await runtime.replyFile(at: folder.appending(path: "Slides.key"), first: project.id) == .failure(.package))
+
+        // Checked again before its event with the folders of now.
+        #expect(await runtime.recheck(taken) == .success(taken))
+        var without = project
+        without.folders = []
+        try await runtime.update(without)
+        #expect(await runtime.recheck(taken) == .failure(.notInAddedFolder))
+
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+        #expect(await runtime.replyFile(at: plan, first: project.id) == .failure(.notInAddedFolder))
+        #expect(await runtime.recheck(taken) == .failure(.notInAddedFolder))
+    }
+
+    /// The projects for the lines about people outside a file's project, and the folder Add
+    /// File… starts in.
+    @Test func theReplyKnowsTheProjectsAndWhereAddFileStarts() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let (project, folder) = try await harborWithFiles(runtime)
+        #expect(runtime.replyProjects() == runtime.projectList.map(\.forExplanation))
+        #expect(runtime.replyProjects().map(\.id) == [project.id])
+        #expect(await runtime.defaultFolder(of: project.id) == folder)
+        #expect(await runtime.defaultFolder(of: nil) == nil)
+        #expect(await runtime.replyRoots() == [project.id: [folder]])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+        #expect(await runtime.defaultFolder(of: project.id) == nil)
+    }
+
     // MARK: Values
 
     @Test func theDebugKeysCountOnlyInDebugBuilds() {
