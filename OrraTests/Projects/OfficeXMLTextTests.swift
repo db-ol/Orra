@@ -73,6 +73,58 @@ struct OfficeXMLTextTests {
         #expect(text == "# Numbers\n| \(day) | \(day) | 15% | 15.5% | 12:00 | \(day) 18:00 | 86000 | 0.1 |")
     }
 
+    /// A time of day shows without its date, a length of time in its largest unit past a
+    /// day, as Excel shows [h]:mm, and a built in format that is a date in Japanese files and
+    /// a time in Chinese ones shows a date for whole days.
+    @Test(arguments: [false, true])
+    func timesShowAsTheirFormatsSay(uses1904: Bool) async throws {
+        let styles = Files.styles(
+            numberFormats: #"<numFmt numFmtId="164" formatCode="[h]:mm"/><numFmt numFmtId="165" formatCode="[mm]:ss"/>"#
+                + #"<numFmt numFmtId="166" formatCode="h:mm AM/PM"/><numFmt numFmtId="167" formatCode="[$-409]mmm d, yyyy"/>"#,
+            cellFormats: [46, 164, 165, 20, 166, 34, 34, 167].map { #"<xf numFmtId="\#($0)" fontId="0" fillId="0" applyNumberFormat="1"/>"# })
+        let cells = [("1.5", 1), ("1.5", 2), ("0.5", 3), ("45000.75", 4), ("0.75", 5), ("46315.5", 6), ("0.5", 7), ("46315", 8)]
+        let row = Files.row(1, cells.enumerated().map { index, cell in Files.cell(Files.reference(index + 1, 1), cell.0, style: cell.1) }.joined())
+        let data = try Files.xlsx(
+            [Files.Sheet("Times", "<sheetData>\(row)</sheetData>")], styles: styles,
+            workbookProperties: uses1904 ? #"<workbookPr date1904="1"/>"# : "<workbookPr/>")
+        let text = try #require(try await pages(data, .xlsx).first?.text)
+        let day = uses1904 ? "2030-10-21" : "2026-10-20"
+        #expect(text == "# Times\n| 36:00:00 | 36:00 | 720:00 | 18:00 | 18:00 | \(day) | 12:00 | \(day) |")
+    }
+
+    /// A number keeps at most the 15 significant digits Excel shows, so a sum that binary
+    /// arithmetic saved a little off reads as the sheet shows it. Other numbers stay as
+    /// written.
+    @Test func numbersKeepTheDigitsExcelShows() async throws {
+        let values = ["59.970000000000006", "0.30000000000000004", "-1.0000000000000002", "86000", "123456789012345", "1.2345678901234568E+17", "0.1"]
+        let text = try #require(try await pages(try Files.xlsx([Files.Sheet("Sums", rows: [values])]), .xlsx).first?.text)
+        #expect(text == "# Sums\n| 59.97 | 0.3 | -1 | 86000 | 123456789012345 | 1.2345678901234568E+17 | 0.1 |")
+    }
+
+    /// A value whose section of its cell's format is empty shows nothing: every number under
+    /// ;;, whose text still shows, and the numbers below 0 under 0;. A zero that shows as
+    /// nothing, as when a sheet hides its zeros, is an empty cell, not hidden text. A semicolon
+    /// in quotes parts no section. White text on a fill without a pattern is on no fill,
+    /// whatever the fill's color says.
+    @Test func emptySectionsAndFillsWithoutAPatternHideWhatTheyHide() async throws {
+        let styles = Files.styles(
+            numberFormats: #"<numFmt numFmtId="164" formatCode=";;"/><numFmt numFmtId="165" formatCode="0;"/><numFmt numFmtId="166" formatCode="&quot;x;;&quot;0"/>"#
+                + #"<numFmt numFmtId="167" formatCode="0;-0;;@"/>"#,
+            fonts: [#"<font><sz val="11"/><color rgb="FFFFFFFF"/></font>"#],
+            fills: [#"<fill><patternFill patternType="none"><fgColor rgb="FF000000"/></patternFill></fill>"#],
+            cellFormats: [
+                #"<xf numFmtId="164" fontId="0" fillId="0" applyNumberFormat="1"/>"#, #"<xf numFmtId="165" fontId="0" fillId="0" applyNumberFormat="1"/>"#,
+                #"<xf numFmtId="166" fontId="0" fillId="0" applyNumberFormat="1"/>"#, #"<xf numFmtId="0" fontId="1" fillId="2"/>"#,
+                #"<xf numFmtId="167" fontId="0" fillId="0" applyNumberFormat="1"/>"#,
+            ])
+        let row = Files.row(1, Files.cell("A1", "Shown") + Files.cell("B1", "86000", style: 1) + Files.cell("C1", "Text under it", style: 1)
+            + Files.cell("D1", "12", style: 2) + Files.cell("E1", "-12", style: 2) + Files.cell("F1", "-5", style: 3) + Files.cell("G1", "White", style: 4)
+            + Files.cell("H1", "0", style: 5) + Files.cell("I1", "7", style: 5))
+        let result = try await read(try Files.xlsx([Files.Sheet("Formats", "<sheetData>\(row)</sheetData>")], styles: styles), .xlsx).get()
+        #expect(result.pages.map(\.text) == ["# Formats\n| Shown |  | Text under it | 12 |  | -5 |  |  | 7 |"])
+        #expect(result.hiddenRuns == 3)
+    }
+
     /// Hidden sheets, rows and columns, columns too narrow to show, cells whose format shows
     /// nothing, tiny fonts and white fonts on no fill are dropped and counted, each sheet,
     /// row, column or run of cells once. White text on a dark fill stays.
@@ -147,30 +199,143 @@ struct OfficeXMLTextTests {
         #expect(try await pages(data, .xlsx).map(\.text) == ["# Data\n| Lamps |"])
     }
 
-    /// Past its characters, a workbook's later cells and sheets are left out, and the result
-    /// says it was cut.
+    /// Past its characters, a workbook's later rows and sheets are left out, the text it
+    /// gives never passes them, and the result says it was cut.
     @Test func aWorkbookIsCutAtItsCharacters() async throws {
         let rows = (1...10).map { ["Row number \($0)"] }
         let data = try Files.xlsx([Files.Sheet("One", rows: rows), Files.Sheet("Two", rows: [["Later sheet"]])])
         var limits = FileTextExtractor.Limits()
-        limits.officeCharacters = 40
+        limits.officeCharacters = 60
         let result = try await read(data, .xlsx, limits: limits).get()
         #expect(result.isCut)
-        #expect(result.pages.count == 1)
-        #expect(result.pages[0].text.contains("Row number 3"))
-        #expect(!result.pages[0].text.contains("Row number 5"))
+        #expect(result.pages.map(\.text) == ["# One\n| Row number 1 |\n| Row number 2 |\n| Row number 3 |"])
         #expect(try await read(data, .xlsx).get().isCut == false)
     }
 
-    /// A part that declares a document type or an entity, or holds a NUL byte, makes the file
-    /// unreadable, whichever part it is.
-    @Test(arguments: ["<!DOCTYPE sst [<!ENTITY lol \"lol\">]>", "<!ENTITY lol \"lol\">", "\u{0}"])
-    func aPartWithADocumentTypeIsUnreadable(declaration: String) async throws {
-        let strings = declaration + #"<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>Plain</t></si></sst>"#
-        let data = try Files.xlsx([Files.Sheet("Data", rows: [["Lamps"]])], sharedStringsXML: strings)
-        #expect(await read(data, .xlsx) == .failure(.unreadable))
-        let deck = try Files.pptx([Files.Slide(Files.shape(["Lamps"]) + "<!--" + declaration + "-->")])
-        #expect(await read(deck, .pptx) == .failure(.unreadable))
+    /// Text in hidden rows, hidden columns and hidden sheets takes none of the characters,
+    /// and the text kept never passes them, bars and empty cells included, as one letter
+    /// cells five columns apart would.
+    @Test func onlyTextThatShowsCountsAgainstTheCharacters() async throws {
+        let secret = String(repeating: "Secret words ", count: 20)
+        let cols = #"<cols><col min="2" max="2" hidden="1"/></cols>"#
+        let rows = Files.row(1, Files.cell("A1", "Lamps") + Files.cell("B1", secret))
+            + Files.row(2, Files.cell("A2", secret), attributes: #" hidden="1""#) + Files.row(3, Files.cell("A3", "Posters"))
+        let data = try Files.xlsx([Files.Sheet("Data", cols + "<sheetData>\(rows)</sheetData>")])
+        var limits = FileTextExtractor.Limits()
+        limits.officeCharacters = 60
+        let result = try await read(data, .xlsx, limits: limits).get()
+        #expect(result.pages.map(\.text) == ["# Data\n| Lamps |\n| Posters |"])
+        #expect(!result.isCut)
+        #expect(result.hiddenRuns == 2)
+
+        let sparse = (1...40).map { row in Files.row(row, (0..<8).map { Files.cell(Files.reference($0 * 5 + 1, row), "x") }.joined()) }
+        let wide = try Files.xlsx([Files.Sheet("Wide", "<sheetData>\(sparse.joined())</sheetData>")])
+        limits.officeCharacters = 500
+        let cut = try await read(wide, .xlsx, limits: limits).get()
+        #expect(cut.isCut)
+        #expect(cut.pages.count == 1)
+        #expect((400...500).contains(cut.pages[0].text.count))
+    }
+
+    /// A hidden sheet is read after the sheets that show, so it takes none of their
+    /// characters or room, wherever it stands in the workbook. It counts once, also when it
+    /// no longer fits, since it may hold text.
+    @Test func hiddenSheetsNeverTakeTheRoomOfSheetsThatShow() async throws {
+        let data = try Files.xlsx([
+            Files.Sheet("Lookup", state: "hidden", rows: (1...200).map { ["Lookup value number \($0)"] }),
+            Files.Sheet("Summary", rows: [["Item", "Qty"], ["Lobby lamps", "12"]]),
+        ])
+        var limits = FileTextExtractor.Limits()
+        limits.officeCharacters = 100
+        let result = try await read(data, .xlsx, limits: limits).get()
+        #expect(result.pages.map(\.text) == ["# Summary: Item | Qty\n| Lobby lamps | 12 |"])
+        #expect(result.hiddenRuns == 1)
+        #expect(!result.isCut)
+
+        // Room for every part but the hidden sheet.
+        let sizes = try ZipArchive(data).entries.filter { $0.name != "xl/worksheets/sheet1.xml" }.map { Int64($0.size) }
+        limits = FileTextExtractor.Limits()
+        limits.officeBytes = sizes.reduce(0, +)
+        let tight = try await read(data, .xlsx, limits: limits).get()
+        #expect(tight.pages.map(\.sheet) == ["Summary"])
+        #expect(tight.hiddenRuns == 1)
+        #expect(!tight.isCut)
+    }
+
+    /// Out of time among the hidden sheets, which are read after the ones that show, a
+    /// workbook keeps the text that shows, and the hidden sheets left count as hidden, since
+    /// they may hold text. Each look at the clock moves it 4 s on.
+    @Test func hiddenSheetsOutOfTimeKeepTheTextThatShows() async throws {
+        let data = try Files.xlsx([
+            Files.Sheet("One", state: "hidden", rows: [["Secret one"]]), Files.Sheet("Two", state: "hidden", rows: [["Secret two"]]),
+            Files.Sheet("Shown", rows: [["Lobby lamps"]]), Files.Sheet("Three", state: "hidden", rows: [["Secret three"]]),
+        ])
+        var limits = FileTextExtractor.Limits()
+        limits.officeTime = .seconds(22)
+        let extractor = FileTextExtractor(limits: limits, now: SteppingClock(step: .seconds(4)).now)
+        let result = try await extractor.text(of: data, format: .xlsx, modified: .now).get()
+        #expect(result.pages.map(\.text) == ["# Shown\n| Lobby lamps |"])
+        #expect(result.hiddenRuns == 3)
+    }
+
+    /// A sheet with many hidden column ranges and many cells is laid out in time, since a
+    /// cell's column is looked up among the ranges rather than tested against each, which
+    /// took minutes here.
+    @Test(.timeLimit(.minutes(1))) func manyHiddenColumnRangesAreLookedUpQuickly() async throws {
+        let cols = "<cols>" + String(repeating: #"<col min="1" max="1" hidden="1"/>"#, count: 50_000) + "</cols>"
+        let row = Files.row(1, String(repeating: "<c><v>1</v></c>", count: 50_000))
+        let data = try Files.xlsx([Files.Sheet("Data", cols + "<sheetData>\(row)</sheetData>")])
+        let started = ContinuousClock.now
+        let result = try await read(data, .xlsx).get()
+        #expect(started.duration(to: .now) < .seconds(20))
+        #expect(result.hiddenRuns == 1)
+        #expect(result.pages.first?.text.hasPrefix("# Data\n| 1 | 1 | 1 |") == true)
+    }
+
+    /// Sheets that name a part the package lacks are passed over quickly, however many the
+    /// workbook lists and however many parts the package holds, which took minutes here when
+    /// each lookup compared every part's name.
+    @Test(.timeLimit(.minutes(1))) func manySheetsAndPartsAreLookedUpQuickly() async throws {
+        let sheet = #"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>"# + Files.row(1, Files.cell("A1", "Lobby lamps"))
+            + "</sheetData></worksheet>"
+        let data = try Self.workbook(
+            list: String(repeating: #"<sheet name="Gone" sheetId="1" r:id="rId1"/>"#, count: 50_000) + #"<sheet name="Lamps" sheetId="2" r:id="rId2"/>"#,
+            targets: ["worksheets/missing.xml", "worksheets/sheet1.xml"],
+            parts: [("xl/worksheets/sheet1.xml", sheet)] + (1...5_000).map { ("xl/other/part\($0).xml", "<a/>") })
+        let started = ContinuousClock.now
+        let result = try await read(data, .xlsx).get()
+        #expect(started.duration(to: .now) < .seconds(20))
+        #expect(result.pages.map(\.text) == ["# Lamps\n| Lobby lamps |"])
+    }
+
+    /// A part in another encoding than UTF-8, in which a declaration could hide from the
+    /// check of the part's bytes, is unreadable. UTF-8 with a byte order mark, white space
+    /// before the root, or a declaration in any case and quote is read.
+    @Test func aPartInAnotherEncodingIsUnreadable() async throws {
+        let rows = #"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>"# + Files.row(1, Files.cell("A1", "Lamps"))
+            + "</sheetData></worksheet>"
+        let dtd = "+ADw-!DOCTYPE worksheet +AFs-+ADw-!ENTITY e +ACI-x+ACI-+AD4-+AF0-+AD4-"
+        for (declaration, expected) in [
+            (#"<?xml version="1.0" encoding="UTF-8"?>"#, Result<[String], FileSkipReason>.success(["# Data\n| Lamps |"])),
+            (#"<?xml version="1.0" encoding="UTF-7"?>"#, .failure(.unreadable)), (#"<?xml version="1.0" encoding="UTF-7"?>"# + dtd, .failure(.unreadable)),
+        ] {
+            let data = try Self.workbook(list: #"<sheet name="Data" sheetId="1" r:id="rId1"/>"#, targets: ["worksheets/sheet1.xml"], parts: [("xl/worksheets/sheet1.xml", declaration + rows)])
+            #expect(await read(data, .xlsx).map { $0.pages.map(\.text) } == expected, "\(declaration)")
+        }
+        let accepted = [
+            #"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a/>"#, "\u{FEFF}<?xml version='1.0' encoding = 'utf-8'?><a/>", "\n <a/>",
+            #"<?xml version="1.0"?><a/>"#,
+        ]
+        for text in accepted {
+            #expect(OfficeXMLText.isPlainXML(Data(text.utf8)), "\(text)")
+        }
+        let refused = [
+            #"<?xml version="1.0" encoding="UTF-7"?><a/>"#, #"<?xml version="1.0" encoding="ISO-8859-1"?><a/>"#, "+ADw-a/+AD4-", "",
+            #"<?xml version="1.0" encoding=UTF-8?><a/>"#, #"<?xml version="1.0" encoding="UTF-8""#,
+        ]
+        for text in refused {
+            #expect(!OfficeXMLText.isPlainXML(Data(text.utf8)), "\(text)")
+        }
     }
 
     /// A relationship is followed only inside the package.
@@ -308,6 +473,15 @@ struct OfficeXMLTextTests {
         #expect(result.hiddenRuns == 2)
     }
 
+    /// A paragraph level at the edge of 64 bit numbers, or past them, is read without a
+    /// crash, as the nearest level there is.
+    @Test func paragraphLevelsAtTheEdgeOfNumbersNeverCrash() async throws {
+        let levels = ["9223372036854775807", "-9223372036854775808", "99999999999999999999"]
+        let paragraphs = levels.map { #"<a:pPr lvl="\#($0)"/>"# + Files.run("Level \($0).") }
+        let result = try await read(try Files.pptx([Files.Slide(Files.shape(paragraphs, plain: false))]), .pptx).get()
+        #expect(result.pages.map(\.text) == [levels.map { "Level \($0)." }.joined(separator: "\n")])
+    }
+
     /// The text of a choice that PowerPoint writes twice, in mc:Choice and mc:Fallback, is
     /// read once. A notes page's slide number is not a note.
     @Test func textWrittenTwiceIsReadOnce() async throws {
@@ -325,6 +499,22 @@ struct OfficeXMLTextTests {
         let result = try await read(data, .pptx, limits: limits).get()
         #expect(result.isCut)
         #expect(result.pages.map(\.number) == [1, 2, 3])
+    }
+
+    /// A workbook's parts written whole, stored, so a test can write what Files.xlsx would
+    /// not: `list` is the XML inside <sheets>, its rId1 and up name `targets` in xl/, and
+    /// `parts` are added as they are.
+    private static func workbook(list: String, targets: [String], parts: [(name: String, text: String)]) throws -> Data {
+        let head = #"<?xml version="1.0" encoding="UTF-8"?>"#
+        let type = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
+        let package = head + #"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#
+            + #"<Relationship Id="rId1" Type="\#(type)officeDocument" Target="xl/workbook.xml"/></Relationships>"#
+        let relationships = head + #"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#
+            + targets.enumerated().map { #"<Relationship Id="rId\#($0.offset + 1)" Type="\#(type)worksheet" Target="\#($0.element)"/>"# }.joined()
+            + "</Relationships>"
+        let workbook = head + #"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="\#(type.dropLast())">"#
+            + "<sheets>\(list)</sheets></workbook>"
+        return try Files.zip(texts: [("_rels/.rels", package), ("xl/workbook.xml", workbook), ("xl/_rels/workbook.xml.rels", relationships)] + parts, stored: true)
     }
 
     /// A clock that moves on by `step` each time it is read.

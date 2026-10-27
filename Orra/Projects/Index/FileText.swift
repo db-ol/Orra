@@ -101,7 +101,7 @@ nonisolated struct FileTextResult: Sendable, Equatable {
     /// The file's modification date when it was read.
     var modified: Date
     /// Whether pages past `FileTextExtractor.Limits.pdfPages` were left out, or the later
-    /// sheets, cells or slides of an xlsx or pptx.
+    /// sheets, rows or slides of an xlsx or pptx.
     var isCut: Bool
     /// The PDF pages whose text layer holds fewer than `FileTextExtractor.textLayerCharacters`
     /// letters or digits, such as scanned pages, whose text only recognition can read.
@@ -167,7 +167,8 @@ nonisolated struct FileTextExtractor: Sendable {
         var pdfTime: Duration = .seconds(10)
         /// The time an xlsx or pptx may take, whose parts are read in steps that can stop.
         var officeTime: Duration = .seconds(10)
-        /// The characters read from an xlsx or pptx. Later cells and slides are left out.
+        /// The characters of text an xlsx or pptx gives, hidden text aside, as its pages hold
+        /// them. Later rows, sheets and slides are left out.
         var officeCharacters = 1_000_000
     }
 
