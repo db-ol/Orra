@@ -28,7 +28,9 @@ import Vision
 /// the values of `minimumTextHeight`. The bars of D-file-types.md 9.4: at 10 points and more
 /// and 200 dots per inch and more, at most 2% errors in English and 4% in Chinese, and at
 /// least 95% of the planted terms read exactly, and a peak under 600 MB. It writes
-/// recognition-report.json into the folder, counts and times only.
+/// recognition-report.json into the folder, counts and times only. It makes the set in the
+/// folder Set inside that folder and keeps its index in the folder Support beside it, and
+/// removes both first, so give it a folder of its own.
 @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["ORRA_RECOGNITION_BENCH"] != nil))
 @MainActor
 struct TextRecognitionMeasurementTests {
