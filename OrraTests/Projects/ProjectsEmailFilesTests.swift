@@ -90,6 +90,17 @@ struct ProjectsEmailFilesTests {
         #expect(read == explanation)
     }
 
+    // MARK: Words
+
+    /// A file chip's popover calls its excerpt saved, with its page, since the explanation
+    /// keeps the lines the hygiene took out before the model read it.
+    @Test func theExcerptOfAFileSaysItIsTheSavedOne() {
+        var chunk = Self.schedule
+        #expect(ProjectsWindowText.savedExcerpt(chunk) == "Saved excerpt, page 2")
+        chunk.page = nil
+        #expect(ProjectsWindowText.savedExcerpt(chunk) == "Saved excerpt")
+    }
+
     // MARK: Where a file is
 
     /// A file's folder is the project folder that holds it, the deepest when the folders

@@ -13243,6 +13243,50 @@
         }
       }
     },
+    "Saved excerpt" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fragmento guardado"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存された抜粋"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存的摘录"
+          }
+        }
+      }
+    },
+    "Saved excerpt, page %lld" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fragmento guardado, página %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存された抜粋、%lldページ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存的摘录，第 %lld 页"
+          }
+        }
+      }
+    },
     "Saved on this Mac until you remove it, and loaded when Orra starts." : {
       "localizations" : {
         "es-419" : {
@@ -15653,6 +15697,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "模型没有列出要点。"
+          }
+        }
+      }
+    },
+    "The model read it without the lines listed under Taken out before the model read it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El modelo lo leyó sin las líneas que aparecen en Quitado antes de que el modelo lo leyera."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "モデルは、“モデルが読む前に取り除いた内容”に挙げた行を除いて読みました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型读取时不含“在模型读取前删去的内容”中列出的部分。"
           }
         }
       }

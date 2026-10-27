@@ -434,6 +434,14 @@ nonisolated enum ProjectsWindowText {
         return String(localized: "Attachment \(name)")
     }
 
+    /// The line under a file's name in the popover of its excerpt, with its page. The
+    /// explanation keeps the excerpt as the index had it, with any lines that the hygiene
+    /// took out before the model read it, so the popover calls it saved.
+    static func savedExcerpt(_ chunk: TextChunker.Chunk) -> String {
+        guard let page = chunk.page else { return String(localized: "Saved excerpt") }
+        return String(localized: "Saved excerpt, page \(page)")
+    }
+
     /// An attachment's kind as Finder names it, such as PDF document, and its size, in the
     /// language of `locale`.
     static func attachmentKind(_ attachment: MailAttachment, locale: Locale = .interface) -> String {
