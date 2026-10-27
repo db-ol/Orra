@@ -629,7 +629,7 @@ extension ProjectsWindowView {
 
         /// The line about the cleanup model while it is not on this Mac: its download or the
         /// check of its files with a spinner, or Settings… while it is missing, where it
-        /// downloads. Today's line after an Explain without the model stays too.
+        /// downloads. The email view still says so too when Explain finds no model.
         static func modelLine(runtime: ProjectsRuntime) -> MailLine? {
             guard runtime.phase == .on else { return nil }
             let status = runtime.dependencies.modelDownloadStatus()
