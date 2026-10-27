@@ -2188,8 +2188,9 @@ struct ProjectsWindowViewTests {
 
     /// Renders Compare with Original, part of `renderTheWindowsParts`: the email view alone
     /// while comparing, at the sizes of `comparedSizes`, since a window that is never shown
-    /// draws its third column empty, then the This email popover and Original Email with
-    /// the sender's words first.
+    /// draws its third column empty, the same after an earlier email's chip showed the email,
+    /// with Back to Previous Email in the bar, at the smallest size and the narrowest, then
+    /// the This email popover and Original Email with the sender's words first.
     private func renderTheComparison(of explained: MailStore.Listed, runtime: ProjectsRuntime, language: String, to folder: URL) async throws {
         let model = ProjectsWindowModel(runtime: runtime)
         await model.show(explained.messageID)
@@ -2198,6 +2199,16 @@ struct ProjectsWindowViewTests {
         #expect(model.isComparing)
         for (name, size) in Self.comparedSizes {
             try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: size, to: folder.appendingPathComponent("\(language)-projects-\(name).png"))
+        }
+        let back = ProjectsWindowModel(runtime: runtime)
+        back.selectedMessageID = "earlier@harbor.example"
+        await back.show(explained.messageID)
+        await back.emailModel(for: explained.messageID).load()
+        back.compare(explained.messageID)
+        #expect(back.isComparing)
+        #expect(back.previousEmail != nil)
+        for (name, size) in Self.comparedSizes where name == "compare-760" || name == "compare-narrowest" {
+            try await render(ProjectsEmailArea(runtime: runtime, model: back, email: explained), size: size, to: folder.appendingPathComponent("\(language)-projects-\(name)-back.png"))
         }
         let popover = ProjectsEmailArea.Excerpt(source: .thisEmail, emailText: "", original: Self.forward, attachments: Self.attachments)
         try await render(popover, size: NSSize(width: 420, height: 420), to: folder.appendingPathComponent("\(language)-projects-this-email.png"))

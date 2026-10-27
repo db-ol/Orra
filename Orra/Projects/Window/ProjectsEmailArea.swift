@@ -31,8 +31,9 @@ import SwiftUI
 /// Compare with Original, beside Hide Explanation once the email is explained, shows the
 /// email in two panes while the window hides its sidebar, see
 /// ProjectsWindowModel.isComparing: a bar above them with Exit Comparison and the subject,
-/// the sender and the date, then Original Email, the email itself with the sender's words
-/// first and its recipients and attachments folded under them, and Explanation and Draft,
+/// the sender and the date, and Back to Previous Email as a back button in place of its own
+/// bar, then Original Email, the email itself with the sender's words first and its
+/// recipients and attachments folded under them, and Explanation and Draft,
 /// with the rest of the view from the marks down to the draft. Each pane scrolls on its
 /// own. They stand side by side where the view is wide enough, see Panes, and one above the
 /// other where it is not. Another email chosen in the list shows the same way. The draft
@@ -91,7 +92,8 @@ struct ProjectsEmailArea: View {
         // undo, as the comparison starts and ends and as its panes go from side by side to
         // one above the other.
         Panes(scroller: scroller) {
-            if model.previousEmail != nil {
+            // While comparing, the bar of the comparison has the way back.
+            if model.previousEmail != nil, !comparing {
                 bar(backBar)
             }
             if comparing {
@@ -234,21 +236,34 @@ struct ProjectsEmailArea: View {
     /// The bar above the panes while comparing: Exit Comparison and the subject in one line,
     /// cut at its end with the whole subject in its help tag, and under them the sender and
     /// the date, which the panes leave out, one under the other where a row has no room. It
-    /// stays put while the panes scroll.
+    /// stays put while the panes scroll. After an earlier email's chip showed this email,
+    /// Back to Previous Email comes first in the line, as a back button, so the panes keep
+    /// the line its own bar would take.
     private var compareBar: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 12) {
-                Button("Exit Comparison") {
-                    let move = Self.focusAfterPress(.exit, voiceOver: voiceOverFocus, keyboard: keyboardFocus)
-                    model.endComparing()
-                    focusAfterSwitch = model.isComparing ? nil : move
+                HStack(spacing: 8) {
+                    if model.previousEmail != nil {
+                        Button {
+                            Task { await model.showPreviousEmail() }
+                        } label: {
+                            Label("Back to Previous Email", systemImage: "chevron.backward")
+                                .labelStyle(.iconOnly)
+                        }
+                        .help("Back to Previous Email")
+                    }
+                    Button("Exit Comparison") {
+                        let move = Self.focusAfterPress(.exit, voiceOver: voiceOverFocus, keyboard: keyboardFocus)
+                        model.endComparing()
+                        focusAfterSwitch = model.isComparing ? nil : move
+                    }
+                    .help("Ends the comparison and puts the sidebar and the email view back as they were.")
+                    .accessibilityFocused($voiceOverFocus, equals: .exit)
+                    .focused($keyboardFocus, equals: .exit)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .fixedSize()
-                .help("Ends the comparison and puts the sidebar and the email view back as they were.")
-                .accessibilityFocused($voiceOverFocus, equals: .exit)
-                .focused($keyboardFocus, equals: .exit)
                 Text(verbatim: email.subject)
                     .font(.headline)
                     .lineLimit(1)
