@@ -1609,7 +1609,9 @@ struct ExplainServiceTests {
         #expect(without.chosenFiles == nil)
     }
 
-    /// An email in Needs a Project explains with the files chosen for it, and says so.
+    /// An email in Needs a Project explains with the files chosen for it, and says so. Search
+    /// finds nothing for it, so the hidden runs of its chosen file are a warning by the
+    /// chosen file alone.
     @Test func anEmailWithoutAProjectExplainsWithItsChosenFiles() async throws {
         let pick = Self.chosen([Fixture.quote])
         let fakes = Fakes(hits: [], chosen: [pick.file], passages: [pick.passages], answer: .success(Fixture.englishAnswer))
@@ -1620,6 +1622,7 @@ struct ExplainServiceTests {
         #expect(explanation.project == nil)
         #expect(explanation.chosenFiles?.map(\.sources) == [["F1"]])
         #expect(explanation.sourceProjects == [Fixture.projectID])
+        #expect(explanation.warnings.contains(.init(warning: .hiddenText, place: .file("F1"))))
     }
 
     /// A chosen file the index does not hold gives nothing and is recorded as not in the
