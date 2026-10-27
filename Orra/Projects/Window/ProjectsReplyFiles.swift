@@ -33,9 +33,8 @@ final class ProjectsReplyFiles {
     /// What the files of a reply need of the runtime. Closures, so tests pass fakes. The
     /// defaults find and take nothing, for tests that never tick a file.
     struct Actions {
-        /// The files a request may mean, see
-        /// ProjectsRuntime.requestedFiles(for:emailProject:scope:people:).
-        var requestedFiles: (FileRequest, _ emailProject: UUID?, _ scope: [UUID]?, _ people: [String]) async -> [RequestedFile] = { _, _, _, _ in [] }
+        /// The files a request may mean, see ProjectsRuntime.requestedFiles(for:emailProject:scope:).
+        var requestedFiles: (FileRequest, _ emailProject: UUID?, _ scope: [UUID]?) async -> [RequestedFile] = { _, _, _ in [] }
         /// A file the user ticks or adds, see ProjectsRuntime.replyFile(at:first:).
         var replyFile: (URL, _ emailProject: UUID?) async -> Result<ReplyFile, ReplyFileProblem> = { _, _ in .failure(.notInAddedFolder) }
         /// A ticked file checked again right before its attach event, see
@@ -52,8 +51,8 @@ final class ProjectsReplyFiles {
         /// The actions of the running app.
         static func live(_ runtime: ProjectsRuntime) -> Actions {
             Actions(
-                requestedFiles: { [weak runtime] request, project, scope, people in
-                    await runtime?.requestedFiles(for: request, emailProject: project, scope: scope, people: people) ?? []
+                requestedFiles: { [weak runtime] request, project, scope in
+                    await runtime?.requestedFiles(for: request, emailProject: project, scope: scope) ?? []
                 },
                 replyFile: { [weak runtime] url, project in
                     await runtime?.replyFile(at: url, first: project) ?? .failure(.notInAddedFolder)
@@ -114,9 +113,6 @@ final class ProjectsReplyFiles {
     private(set) var warnings: Set<ProjectsWarning> = []
     /// Whether sorting set the email aside.
     private(set) var isSetAside = false
-    /// The names of the email's sender and of the people a reply reaches, which bring in no
-    /// file of another project.
-    @ObservationIgnored private var people: [String] = []
     /// The requests of the explanation with their files.
     private(set) var groups: [Group] = []
     /// Whether files are looked for.
@@ -289,8 +285,6 @@ final class ProjectsReplyFiles {
             self.warnings = warnings
         }
         isSetAside = listed?.level == .setAside
-        var named: Set<String> = []
-        people = ([listed?.sender.name ?? ""] + (explanation.draftCheck?.recipients ?? []).map(\.name)).filter { !$0.isEmpty && named.insert($0).inserted }
         if senderLooksSpoofed, !ticked.isEmpty {
             ticked = []
         }
@@ -320,16 +314,15 @@ final class ProjectsReplyFiles {
         }
         isLooking = true
         let project = emailProject
-        let people = people
         looking = Task { [weak self, actions] in
             var shown: Set<String> = []
             for (index, request) in requests.enumerated() {
                 var files: [RequestedFile] = []
                 switch scope {
                 case .everyProject:
-                    files = await actions.requestedFiles(request, project, nil, people)
+                    files = await actions.requestedFiles(request, project, nil)
                 case .ownProject(let own):
-                    files = await actions.requestedFiles(request, project, [own], people)
+                    files = await actions.requestedFiles(request, project, [own])
                 case .nowhere, .spoofed:
                     break
                 }

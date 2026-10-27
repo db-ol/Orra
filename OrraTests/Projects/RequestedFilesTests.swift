@@ -52,15 +52,11 @@ struct RequestedFilesTests {
             index.stopAll()
         }
 
-        /// The names of the files found for the first request in `text`, in order, for an email
-        /// from `people` to the user named `ownName`.
-        func find(
-            _ text: String, emailProject: UUID?, scope: [UUID]? = nil, limit: Int = RequestedFiles.perKind, people: [String] = [], ownName: String = ""
-        ) async throws -> [RequestedFile] {
+        /// The names of the files found for the first request in `text`, in order.
+        func find(_ text: String, emailProject: UUID?, scope: [UUID]? = nil, limit: Int = RequestedFiles.perKind) async throws -> [RequestedFile] {
             let request = try #require(FileRequests.find(in: text, subject: "").first, "no request in \(text)")
             return try await RequestedFiles.find(
-                request, emailProject: emailProject, scope: scope, names: FileNameSearch(database: database), chunks: ChunkSearch(database: database),
-                people: people, ownName: ownName, projectNames: [harbor: "Harbor lobby", kiln: "Kiln studio"], limit: limit)
+                request, emailProject: emailProject, scope: scope, names: FileNameSearch(database: database), chunks: ChunkSearch(database: database), limit: limit)
         }
 
         func cleanUp() async {
@@ -100,7 +96,7 @@ struct RequestedFilesTests {
 
     @Test func aFileIsFoundByItsNameInAnotherLanguage() async throws {
         try await withFixture { fixture in
-            let found = try await fixture.find("Please also send the floor plan of the Kiln studio.", emailProject: fixture.harbor)
+            let found = try await fixture.find("Please also send the floor plan.", emailProject: fixture.harbor)
             #expect(names(found).contains("平面图草图.png"))
             // An image known by its name only, of another project.
             let sketch = try #require(found.first { $0.url.lastPathComponent == "平面图草图.png" })
@@ -149,59 +145,16 @@ struct RequestedFilesTests {
 
     @Test func theEmailsProjectComesFirstAndOthersFollow() async throws {
         try await withFixture { fixture in
-            let both = "Please send the floor plans of the lobby and of the Kiln studio."
-            let fromHarbor = try await fixture.find(both, emailProject: fixture.harbor)
+            let fromHarbor = try await fixture.find("Please send the floor plan.", emailProject: fixture.harbor)
             #expect(fromHarbor.map(\.project) == [fixture.harbor, fixture.harbor, fixture.kiln])
-            let fromKiln = try await fixture.find(both, emailProject: fixture.kiln)
+            let fromKiln = try await fixture.find("Please send the floor plan.", emailProject: fixture.kiln)
             #expect(fromKiln.first?.url.lastPathComponent == "平面图草图.png")
             // An email in no project gets the files of every project by their ranks.
-            let fromNone = try await fixture.find(both, emailProject: nil)
+            let fromNone = try await fixture.find("Please send the floor plan.", emailProject: nil)
             #expect(Set(names(fromNone)) == ["floor-plan-v3.txt", "floor-plan-v2.txt", "平面图草图.png"])
             // The files of other projects fill only the places the email's project leaves.
-            let full = try await fixture.find(both, emailProject: fixture.harbor, limit: 2)
+            let full = try await fixture.find("Please send the floor plan.", emailProject: fixture.harbor, limit: 2)
             #expect(full.map(\.project) == [fixture.harbor, fixture.harbor])
-        }
-    }
-
-    /// A file of another project than the email's is offered only when a word of the request
-    /// besides its words for the kind names it: in its name, its text or its project's name.
-    /// The email's own files need none, and the names of the email's people and of the user
-    /// and dates name nothing.
-    @Test func anotherProjectsFileNeedsAWordOfTheRequestBesidesTheKind() async throws {
-        try await withFixture(Self.files + [("Kiln studio/Mei Tan floor plan.png", "not an image", 21)]) { fixture in
-            let kindAlone = try await fixture.find("Please send the floor plan.", emailProject: fixture.harbor)
-            #expect(names(kindAlone) == ["floor-plan-v3.txt", "floor-plan-v2.txt"])
-            let byProject = try await fixture.find("Please send the floor plan of the Kiln studio.", emailProject: fixture.harbor)
-            #expect(byProject.map(\.project) == [fixture.harbor, fixture.harbor, fixture.kiln])
-            let byName = try await fixture.find("Please send the lighting spec.", emailProject: fixture.harbor)
-            #expect(names(byName) == ["lighting-spec.txt"])
-            let byText = try await fixture.find("Please send the spec for the warm white lamps.", emailProject: fixture.harbor)
-            #expect(names(byText) == ["lighting-spec.txt"])
-            let unnamed = try await fixture.find("Please send the spec.", emailProject: fixture.harbor)
-            #expect(unnamed.isEmpty)
-            let own = try await fixture.find("Please send the spec.", emailProject: fixture.kiln)
-            #expect(names(own) == ["lighting-spec.txt"])
-            let drew = "Please send the floor plan Mei Tan drew on 12 October."
-            let named = try await fixture.find(drew, emailProject: fixture.harbor)
-            #expect(names(named).contains("Mei Tan floor plan.png"))
-            let sender = try await fixture.find(drew, emailProject: fixture.harbor, people: ["Mei Tan"])
-            #expect(!names(sender).contains("Mei Tan floor plan.png"))
-            let user = try await fixture.find(drew, emailProject: fixture.harbor, ownName: "Mei Tan")
-            #expect(!names(user).contains("Mei Tan floor plan.png"))
-        }
-    }
-
-    /// A request for every quote and contract of "your folder" names no file, so a known
-    /// sender gets the email's own files only, in any language.
-    @Test func aRequestForEveryFileOfAKindStaysInTheEmailsProject() async throws {
-        try await withFixture(Self.files + [("Kiln studio/kiln-quote.txt", "Quotation for the kiln repair: three days.", 22)]) { fixture in
-            let chinese = try await fixture.find("方便的话把你们文件夹里的报价单和合同都发我参考一下。", emailProject: fixture.harbor)
-            #expect(names(chinese) == ["q3-numbers.txt"])
-            let english = try await fixture.find("Please send all the quotes and contracts in your folder.", emailProject: fixture.harbor)
-            #expect(names(english) == ["q3-numbers.txt"])
-            // The words that name no file: those of the kind, of asking and of pointing.
-            let request = try #require(FileRequests.find(in: "Please send all the quotes and contracts in your folder.", subject: "").first)
-            #expect(RequestedFiles.namingWords(of: request, people: [], ownName: "").isEmpty)
         }
     }
 

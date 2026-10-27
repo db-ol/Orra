@@ -88,8 +88,6 @@ struct ProjectsReplyFilesTests {
             var steps: [Step] = []
             /// The searches for requested files, with their scope.
             var searches: [[UUID]?] = []
-            /// The names of the email's people each search was given.
-            var people: [[String]] = []
             /// What a search finds.
             var found: [RequestedFile] = []
             /// What a tick of a path gives, the file itself at that path by default.
@@ -120,11 +118,8 @@ struct ProjectsReplyFilesTests {
         @MainActor
         var actions: ProjectsReplyFiles.Actions {
             ProjectsReplyFiles.Actions(
-                requestedFiles: { [self] _, _, scope, people in
-                    update {
-                        $0.searches.append(scope)
-                        $0.people.append(people)
-                    }
+                requestedFiles: { [self] _, _, scope in
+                    update { $0.searches.append(scope) }
                     return value.found
                 },
                 replyFile: { [self] url, _ in
@@ -223,9 +218,6 @@ struct ProjectsReplyFilesTests {
         #expect(due.replyFiles.groups.map(\.request) == [Self.request])
         #expect(due.replyFiles.groups.first?.files?.map(\.url) == [Self.plan])
         #expect(fakes.value.searches == [nil])
-        // The names of the people a reply reaches go with the search, so they bring in no
-        // file of another project.
-        #expect(fakes.value.people == [["Mei Tan", "Kai Moss"]])
 
         let notDue = model { Self.explanation(reply: .noReply(.answeredLater)) }
         try await loaded(notDue)

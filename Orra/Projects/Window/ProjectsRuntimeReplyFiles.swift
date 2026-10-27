@@ -8,26 +8,22 @@ import os
 /// the log holds counts, times and error kinds only.
 extension ProjectsRuntime {
     /// The files a request of an explanation may mean, best first, see RequestedFiles, in the
-    /// folders of the projects of `scope`, or of every project when nil. `people` are the
-    /// names of the email's people, which with the user's own name bring in no file of another
-    /// project. It first waits while a dictation is under way, looking again every 100 ms as
-    /// the folder index does, so the search never holds up a dictation. Empty while Projects
-    /// is off, and when the search fails.
-    func requestedFiles(for request: FileRequest, emailProject: UUID?, scope: [UUID]?, people: [String] = []) async -> [RequestedFile] {
+    /// folders of the projects of `scope`, or of every project when nil. It first waits while
+    /// a dictation is under way, looking again every 100 ms as the folder index does, so the
+    /// search never holds up a dictation. Empty while Projects is off, and when the search
+    /// fails.
+    func requestedFiles(for request: FileRequest, emailProject: UUID?, scope: [UUID]?) async -> [RequestedFile] {
         guard running != nil else { return [] }
         while dependencies.isDictating() {
             try? await Task.sleep(for: Self.dictationCheck)
             guard !Task.isCancelled else { return [] }
         }
-        let owner = await owner()
         guard projects.isOn, !projects.isDeleting, let running else { return [] }
-        let projectNames = Dictionary(projectList.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
         let started = ContinuousClock.now
         do {
             let files = try await RequestedFiles.find(
                 request, emailProject: emailProject, scope: scope,
-                names: FileNameSearch(database: running.database), chunks: running.search,
-                people: people, ownName: owner.name ?? "", projectNames: projectNames)
+                names: FileNameSearch(database: running.database), chunks: running.search)
             let own = files.filter { $0.project == emailProject }.count
             Logger.projects.notice("Requested files: \(files.count, privacy: .public) files, \(own, privacy: .public) of the email's project, for a request of \(request.documentKinds.count, privacy: .public) kinds in \(Self.milliseconds(started.duration(to: .now)), privacy: .public) ms")
             return files
