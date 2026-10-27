@@ -1253,6 +1253,43 @@ struct ExplainPromptTests {
         #expect(user(prompt(given)).contains("- 其他项目的文件 O1 里有写给助手或模型的话"))
     }
 
+    /// A prompt that shows an excerpt of another project's file asks for no draft, since a
+    /// second prompt without them writes it, and the answer's note reads as no draft. With
+    /// `draftApart` off it asks for the draft as before, and without other projects' excerpts
+    /// the flag changes nothing in any prompt.
+    @Test(arguments: [ProjectsLanguage.en, .zh])
+    func aPromptWithOtherProjectsFilesAsksForNoDraft(_ language: ProjectsLanguage) {
+        let closing = language == .zh
+            ? "规则判断：需要回复，但回复草稿另外写，这里不写回复草稿。“回复草稿”只写“不写草稿”。"
+            : #"Rule decision: a reply is due, but its draft is written apart, so no draft is written here. Under "Draft reply:" write only "No draft"."#
+        let reply: ReplyRule.Decision = .reply(language)
+        for decision in [reply, .reply(.other), .noReply(.sentByUser), .noReply(.listMail)] {
+            var plain = input(reply: decision, language: language, chunks: [chunk("spec.md", text: "Paper: 200 g matte.")])
+            let apart = prompt(plain).text
+            plain.draftApart = false
+            #expect(prompt(plain).text == apart)
+            #expect(!apart.contains(closing))
+        }
+        var given = input(reply: reply, language: language, chunks: [chunk("spec.md", text: "Paper: 200 g matte.")])
+        given.otherChunks = [other("floor-plan.pdf", text: "Lobby floor plan.")]
+        let apart = prompt(given)
+        #expect(user(apart).hasSuffix(closing))
+        let answer = ExplainAnswer(ExplainPrompt.prefill(language) + "\n- \(language == .zh ? "无" : "None")\n\n\(ExplainPrompt.Headings(language).points)\n- A point. [O1]\n\n\(ExplainPrompt.Headings(language).questions)\n- \(language == .zh ? "无" : "None")\n\n\(ExplainPrompt.Headings(language).draft)\n\(ExplainPrompt.Headings(language).noDraft)", sources: apart.sources.keys, rules: apart.rules)
+        #expect(answer.draft == .noDraft)
+        #expect(answer.problems.isEmpty)
+        given.draftApart = false
+        #expect(!prompt(given).text.contains(closing))
+        #expect(user(prompt(given)).contains(language == .zh ? "规则判断：需要回复。回复草稿用" : "Rule decision: a reply is due. Write the draft in"))
+        // A reply that is not due, or not in Chinese or English, reads as before.
+        given.draftApart = true
+        for decision in [ReplyRule.Decision.noReply(.sentByUser), .reply(.other)] {
+            given.reply = decision
+            var together = given
+            together.draftApart = false
+            #expect(prompt(given).text == prompt(together).text)
+        }
+    }
+
     /// A file of another project is marked by the versions of its own project.
     @Test func anotherProjectsReplacedFileIsMarkedByItsOwnProject() {
         let older = other("plan-v1.md", text: "Delivery 11-20.", day: "2026-09-12")

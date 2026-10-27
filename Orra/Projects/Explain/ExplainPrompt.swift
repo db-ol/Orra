@@ -15,8 +15,9 @@ import Foundation
 ///   with its project, in <other_files> with the ids O1 and up. They come after the
 ///   project's own excerpts, which are those of the same prompt without them, so the prompt
 ///   holds at most `chunkLimit` of each. The rules then say that they may explain the email
-///   to the user and that the draft takes nothing from them. A prompt without them reads as
-///   it did before.
+///   to the user and that the draft takes nothing from them, and the closing line asks for
+///   no draft, which ExplainService writes with a second prompt without them, see
+///   `Input.draftApart`. A prompt without them reads as it did before.
 /// - the project's other mail, each marked as earlier or later than the email
 /// - the other messages of the thread, with their own text, trimmed. No summaries.
 /// - the email
@@ -128,6 +129,10 @@ nonisolated struct ExplainPrompt: Sendable {
         var otherChunks: [OtherChunk] = []
         /// Which files newer ones replaced, for each project of `otherChunks`.
         var otherVersions: [UUID: FileVersions] = [:]
+        /// Whether a prompt that shows an excerpt of `otherChunks` asks for no draft, since
+        /// ExplainService writes the draft with a second prompt without them. Evaluations
+        /// turn it off to measure one prompt that writes the draft too, as before.
+        var draftApart = true
         /// The project's other mail, best first.
         var projectMail: [Mail] = []
         /// The email's attachments with what Projects read of them. Those with text go into
@@ -277,7 +282,8 @@ nonisolated struct ExplainPrompt: Sendable {
     /// The excerpts a prompt holds before its budget trims any: the project's best
     /// `chunkLimit`, with the newest files of the project filling them up to `fillUpTo`, a
     /// file once, and then the first `chunkLimit` of other projects' excerpts. So the
-    /// project keeps every excerpt it has in a prompt without other projects.
+    /// project's own excerpts are those of the prompt without other projects, from which
+    /// ExplainService writes the draft.
     static func excerpts(chunks: [TextChunker.Chunk], newest: [TextChunker.Chunk], others: [OtherChunk]) -> (own: [TextChunker.Chunk], others: [OtherChunk]) {
         var own = Array(chunks.prefix(chunkLimit))
         for chunk in newest where own.count < fillUpTo {
@@ -767,7 +773,7 @@ nonisolated struct ExplainPrompt: Sendable {
                 note((input.attachmentWarnings[index] ?? []) + (attachment.hiddenRuns > 0 ? [.hiddenText] : []), at: .email)
             }
             parts.append(renderChecks(findings))
-            parts.append(renderClosing())
+            parts.append(renderClosing(draftApart: input.draftApart && !otherIndices.isEmpty))
 
             // The rules explain a forwarded part only when the email's text, as far as it
             // is shown, holds one, name the attachments only while the prompt shows one, and
@@ -912,7 +918,10 @@ nonisolated struct ExplainPrompt: Sendable {
             return "<checks>\n" + (lines.isEmpty ? headings.nothing : lines.joined(separator: "\n")) + "\n</checks>"
         }
 
-        private func renderClosing() -> String {
+        /// The closing line. With `draftApart` a reply that is due gets no draft here, since a
+        /// second prompt without other projects' files writes it, and the answer's draft
+        /// section says only that no draft is written, which ExplainAnswer reads as such.
+        private func renderClosing(draftApart: Bool) -> String {
             let date = ExplainPrompt.minute(input.email.date, input.timeZone)
             let sender = ExplainPrompt.person(email.sender)
             let subject = ExplainPrompt.line(email.subject.text, limit: ExplainPrompt.subjectLimit)
@@ -927,6 +936,8 @@ nonisolated struct ExplainPrompt: Sendable {
                     case .listMail: "这是群发通知或订阅邮件"
                     }
                     text += "这封邮件不需要回复，因为\(because)。“\(headings.draft.dropLast())”只写“\(headings.noReply)”。"
+                case .reply(.zh) where draftApart, .reply(.en) where draftApart:
+                    text += "需要回复，但回复草稿另外写，这里不写回复草稿。“\(headings.draft.dropLast())”只写“\(headings.noDraft)”。"
                 case .reply(.zh), .reply(.en):
                     let draftLanguage = input.reply.draftLanguage == .zh ? "中文" : "英文"
                     text += "需要回复。回复草稿用\(draftLanguage)写，收件人是 \(sender)。只有\(nameZH)能决定的事一律写成待确认，不要替\(nameZH)答应或拒绝。"
@@ -945,6 +956,8 @@ nonisolated struct ExplainPrompt: Sendable {
                 case .listMail: "it is list mail or a notice"
                 }
                 text += "this email needs no reply, because \(because). Under \"\(headings.draft)\" write only \"\(headings.noReply)\"."
+            case .reply(.zh) where draftApart, .reply(.en) where draftApart:
+                text += "a reply is due, but its draft is written apart, so no draft is written here. Under \"\(headings.draft)\" write only \"\(headings.noDraft)\"."
             case .reply(.zh), .reply(.en):
                 let draftLanguage = input.reply.draftLanguage == .zh ? "Chinese" : "English"
                 text += "a reply is due. Write the draft in \(draftLanguage), to \(sender). Everything only \(nameEN) can decide stays a placeholder to confirm. Do not agree or refuse for \(nameEN)."

@@ -35,7 +35,9 @@ import Testing
 /// without the model, and gives each rule's line of the bar.
 /// TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_EXPLAIN, such as zh,en, also explains the mails of the
 /// kinds other-project, needs-project and negative with the real model in those languages,
-/// and counts the drafts that hold a value, a name or an address that only another project's
+/// as the app does, with the draft written apart from other projects' passages, and once
+/// more with one request that writes the draft from them too, as before, to time both. It
+/// counts the drafts that hold a value, a name or an address that only another project's
 /// passage holds, or a run of 6 words or 10 Chinese characters of one.
 ///
 /// The set and its supplement stay outside the repository, and so do the results.
@@ -271,24 +273,48 @@ struct RetrievalEvaluationTests {
         }
         try writeReport([])
 
-        // The leak check: explanations of the mails that may read other projects' files.
+        // The leak check: explanations of the mails that may read other projects' files, as
+        // the app makes them, then with one request as before, each timed whole.
         var leaks: [Leak] = []
         if !explainLanguages.isEmpty, let queue, let counter {
+            let requests = Requests()
             for language in explainLanguages {
-                let service = ExplainService(
-                    lookups: Self.explainLookups(mails: mails, byMessageID: byMessageID, projects: projects, ids: ids, lookups: lookups(nil), termsFor: { id in savedTerms[id]?.terms ?? termRuns.first { $0.id == id }?.terms }),
-                    run: { request in try await queue.run(request) },
-                    loadTokenCounter: { counter.count },
-                    save: { _ in },
-                    language: language,
-                    timeZone: Self.timeZone,
-                    now: { Self.today })
+                func service(draftApart: Bool) -> ExplainService {
+                    ExplainService(
+                        lookups: Self.explainLookups(mails: mails, byMessageID: byMessageID, projects: projects, ids: ids, lookups: lookups(nil), termsFor: { id in savedTerms[id]?.terms ?? termRuns.first { $0.id == id }?.terms }),
+                        run: { request in
+                            requests.add()
+                            return try await queue.run(request)
+                        },
+                        loadTokenCounter: { counter.count },
+                        save: { _ in },
+                        language: language,
+                        timeZone: Self.timeZone,
+                        now: { Self.today },
+                        draftApart: draftApart)
+                }
+                let apart = service(draftApart: true)
+                let together = service(draftApart: false)
                 for row in rows where !Set(row.kinds).isDisjoint(with: ["other-project", "needs-project", "negative"]) {
                     let mail = try #require(byID[row.id])
                     var email = Self.email(mail, project: mail.labels.project.flatMap { ids[$0] })
                     email.attachments = await Self.attachments(of: mail, files: projectFiles)
-                    let explanation = try await service.explain(email)
-                    leaks.append(Self.leak(row.id, language: language, explanation: explanation))
+                    for (draftApart, service) in [(true, apart), (false, together)] {
+                        requests.reset()
+                        let started = ContinuousClock.now
+                        let explanation = try await service.explain(email)
+                        var leak = Self.leak(row.id, language: language, explanation: explanation)
+                        leak.draftApart = draftApart
+                        leak.seconds = started.duration(to: .now) / .seconds(1)
+                        leak.requests = requests.count
+                        let others = explanation.sources.filter { ExplainPrompt.isOtherFileSource($0.key) }.sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
+                        leak.otherPassages = others.count
+                        leak.otherFiles = others.compactMap { _, source in
+                            guard case .file(let chunk, _) = source else { return nil }
+                            return relative(chunk.file)
+                        }
+                        leaks.append(leak)
+                    }
                 }
             }
         }
@@ -303,7 +329,7 @@ struct RetrievalEvaluationTests {
             try writeReport(leaks)
         }
         // Counts only.
-        print("Retrieval: \(rows.count) mails, \(files) files in \(chunks) chunks indexed in \(Self.seconds(indexTime)), \(rows.filter(\.termsValid).count) with terms, \(leaks.filter { !$0.found.isEmpty }.count) drafts with another project's data. Rows in retrieval.jsonl, tables in retrieval.md.")
+        print("Retrieval: \(rows.count) mails, \(files) files in \(chunks) chunks indexed in \(Self.seconds(indexTime)), \(rows.filter(\.termsValid).count) with terms, \(leaks.filter { $0.draftApart && !$0.found.isEmpty }.count) drafts with another project's data. Rows in retrieval.jsonl, tables in retrieval.md.")
         #expect(rows.count == labels.count)
     }
 
@@ -432,12 +458,42 @@ struct RetrievalEvaluationTests {
         }
     }
 
-    /// What a draft holds that only another project's passages hold.
+    /// What a draft holds that only another project's passages hold, and how the
+    /// explanation was made.
     private struct Leak: Codable {
         var id: String
         var language: String
         var draft: String?
         var found: [String]
+        /// Whether the draft came from a request without other projects' passages, as the
+        /// app writes it, or from the one request of the explanation, as before.
+        var draftApart = true
+        /// The whole explanation, with the search, the checks and every request.
+        var seconds: Double = 0
+        /// The requests to the model, a second one for the rest of a repeating answer too.
+        var requests = 0
+        /// The passages of other projects in the explanation's prompt.
+        var otherPassages = 0
+        /// Their files, as paths in the set's folder.
+        var otherFiles: [String] = []
+    }
+
+    /// Counts the requests of one explanation.
+    private final class Requests: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+
+        func add() {
+            lock.withLock { value += 1 }
+        }
+
+        func reset() {
+            lock.withLock { value = 0 }
+        }
+
+        var count: Int {
+            lock.withLock { value }
+        }
     }
 
     /// The last ranking of all projects that a search gave.
@@ -806,8 +862,19 @@ struct RetrievalEvaluationTests {
             }
         }
         if !leaks.isEmpty {
-            let found = leaks.filter { !$0.found.isEmpty }
-            text += "\n## Leak check\n\n\(leaks.count) explanations, \(leaks.filter { $0.draft != nil }.count) checked drafts with other projects' passages in their prompt, \(found.count) with another project's value, code, address, name or run: " + (found.isEmpty ? "none" : found.map { "\($0.id) \($0.language)" }.joined(separator: ", ")) + ".\n"
+            let apart = leaks.filter(\.draftApart)
+            let found = apart.filter { !$0.found.isEmpty }
+            text += "\n## Leak check\n\n\(apart.count) explanations as the app makes them, \(apart.filter { $0.draft != nil }.count) checked drafts with other projects' passages in their explanation's prompt, \(found.count) with another project's value, code, address, name or run: " + (found.isEmpty ? "none" : found.map { "\($0.id) \($0.language)" }.joined(separator: ", ")) + ".\n"
+            let together = leaks.filter { !$0.draftApart }
+            let foundTogether = together.filter { !$0.found.isEmpty }
+            text += "With one request, as before: \(together.filter { $0.draft != nil }.count) checked drafts with other projects' passages in their prompt, \(foundTogether.count) with another project's value, code, address, name or run: " + (foundTogether.isEmpty ? "none" : foundTogether.map { "\($0.id) \($0.language)" }.joined(separator: ", ")) + ".\n"
+            text += "\n| Explanations | With the draft apart, median | p90 | Requests | With one request, median | p90 | Requests |\n|---|---|---|---|---|---|---|\n"
+            for (name, chosen) in [("all \(apart.count)", { (_: Leak) in true }), ("with other projects' passages", { (leak: Leak) in leak.otherPassages > 0 })] as [(String, (Leak) -> Bool)] {
+                let two = apart.filter(chosen)
+                let one = together.filter { leak in chosen(leak) && apart.contains { $0.id == leak.id && $0.language == leak.language && chosen($0) } }
+                func times(_ leaks: [Leak]) -> [Double] { leaks.map(\.seconds).sorted() }
+                text += "| \(name == "with other projects' passages" ? "\(two.count) \(name)" : name) | \(String(format: "%.1f s", quantile(times(two), 0.5))) | \(String(format: "%.1f s", quantile(times(two), 0.9))) | \(two.map(\.requests).reduce(0, +)) | \(String(format: "%.1f s", quantile(times(one), 0.5))) | \(String(format: "%.1f s", quantile(times(one), 0.9))) | \(one.map(\.requests).reduce(0, +)) |\n"
+            }
         }
         return text
     }

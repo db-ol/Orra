@@ -1268,6 +1268,170 @@ struct ExplainServiceTests {
             rule: .init(needsProjectTerms: 1))
         #expect(any.others.map(\.file) == [two.file, three.file])
     }
+
+    // MARK: The draft apart from other projects' passages
+
+    /// With a passage of another project in its prompt, the explanation takes its points
+    /// from that prompt, which asks for no draft, and its draft from a second request of the
+    /// user whose prompt is the one the email gets without other projects, word for word.
+    @Test func theDraftComesFromASecondRequestWithoutOtherProjectsPassages() async throws {
+        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), .success(Fixture.draftWithoutThePlan))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        let requests = fakes.requestList
+        #expect(requests.count == 2)
+        #expect(requests.allSatisfy { $0.priority == .user && $0.maximumTokens == ExplainPrompt.maximumTokens })
+        let first = try #require(requests.first?.prompt)
+        let second = try #require(requests.last?.prompt)
+        #expect(first.contains("<other_files>") && first.contains("north wall"))
+        #expect(first.contains("Rule decision: a reply is due, but its draft is written apart, so no draft is written here. Under \"Draft reply:\" write only \"No draft\"."))
+        #expect(!second.contains("other_files") && !second.contains("O1") && !second.contains("north wall") && !second.contains("Studio move"))
+        #expect(second.contains("Rule decision: a reply is due. Write the draft in English, to Iris Fang <iris.fang@printworks.example>."))
+        // The prompt of the email had no other project been searched.
+        let alone = Fakes(terms: ["floor plan"], answer: .success(Fixture.englishAnswer))
+        _ = try await alone.service().explain(Fixture.email())
+        #expect(alone.requestList.map(\.prompt) == [second])
+
+        #expect(explanation.points.map(\.sources) == [["this email"], ["O1"]])
+        #expect(explanation.sources.keys.filter(ExplainPrompt.isOtherFileSource) == ["O1"])
+        #expect(explanation.questions == ["Whether Wednesday suits Bai Lu for the proof."])
+        #expect(explanation.problems.isEmpty)
+        guard case .checked(let result) = explanation.draft else {
+            Issue.record("the draft is \(explanation.draft)")
+            return
+        }
+        #expect(result.draft == "Hi Iris,\n\nThanks for the second proof. [to confirm: whether Wednesday suits me]\n\nBest,\nBai Lu")
+        // The draft check reads the sources of the draft's own prompt, and other projects'
+        // passages stay a second guard.
+        let check = try #require(explanation.draftCheck)
+        #expect(check.otherProjectTexts == [Fixture.plan.text])
+        #expect(check.otherProjectNames == ["Studio move", "Ken Ito"])
+        #expect(check.sourceTexts.contains(Fixture.quote.text))
+        #expect(!check.sourceTexts.contains(Fixture.plan.text))
+        #expect(explanation.citesOtherProjectFile)
+        #expect(fakes.savedList == [explanation])
+    }
+
+    /// The draft's prompt holds the project's own passages of the first prompt, its six and
+    /// the newest files that fill them up, without other projects' passages, so the draft
+    /// check counts all of them as the project's data.
+    @Test func theDraftsPromptHoldsTheProjectsOwnPassagesOfTheFirst() async throws {
+        let six = (1...6).map { Fixture.hit("part-\($0).md", "Part \($0) of the brief, code PB-\($0)00.") }
+        let fakes = Fakes(hits: six, terms: ["brief"], otherHits: [Fixture.plan, Fixture.otherHit("hall.pdf", "The hall plan.")], answer: .success(Fixture.explanationCitingThePlan), .success(Fixture.draftWithoutThePlan))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        let first = try #require(fakes.requestList.first?.prompt)
+        let second = try #require(fakes.requestList.last?.prompt)
+        #expect((1...6).allSatisfy { first.contains("Part \($0) of the brief") && second.contains("Part \($0) of the brief") })
+        #expect(first.contains("The hall plan.") && !second.contains("The hall plan."))
+        #expect(explanation.sources.keys.filter { $0.hasPrefix("F") }.count == 6)
+        let check = try #require(explanation.draftCheck)
+        #expect(check.sourceTexts.contains(six[5].text))
+
+        let few = Fakes(hits: [Fixture.quote], newest: [Fixture.hit("new-1.md", "New one."), Fixture.hit("new-2.md", "New two.")], terms: ["floor plan"],
+                        otherHits: [Fixture.plan, Fixture.otherHit("hall.pdf", "The hall plan.")], answer: .success(Fixture.explanationCitingThePlan), .success(Fixture.draftWithoutThePlan))
+        _ = try await few.service().explain(Fixture.email())
+        #expect(few.requestList.allSatisfy { $0.prompt.contains("New one.") && $0.prompt.contains("New two.") })
+        #expect(few.requestList.first?.prompt.contains("The hall plan.") == true)
+    }
+
+    /// An email whose prompt holds no passage of another project gets one request, and its
+    /// prompt is the one of the app before, word for word.
+    @Test func anEmailWithoutOtherProjectsPassagesGetsOneRequestWithThePromptAsBefore() async throws {
+        for (terms, others) in [(nil, [Fixture.plan]), (["proof"], []), (["proof"], [Fixture.plan])] as [([String]?, [ChunkSearch.Hit])] {
+            var matched = Fixture.quote
+            matched.matchedTerm = true
+            let ranking = [matched] + others
+            let fakes = Fakes(hits: [matched], terms: terms, otherHits: others, ranking: ranking, answer: .success(Fixture.englishAnswer))
+            let explanation = try await fakes.service().explain(Fixture.email())
+            #expect(fakes.requestList.count == 1)
+            let prompt = try #require(fakes.requestList.first?.prompt)
+            #expect(!prompt.contains("other_files") && !prompt.contains("written apart"))
+            let before = Fakes(hits: [matched], terms: terms, otherHits: others, ranking: ranking, answer: .success(Fixture.englishAnswer))
+            _ = try await before.service(draftApart: false).explain(Fixture.email())
+            #expect(before.requestList.map(\.prompt) == [prompt])
+            #expect(explanation.draftCheck?.otherProjectTexts == nil)
+        }
+    }
+
+    /// No draft is due, so there is no second request.
+    @Test func mailThatNeedsNoReplyGetsNoSecondRequest() async throws {
+        var email = Fixture.email(from: ExplainPrompt.Person(name: "Bai Lu", address: Fixture.own))
+        email.to = [Fixture.iris]
+        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
+        let explanation = try await fakes.service().explain(email)
+        #expect(fakes.requestList.count == 1)
+        #expect(explanation.reply == .noReply(.sentByUser))
+        #expect(explanation.sources.keys.contains(where: ExplainPrompt.isOtherFileSource))
+    }
+
+    /// Evaluations turn the draft apart off: one request whose prompt asks for the draft too,
+    /// as before.
+    @Test func withoutTheDraftApartOneRequestWritesTheDraftToo() async throws {
+        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
+        let explanation = try await fakes.service(draftApart: false).explain(Fixture.email())
+        #expect(fakes.requestList.count == 1)
+        let prompt = try #require(fakes.requestList.first?.prompt)
+        #expect(prompt.contains("<other_files>") && prompt.contains("Rule decision: a reply is due. Write the draft in English"))
+        guard case .checked(let result) = explanation.draft else {
+            Issue.record("the draft is \(explanation.draft)")
+            return
+        }
+        #expect(result.removals.map(\.kind) == [.otherProjectText, .otherProjectData])
+    }
+
+    /// When the first request fails or is cancelled, nothing is saved and the draft's request
+    /// is not sent, as with one request.
+    @Test func aFirstRequestThatFailsOrIsCancelledSendsNoSecondAndSavesNothing() async throws {
+        let cancelled = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .failure(CancellationError()))
+        await #expect(throws: CancellationError.self) { try await cancelled.service().explain(Fixture.email()) }
+        #expect(cancelled.requestList.count == 1)
+        #expect(cancelled.savedList.isEmpty)
+
+        let failed = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .failure(RewriteError.notLoaded))
+        await #expect(throws: RewriteError.notLoaded) { try await failed.service().explain(Fixture.email()) }
+        #expect(failed.requestList.count == 1)
+        #expect(failed.savedList.isEmpty)
+    }
+
+    /// A cancel of the draft's request, as by Forget Project, saves nothing.
+    @Test func aCancelledDraftRequestSavesNothing() async throws {
+        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), .failure(CancellationError()))
+        await #expect(throws: CancellationError.self) { try await fakes.service().explain(Fixture.email()) }
+        #expect(fakes.requestList.count == 2)
+        #expect(fakes.savedList.isEmpty)
+    }
+
+    /// When only the draft's request fails, the explanation is saved without a draft, as
+    /// when the model writes none, and the draft check is there for Explain Again.
+    @Test func aDraftRequestThatFailsLeavesTheExplanationWithoutADraft() async throws {
+        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), .failure(RewriteError.jobDropped))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.requestList.count == 2)
+        #expect(explanation.points.map(\.sources) == [["this email"], ["O1"]])
+        #expect(explanation.draft == .missing)
+        #expect(explanation.draftCheck?.otherProjectTexts == [Fixture.plan.text])
+        #expect(explanation.problems.isEmpty)
+        #expect(fakes.savedList == [explanation])
+    }
+
+    /// A draft's prompt over the budget is not sent, and the explanation has no draft.
+    @Test func aDraftPromptOverTheBudgetIsNotSent() async throws {
+        let tokens: @Sendable (String) -> Int = { $0.contains("<other_files>") ? $0.count / 3 : 100_000 }
+        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), tokens: tokens)
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.requestList.count == 1)
+        #expect(explanation.draft == .missing)
+        #expect(fakes.savedList == [explanation])
+    }
+
+    /// A draft's answer that lacks its draft says so among the problems of form, while the
+    /// first answer's "No draft" is none.
+    @Test func theFormOfTheDraftIsThatOfTheDraftsAnswer() async throws {
+        let fakes = Fakes(terms: ["floor plan"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), .success("- None\n\nPoints:\n- The second proof is ready. [this email]\n\nBefore you reply:\n- None\n"))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(explanation.draft == .missing)
+        #expect(explanation.problems == [.missing(.draft)])
+        #expect(explanation.points.map(\.sources) == [["this email"], ["O1"]])
+    }
 }
 
 nonisolated private enum ExplainServiceFixture {
@@ -1438,6 +1602,40 @@ nonisolated private enum ExplainServiceFixture {
     /// A passage of the other project's floor plan, with a value and a person of its own.
     static let plan = otherHit("floor-plan.pdf", "Studio floor plan, revision C. The lamps hang along the north wall of the lobby next to the reception desk. Deposit ¥8,400 to Ken Ito.")
 
+    /// The answer to a prompt with the floor plan, which asks for no draft.
+    static let explanationCitingThePlan = """
+        - None
+
+        Points:
+        - The second proof is ready. [this email]
+        - The studio's deposit is ¥8,400. [O1]
+
+        Before you reply:
+        - Whether Wednesday suits Bai Lu for the proof.
+
+        Draft reply:
+        No draft
+        """
+
+    /// The answer to the draft's prompt, without the floor plan.
+    static let draftWithoutThePlan = """
+        - None
+
+        Points:
+        - The second proof is ready. [this email]
+
+        Before you reply:
+        - Whether Wednesday suits Bai Lu for the proof.
+
+        Draft reply:
+        Hi Iris,
+
+        Thanks for the second proof. [to confirm: whether Wednesday suits me]
+
+        Best,
+        Bai Lu
+        """
+
     /// An answer that cites the floor plan and whose draft repeats a sentence and a value of
     /// it.
     static let answerCitingThePlan = """
@@ -1606,7 +1804,7 @@ private final class Fakes: Sendable {
     }
 
     @MainActor
-    func service(language: ProjectsLanguage = .en) -> ExplainService {
+    func service(language: ProjectsLanguage = .en, draftApart: Bool = true) -> ExplainService {
         ExplainService(
             lookups: lookups,
             run: { [self] request in
@@ -1623,7 +1821,8 @@ private final class Fakes: Sendable {
             save: { [self] explanation in saved.withLock { $0.append(explanation) } },
             language: language,
             timeZone: ExplainServiceFixture.shanghai,
-            now: { ExplainServiceFixture.today }
+            now: { ExplainServiceFixture.today },
+            draftApart: draftApart
         )
     }
 
