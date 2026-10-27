@@ -453,14 +453,15 @@ struct ProjectsChooseFiles: View {
     /// The open panel that adds a folder to a project, while it shows.
     @State private var panel: Panel?
     @State private var showsPanel = false
-    /// The sheet's height, for the footer: under the list, or at its end in a sheet too low
-    /// for both, so the list keeps its rows.
+    /// The sheet's height, for the footer: all of it under the list, or in a sheet too low
+    /// for that only the drag line and Add a Folder, with the two lines about the choice at
+    /// the end of the list, so the list keeps its rows.
     @State private var height: CGFloat = 560
 
-    /// The lowest sheet whose footer stays under the list. In Spanish at 520 points wide,
-    /// the header, the footer and the buttons in two rows take about 310 points, so a lower
-    /// sheet would leave the list less than its 120 points, and some room is left for larger
-    /// text.
+    /// The lowest sheet whose whole footer stays under the list. In Spanish at 520 points
+    /// wide, the header, the footer and the buttons in two rows take about 310 points, so a
+    /// lower sheet would leave the list less than its 120 points, and some room is left for
+    /// larger text.
     static let compactHeight: CGFloat = 470
 
     /// A folder to add to a project, with the dropped file it is for, if any.
@@ -508,12 +509,16 @@ struct ProjectsChooseFiles: View {
             Divider()
             list
                 .frame(minHeight: 120)
-            if !isCompact {
-                Divider()
-                footer
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+            Divider()
+            Group {
+                if isCompact {
+                    dropControls
+                } else {
+                    footer
+                }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, isCompact ? 8 : 10)
             Divider()
             buttons
                 .padding(12)
@@ -663,8 +668,10 @@ struct ProjectsChooseFiles: View {
                             .accessibilityAddTraits(.isHeader)
                     }
                 }
+                // In a sheet too low for the whole footer, the two lines about the choice
+                // come after the files, and the drag line and Add a Folder stay under the list.
                 if isCompact {
-                    footer
+                    choiceLines
                         .padding(.vertical, 6)
                 }
             }
@@ -739,33 +746,44 @@ struct ProjectsChooseFiles: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Orra puts the passages of these files that best fit this email first, or a file's beginning, then adds what its own search finds. Of a file without text, the model gets only its name.")
-                Group {
-                    if current.isExplained {
-                        Text("This choice is for this email only. Explain Again uses it.")
-                    } else {
-                        Text("This choice is for this email only. Explain uses it.")
-                    }
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-            // The button goes under the line where they do not fit side by side.
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) {
-                    dragLine
-                    addFolder(for: nil)
-                        .fixedSize()
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    dragLine
-                    addFolder(for: nil)
-                }
-            }
-            .font(.callout)
+            choiceLines
+            dropControls
         }
+    }
+
+    /// What Orra does with the files, and which button uses the choice.
+    private var choiceLines: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Orra puts the passages of these files that best fit this email first, or a file's beginning, then adds what its own search finds. Of a file without text, the model gets only its name.")
+            Group {
+                if current.isExplained {
+                    Text("This choice is for this email only. Explain Again uses it.")
+                } else {
+                    Text("This choice is for this email only. Explain uses it.")
+                }
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The drag line and Add a Folder, the button under the line where they do not fit side
+    /// by side.
+    private var dropControls: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                dragLine
+                addFolder(for: nil)
+                    .fixedSize()
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                dragLine
+                addFolder(for: nil)
+            }
+        }
+        .font(.callout)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

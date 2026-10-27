@@ -3937,7 +3937,8 @@ this Mac, until you use Delete All Projects Data… in its Settings.
   uses the chosen files.
 - [ ] At the window's smallest size, 760 by 420, the sheet fits in the window, its list
   scrolls, and its buttons wrap in Español. In a sheet lower than about 470 points, the two
-  lines about the choice, the drag line and Add a Folder come at the end of the list.
+  lines about the choice come at the end of the list, and the drag line and Add a Folder
+  stay under it.
 - [ ] VoiceOver reads the sheet's title as a heading, each row as one checkbox with its
   name, folder, kind, text state, date and project, announces the limit and the lines about
   dropped files, and after the sheet closes, the focus is back on the button that opened
