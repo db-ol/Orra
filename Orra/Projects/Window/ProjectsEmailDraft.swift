@@ -22,9 +22,9 @@ extension ProjectsEmailArea {
     /// Without a draft it says why: no reply is due, the language gets no draft, or the model
     /// wrote none. When a reply is due all the same, Attachments for the Reply follows, and
     /// once a file is ticked, Open Reply in Mail and Reply All, which open the reply with the
-    /// files and put nothing on the clipboard. The note after a handoff stays when the
-    /// files go meanwhile. The requests run through `ProjectsEmailModel.perform(_:)`, so
-    /// closing the window ends them.
+    /// files and put nothing on the clipboard, as a blank draft with ticked files does, which
+    /// shows no Copy either. The note after a handoff stays when the files go meanwhile. The
+    /// requests run through `ProjectsEmailModel.perform(_:)`, so closing the window ends them.
     struct DraftSection: View {
         let runtime: ProjectsRuntime
         let emailModel: ProjectsEmailModel
@@ -426,8 +426,8 @@ extension ProjectsEmailArea {
         @ViewBuilder
         private var handoffControls: some View {
             // Said before the click, since Mail comes to the front then and the line after
-            // the handoff may go unseen.
-            Text(verbatim: ProjectsWindowText.handoffLine(hasDraft: emailModel.hasDraft, hasFiles: !emailModel.replyFiles.handoffFiles.isEmpty))
+            // the handoff may go unseen. A blank draft with ticked files goes as no draft does.
+            Text(verbatim: ProjectsWindowText.handoffLine(hasDraft: emailModel.handsOffDraft, hasFiles: !emailModel.replyFiles.handoffFiles.isEmpty))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -475,9 +475,10 @@ extension ProjectsEmailArea {
                 }
             }
             .disabled(!emailModel.canHandOff)
-            // A change that waits leaves the draft as it is, which Copy takes. Without a draft
-            // there is nothing to copy.
-            if emailModel.hasDraft {
+            // A change that waits leaves the draft as it is, which Copy takes. Without a draft,
+            // and with a blank draft and ticked files, which go as no draft does, there is
+            // nothing to copy.
+            if emailModel.handsOffDraft {
                 Button("Copy") {
                     emailModel.copy()
                 }

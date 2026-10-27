@@ -355,6 +355,15 @@ final class ProjectsEmailModel {
         modelDraft != nil
     }
 
+    /// Whether Open Reply in Mail and Reply All put the draft on the clipboard, and Copy
+    /// shows: there is a draft, and it is not blank while files are ticked. A blank draft
+    /// with ticked files opens the reply with the files and puts nothing on the clipboard,
+    /// as an email without a draft does, so the line above the buttons and the footer of the
+    /// files say so and Copy does not show.
+    var handsOffDraft: Bool {
+        handoffDraft(files: replyFiles.handoffFiles) != nil
+    }
+
     /// Whether a request runs on the draft, so the editor and the buttons wait.
     var isBusy: Bool {
         changing != nil || isUndoing

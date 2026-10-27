@@ -230,8 +230,9 @@ extension ProjectsEmailArea {
                             .draggable(file.url)
                     }
                     Group {
-                        // Said before the click, as the files reach Mail with it.
-                        if !files.ticked.isEmpty, emailModel.hasDraft {
+                        // Said before the click, as the files reach Mail with it. A blank draft
+                        // with files goes as no draft does.
+                        if !files.ticked.isEmpty, emailModel.handsOffDraft {
                             Text("Open Reply in Mail and Reply All add these files to the reply, and Mail may save it with them to your account's Drafts on the mail server before you send it. Copy copies only the draft.")
                         } else if !files.ticked.isEmpty {
                             Text("Opening the reply in Mail adds these files to it, and Mail may save it with them to your account's Drafts on the mail server before you send it.")

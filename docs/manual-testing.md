@@ -4177,8 +4177,10 @@ PY
 - [ ] Untick every file and type "Attached is the floor plan." into the draft. Within a second
   of the last key the orange line says the draft says a file is attached. Tick a file: the
   line goes. Repeat with 附上平面图。.
-- [ ] Empty the draft, tick a file and click Open Reply in Mail. The reply opens with the file,
-  the note says to write the reply in Mail, and the clipboard keeps what it held.
+- [ ] Empty the draft and tick a file. The line above the buttons says to write the reply in
+  Mail, the footer of Attachments for the Reply does not mention Copy, and Copy does not
+  show. Click Open Reply in Mail. The reply opens with the file, the note says to write the
+  reply in Mail, and the clipboard keeps what it held.
 - [ ] Add File… opens the panel in the project's folder. Choose a file in ~/Downloads: the
   line says Orra attaches only files in folders added to a project. Choose
   quote-2026.xlsx: it is added. Drag a file of orra-attach-test from Finder onto the area:

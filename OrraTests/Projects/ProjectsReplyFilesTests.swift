@@ -472,6 +472,28 @@ struct ProjectsReplyFilesTests {
         #expect(model.replyFiles.senderLooksSpoofed)
     }
 
+    /// A blank draft with ticked files goes as no draft does: the line above the buttons
+    /// says so, as the footer and the missing Copy do, since the handoff puts nothing on the
+    /// clipboard. Without files a blank draft is as before.
+    @Test func aBlankDraftWithFilesSaysTheReplyOpensWithoutTheClipboard() async throws {
+        let model = model()
+        try await loaded(model)
+        #expect(model.handsOffDraft)
+        model.text = " \n"
+        #expect(model.handsOffDraft)
+        await model.replyFiles.setTicked(Self.plan, true)
+        #expect(!model.handsOffDraft)
+        #expect(ProjectsWindowText.handoffLine(hasDraft: model.handsOffDraft, hasFiles: true) == "Open Reply in Mail opens the reply with the files you ticked. Write your reply in Mail, check the recipients and send it yourself.")
+        model.text = Self.draft
+        #expect(model.handsOffDraft)
+        #expect(ProjectsWindowText.handoffLine(hasDraft: model.handsOffDraft, hasFiles: true) == "Open Reply in Mail puts the draft on the clipboard and adds the files you ticked. Press ⌘V in the reply window, check the recipients and the files, and send it yourself.")
+        // An email without a draft never hands one off.
+        let none = self.model { Self.explanation(reply: .reply(.other)) }
+        try await loaded(none)
+        await none.replyFiles.setTicked(Self.plan, true)
+        #expect(!none.handsOffDraft)
+    }
+
     /// Where the files are looked for follows the warnings about the email itself and its
     /// attachments. Hidden text in a project file, a line to an assistant in a message of the
     /// thread and a claim to come from Orra in the project's other mail are about those
