@@ -361,6 +361,28 @@
         }
       }
     },
+    "%@ is not downloaded to this Mac. Download it in Finder first." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no está descargado en esta Mac. Descárgalo primero en Finder."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”はこのMacにダウンロードされていません。先にFinderでダウンロードしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”还没有下载到这台 Mac。请先在“访达”中下载。"
+          }
+        }
+      }
+    },
     "%@ is the Live Captions shortcut." : {
       "localizations" : {
         "es-419" : {
@@ -558,6 +580,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@，第 %2$lld 张幻灯片"
+          }
+        }
+      }
+    },
+    "%@: %@" : {
+      "comment" : "A file that is not in the reply, and why, such as floor-plan.pdf: Mail did not take it.",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@: %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@: %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@：%2$@"
           }
         }
       }
@@ -1384,6 +1429,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请添加电子邮件地址。"
+          }
+        }
+      }
+    },
+    "Add File…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agregar archivo…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルを追加…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加文件…"
           }
         }
       }
@@ -2248,6 +2315,28 @@
         }
       }
     },
+    "Attach %@ to the reply" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adjuntar %@ a la respuesta"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”を返信に添付"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把“%@”附加到回复"
+          }
+        }
+      }
+    },
     "Attach the diagnostic report" : {
       "localizations" : {
         "es-419" : {
@@ -2266,6 +2355,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "附上诊断报告"
+          }
+        }
+      }
+    },
+    "Attach to Reply" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adjuntar a la respuesta"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返信に添付"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附加到回复"
+          }
+        }
+      }
+    },
+    "Attaches the file when you open the reply in Mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adjunta el archivo cuando abres la respuesta en Mail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”で返信を開くときに、このファイルを添付します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“邮件”中打开回复时附加这个文件。"
+          }
+        }
+      }
+    },
+    "Attaching files in Mail…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adjuntando archivos en Mail…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”でファイルを添付しています…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在“邮件”中附加文件…"
           }
         }
       }
@@ -2310,6 +2465,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "附件"
+          }
+        }
+      }
+    },
+    "Attachments for the Reply" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archivos adjuntos de la respuesta"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返信の添付ファイル"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回复的附件"
           }
         }
       }
@@ -3169,6 +3346,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在“待归入项目”中选择一封邮件，然后用“归入项目”把它归入这个项目。"
+          }
+        }
+      }
+    },
+    "Choose files in the folders you added to a project." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elige archivos de las carpetas que agregaste a un proyecto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロジェクトに追加したフォルダ内のファイルを選択してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择你添加到项目的文件夹中的文件。"
           }
         }
       }
@@ -5290,6 +5489,28 @@
         }
       }
     },
+    "Files This Email Asks For" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archivos que pide este correo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "求められているファイル"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对方要的文件"
+          }
+        }
+      }
+    },
     "Files with Hidden Text" : {
       "localizations" : {
         "es-419" : {
@@ -6572,6 +6793,28 @@
         }
       }
     },
+    "It changed after you ticked it. Tick it again." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambió después de que lo marcaste. Márcalo de nuevo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "チェックを入れた後に変更されました。もう一度チェックを入れてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勾选后它有改动。请重新勾选。"
+          }
+        }
+      }
+    },
     "It holds a link." : {
       "localizations" : {
         "es-419" : {
@@ -7788,6 +8031,50 @@
         }
       }
     },
+    "Look Again" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscar de nuevo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もう一度探す"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新查找"
+          }
+        }
+      }
+    },
+    "Looking for files…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscando archivos…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルを探しています…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在查找文件…"
+          }
+        }
+      }
+    },
     "Looking for projects in your mail…" : {
       "localizations" : {
         "es-419" : {
@@ -8004,6 +8291,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“邮件”没有打开回复。草稿已在剪贴板上。"
+          }
+        }
+      }
+    },
+    "Mail did not say which reply it opened." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail no indicó qué respuesta abrió."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”は、どの返信を開いたかを返しませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”没有说明它打开的是哪个回复。"
+          }
+        }
+      }
+    },
+    "Mail did not take it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail no lo aceptó."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”が受け付けませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”没有接受它。"
           }
         }
       }
@@ -8294,6 +8625,94 @@
         }
       }
     },
+    "Mail opened the reply with %lld files attached, and the draft is on the clipboard. Press ⌘V in the reply window." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail abrió la respuesta con %lld archivos adjuntos, y el borrador está en el portapapeles. Presiona ⌘V en la ventana de respuesta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”で返信が開き、%lld個のファイルが添付されました。下書きはクリップボードにあります。返信ウインドウで⌘Vを押してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”已打开回复并附加了 %lld 个文件，草稿已在剪贴板上。请在回复窗口中按下 ⌘V。"
+          }
+        }
+      }
+    },
+    "Mail opened the reply with %lld files attached. Write your reply there." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail abrió la respuesta con %lld archivos adjuntos. Escribe tu respuesta allí."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”で返信が開き、%lld個のファイルが添付されました。そこで返信を書いてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”已打开回复并附加了 %lld 个文件。请在那里写回复。"
+          }
+        }
+      }
+    },
+    "Mail opened the reply with 1 file attached, and the draft is on the clipboard. Press ⌘V in the reply window." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail abrió la respuesta con 1 archivo adjunto, y el borrador está en el portapapeles. Presiona ⌘V en la ventana de respuesta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”で返信が開き、1個のファイルが添付されました。下書きはクリップボードにあります。返信ウインドウで⌘Vを押してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”已打开回复并附加了 1 个文件，草稿已在剪贴板上。请在回复窗口中按下 ⌘V。"
+          }
+        }
+      }
+    },
+    "Mail opened the reply with 1 file attached. Write your reply there." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail abrió la respuesta con 1 archivo adjunto. Escribe tu respuesta allí."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”で返信が開き、1個のファイルが添付されました。そこで返信を書いてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”已打开回复并附加了 1 个文件。请在那里写回复。"
+          }
+        }
+      }
+    },
     "Mail opened the reply, and the draft is on the clipboard. Press ⌘V in the reply window." : {
       "localizations" : {
         "es-419" : {
@@ -8316,6 +8735,50 @@
         }
       }
     },
+    "Mail opened the reply. Write your reply there." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail abrió la respuesta. Escribe tu respuesta allí."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”で返信が開きました。そこで返信を書いてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”已打开回复。请在那里写回复。"
+          }
+        }
+      }
+    },
+    "Mail quit." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail se cerró."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”が終了しました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”已退出。"
+          }
+        }
+      }
+    },
     "Mail was not asked to open the reply." : {
       "localizations" : {
         "es-419" : {
@@ -8334,6 +8797,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 没有请“邮件”打开回复。"
+          }
+        }
+      }
+    },
+    "Mail was slow to answer. Check whether the reply holds it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail tardó en responder. Comprueba si la respuesta lo tiene."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”の応答が遅れました。返信に添付されているか確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”响应太慢。请检查回复中是否已有它。"
+          }
+        }
+      }
+    },
+    "Mail was slow with a file before it, so Orra did not ask for this one." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail tardó con un archivo anterior, así que Orra no pidió este."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前のファイルで“メール”の応答が遅れたため、Orraはこのファイルの添付を依頼しませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”处理前面的文件时响应太慢，所以 Orra 没有请求附加这个文件。"
           }
         }
       }
@@ -8800,6 +9307,50 @@
         }
       }
     },
+    "No files were attached." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se adjuntó ningún archivo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルは添付されませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有附加任何文件。"
+          }
+        }
+      }
+    },
+    "No files." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay archivos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルはありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有文件。"
+          }
+        }
+      }
+    },
     "No folders yet." : {
       "localizations" : {
         "es-419" : {
@@ -8840,6 +9391,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无关联邮箱"
+          }
+        }
+      }
+    },
+    "No longer in a folder you added to a project." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ya no está en una carpeta que agregaste a un proyecto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロジェクトに追加したフォルダ内にもうありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已不在你添加到项目的文件夹中。"
+          }
+        }
+      }
+    },
+    "No longer in its folder." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ya no está en su carpeta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元のフォルダにもうありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已不在原来的文件夹中。"
           }
         }
       }
@@ -9615,6 +10210,28 @@
         }
       }
     },
+    "Older version" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Versión anterior"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧バージョン"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧版本"
+          }
+        }
+      }
+    },
     "On" : {
       "localizations" : {
         "es-419" : {
@@ -10122,6 +10739,72 @@
         }
       }
     },
+    "Open Reply in Mail and Reply All add these files to the reply, and Mail may save it with them to your account's Drafts on the mail server before you send it. Copy copies only the draft." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir respuesta en Mail y Responder a todos agregan estos archivos a la respuesta, y Mail puede guardarla con ellos en Borradores de tu cuenta en el servidor de correo antes de que la envíes. Copiar copia solo el borrador."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“‘メール’で返信を開く”と“全員に返信”では、これらのファイルが返信に添付されます。送信する前に、“メール”が返信をこれらのファイルごとメールサーバ上のアカウントの“下書き”に保存することがあります。“コピー”では下書きだけがコピーされます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“在‘邮件’中打开回复”和“全部回复”会把这些文件附加到回复中。在你发送之前，“邮件”可能会把回复连同这些文件存到邮件服务器上你账户的草稿箱里。“拷贝”只拷贝草稿。"
+          }
+        }
+      }
+    },
+    "Open Reply in Mail opens the reply with the files you ticked. Write your reply in Mail, check the recipients and send it yourself." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir respuesta en Mail abre la respuesta con los archivos que marcaste. Escribe tu respuesta en Mail, revisa los destinatarios y envíala tú."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“‘メール’で返信を開く”をクリックすると、チェックを入れたファイルを添付した返信が開きます。“メール”で返信を書き、宛先を確認してから自分で送信してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“在‘邮件’中打开回复”会打开回复并附加你勾选的文件。请在“邮件”中写回复，检查收件人后自行发送。"
+          }
+        }
+      }
+    },
+    "Open Reply in Mail puts the draft on the clipboard and adds the files you ticked. Press ⌘V in the reply window, check the recipients and the files, and send it yourself." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir respuesta en Mail pone el borrador en el portapapeles y agrega los archivos que marcaste. Presiona ⌘V en la ventana de respuesta, revisa los destinatarios y los archivos, y envía tú la respuesta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“‘メール’で返信を開く”をクリックすると、下書きがクリップボードに入り、チェックを入れたファイルが添付されます。返信ウインドウで⌘Vを押し、宛先とファイルを確認してから自分で送信してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“在‘邮件’中打开回复”会把草稿放到剪贴板上，并附加你勾选的文件。请在回复窗口中按下 ⌘V，检查收件人和附件后自行发送。"
+          }
+        }
+      }
+    },
     "Open Reply in Mail puts the draft on the clipboard. Press ⌘V in the reply window, check the recipients and send it yourself." : {
       "localizations" : {
         "es-419" : {
@@ -10184,6 +10867,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开“邮件” App"
+          }
+        }
+      }
+    },
+    "Opening the reply in Mail adds these files to it, and Mail may save it with them to your account's Drafts on the mail server before you send it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al abrir la respuesta en Mail se agregan estos archivos, y Mail puede guardarla con ellos en Borradores de tu cuenta en el servidor de correo antes de que la envíes."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”で返信を開くと、これらのファイルが添付されます。送信する前に、“メール”が返信をこれらのファイルごとメールサーバ上のアカウントの“下書き”に保存することがあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“邮件”中打开回复时会附加这些文件。在你发送之前，“邮件”可能会把回复连同这些文件存到邮件服务器上你账户的草稿箱里。"
           }
         }
       }
@@ -10273,6 +10978,94 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra"
+          }
+        }
+      }
+    },
+    "Orra attaches at most %lld files to one reply." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra adjunta como máximo %lld archivos a una respuesta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraが1つの返信に添付できるファイルは%lld個までです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 最多为一封回复附加 %lld 个文件。"
+          }
+        }
+      }
+    },
+    "Orra attaches no files to a reply to this sender, who may not be who they claim to be." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra no adjunta archivos a una respuesta a este remitente, que podría no ser quien dice ser."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この差出人はなりすましの可能性があるため、Orraはこの差出人への返信にファイルを添付しません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个发件人可能是冒充的，所以 Orra 不会在给对方的回复中附加文件。"
+          }
+        }
+      }
+    },
+    "Orra attaches only files in the folders you added to a project, once Projects has read them. Add the file's folder to a project first, then wait until Projects has read it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra solo adjunta archivos de las carpetas que agregaste a un proyecto, una vez que Proyectos los leyó. Primero agrega la carpeta del archivo a un proyecto y espera a que Proyectos la lea."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraが添付するのは、プロジェクトに追加したフォルダ内にあり、“プロジェクト”が読み取り済みのファイルだけです。先にファイルのフォルダをプロジェクトに追加し、“プロジェクト”が読み取るまでお待ちください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 只附加你添加到项目的文件夹中、且“项目”已读取过的文件。请先把这个文件所在的文件夹添加到项目，等“项目”读取完后再添加。"
+          }
+        }
+      }
+    },
+    "Orra attaches single files only, not packages such as some Keynote or Pages documents." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra solo adjunta archivos individuales, no paquetes como algunos documentos de Keynote o Pages."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraが添付するのは単一のファイルだけで、一部のKeynoteやPagesの書類のようなパッケージは添付しません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 只附加单个文件，不附加软件包，比如某些 Keynote 或 Pages 文稿。"
           }
         }
       }
@@ -10585,6 +11378,28 @@
         }
       }
     },
+    "Orra found no file for this in the folders you added to projects." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra no encontró ningún archivo para esto en las carpetas que agregaste a los proyectos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロジェクトに追加したフォルダに、該当するファイルは見つかりませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在你添加到项目的文件夹中没有找到这个文件。"
+          }
+        }
+      }
+    },
     "Orra heard no speech in the voice sample." : {
       "localizations" : {
         "es-419" : {
@@ -10783,6 +11598,28 @@
         }
       }
     },
+    "Orra looked for these by name and by text in the folders you added to projects. Check each file before you tick it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra buscó estos archivos por nombre y por contenido en las carpetas que agregaste a los proyectos. Revisa cada archivo antes de marcarlo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraは、プロジェクトに追加したフォルダの中から、ファイル名と内容でこれらのファイルを探しました。チェックを入れる前に、それぞれのファイルを確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 按文件名和内容，在你添加到项目的文件夹中找到了这些文件。勾选前请逐一确认。"
+          }
+        }
+      }
+    },
     "Orra may not control Mail, so the draft is only on the clipboard. Allow it in Settings." : {
       "localizations" : {
         "es-419" : {
@@ -10933,6 +11770,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 不会自行通过扬声器说话。没有 Orra Microphone 时，请在这里选择一个设备，例如会议应用可以用作麦克风的环回设备。"
+          }
+        }
+      }
+    },
+    "Orra offers no files for this email, as its sender may not be who they claim to be." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra no ofrece archivos para este correo, ya que el remitente podría no ser quien dice ser."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このメールの差出人はなりすましの可能性があるため、Orraはファイルを提示しません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这封邮件的发件人可能是冒充的，所以 Orra 不为它提供文件。"
           }
         }
       }
@@ -12414,6 +13273,28 @@
         }
       }
     },
+    "Projects does not know this sender. Check who is asking before you send a file." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos no conoce a este remitente. Comprueba quién lo pide antes de enviar un archivo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”はこの差出人を知りません。ファイルを送る前に、誰からの依頼かを確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”不认识这个发件人。发送文件前，请先确认是谁在要文件。"
+          }
+        }
+      }
+    },
     "Projects does not read this kind of file." : {
       "localizations" : {
         "es-419" : {
@@ -13620,6 +14501,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除"
+          }
+        }
+      }
+    },
+    "Remove %@ from the reply" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar %@ de la respuesta"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”を返信から削除"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从回复中移除“%@”"
           }
         }
       }
@@ -16593,6 +17496,72 @@
         }
       }
     },
+    "The draft says a file is attached, but no file is ticked for the reply." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El borrador dice que hay un archivo adjunto, pero no marcaste ningún archivo para la respuesta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下書きにはファイルを添付したと書かれていますが、返信に添付するファイルにチェックが入っていません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "草稿里说附上了文件，但还没有勾选要附加到回复的文件。"
+          }
+        }
+      }
+    },
+    "The email asks for a file but does not say which one." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El correo pide un archivo, pero no dice cuál."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルを求めていますが、どのファイルかは書かれていません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对方要一个文件，但没有说是哪一个。"
+          }
+        }
+      }
+    },
+    "The email asks: %@" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El correo pide: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールの依頼: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对方写道：%@"
+          }
+        }
+      }
+    },
     "The email changed meanwhile, so the new version was not kept." : {
       "localizations" : {
         "es-419" : {
@@ -17319,6 +18288,28 @@
         }
       }
     },
+    "The reply window closed first." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La ventana de respuesta se cerró antes."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先に返信ウインドウが閉じられました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回复窗口先关闭了。"
+          }
+        }
+      }
+    },
     "The report could not be saved." : {
       "localizations" : {
         "es-419" : {
@@ -17875,6 +18866,50 @@
         }
       }
     },
+    "These files add up to %@, more than many mail servers take." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estos archivos suman %@, más de lo que aceptan muchos servidores de correo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これらのファイルは合計%@で、多くのメールサーバが受け付けるサイズを超えています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这些文件共 %@，超过很多邮件服务器能接收的大小。"
+          }
+        }
+      }
+    },
+    "These files are not attached. Drag them from Attachments for the Reply into the reply window:" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estos archivos no se adjuntaron. Arrástralos desde Archivos adjuntos de la respuesta a la ventana de respuesta:"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次のファイルは添付されていません。“返信の添付ファイル”から返信ウインドウにドラッグしてください:"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以下文件没有附加。可以把它们从“回复的附件”拖到回复窗口中："
+          }
+        }
+      }
+    },
     "They asked %lld things, your draft answers %lld." : {
       "localizations" : {
         "en" : {
@@ -18163,6 +19198,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本邮件"
+          }
+        }
+      }
+    },
+    "This email has warnings and no project, so Orra does not look for files for it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este correo tiene advertencias y no tiene proyecto, así que Orra no busca archivos para él."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このメールには警告があり、プロジェクトにも属していないため、Orraはファイルを探しません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这封邮件有警告，又不属于任何项目，所以 Orra 不为它查找文件。"
+          }
+        }
+      }
+    },
+    "This email has warnings, so Orra looked only in the folders of its project." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este correo tiene advertencias, así que Orra buscó solo en las carpetas de su proyecto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このメールには警告があるため、Orraはこのメールのプロジェクトのフォルダだけを探しました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这封邮件有警告，所以 Orra 只在它所属项目的文件夹中查找。"
           }
         }
       }
@@ -20256,6 +21335,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的项目及其邮件、解释和草稿都在单独的窗口中。你也可以从 Orra 菜单打开它。"
+          }
+        }
+      }
+    },
+    "Your reply may reach people outside %@: %@" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu respuesta puede llegar a personas fuera de %1$@: %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返信が“%1$@”以外の人に届く可能性があります: %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的回复可能会发给“%1$@”以外的人：%2$@"
           }
         }
       }

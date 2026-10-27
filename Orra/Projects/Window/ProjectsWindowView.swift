@@ -257,7 +257,7 @@ struct ProjectsWindowView: View {
     @ViewBuilder
     private var detail: some View {
         if let email = model.selectedEmail {
-            ProjectsEmailArea(runtime: runtime, model: model, email: email, openSettings: openSettings)
+            ProjectsEmailArea(runtime: runtime, model: model, email: email, openSettings: openSettings, openMail: openMail)
         } else if case .project(let id)? = model.place, let project = runtime.projectList.first(where: { $0.id == id }) {
             ProjectsProjectPage(runtime: runtime, project: project) {
                 setup = ProjectsSetupView.Draft(project)

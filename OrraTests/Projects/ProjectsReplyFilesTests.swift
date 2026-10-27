@@ -526,10 +526,64 @@ struct ProjectsReplyFilesTests {
         #expect(await model.replyFiles.defaultFolder() == Self.drawings)
     }
 
+    // MARK: Words
+
+    /// Every reason, scope and state of the files of a reply has words of its own.
+    @Test func everyValueOfTheReplyFilesHasWords() {
+        let problems: [ReplyFileProblem] = [.notInAddedFolder, .moved, .changed, .notDownloaded, .package]
+        #expect(Set(problems.map(ProjectsWindowText.replyFileProblem)).count == problems.count)
+        let attach: [ReplyHandoff.AttachProblem] = [.noReplyNamed, .replyClosed, .refused(code: -1), .timedOut, .afterTimeOut, .notAllowed, .mailQuit]
+        let reasons = attach.map(ProjectsWindowText.attachProblem) + problems.map { ProjectsWindowText.attachProblem(.notChecked($0)) }
+        #expect(Set(reasons).count == reasons.count)
+        #expect(!reasons.contains(""))
+        #expect(ProjectsWindowText.scope(.everyProject) == nil)
+        let scopes: [ProjectsReplyFiles.Scope] = [.ownProject(Self.harbor), .nowhere, .spoofed]
+        #expect(Set(scopes.compactMap(ProjectsWindowText.scope)).count == scopes.count)
+        let lines = [(true, false), (true, true), (false, true)].map { ProjectsWindowText.handoffLine(hasDraft: $0.0, hasFiles: $0.1) }
+        #expect(Set(lines).count == lines.count)
+        let refusals = problems.map { ProjectsWindowText.refusal(.init(problem: $0, name: "plan.pdf")) }
+        #expect(refusals[ReplyFileProblem.notDownloaded.index(in: problems)] == "plan.pdf is not downloaded to this Mac. Download it in Finder first.")
+        #expect(Set(refusals).count == 3)
+        #expect(ProjectsWindowText.attachCap == "Orra attaches at most 10 files to one reply.")
+        #expect(ProjectsWindowText.largeTotal(25_000_000, locale: Locale(identifier: "en_US")) == "These files add up to 25 MB, more than many mail servers take.")
+        #expect(ProjectsWindowText.outside(project: "Harbor lobby", addresses: ["kai@kiln.example", "pat@new.example"]) == "Your reply may reach people outside Harbor lobby: kai@kiln.example, pat@new.example")
+        #expect(ProjectsWindowText.saysMailIsNotOpen(.outcome(.copiedMailNotRunning)))
+        #expect(ProjectsWindowText.saysMailIsNotOpen(.outcome(.mailNotRunning)))
+        #expect(!ProjectsWindowText.saysMailIsNotOpen(.outcome(.replyFailed(.denied))))
+        // Without files and with a draft, the note is as before.
+        #expect(ProjectsWindowText.handoffLines(.outcome(.replyOpened(files: [])), files: nil) == [ProjectsWindowText.handoff(.outcome(.replyOpened(files: [])))])
+        let three = ProjectsEmailModel.HandoffFiles(withDraft: true, given: 3, attached: 3, notAttached: [])
+        #expect(ProjectsWindowText.handoffLines(.outcome(.replyOpened(files: [.attached, .attached, .attached])), files: three) == ["Mail opened the reply with 3 files attached, and the draft is on the clipboard. Press ⌘V in the reply window."])
+        let none = ProjectsEmailModel.HandoffFiles(withDraft: false, given: 1, attached: 0, notAttached: [.init(name: "plan.pdf", problem: .replyClosed)])
+        #expect(ProjectsWindowText.handoffLines(.outcome(.replyOpened(files: [.notAttached(.replyClosed)])), files: none) == [
+            "Mail opened the reply. Write your reply there.",
+            "These files are not attached. Drag them from Attachments for the Reply into the reply window:",
+            "plan.pdf: The reply window closed first.",
+        ])
+        #expect(ProjectsWindowText.request(Self.request) == "The email asks: Please also send the floor plan.")
+        #expect(ProjectsWindowText.attachLabel("plan.pdf") == "Attach plan.pdf to the reply")
+        #expect(ProjectsWindowText.removeLabel("plan.pdf") == "Remove plan.pdf from the reply")
+    }
+
+    /// The words of the files of a reply in Chinese, as the catalog gives them.
+    @Test func theWordsOfTheFilesOfAReplyReadInChinese() throws {
+        let path = try #require(Bundle.main.path(forResource: "zh-Hans", ofType: "lproj"))
+        let chinese = try #require(Bundle(path: path))
+        #expect(chinese.localizedString(forKey: "Files This Email Asks For", value: nil, table: nil) == "对方要的文件")
+        #expect(chinese.localizedString(forKey: "Attach to Reply", value: nil, table: nil) == "附加到回复")
+        #expect(chinese.localizedString(forKey: "Attachments for the Reply", value: nil, table: nil) == "回复的附件")
+    }
+
     static func listed(warnings: [ProjectsWarning] = [], level: SortingLevel? = .sure) -> MailStore.Listed {
         MailStore.Listed(
             messageID: id, date: today, sender: MailStore.Person(address: "mei@harbor.example"), subject: "Lobby lamps",
             project: harbor, level: level, reasons: [], movedByUser: false, reply: .reply(.en), warnings: warnings,
             isExplained: true, hasText: true, summary: "")
+    }
+}
+
+private extension ReplyFileProblem {
+    func index(in problems: [ReplyFileProblem]) -> Int {
+        problems.firstIndex(of: self) ?? 0
     }
 }

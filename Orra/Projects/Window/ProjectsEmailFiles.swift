@@ -230,7 +230,7 @@ extension ProjectsEmailArea {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     ForEach(files) { file in
-                        FileRow(file: file, place: place(of: file), project: projectLine(file))
+                        FileRow(file: file, place: place(of: file), project: projectLine(file), emailModel: emailModel)
                     }
                 }
                 controls
@@ -314,14 +314,17 @@ extension ProjectsEmailArea {
 
     /// One file of the list: its name, the folder that holds it, whether a point cites it,
     /// why it was in the prompt, its project when that is not the email's, and the warnings
-    /// found at it, as one element for VoiceOver, then a chip for each saved excerpt. As the
-    /// attachments under Original Email show, see ProjectsAttachmentList.
+    /// found at it, as one element for VoiceOver, then a chip for each saved excerpt, and
+    /// Attach to Reply while files can be ticked for the reply. As the attachments under
+    /// Original Email show, see ProjectsAttachmentList.
     struct FileRow: View {
         let file: ProjectsEmailFiles.File
         /// Where the file is now, nil while the folders resolve.
         let place: ProjectsEmailFiles.Place?
         /// The line that names the project of a file of another project.
         let project: String?
+        /// The email view, for Attach to Reply, nil where the row shows without it.
+        var emailModel: ProjectsEmailModel? = nil
 
         var body: some View {
             VStack(alignment: .leading, spacing: 6) {
@@ -371,6 +374,10 @@ extension ProjectsEmailArea {
                 .accessibilityElement(children: .combine)
                 ExcerptChips(file: file)
                     .padding(.leading, 26)
+                if let emailModel {
+                    AttachToggle(url: file.url, emailModel: emailModel)
+                        .padding(.leading, 26)
+                }
             }
         }
     }
