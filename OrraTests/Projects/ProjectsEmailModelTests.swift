@@ -469,6 +469,27 @@ struct ProjectsEmailModelTests {
         #expect(!ProjectsEmailArea.SourceChip.isGone(.thisEmail))
     }
 
+    /// A point whose source the model wrote as [E1], its own name for the email, gets the
+    /// This email chip, as a point that names the email this email does, and no line that
+    /// it has no source.
+    @Test func thePointsOfTheModelsE1ShowTheThisEmailChip() async {
+        let answer = ExplainAnswer(
+            "Points:\n- Mei asks you to confirm the lamp order by Friday. [E1]\n- The lamps arrive in week 47. [F1, E1]\n- Mei asks for the floor plan. [this email]",
+            sources: ["this email", "F1", "T1", "M1"])
+        var explanation = Self.explanation()
+        explanation.points = answer.points.map { Explanation.Point(text: $0.text, sources: $0.sources, flags: []) }
+        let explained = explanation
+        let model = model(explanation: { explained })
+        await model.load()
+        let points = model.explanation?.points ?? []
+        #expect(points.map(\.text) == ["Mei asks you to confirm the lamp order by Friday.", "The lamps arrive in week 47.", "Mei asks for the floor plan."])
+        #expect(points.map(\.sources) == [["this email"], ["F1", "this email"], ["this email"]])
+        #expect(points.map(ProjectsWindowText.noSource) == [nil, nil, nil])
+        let chips = points.map { $0.sources.compactMap { model.sources[$0] } }
+        #expect(chips == [[.thisEmail], [.file(Self.file), .thisEmail], [.thisEmail]])
+        #expect(chips.first?.map(ProjectsWindowText.source) == ["This email"])
+    }
+
     /// An excerpt of another project's file carries that project's name while the list
     /// holds it, and none once it is gone. A file the user chose for the email from another
     /// project's folders carries its project too, while the email's own project's files

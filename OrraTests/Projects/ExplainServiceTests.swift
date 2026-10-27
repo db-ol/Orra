@@ -65,6 +65,20 @@ struct ExplainServiceTests {
         #expect(draft.contains("Thanks for the second proof."))
     }
 
+    /// The model's own [E1] for the email reaches the saved explanation as the email, with
+    /// no bracket left in the point, while an id the prompt does not have is still flagged.
+    @Test func theModelsE1IsSavedAsTheEmail() async throws {
+        let answer = Fixture.englishAnswer.replacingOccurrences(of: "The second proof is ready. [this email]", with: "The second proof is ready. [E1]")
+        #expect(answer != Fixture.englishAnswer)
+        let fakes = Fakes(answer: .success(answer))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.savedList == [explanation])
+        #expect(explanation.points.first?.text == "The second proof is ready.")
+        #expect(explanation.points.first?.sources == ["this email"])
+        #expect(explanation.sources["this email"] == .message("proof-2@printworks.example"))
+        #expect(explanation.unknownSources == ["F9"])
+    }
+
     @Test func aFileWithHiddenRunsGivesAHiddenTextWarningAtItsSource() async throws {
         let fakes = Fakes(answer: .success(Fixture.englishAnswer))
         let explanation = try await fakes.service().explain(Fixture.email())

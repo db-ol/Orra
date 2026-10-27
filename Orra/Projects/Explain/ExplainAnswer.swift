@@ -8,14 +8,16 @@ import Foundation
 /// numbers in front, since a small model does not always keep the format. Inside the draft
 /// only a heading with its colon and nothing after it counts, so a line such as "Questions"
 /// stays in the draft. A point ends with its sources in brackets, such as [本邮件], [F2],
-/// [O1], [A1] or [M1, T1]. Sources that are not in the prompt's table are dropped and flagged, and so are
-/// missing and repeated sections. A repeated section's second copy is not read, but the
-/// heading written again right after itself, as after the prefill, is not a copy. An item
-/// copied from the prompt's own rules is left out, and so is a lead in copied from them
-/// before a colon, see `Echo`. A list leaves out an item that repeats an earlier one, and in
-/// an answer without a draft the last list that repeated ends before its first repeat, see
-/// `loop`. The answer is data, and nothing here follows it: the window shows it as plain
-/// text only.
+/// [O1], [A1] or [M1, T1]. The model often names the email [E1], as if it were a source like
+/// F1, though the prompt names it 本邮件 or this email, so E1 reads as the email while the
+/// prompt names no E source. Sources that are not in the prompt's table, any other E id
+/// among them, are dropped and flagged, and so are missing and repeated sections. A
+/// repeated section's second copy is not read, but the heading written again right after
+/// itself, as after the prefill, is not a copy. An item copied from the prompt's own rules
+/// is left out, and so is a lead in copied from them before a colon, see `Echo`. A list
+/// leaves out an item that repeats an earlier one, and in an answer without a draft the
+/// last list that repeated ends before its first repeat, see `loop`. The answer is data,
+/// and nothing here follows it: the window shows it as plain text only.
 nonisolated struct ExplainAnswer: Sendable, Equatable {
     nonisolated enum Section: String, Sendable, CaseIterable, Codable {
         case warnings
@@ -333,6 +335,8 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         var sources: [String] = []
         var unknown: [String] = []
         let emailLabel = known.first(where: { emailLabels.contains($0.lowercased()) })
+        // The model's own E1 is the email unless the prompt names E sources itself.
+        let emailID = known.contains { $0.wholeMatch(of: /E\d+/) != nil } ? nil : modelsEmailID
         let range = NSRange(item.startIndex..., in: item)
         for match in sourcePattern.matches(in: item, range: range).reversed() {
             guard let whole = Range(match.range, in: text),
@@ -340,7 +344,8 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
             guard let ids = sourceIDs(String(item[group])) else { continue }
             text.replaceSubrange(whole, with: " ")
             for id in ids.reversed() {
-                let resolved = emailLabels.contains(id.lowercased()) ? (emailLabel ?? id) : id
+                let isEmail = emailLabels.contains(id.lowercased()) || id == emailID
+                let resolved = isEmail ? (emailLabel ?? id) : id
                 if known.contains(resolved) {
                     if !sources.contains(resolved) { sources.insert(resolved, at: 0) }
                 } else if !unknown.contains(resolved) {
@@ -370,7 +375,7 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         for part in parts {
             if emailLabels.contains(part.lowercased()) {
                 ids.append(part)
-            } else if let match = part.wholeMatch(of: /(?i)([fmtao])\s*(\d{1,3})/) {
+            } else if let match = part.wholeMatch(of: /(?i)([fmtaoe])\s*(\d{1,3})/) {
                 ids.append(match.output.1.uppercased() + match.output.2)
             } else {
                 return nil
@@ -381,6 +386,10 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
 
     /// The ways a model names the email itself.
     private static let emailLabels: Set<String> = ["本邮件", "本封邮件", "这封邮件", "此邮件", "该邮件", "this email", "the email", "email"]
+
+    /// The id the model gives the email itself as if it were a source such as F1 or A1,
+    /// though no prompt names it.
+    private static let modelsEmailID = "E1"
 
     private static let sourcePattern = try! NSRegularExpression(pattern: #"\[([^\[\]\n]{1,40})\]|【([^【】\n]{1,40})】|[（(]([^（）()\n]{1,40})[）)]"#)
 
