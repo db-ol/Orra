@@ -41,9 +41,10 @@ struct ProjectsRuntimeTests {
     /// The runtime with fakes, and its switch and mailbox choice. `installed` says whether
     /// the cleanup model is on this Mac, `countsTokens` gives the explain service a
     /// tokenizer, `openFails` makes the start fail at the database, `folders` stands in for
-    /// how the index reaches project folders, `keyDown` for the presses of the talk key, and
-    /// `retryLoading` for Try Loading Again.
-    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+    /// how the index reaches project folders, `keyDown` for the presses of the talk key,
+    /// `retryLoading` for Try Loading Again, and `download` for where the model's download
+    /// stands.
+    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, download: Download = Download()) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
         let projects = ProjectsSwitch(defaults: defaults, isVisible: isVisible, physicalMemory: 32 << 30, storage: storage)
         if isOn {
             projects.turnOn()
@@ -69,6 +70,7 @@ struct ProjectsRuntimeTests {
             whenDictationStarts: { [keyDown] handler in keyDown?.handlers.append(handler) },
             modelEnvironment: { _ in model.environment },
             modelIsInstalled: { installed.value },
+            modelDownloadStatus: { download.status },
             retryLoadingModel: retryLoading,
             loadTokenCounter: { [tokenizer] in try await tokenizer.load(counter) },
             handoff: ReplyHandoff(copy: { _ in true }, mail: mail.bridge, isOrraActive: { true }, bringMailToFront: {}),
@@ -90,8 +92,8 @@ struct ProjectsRuntimeTests {
         return (runtime, projects, choice)
     }
 
-    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, sourceLocation: SourceLocation = #_sourceLocation) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
-        let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown, retryLoading: retryLoading)
+    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, download: Download = Download(), sourceLocation: SourceLocation = #_sourceLocation) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+        let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown, retryLoading: retryLoading, download: download)
         made.0.follow()
         try await waitUntil({ made.0.phase == .on }, sourceLocation: sourceLocation)
         return made
@@ -980,6 +982,29 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// While the cleanup model is not on this Mac, a line under the list says so: its
+    /// download with a spinner, the check of its files, or Settings… while it is missing,
+    /// where it downloads. Nothing once it is on this Mac, or while Projects is off.
+    @Test func theWindowSaysWhileTheModelIsNotOnThisMac() async throws {
+        defer { cleanUp() }
+        let download = Download()
+        let (runtime, projects, _) = try await started(download: download)
+        #expect(Lines.modelLine(runtime: runtime) == nil)
+        download.status = .downloading(bytes: 1_525_000_000, total: 3_050_000_000)
+        let downloading = try #require(Lines.modelLine(runtime: runtime))
+        #expect(downloading.text == CleanupLabels.progress(bytes: 1_525_000_000, total: 3_050_000_000))
+        #expect(downloading.text.hasPrefix("Downloading the cleanup model: 50% of "))
+        #expect(downloading.isActivity)
+        #expect(downloading.action == nil)
+        download.status = .verifying
+        #expect(Lines.modelLine(runtime: runtime) == Line(text: "Checking the downloaded files…", isActivity: true))
+        download.status = .missing
+        #expect(Lines.modelLine(runtime: runtime) == Line(text: "The cleanup model is not on this Mac yet. Download it in Projects Settings to explain mail.", action: .settings))
+        await projects.turnOff(keepingData: false)
+        try await waitUntil { runtime.phase == .off }
+        #expect(Lines.modelLine(runtime: runtime) == nil)
+    }
+
     /// The window says why no mail comes in: no mailbox chosen, Mail not open, or Orra not
     /// allowed to control Mail, each with its way out. A notice of Explain Message Selected
     /// in Mail that says the same shows once.
@@ -989,7 +1014,7 @@ struct ProjectsRuntimeTests {
         #expect(problems(runtime) == [Line(text: "Projects reads no mail yet. Choose its mailboxes in Settings.", action: .settings)])
         choice.choose([.inbox])
         choice.confirm()
-        #expect(problems(runtime) == [Line(text: "Mail is not open. Projects reads new mail while Mail runs.")])
+        #expect(problems(runtime) == [Line(text: "Mail is not open. Projects reads new mail while Mail runs.", action: .openMail)])
 
         mail.update {
             $0.isRunning = true
@@ -3041,6 +3066,12 @@ struct ProjectsRuntimeTests {
         init(_ value: Bool = false) {
             self.value = value
         }
+    }
+
+    /// Where the cleanup model's download stands, as the app maps it from the installer,
+    /// which a test changes.
+    @Observable final class Download {
+        var status = ProjectsRuntime.ModelDownloadStatus.none
     }
 
     /// How the index reaches project folders, recorded by name: resolves bookmarks with

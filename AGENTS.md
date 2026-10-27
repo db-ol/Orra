@@ -100,8 +100,10 @@ trusted once in Xcode. docs/dependencies.md has the details.
   only the names and rare words taken from it, and never logs or saves the text or the names.
 - Projects code must read mail only through the Mail app's scripting, only from the mailboxes
   the user chose and only while Mail runs. It must read files only in the folders the user
-  added to a project, and nothing at all while Projects is off. It must never launch Mail,
-  read ~/Library/Mail or ask for Full Disk Access. It must never log mail or file text,
+  added to a project, and nothing at all while Projects is off. Orra opens Mail only when the
+  user clicks Open Mail, through MailApp.open() in Orra/MailApp.swift, which code in
+  Orra/Projects gets as a closure. Nothing else launches Mail. Projects code must never read
+  ~/Library/Mail or ask for Full Disk Access. It must never log mail or file text,
   subjects, addresses, names or file names, only counts, timings and error codes.
 - The Projects model must have no tools. Projects code must treat the model's output as data
   and show it in the Projects window as plain text only. Code in Orra/Projects must never call
@@ -156,8 +158,9 @@ docs/privacy.md, as docs/website.md describes.
   must not use, where NSAttributedString may appear, that Orra/Projects holds Swift files
   only, Apple Events built or sent in Orra outside the files it allows or sent from tests,
   the three events the Mail bridge may build and the window each reply opens,
-  script text in any file under Orra, OrraTests or Tools, and where SQLite, removing files
-  and UserDefaults may appear. It reads names in code, not every way around them, so review
+  script text in any file under Orra, OrraTests or Tools, apps opened outside
+  Orra/MailApp.swift and Mail opened from tests, and where SQLite, removing files and
+  UserDefaults may appear. It reads names in code, not every way around them, so review
   Projects changes by hand too. The same job runs the tests of the rules check in Tools/ci
   and of the speech evaluation scorer in Tools/speech-eval.
 - Build and test, on the xcode-27 runner, a GitHub hosted Mac with Xcode 27.0. It runs the test

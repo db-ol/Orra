@@ -24,15 +24,19 @@ final class ProjectsWindow {
     private let willShow: () -> Void
     /// Opens Settings at the Projects page.
     private let openSettings: () -> Void
+    /// Opens the Mail app on the user's click, MailApp.open in the app. Code here never
+    /// opens it by itself.
+    private let openMail: () -> Void
     private var window: NSWindow?
     /// What the open window shows, nil while it is closed.
     private var model: ProjectsWindowModel?
     private var closeObserver: (any NSObjectProtocol)?
 
-    init(runtime: ProjectsRuntime, willShow: @escaping () -> Void, openSettings: @escaping () -> Void) {
+    init(runtime: ProjectsRuntime, willShow: @escaping () -> Void, openSettings: @escaping () -> Void, openMail: @escaping () -> Void) {
         self.runtime = runtime
         self.willShow = willShow
         self.openSettings = openSettings
+        self.openMail = openMail
     }
 
     /// Brings the window to the front, while Projects is on, see
@@ -82,7 +86,7 @@ final class ProjectsWindow {
     private func makeWindow() -> NSWindow {
         let model = ProjectsWindowModel(runtime: runtime)
         self.model = model
-        let view = ProjectsWindowView(runtime: runtime, model: model, openSettings: openSettings)
+        let view = ProjectsWindowView(runtime: runtime, model: model, openSettings: openSettings, openMail: openMail)
         let window = Self.window(hosting: view)
         if !window.setFrameUsingName(Self.frameName) {
             window.center()

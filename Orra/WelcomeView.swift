@@ -25,6 +25,9 @@ struct WelcomeView: View {
     let guideSettings: (PermissionDemo.Kind) -> Void
     /// Opens Orra's Settings on a tab, for the suggestions once Orra is ready.
     let openSettings: @MainActor (SettingsTab) -> Void
+    /// The Projects switch, for its row in Try next, nil where the window is shown without
+    /// it, which leaves the row out.
+    let projects: ProjectsSwitch?
     @State private var language: AppLanguage
     /// The localization the window shows, such as "zh-Hans". Kept, so a redraw for the
     /// download's progress does not read the Mac's languages again.
@@ -35,7 +38,8 @@ struct WelcomeView: View {
     /// Whether the steps scroll on a short screen. Off only to draw the whole window.
     let limitsHeight: Bool
 
-    init(pushToTalk: PushToTalkController, setup: SetupDownload, language: AppLanguage, limitsHeight: Bool = true, close: @escaping () -> Void, localizationChanged: @escaping (String) -> Void, languagePicked: @escaping (AppLanguage) -> Void, guideSettings: @escaping (PermissionDemo.Kind) -> Void = { _ in }, openSettings: @escaping @MainActor (SettingsTab) -> Void = WelcomeView.openSettingsWindow) {
+    init(pushToTalk: PushToTalkController, setup: SetupDownload, language: AppLanguage, projects: ProjectsSwitch? = nil, limitsHeight: Bool = true, close: @escaping () -> Void, localizationChanged: @escaping (String) -> Void, languagePicked: @escaping (AppLanguage) -> Void, guideSettings: @escaping (PermissionDemo.Kind) -> Void = { _ in }, openSettings: @escaping @MainActor (SettingsTab) -> Void = WelcomeView.openSettingsWindow) {
+        self.projects = projects
         self.limitsHeight = limitsHeight
         _stepsHeight = State(initialValue: Self.tallestSteps)
         self.pushToTalk = pushToTalk
@@ -196,7 +200,7 @@ struct WelcomeView: View {
             }
             if WelcomeSuggestion.shows(checklist: checklist) {
                 SuggestionsBlock(
-                    suggestions: WelcomeSuggestion.all(cleanupOn: setup.cleanup.isOn, cleanupModelInstalled: setup.cleanup.models.state.isInstalled, translationOn: setup.cleanup.translationIsOn, language: pushToTalk.dictationLanguage, translationKey: pushToTalk.translationKey, translationMode: pushToTalk.translationMode, locale: Locale(identifier: localization)),
+                    suggestions: WelcomeSuggestion.all(cleanupOn: setup.cleanup.isOn, cleanupModelInstalled: setup.cleanup.models.state.isInstalled, translationOn: setup.cleanup.translationIsOn, language: pushToTalk.dictationLanguage, translationKey: pushToTalk.translationKey, translationMode: pushToTalk.translationMode, projectsAvailable: projects?.canTurnOn ?? false, projectsOn: projects?.isOn ?? false, locale: Locale(identifier: localization)),
                     locale: Locale(identifier: localization),
                     open: { openSettings($0.settingsTab) }
                 )
@@ -210,7 +214,7 @@ struct WelcomeView: View {
 
 /// What to try next, under "Orra is ready": one compact row for each feature, with its symbol,
 /// its name and one line, and a button that opens Settings on the feature's page, or On when
-/// it is on already.
+/// it is on already. Projects comes last, on a Mac where it can be turned on.
 private struct SuggestionsBlock: View {
     let suggestions: [WelcomeSuggestion]
     let locale: Locale
@@ -270,6 +274,7 @@ extension WelcomeSuggestion.Kind {
         case .cleanup: .dictation
         case .translation: .translation
         case .meeting: .meeting
+        case .projects: .projects
         }
     }
 }
@@ -313,63 +318,6 @@ private struct LanguageRow: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-}
-
-/// One step: its number until it is done, a spinner while it runs, a check mark after.
-private struct SetupStepRow<Detail: View>: View {
-    let number: Int
-    let status: SetupChecklist.Status
-    let title: LocalizedStringKey
-    /// The step the guide talks about, shown with a tint.
-    var isCurrent = false
-    @ViewBuilder let detail: Detail
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            StepBadge(number: number, status: status)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title)
-                    .font(.headline)
-                detail
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(8)
-        .background(
-            Color.accentColor.opacity(isCurrent ? 0.08 : 0),
-            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-        )
-        .padding(-8)
-        .animation(.easeInOut(duration: 0.25), value: isCurrent)
-    }
-}
-
-private struct StepBadge: View {
-    let number: Int
-    let status: SetupChecklist.Status
-
-    var body: some View {
-        ZStack {
-            switch status {
-            case .done:
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(.green)
-            case .inProgress:
-                ProgressView()
-                    .controlSize(.small)
-            case .todo:
-                Circle()
-                    .strokeBorder(.secondary, lineWidth: 1.5)
-                Text(number, format: .number)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(width: 26, height: 26)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(status == .done ? Text("Done") : Text("Not done yet"))
     }
 }
 
