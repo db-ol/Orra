@@ -3811,7 +3811,8 @@ in the test guide, in English and then in 简体中文:
 - [ ] Explain an email in Needs a Project about a document of a project. Its chip names the
   project in brackets, the line under the points says that such files are for you only,
   and the excerpt says From the folders of with the project's name. The draft, if any,
-  holds none of that file's amounts, codes or names.
+  holds none of that file's amounts, codes or names, nor the project's name. Read it for
+  facts of that file in other words, such as a date or a count, which no check takes out.
 - [ ] Assign that email to the project and click Explain Again. The chip has no brackets
   now, and the draft may use the file.
 - [ ] An email in Needs a Project with a warning about its sender, or with a line to an
