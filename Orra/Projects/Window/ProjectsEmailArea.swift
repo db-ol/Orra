@@ -323,6 +323,11 @@ struct ProjectsEmailArea: View {
         RowOrColumn {
             explainButtons(state: state, isChanging: isChanging, noText: noText, comparing: comparing)
         }
+        // A name a little too long for the column, such as Compare with Original beside a
+        // scroll bar at the window's smallest size, tightens or shrinks by up to a tenth
+        // rather than being cut. A row needs every name at its full size.
+        .allowsTightening(true)
+        .minimumScaleFactor(0.9)
         // What the next explanation uses of the files the user chose.
         if let note = model.emailModel(for: email.messageID).choiceNote {
             Text(verbatim: ProjectsWindowText.choiceNote(note))

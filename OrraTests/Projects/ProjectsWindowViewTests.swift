@@ -2125,6 +2125,11 @@ struct ProjectsWindowViewTests {
         await smallestEmail.showTranslation(true)
         try await render(ProjectsWindowView(runtime: runtime, model: smallest, openSettings: {}, openMail: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-window-760-email.png"))
         try await render(ProjectsEmailArea(runtime: runtime, model: smallest, email: explained), size: NSSize(width: 200, height: 3_800), to: folder.appendingPathComponent("\(language)-projects-email-200.png"))
+        // The scroll of that column less the room of a scroll bar that always shows, as with a
+        // mouse, whatever this Mac shows, so without Back to Previous Email, which stays
+        // above the scroll.
+        let scrollBar = NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
+        try await render(ProjectsEmailArea(runtime: runtime, model: narrowModel, email: explained), size: NSSize(width: 200 - scrollBar, height: 3_800), to: folder.appendingPathComponent("\(language)-projects-email-200-scroll-bar.png"))
 
         // An email whose explanation cites a file of another project, with the note under the
         // points and another project's data taken out of the draft, at the width of the
