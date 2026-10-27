@@ -1566,6 +1566,51 @@ struct ExplainServiceTests {
         #expect(check.otherProjectTexts == [Fixture.plan.text])
     }
 
+    // MARK: Source ids in the draft
+
+    /// The draft loses the brackets of the ids its prompt names before DraftCheck reads it,
+    /// so the check reads the text the user copies: the check of a draft with ids is the
+    /// check of the same draft without them, and a sentence copied from another project's
+    /// file still goes, also when ids inside it would split its run of words.
+    @Test func theDraftCheckReadsTheDraftWithoutItsSourceIDs() async throws {
+        let plain = "Thanks for the second proof. The deposit is ¥8,400. The lamps hang along the north wall of the lobby next to the reception desk."
+        let cited = "Thanks for the second proof [this email]. The deposit is ¥8,400 (O1). The lamps hang along the north [O1] wall of the lobby [F1] next to the reception desk."
+        let answer = Fixture.answerCitingThePlan.replacingOccurrences(of: plain, with: cited)
+        #expect(answer != Fixture.answerCitingThePlan)
+        let fakes = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(answer))
+        let explanation = try await fakes.service(draftApart: false).explain(Fixture.email())
+        let without = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(Fixture.answerCitingThePlan))
+        let withoutIDs = try await without.service(draftApart: false).explain(Fixture.email())
+        #expect(explanation.draft == withoutIDs.draft)
+        guard case .checked(let result) = explanation.draft else {
+            Issue.record("the draft is \(explanation.draft)")
+            return
+        }
+        #expect(result.draft == "Hi Iris,\n\nThanks for the second proof. The deposit is [another project's data removed]. [sentence removed: it is from another project's file]\n\nBest,\nBai Lu")
+        #expect(result.removals.map(\.kind) == [.otherProjectText, .otherProjectData])
+    }
+
+    /// A draft written apart is read with the ids of its own prompt, which names no passage
+    /// of another project: the email and the project's own file leave it, [O1] stays as
+    /// text, and DraftCheck still takes out a sentence of another project's file, its
+    /// second guard.
+    @Test func aDraftWrittenApartLosesOnlyTheIDsOfItsOwnPrompt() async throws {
+        let draft = Fixture.draftWithoutThePlan.replacingOccurrences(
+            of: "Thanks for the second proof. [to confirm: whether Wednesday suits me]",
+            with: "Thanks for the second proof [this email] (F1). [to confirm: whether Wednesday suits me]\n\nThe lamps hang along the north wall of the lobby next to the reception desk. [O1]")
+        #expect(draft != Fixture.draftWithoutThePlan)
+        let fakes = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), .success(draft))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.requestList.count == 2)
+        #expect(explanation.points.map(\.sources) == [["this email"], ["O1"]])
+        guard case .checked(let result) = explanation.draft else {
+            Issue.record("the draft is \(explanation.draft)")
+            return
+        }
+        #expect(result.draft == "Hi Iris,\n\nThanks for the second proof. [to confirm: whether Wednesday suits me]\n\n[sentence removed: it is from another project's file] [O1]\n\nBest,\nBai Lu")
+        #expect(result.removals.map(\.kind) == [.otherProjectText])
+    }
+
     // MARK: Chosen files
 
     /// A file the user chose, with what the index gives of it: these passages, or with none
