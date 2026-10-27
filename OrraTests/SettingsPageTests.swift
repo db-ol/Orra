@@ -79,6 +79,22 @@ struct SettingsPageTests {
         ])
     }
 
+    /// How to Use Projects opens the Projects section of the user guide in the interface
+    /// language, English for any other, at the anchors the site links to.
+    @Test func howToUseProjectsOpensTheGuideAtProjects() {
+        let guides = ["en", "zh-Hans", "ja", "es-419", "fr"].map { ProjectsSettings.userGuidePage(for: $0) }
+        #expect(guides.map { $0.absoluteString.components(separatedBy: "#")[0] } == [
+            "https://github.com/db-ol/Orra/blob/main/docs/user-guide.md",
+            "https://github.com/db-ol/Orra/blob/main/docs/user-guide.zh-CN.md",
+            "https://github.com/db-ol/Orra/blob/main/docs/user-guide.ja.md",
+            "https://github.com/db-ol/Orra/blob/main/docs/user-guide.es.md",
+            "https://github.com/db-ol/Orra/blob/main/docs/user-guide.md",
+        ])
+        #expect(guides.map { $0.fragment(percentEncoded: false) } == ["projects-preview", "项目预览版", "プロジェクトプレビュー", "proyectos-vista-previa", "projects-preview"])
+        // Percent encoded, as a browser sends it.
+        #expect(guides[1].absoluteString.hasSuffix("#%E9%A1%B9%E7%9B%AE%E9%A2%84%E8%A7%88%E7%89%88"))
+    }
+
     @Test func aTabAskedForOpensOnceAndSettingsOpensGeneral() {
         SettingsWindow.show(.vocabulary)
         #expect(SettingsWindow.takeRequest() == .init(tab: .vocabulary, section: nil))

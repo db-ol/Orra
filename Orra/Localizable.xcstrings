@@ -11984,6 +11984,28 @@
         }
       }
     },
+    "Projects works with the Mail app on this Mac. Before you turn it on, check that your mail shows in Mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos funciona con la app Mail de esta Mac. Antes de activarlo, asegúrate de que tu correo aparezca en Mail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”は、このMacの“メール”アプリと一緒に使います。オンにする前に、メールが“メール”に表示されることを確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”适用于这台 Mac 上的“邮件” App。打开之前，请先确认你的邮件能在“邮件”中看到。"
+          }
+        }
+      }
+    },
     "Quit Orra" : {
       "localizations" : {
         "es-419" : {

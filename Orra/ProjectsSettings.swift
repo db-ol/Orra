@@ -16,8 +16,8 @@ import SwiftUI
 /// at launch.
 ///
 /// The page sits outside Orra/Projects, since it is the one place where Projects may link to
-/// the privacy page and to System Settings. Code in Orra/Projects never opens a URL. The page
-/// is compiled in every build, so Xcode keeps its strings in the catalog.
+/// the privacy page, the user guide and System Settings. Code in Orra/Projects never opens a
+/// URL. The page is compiled in every build, so Xcode keeps its strings in the catalog.
 struct ProjectsSettings: View {
     let projects: ProjectsSwitch
     @Bindable var cleanup: TextCleanup
@@ -68,12 +68,22 @@ struct ProjectsSettings: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                // Nothing on this page reads Mail before Projects is on, so the user checks it
+                // first.
+                if !projects.isOn {
+                    Text("Projects works with the Mail app on this Mac. Before you turn it on, check that your mail shows in Mail.")
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 // True while the Mail bridge sends only its read requests and reply, which
                 // Tools/ci/check_rules.py holds (rule 10).
                 Text("Assigning, editing and deleting in Projects change only what it keeps on this Mac, never your mail in Mail.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Link("Privacy details", destination: Self.privacyPage(for: AppLanguage.launchLocalization))
+                HStack(spacing: 16) {
+                    Link("Privacy details", destination: Self.privacyPage(for: AppLanguage.launchLocalization))
+                    Link("How to Use Projects", destination: Self.userGuidePage(for: AppLanguage.launchLocalization))
+                }
             } header: {
                 Text("Sorts your mail into projects and explains each email with the files of your projects.")
                     .font(.subheadline)
@@ -375,6 +385,21 @@ struct ProjectsSettings: View {
         default: "privacy.md"
         }
         return URL(string: "https://github.com/db-ol/Orra/blob/main/docs/\(name)")!
+    }
+
+    /// The Projects section of the user guide in the language of Orra's interface, English
+    /// for any other. The anchor is the section's heading as GitHub makes it, which the site
+    /// links to as well. URLComponents encodes it.
+    static func userGuidePage(for localization: String) -> URL {
+        let (name, anchor) = switch localization {
+        case "zh-Hans": ("user-guide.zh-CN.md", "项目预览版")
+        case "ja": ("user-guide.ja.md", "プロジェクトプレビュー")
+        case "es-419": ("user-guide.es.md", "proyectos-vista-previa")
+        default: ("user-guide.md", "projects-preview")
+        }
+        var page = URLComponents(string: "https://github.com/db-ol/Orra/blob/main/docs/\(name)")!
+        page.fragment = anchor
+        return page.url!
     }
 
     /// Privacy & Security, Automation in System Settings, where the user turns Mail on for
