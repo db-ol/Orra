@@ -1123,14 +1123,6 @@ final class FolderIndex {
 
     private func nextRecognition(in id: UUID, watched: Watched) async throws -> Waiting? {
         let project = Value.text(id.uuidString)
-        let textBytes = try await database.run("SELECT coalesce(sum(text_bytes), 0) FROM index_files WHERE project = ?", [project]).first?.first?.integer ?? 0
-        guard textBytes < limits.textBytes else {
-            // Recognition stops here, and the page says the text limit was reached.
-            if reports[id].map({ $0.recognitionLeft > 0 || !$0.reachedTextLimit }) ?? false {
-                await refreshReport(id, generation: watched.generation, isIndexing: reports[id]?.isIndexing ?? false)
-            }
-            return nil
-        }
         guard let row = try await database.run("""
             SELECT id, path, size, modified FROM index_files
             WHERE project = ?1 AND recognize = 1 AND id NOT IN (SELECT value FROM json_each(?2))
@@ -1138,6 +1130,14 @@ final class FolderIndex {
             """, [project, .text(Self.jsonArray(watched.recognitionSkips))]).first,
               row.count == 4, let file = row[0].integer, let path = row[1].text, let size = row[2].integer, let modified = row[3].real
         else { return nil }
+        let textBytes = try await database.run("SELECT coalesce(sum(text_bytes), 0) FROM index_files WHERE project = ?", [project]).first?.first?.integer ?? 0
+        guard textBytes < limits.textBytes else {
+            // Recognition stops here, and the page says the text limit was reached once.
+            if reports[id].map({ $0.recognitionLeft > 0 || !$0.reachedTextLimit }) ?? false {
+                await refreshReport(id, generation: watched.generation, isIndexing: reports[id]?.isIndexing ?? false)
+            }
+            return nil
+        }
         let done = try await database.run(
             "SELECT page FROM index_recognition_pages WHERE file = ? AND size = ? AND modified = ?",
             [.integer(file), .integer(size), .real(modified)]
