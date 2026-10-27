@@ -17165,24 +17165,24 @@
         }
       }
     },
-    "This removes the project with its index, mail and drafts from Projects, and the explanations of other emails that used its files. Your mail in Mail and the files in its folders stay as they are." : {
+    "This removes the project with its index, mail and drafts from Projects, and the explanations and drafts of other emails that used its files. Your mail in Mail and the files in its folders stay as they are." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Se quitará el proyecto de Proyectos con su índice, su correo y sus borradores, y las explicaciones de otros correos que usaron sus archivos. Tu correo en Mail y los archivos de sus carpetas no cambian."
+            "value" : "Se quitará el proyecto de Proyectos con su índice, su correo y sus borradores, y las explicaciones y los borradores de otros correos que usaron sus archivos. Tu correo en Mail y los archivos de sus carpetas no cambian."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このプロジェクトと、そのインデックス、メール、下書き、およびそのファイルを使ったほかのメールの説明を“プロジェクト”から削除します。“メール”内のメールとフォルダ内のファイルはそのまま残ります。"
+            "value" : "このプロジェクトと、そのインデックス、メール、下書き、およびそのファイルを使ったほかのメールの説明と下書きを“プロジェクト”から削除します。“メール”内のメールとフォルダ内のファイルはそのまま残ります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这会从“项目”中移除这个项目，以及它的索引、邮件和草稿，还有用到它的文件的其他邮件的解释。“邮件” App 里的邮件和它文件夹里的文件保持不变。"
+            "value" : "这会从“项目”中移除这个项目，以及它的索引、邮件和草稿，还有用到它的文件的其他邮件的解释和草稿。“邮件” App 里的邮件和它文件夹里的文件保持不变。"
           }
         }
       }

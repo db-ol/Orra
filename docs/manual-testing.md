@@ -3823,8 +3823,9 @@ in the test guide, in English and then in 简体中文:
   is paused, and the dictation pastes as fast as usual. With a dictation longer than 15
   seconds, Explain goes on without terms, and the log says so.
 - [ ] Forget a project whose file an email of another project cited. The alert names the
-  explanations of other emails, and that email's explanation and draft are gone. Forget a
-  project while another email is explained: the explanation stops, and Explain shows again.
+  explanations and drafts of other emails, and that email's explanation and draft are gone.
+  Forget a project while another email is explained: the explanation stops, and Explain
+  shows again.
 - [ ] At 760 points wide, a chip of another project's file stands on its own line and keeps
   the project's name at its end. With VoiceOver it reads "…, from the project …".
 - [ ] Turn the cleanup model off in Settings while Explain asks for terms. The line says the

@@ -1228,11 +1228,11 @@ final class ProjectsRuntime {
     }
 
     /// Forget Project: removes the project with its mail, drafts, counts and index, and
-    /// the explanations of other emails that hold excerpts of its files, and sorts again the
-    /// mail the change reaches, since the project no longer counts among the candidates. Its
-    /// linked mailbox is not read further. The explanations under way end first, since one
-    /// may hold excerpts of its files, which the store would not save anyway, see
-    /// MailStore.save.
+    /// the explanations and drafts of other emails that hold excerpts of its files, and sorts
+    /// again the mail the change reaches, since the project no longer counts among the
+    /// candidates. Its linked mailbox is not read further. The explanations under way end
+    /// first, since one may hold excerpts of its files, which the store would not save
+    /// anyway, see MailStore.save.
     func forget(_ project: UUID) async throws {
         guard let running else { throw Failure.off }
         for request in userRequests.values where request.readsFiles {
