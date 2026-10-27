@@ -210,6 +210,7 @@ struct FileRequestsTests {
         Self.expectConstruction("a pronoun under a condition: if you have X, could you send it", [
             ("If you still have the moodboard from March, could you forward it to me?", "the moodboard", [.document]),
             ("If you have the signed waiver handy, please send it over.", "the signed waiver", [.document]),
+            ("If you kept that waiver from the venue, please send it over.", "that waiver", [.document]),
         ])
         Self.expectConstruction("a pronoun or a plain file that points to the sentence before", [
             ("We are still missing the packing list for the second shipment. Could you send it today?", "the packing list", [.document]),
@@ -256,6 +257,7 @@ struct FileRequestsTests {
             ("合同扫描件发我一份就行", "合同扫描件", [.contract, .scan]),
             ("那张效果图发我看看", "那张效果图", [.rendering]),
             ("你的演示稿能不能今晚发给我？", "演示稿", [.document]),
+            ("另外，报价单方便发我一份吗？", "报价单", [.quote]),
         ])
         Self.expectConstruction("发我一份 X, 发 X 给我 and 给我发 X", [
             ("发我一份最新的报价单", "报价单", [.quote]),

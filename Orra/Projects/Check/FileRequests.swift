@@ -936,7 +936,7 @@ nonisolated enum FileRequests {
             towardTheWriter: true, gates: [chineseSend]),
         Construction(
             "X 发我一下, X 也发我一份吧, X 发过来",
-            regex(chineseClauseStart + "(?<object>" + chineseTopic + "{1,30}?)(?<frame>(?:(?:你|您)们?)?(?:" + chineseFrames + "|也|再|就|先|都|还|帮忙|尽快|赶紧|直接|顺便|" + chineseWhen + "){0,4})(?<verb>发|传|寄|转发|转|分享|共享|发送)(?=给?(?:我|我们)(?:一下|一份|一个|个|吧|哈|呀|啊|哦|呗|看看|参考|就行|就好|就可以|即可|好吗|可以吗)*(?:$|[,，;；:：。!！?？\\s])|过来)"),
+            regex(chineseClauseStart + "(?<object>" + chineseTopic + "{1,30}?)(?<frame>(?:(?:你|您)们?)?(?:" + chineseFrames + "|也|再|就|先|都|还|能|方便|有空|帮忙|尽快|赶紧|直接|顺便|" + chineseWhen + "){0,4})(?<verb>发|传|寄|转发|转|分享|共享|发送)(?=给?(?:我|我们)(?:一下|一份|一个|个|吧|吗|呢|哈|呀|啊|哦|呗|看看|参考|就行|就好|就可以|即可|好吗|可以吗)*(?:$|[,，;；:：。!！?？\\s])|过来)"),
             mustNameADocument: true, gates: [chineseSendCharacter]),
         Construction(
             "发我一份 X, 你发我一下 X, at the start of a clause",
@@ -1597,6 +1597,10 @@ nonisolated enum FileRequests {
             let before = rest[..<range.lowerBound].split(whereSeparator: { !$0.isLetter && !$0.isNumber }).last.map { $0.lowercased() }
             let word = rest[range].trimmingCharacters(in: .whitespaces).lowercased()
             if let before, keepGoing.contains(before), prepositions.contains(word) {
+                continue
+            }
+            // "That" at the start points, as in "that permit", and ends nothing.
+            if before == nil, word == "that" {
                 continue
             }
             end = range.lowerBound
