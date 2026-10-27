@@ -273,6 +273,7 @@ struct ProjectsWindowView: View {
             ProjectsHowTo(
                 showsSetup: !runtime.choice.isConfirmed, canCreate: runtime.phase == .on,
                 openSettings: openSettings, newProject: { setup = ProjectsSetupView.Draft() },
+                hasSuggestions: !model.suggestions.suggestions.isEmpty || model.suggestions.isNaming,
                 mailIsRunning: runtime.mailIsRunning, openMail: openMail)
         }
     }

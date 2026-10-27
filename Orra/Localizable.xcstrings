@@ -7930,6 +7930,28 @@
         }
       }
     },
+    "Make a project with New Project…, and add its folders and the people you exchange mail with. Explanations use the files in its folders. Once Projects has read your mail, it may also suggest projects in the sidebar." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crea un proyecto con Nuevo proyecto… y agrega sus carpetas y las personas con las que intercambias correos. Las explicaciones usan los archivos de sus carpetas. Cuando Proyectos haya leído tu correo, también puede sugerir proyectos en la barra lateral."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“新規プロジェクト…”でプロジェクトを作成し、そのフォルダと、メールをやり取りする相手を追加します。説明には、フォルダ内のファイルが使われます。“プロジェクト”がメールを読み取った後は、サイドバーにプロジェクトの候補が表示されることもあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用“新建项目…”创建项目，并添加项目的文件夹和与你有邮件往来的人。解释会用到这些文件夹中的文件。“项目”读取你的邮件后，还可能在边栏中建议项目。"
+          }
+        }
+      }
+    },
     "Make your first project (optional)" : {
       "localizations" : {
         "es-419" : {

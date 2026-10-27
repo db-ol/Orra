@@ -885,6 +885,13 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsWindowText.modelLine(.missing) == "The cleanup model is not on this Mac yet. Download it in Projects Settings to explain mail.")
     }
 
+    /// The step of How to Use about projects names Suggested Projects only while the
+    /// sidebar shows them.
+    @Test func howToUseNamesSuggestedProjectsOnlyOnceTheyShow() {
+        #expect(ProjectsHowTo.projectStep(hasSuggestions: true) == "Make a project from a suggestion under Suggested Projects, or with New Project…, and add its folders. Explanations use the files in them.")
+        #expect(ProjectsHowTo.projectStep(hasSuggestions: false) == "Make a project with New Project…, and add its folders and the people you exchange mail with. Explanations use the files in its folders. Once Projects has read your mail, it may also suggest projects in the sidebar.")
+    }
+
     // MARK: Render
 
     /// Renders the window's parts into PNG files, for reading the layout and the strings
@@ -1028,8 +1035,9 @@ struct ProjectsWindowViewTests {
         // As wide as the third column of the window at its smallest size.
         try await render(ProjectsHowTo(showsSetup: true, canCreate: true, openSettings: {}, newProject: {}), size: NSSize(width: 200, height: 1_000), to: folder.appendingPathComponent("\(language)-projects-how-to-narrow.png"))
         // With Mail closed, the first step has Open Mail too, in a row at the window's first
-        // size and one under the other at its smallest.
-        let closed = ProjectsHowTo(showsSetup: true, canCreate: true, openSettings: {}, newProject: {}, mailIsRunning: false, openMail: {})
+        // size and one under the other at its smallest. No suggestion shows yet, so the step
+        // about projects does not name them.
+        let closed = ProjectsHowTo(showsSetup: true, canCreate: true, openSettings: {}, newProject: {}, hasSuggestions: false, mailIsRunning: false, openMail: {})
         try await render(closed, size: NSSize(width: 480, height: 700), to: folder.appendingPathComponent("\(language)-projects-how-to-mail-closed.png"))
         try await render(closed, size: NSSize(width: 200, height: 1_000), to: folder.appendingPathComponent("\(language)-projects-how-to-mail-closed-narrow.png"))
         // The window at its smallest size: with its title bar and toolbar, and the columns
