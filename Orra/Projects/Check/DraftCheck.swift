@@ -26,7 +26,8 @@ nonisolated struct DraftCheckInput: Sendable, Equatable, Codable {
     /// The other texts the model read: the excerpts of project files and the project's
     /// other mail.
     var sourceTexts: [String] = []
-    /// The questions the window lists for the user to decide.
+    /// The questions the window lists for the user to decide, or those of the answer that
+    /// wrote the draft when that answer lists more, see ExplainService.finish.
     var questionsForUser: [String] = []
     var today: Date
     /// The domains that imitate a domain the user knows: the sender's, when the sender

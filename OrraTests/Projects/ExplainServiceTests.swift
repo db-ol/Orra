@@ -1433,6 +1433,45 @@ struct ExplainServiceTests {
         #expect(explanation.points.map(\.sources) == [["this email"], ["O1"]])
     }
 
+    /// A draft written apart counts its placeholders against the longer of two lists of
+    /// questions: the first answer's, which the window shows and which may hold a question
+    /// that only another project's passage raises, and the draft's own.
+    @Test func aDraftWrittenApartCountsItsPlaceholdersAgainstTheLongerListOfQuestions() async throws {
+        let question = "- Whether Wednesday suits Bai Lu for the proof.\n"
+        let more = question + "- Whether the lobby lamps of the studio matter for the proof.\n"
+        let firstAsksMore = Fakes(
+            terms: ["floor plan", "lobby"], otherHits: [Fixture.plan],
+            answer: .success(Fixture.explanationCitingThePlan.replacingOccurrences(of: question, with: more)), .success(Fixture.draftWithoutThePlan))
+        let fromFirst = try await firstAsksMore.service().explain(Fixture.email())
+        #expect(fromFirst.questions.count == 2)
+        #expect(fromFirst.draftCheck?.questionsForUser.count == 2)
+        guard case .checked(let first) = fromFirst.draft else {
+            Issue.record("the draft is \(fromFirst.draft)")
+            return
+        }
+        #expect(first.flags.contains(.decidesQuestion(placeholders: 1, questions: 2)))
+
+        let draftAsksMore = Fakes(
+            terms: ["floor plan", "lobby"], otherHits: [Fixture.plan],
+            answer: .success(Fixture.explanationCitingThePlan), .success(Fixture.draftWithoutThePlan.replacingOccurrences(of: question, with: more)))
+        let fromDraft = try await draftAsksMore.service().explain(Fixture.email())
+        #expect(fromDraft.questions.count == 1)
+        #expect(fromDraft.draftCheck?.questionsForUser.count == 2)
+        guard case .checked(let draft) = fromDraft.draft else {
+            Issue.record("the draft is \(fromDraft.draft)")
+            return
+        }
+        #expect(draft.flags.contains(.decidesQuestion(placeholders: 1, questions: 2)))
+
+        let same = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(Fixture.explanationCitingThePlan), .success(Fixture.draftWithoutThePlan))
+        let even = try await same.service().explain(Fixture.email())
+        guard case .checked(let unflagged) = even.draft else {
+            Issue.record("the draft is \(even.draft)")
+            return
+        }
+        #expect(!unflagged.flags.contains { if case .decidesQuestion = $0 { true } else { false } })
+    }
+
     /// A prompt whose budget trimmed every passage of other projects is built again without
     /// them, so its one request is the prompt the email gets with no other project searched,
     /// and nothing of the email's own went for those passages.
@@ -1450,6 +1489,29 @@ struct ExplainServiceTests {
         #expect(alone.requestList.map(\.prompt) == [prompt])
         #expect(!explanation.sources.keys.contains(where: ExplainPrompt.isOtherFileSource))
         #expect(explanation.draftCheck?.otherProjectTexts == nil)
+    }
+
+    /// The draft check of a draft written apart reads the sources of the draft's own prompt,
+    /// not those of the first, while the first prompt's passages of other projects stay its
+    /// second guard.
+    @Test func theDraftCheckReadsTheSourcesOfTheDraftsOwnPrompt() async throws {
+        let six = (1...6).map { Fixture.hit("part-\($0).md", "Part \($0) of the brief, code PB-\($0)00.") }
+        var gathered = ExplainService.Gathered(email: Fixture.email(), known: Fixture.known, project: Fixture.project, thread: [], today: Fixture.today)
+        gathered.hits = six
+        gathered.others = [Fixture.plan]
+        let count: @Sendable (String) -> Int = { $0.count / 3 }
+        let first = await ExplainService.prepare(gathered, language: .en, timeZone: Fixture.shanghai, countTokens: count)
+        var fewer = gathered.withoutOtherProjects
+        fewer.hits = Array(six.prefix(5))
+        let ownPrompt = await ExplainService.prepare(fewer, language: .en, timeZone: Fixture.shanghai, countTokens: count)
+        let explanation = await ExplainService.finish(
+            first, written: Fixture.explanationCitingThePlan,
+            draft: ExplainService.DraftApart(prepared: ownPrompt, written: Fixture.draftWithoutThePlan), timeZone: Fixture.shanghai)
+        #expect(explanation.sources["F6"] != nil)
+        let check = try #require(explanation.draftCheck)
+        #expect(check.sourceTexts.contains(six[4].text))
+        #expect(!check.sourceTexts.contains(six[5].text))
+        #expect(check.otherProjectTexts == [Fixture.plan.text])
     }
 }
 

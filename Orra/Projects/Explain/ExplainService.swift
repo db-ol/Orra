@@ -978,7 +978,8 @@ final class ExplainService {
     /// projects' passages, the explanation takes its warnings, points, questions and sources
     /// from `written` and its draft from `apart`, which DraftCheck checks with the sources of
     /// its own prompt and, as a second guard, with the passages of other projects that the
-    /// first prompt held.
+    /// first prompt held, and whose placeholders count against the longer of the two lists
+    /// of questions.
     @concurrent
     nonisolated static func finish(_ prepared: Prepared, written: String, draft apart: DraftApart? = nil, timeZone: TimeZone) async -> Explanation {
         let gathered = prepared.gathered
@@ -1041,8 +1042,13 @@ final class ExplainService {
                 people += recipients.filter { isInProject($0.address, project) && !people.contains($0) }
             }
             // A draft written apart is checked with what its own prompt held, and the passages
-            // of other projects in the first prompt stay a second guard.
+            // of other projects in the first prompt stay a second guard. Its placeholders answer
+            // the questions of its own answer, while the window lists those of the first, which
+            // may see a question that the draft's prompt cannot, so they count against the
+            // longer list.
             let draftTexts = apart.map { sourceTexts($0.prepared) } ?? texts
+            let questions = answer.questions.map(shown)
+            let draftQuestions = draftAnswer?.questions.map(shown) ?? []
             let input = DraftCheckInput(
                 draft: "",
                 language: language,
@@ -1051,7 +1057,7 @@ final class ExplainService {
                 own: own,
                 incomingText: imitating.isEmpty ? draftTexts.incoming : "",
                 sourceTexts: draftTexts.other,
-                questionsForUser: answer.questions.map(shown),
+                questionsForUser: draftQuestions.count > questions.count ? draftQuestions : questions,
                 today: gathered.today,
                 imitatingDomains: imitating,
                 asksForData: asksForData,
