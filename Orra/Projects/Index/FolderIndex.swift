@@ -448,6 +448,14 @@ final class FolderIndex {
     /// what the index holds of it, never its text. A file in the folders of two projects is
     /// listed for each.
     func listFiles(projects: [UUID]) async throws -> [ListedFile] {
+        try await Self.listedFiles(projects: projects, database: database)
+    }
+
+    /// The files of `listFiles(projects:)`, read and made off the main actor, since the
+    /// projects may hold thousands of files. Each path becomes a URL without a look at the
+    /// disk, also for a folder that hangs.
+    @concurrent
+    private nonisolated static func listedFiles(projects: [UUID], database: ProjectsDatabase) async throws -> [ListedFile] {
         guard !projects.isEmpty else { return [] }
         let rows = try await database.run("""
             SELECT f.project, f.path, f.size, f.modified, f.skip,
@@ -463,7 +471,9 @@ final class FolderIndex {
             case FileSkipReason.waitsForRecognition.rawValue?: .waitsForRecognition
             default: .nameOnly
             }
-            return ListedFile(project: project, url: URL(fileURLWithPath: path), size: size, modified: Date(timeIntervalSince1970: modified), reading: reading)
+            return ListedFile(
+                project: project, url: URL(filePath: path, directoryHint: .notDirectory), size: size, modified: Date(timeIntervalSince1970: modified),
+                reading: reading)
         }
     }
 

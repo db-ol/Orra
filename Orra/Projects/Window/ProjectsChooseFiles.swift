@@ -11,7 +11,8 @@ import UniformTypeIdentifiers
 /// its path alone against the real paths of the projects' folders, see
 /// ProjectsEmailFiles.place(of:in:), and nothing opens or looks it up. A file outside every
 /// folder can only bring its folder into a project, for all of that project's mail, as Edit
-/// Project does. Nothing here logs.
+/// Project does. The files are read and ordered off the main actor, since a project may hold
+/// thousands. Nothing here logs.
 @Observable
 final class ProjectsFileChoice {
     /// A file of the list, under the project whose section shows it.
@@ -45,6 +46,21 @@ final class ProjectsFileChoice {
         var id: Kind { kind }
     }
 
+    /// The files the index lists as the sheet orders them before a search, see
+    /// `arrange(_:order:inExplanation:)`.
+    nonisolated struct Listing: Sendable {
+        /// A project's files: those of the saved explanation first, then the newest.
+        nonisolated struct Files: Sendable {
+            var project: UUID
+            var rows: [Row]
+        }
+
+        /// The projects with files, the email's project first, then the others by name.
+        var projects: [Files] = []
+        /// Every file by its path without case, under the project whose section shows it.
+        var byPath: [String: Row] = [:]
+    }
+
     /// The line of the last action, which VoiceOver reads as it shows.
     nonisolated enum Notice: Equatable, Sendable {
         /// A seventh tick, which stays off.
@@ -68,12 +84,17 @@ final class ProjectsFileChoice {
 
     /// The files a section shows at most, besides the chosen ones. Search finds the others.
     nonisolated static let sectionLimit = 200
+    /// How often the sheet reads the files again while an index reads a project's folders,
+    /// such as a folder added from the sheet.
+    nonisolated static let followInterval: Duration = .seconds(3)
 
     let email: MailStore.Listed
     @ObservationIgnored private let runtime: ProjectsRuntime
     @ObservationIgnored private let emailModel: ProjectsEmailModel
-    /// The files the index lists, every project's.
-    private(set) var listed: [FolderIndex.ListedFile] = []
+    /// The files the index lists, every project's, in the sheet's order.
+    private(set) var listing = Listing()
+    /// Counts the reads of `load()`, so a read that a newer one overtook keeps nothing.
+    @ObservationIgnored private var loads = 0
     /// The real paths of each project's folders, for the folder lines and the drops.
     private(set) var roots: [UUID: ProjectsEmailFiles.Roots] = [:]
     /// The paths of the files whose excerpts the saved explanation holds.
@@ -101,29 +122,85 @@ final class ProjectsFileChoice {
     // MARK: Reading
 
     /// Reads the index's files and the projects' folders, and the first time the email's
-    /// saved choice and the files of its saved explanation. Called when the sheet opens and
-    /// again when an index's report changes, so a folder added from here shows its files.
+    /// saved choice and the files of its saved explanation, then orders the files off the main
+    /// actor. Called when the sheet opens, and again when an index starts or ends reading a
+    /// project's folders and every `followInterval` while it reads, so a folder added from here
+    /// shows its files. Only the newest of reads that overlap keeps what it read, and the ticks
+    /// the user made stay.
     func load() async {
+        loads += 1
+        let load = loads
+        let projects = runtime.projectList
         let files = await runtime.projectFiles()
         var found: [UUID: ProjectsEmailFiles.Roots] = [:]
-        for project in runtime.projectList {
+        for project in projects {
             if let resolved = await runtime.folderRoots(of: project.id) {
                 found[project.id] = resolved
             }
         }
+        var saved: (ticks: [MailStore.ChosenFile], inExplanation: Set<String>)?
         if !isLoaded {
             await emailModel.loadChoice()
-            ticks = emailModel.chosenFiles
             let sources = await runtime.explanation(for: email.messageID)?.sources ?? [:]
-            inExplanation = Set(sources.values.compactMap { source -> String? in
+            saved = (emailModel.chosenFiles, Set(sources.values.compactMap { source -> String? in
                 guard case .file(let chunk, _) = source else { return nil }
                 return chunk.file.path
-            })
+            }))
         }
-        listed = files
+        let listing = await Self.arrange(files, order: Self.order(of: projects, emailProject: email.project), inExplanation: saved?.inExplanation ?? inExplanation)
+        // A newer read overtook this one, or the sheet closed.
+        guard load == loads, !Task.isCancelled else { return }
+        if let saved, !isLoaded {
+            ticks = saved.ticks
+            inExplanation = saved.inExplanation
+        }
+        self.listing = listing
         roots = found
         isLoaded = true
         takeWaitingFile()
+    }
+
+    /// The order of the projects' sections: the email's project first, then the others by
+    /// name.
+    nonisolated static func order(of projects: [Project], emailProject: UUID?) -> [UUID] {
+        projects.sorted { first, second in
+            if first.id == emailProject { return second.id != emailProject }
+            if second.id == emailProject { return false }
+            return first.name.localizedStandardCompare(second.name) == .orderedAscending
+        }.map(\.id)
+    }
+
+    /// The files the index lists in the sheet's order, the projects in `order`, each with the
+    /// files of the saved explanation first and then the newest. A file in the folders of two
+    /// projects shows once, under the one that comes first, and a file of a project not in
+    /// `order` not at all. Off the main actor, since the projects may hold thousands of files.
+    @concurrent
+    nonisolated static func arrange(_ listed: [FolderIndex.ListedFile], order: [UUID], inExplanation: Set<String>) async -> Listing {
+        let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        var held: [String: FolderIndex.ListedFile] = [:]
+        for file in listed {
+            guard let place = rank[file.project] else { continue }
+            let key = file.url.path.lowercased()
+            if let before = held[key], rank[before.project, default: .max] <= place { continue }
+            held[key] = file
+        }
+        var listing = Listing()
+        var rows: [UUID: [Row]] = [:]
+        for (key, file) in held {
+            let row = Row(project: file.project, url: file.url, modified: file.modified, reading: file.reading, isInExplanation: inExplanation.contains(file.url.path))
+            rows[file.project, default: []].append(row)
+            listing.byPath[key] = row
+        }
+        listing.projects = order.compactMap { project in
+            rows[project].map { found in
+                Listing.Files(project: project, rows: found.sorted { first, second in
+                    if first.isInExplanation != second.isInExplanation { return first.isInExplanation }
+                    if first.modified != second.modified { return (first.modified ?? .distantPast) > (second.modified ?? .distantPast) }
+                    return first.url.path < second.url.path
+                })
+            }
+        }
+        return listing
     }
 
     /// The sections for the search as it is: the email's project first, then the other
@@ -134,54 +211,42 @@ final class ProjectsFileChoice {
     /// neither has one without a match.
     var sections: [Section] {
         Self.sections(
-            listed: listed, projects: runtime.projectList, emailProject: email.project, inExplanation: inExplanation,
-            ticks: ticks, query: query, indexing: Set(runtime.projectList.map(\.id).filter { runtime.indexReport($0)?.isIndexing == true }),
-            limit: shownPerSection)
+            listing, names: Dictionary(runtime.projectList.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first }),
+            emailProject: email.project, ticks: ticks, query: query,
+            indexing: Set(runtime.projectList.map(\.id).filter { runtime.indexReport($0)?.isIndexing == true }), limit: shownPerSection)
     }
 
+    /// The sections of `listing` for a search, with the first `limit` files that match of each
+    /// project and every chosen one. A project `names` lacks, such as one forgotten since the
+    /// files were read, has none.
     nonisolated static func sections(
-        listed: [FolderIndex.ListedFile], projects: [Project], emailProject: UUID?, inExplanation: Set<String>,
-        ticks: [MailStore.ChosenFile], query: String, indexing: Set<UUID>, limit: Int = sectionLimit
+        _ listing: Listing, names: [UUID: String], emailProject: UUID?, ticks: [MailStore.ChosenFile], query: String, indexing: Set<UUID>,
+        limit: Int = sectionLimit
     ) -> [Section] {
-        let names = Dictionary(projects.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
-        let order = projects.sorted { first, second in
-            if first.id == emailProject { return second.id != emailProject }
-            if second.id == emailProject { return false }
-            return first.name.localizedStandardCompare(second.name) == .orderedAscending
-        }.map(\.id)
-        let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
-        // Each path once, under the project that comes first.
-        var byPath: [String: FolderIndex.ListedFile] = [:]
-        for file in listed where names[file.project] != nil {
-            let key = file.url.path.lowercased()
-            if let held = byPath[key], rank[held.project, default: .max] <= rank[file.project, default: .max] { continue }
-            byPath[key] = file
-        }
-        let ticked = Set(ticks.map { $0.path.lowercased() })
-        let searching = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let searching = !text.isEmpty
         func matches(_ url: URL) -> Bool {
-            !searching || url.lastPathComponent.localizedStandardContains(query.trimmingCharacters(in: .whitespacesAndNewlines))
+            !searching || url.lastPathComponent.localizedStandardContains(text)
         }
         var sections: [Section] = []
-        for project in order {
-            let files = byPath.values.filter { $0.project == project }
-            guard !files.isEmpty else { continue }
-            let rows = files.filter { matches($0.url) }.map { file in
-                Row(project: project, url: file.url, modified: file.modified, reading: file.reading, isInExplanation: inExplanation.contains(file.url.path))
-            }.sorted { first, second in
-                if first.isInExplanation != second.isInExplanation { return first.isInExplanation }
-                if first.modified != second.modified { return (first.modified ?? .distantPast) > (second.modified ?? .distantPast) }
-                return first.url.path < second.url.path
+        for project in listing.projects {
+            guard let name = names[project.project] else { continue }
+            let rows = searching ? project.rows.filter { matches($0.url) } : project.rows
+            guard !rows.isEmpty else { continue }
+            var shown = Array(rows.prefix(limit))
+            if rows.count > limit {
+                // The chosen files past the limit show too.
+                let ids = Set(shown.map(\.id))
+                shown += ticks.compactMap { listing.byPath[$0.path.lowercased()] }
+                    .filter { $0.project == project.project && !ids.contains($0.id) && matches($0.url) }
             }
-            guard !rows.isEmpty || !searching else { continue }
-            let shown = Array(rows.prefix(limit)) + rows.dropFirst(limit).filter { ticked.contains($0.url.path.lowercased()) }
-            let name = names[project] ?? ""
             sections.append(Section(
-                kind: .project(project), title: project == emailProject ? ProjectsWindowText.emailsProject(name) : name,
-                rows: shown, total: rows.count, isIndexing: indexing.contains(project)))
+                kind: .project(project.project), title: project.project == emailProject ? ProjectsWindowText.emailsProject(name) : name,
+                rows: shown, total: rows.count, isIndexing: indexing.contains(project.project)))
         }
-        let missing = ticks.filter { byPath[$0.path.lowercased()] == nil }
-            .map { Row(project: $0.project, url: URL(fileURLWithPath: $0.path)) }
+        // By their path alone, never looked up on the disk.
+        let missing = ticks.filter { listing.byPath[$0.path.lowercased()] == nil }
+            .map { Row(project: $0.project, url: URL(filePath: $0.path, directoryHint: .notDirectory)) }
             .filter { matches($0.url) }
         if !missing.isEmpty {
             sections.append(Section(kind: .notRead, title: String(localized: "Chosen Files Projects Has Not Read"), rows: missing, total: missing.count))
@@ -231,14 +296,13 @@ final class ProjectsFileChoice {
     // MARK: Dropped files
 
     /// Files dragged onto the list from Finder, each placed by its path alone, never opened
-    /// or looked up: a file the index lists is ticked and shown, one inside a project folder
-    /// that the index does not list says so, and one outside every folder offers to add its
-    /// folder to a project.
+    /// or looked up: a file the index lists is ticked and shown, in any project and also past
+    /// the files a section shows, one inside a project folder that the index does not list
+    /// says so, and one outside every folder offers to add its folder to a project.
     func drop(_ urls: [URL]) {
-        let every = Self.sections(listed: listed, projects: runtime.projectList, emailProject: email.project, inExplanation: inExplanation, ticks: [], query: "", indexing: [])
         for url in urls where url.isFileURL {
             let key = url.path.lowercased()
-            if let row = every.lazy.flatMap(\.rows).first(where: { $0.url.path.lowercased() == key }) {
+            if let row = listing.byPath[key] {
                 query = ""
                 if !isTicked(row) {
                     guard ticks.count < ExplainPrompt.chosenFileLimit else {
@@ -295,15 +359,15 @@ final class ProjectsFileChoice {
     }
 
     /// Once the index lists the dropped file that waits, its tick takes the path and the
-    /// project the index gives, and the sheet says that it is chosen.
+    /// project of its row, and the sheet says that it is chosen.
     private func takeWaitingFile() {
-        guard let waiting, let file = listed.first(where: { $0.url.path.lowercased() == waiting }) else { return }
+        guard let waiting, let row = listing.byPath[waiting] else { return }
         self.waiting = nil
         if let index = ticks.firstIndex(where: { $0.path.lowercased() == waiting }) {
-            ticks[index] = MailStore.ChosenFile(project: file.project, path: file.url.path)
+            ticks[index] = MailStore.ChosenFile(project: row.project, path: row.url.path)
         }
-        notice = .chosen(file.url.lastPathComponent)
-        scrollTarget = file.url.path
+        notice = .chosen(row.url.lastPathComponent)
+        scrollTarget = row.id
     }
 
     // MARK: Saving
@@ -356,11 +420,14 @@ struct ProjectsChooseFiles: View {
         var dropped: URL?
     }
 
-    /// Reads the files again when an index's report changes, such as after a folder was
-    /// added, or the projects' folders do.
+    /// Reads the files again when an index starts or ends reading a project's folders, such
+    /// as after a folder was added, or the projects' folders or names change. While an index
+    /// reads, the sheet reads them again every `ProjectsFileChoice.followInterval`, not at
+    /// each file the index reads.
     private struct Reload: Hashable {
-        var reports: [UUID: [Int]]
+        var indexing: Set<UUID>
         var folders: [UUID: [Data]]
+        var names: [UUID: String]
     }
 
     init(runtime: ProjectsRuntime, model: ProjectsWindowModel, email: MailStore.Listed) {
@@ -400,6 +467,12 @@ struct ProjectsChooseFiles: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .task(id: reload) {
             await choice.load()
+            // While an index reads, its files show as it reads them.
+            while !reload.indexing.isEmpty {
+                try? await Task.sleep(for: ProjectsFileChoice.followInterval)
+                guard !Task.isCancelled else { return }
+                await choice.load()
+            }
         }
         .onAppear {
             searchHasFocus = true
@@ -424,14 +497,15 @@ struct ProjectsChooseFiles: View {
     }
 
     private var reload: Reload {
-        var reports: [UUID: [Int]] = [:]
-        var folders: [UUID: [Data]] = [:]
+        var reload = Reload(indexing: [], folders: [:], names: [:])
         for project in runtime.projectList {
-            let report = runtime.indexReport(project.id)
-            reports[project.id] = [report?.indexed ?? -1, report?.nameOnly ?? -1, report?.isIndexing == true ? 1 : 0, report?.recognitionLeft ?? 0]
-            folders[project.id] = project.folders
+            if runtime.indexReport(project.id)?.isIndexing == true {
+                reload.indexing.insert(project.id)
+            }
+            reload.folders[project.id] = project.folders
+            reload.names[project.id] = project.name
         }
-        return Reload(reports: reports, folders: folders)
+        return reload
     }
 
     // MARK: The header

@@ -69,6 +69,28 @@ struct ProjectsChooseFilesTests {
         try #require(choice.sections.flatMap(\.rows).first { $0.url.lastPathComponent == name })
     }
 
+    /// A third project, Warehouse archive, with `count` drawings, elevation-001.dwg the
+    /// oldest, indexed. Returns its folder's real path.
+    private static func archive(_ count: Int, in projects: Projects) async throws -> URL {
+        let runtime = projects.fixture.runtime
+        let folder = projects.fixture.root.appendingPathComponent("Warehouse archive", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for number in 1...count {
+            let file = folder.appendingPathComponent(String(format: "elevation-%03d.dwg", number))
+            try Data("drawing".utf8).write(to: file)
+            if number == 1 {
+                try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_600_000_000)], ofItemAtPath: file.path)
+            }
+        }
+        let before = await runtime.projectFiles().count
+        try await runtime.add(Project(name: "Warehouse archive", folders: [try Project.bookmark(of: folder)]))
+        for _ in 0..<2_000 where (await runtime.projectFiles()).count < before + count {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let project = try #require(runtime.projectList.first { $0.name == "Warehouse archive" })
+        return try #require(await runtime.folderRoots(of: project.id)?.folders.first)
+    }
+
     // MARK: The sheet
 
     /// The email's project comes first, then the other projects by name. A search keeps the
@@ -161,6 +183,29 @@ struct ProjectsChooseFilesTests {
         #expect(choice.notice == .outside(elsewhere))
         #expect(choice.ticks.count == 1)
         #expect(ProjectsWindowText.choiceNotice(.outside(elsewhere)) == "“brief.pdf” is not in a folder of your projects. Projects reads only the folders you add.")
+        await projects.fixture.stop()
+    }
+
+    /// A dropped file the index lists is found past the newest files its section shows, and
+    /// is ticked and shown at the end of its section.
+    @Test func aDroppedFileIsFoundPastTheNewestOfItsSection() async throws {
+        let projects = try await Self.projects()
+        defer { projects.fixture.cleanUp() }
+        let runtime = projects.fixture.runtime
+        let folder = try await Self.archive(ProjectsFileChoice.sectionLimit + 5, in: projects)
+        let model = ProjectsWindowModel(runtime: runtime)
+        let email = try await Self.email(in: projects.harbor.id, runtime: runtime)
+        let choice = await Self.choice(for: email, runtime: runtime, model: model)
+        let oldest = folder.appending(path: "elevation-001.dwg")
+        let section = try #require(choice.sections.first { $0.title == "Warehouse archive" })
+        #expect(section.total == ProjectsFileChoice.sectionLimit + 5)
+        #expect(section.rows.count == ProjectsFileChoice.sectionLimit && !section.rows.contains { $0.url.path == oldest.path })
+        choice.drop([oldest])
+        #expect(choice.notice == .chosen("elevation-001.dwg"))
+        #expect(choice.ticks.map(\.path) == [oldest.path])
+        #expect(choice.scrollTarget == oldest.path)
+        let shown = try #require(choice.sections.first { $0.title == "Warehouse archive" })
+        #expect(shown.rows.count == ProjectsFileChoice.sectionLimit + 1 && shown.rows.last?.url.path == oldest.path)
         await projects.fixture.stop()
     }
 

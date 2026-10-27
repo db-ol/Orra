@@ -3904,7 +3904,7 @@ this Mac, until you use Delete All Projects Data… in its Settings.
   still says it uses the 2 files.
 - [ ] Tick a seventh file. It stays unticked, and the sheet says you can choose up to 6.
 - [ ] Drag a file of a project folder from Finder onto the list. It is ticked and scrolls
-  into view.
+  into view, also an old file of a project with more than 200 files.
 - [ ] Drag a file from a folder no project holds. The top of the list names it and says
   Projects reads only the folders you add. Add Its Folder to the project… opens the open
   panel in that file's folder, with the message about all mail of the project and the

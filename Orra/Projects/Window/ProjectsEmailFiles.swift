@@ -100,10 +100,12 @@ nonisolated enum ProjectsEmailFiles {
 
     /// The files the user chose for the email that gave its explanation nothing, which the
     /// index did not hold or the budget left out, in the order of the choice, with no excerpt.
+    /// By their path alone, never looked up on the disk, since such a file may have left the
+    /// project folders.
     static func chosenWithoutExcerpts(in explanation: Explanation) -> [File] {
         (explanation.chosenFiles ?? []).filter { $0.sources.isEmpty }.map { chosen in
             File(
-                url: URL(fileURLWithPath: chosen.path), excerpts: [], isCited: false, reason: .chosen, project: chosen.project,
+                url: URL(filePath: chosen.path, directoryHint: .notDirectory), excerpts: [], isCited: false, reason: .chosen, project: chosen.project,
                 warnings: [], missing: chosen.missing ?? .notInIndex)
         }
     }
