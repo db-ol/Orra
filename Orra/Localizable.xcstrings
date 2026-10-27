@@ -7446,6 +7446,28 @@
         }
       }
     },
+    "Mail did not open the reply." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail no abrió la respuesta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”で返信が開きませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”没有打开回复。"
+          }
+        }
+      }
+    },
     "Mail did not open the reply. The draft is on the clipboard." : {
       "localizations" : {
         "es-419" : {
@@ -7578,6 +7600,28 @@
         }
       }
     },
+    "Mail is not open, so the reply did not open." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail no está abierto, así que la respuesta no se abrió."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”が開いていないため、返信を開けませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”没有打开，所以无法打开回复。"
+          }
+        }
+      }
+    },
     "Mail is not open. Projects reads new mail while Mail runs." : {
       "localizations" : {
         "es-419" : {
@@ -7618,6 +7662,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“邮件”响应缓慢。“项目”稍后会再试。"
+          }
+        }
+      }
+    },
+    "Mail is slow to answer. The reply may still open." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail tarda en responder. La respuesta todavía puede abrirse."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”の応答が遅れています。返信ウインドウが後から開く場合があります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”响应缓慢，回复窗口可能稍后才会打开。"
           }
         }
       }
@@ -7706,6 +7772,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“邮件”已打开回复，草稿已在剪贴板上。请在回复窗口中按下 ⌘V。"
+          }
+        }
+      }
+    },
+    "Mail was not asked to open the reply." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se le pidió a Mail que abriera la respuesta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”に返信を開くよう依頼していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 没有请“邮件”打开回复。"
           }
         }
       }
@@ -9935,6 +10023,28 @@
         }
       }
     },
+    "Orra may not control Mail. Allow it in Settings." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra no puede controlar Mail. Permítelo en Configuración."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraは“メール”を制御できません。設定で許可してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无权控制“邮件”。请在设置中允许。"
+          }
+        }
+      }
+    },
     "Orra needs it to notice the talk key and to paste the text. Turn on Orra in the list that opens, then come back here." : {
       "localizations" : {
         "es-419" : {
@@ -11232,6 +11342,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“项目”现在无法在“邮件”中找到这封邮件，所以草稿只放到了剪贴板上。请在“邮件”中回复这封邮件，然后按下 ⌘V。"
+          }
+        }
+      }
+    },
+    "Projects cannot find this email in Mail now." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos no encuentra este correo en Mail ahora."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”は今“メール”内でこのメールを見つけられません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”现在无法在“邮件”中找到这封邮件。"
           }
         }
       }

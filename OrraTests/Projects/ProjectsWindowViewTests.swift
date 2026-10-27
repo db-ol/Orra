@@ -458,10 +458,12 @@ struct ProjectsWindowViewTests {
         #expect(Set(failures.map(ProjectsWindowText.explainFailure)).count == failures.count)
         #expect(ProjectsWindowText.save(.saved) != ProjectsWindowText.save(.notSaved))
         let outcomes: [ReplyHandoff.Outcome] = [
-            .replyOpened, .copied, .copiedMailNotRunning, .copiedReplyFailed(.timedOut), .copiedReplyFailed(.denied),
+            .replyOpened(files: []), .copied, .copiedMailNotRunning, .copiedReplyFailed(.timedOut), .copiedReplyFailed(.denied),
             .copiedReplyFailed(.notFound), .copiedReplyFailed(.failed(code: -1)), .emptyDraft, .notCopied,
+            .mailNotRunning, .replyFailed(.timedOut), .replyFailed(.denied), .replyFailed(.notFound), .replyFailed(.failed(code: -1)), .stopped,
         ]
-        #expect(Set((outcomes.map(ProjectsEmailModel.HandoffNote.outcome) + [.messageNotFound]).map(ProjectsWindowText.handoff)).count == 10)
+        #expect(Set((outcomes.map(ProjectsEmailModel.HandoffNote.outcome) + [.messageNotFound]).map(ProjectsWindowText.handoff)).count == 16)
+        #expect(ProjectsWindowText.handoff(.outcome(.replyFailed(.notAsked))) == ProjectsWindowText.handoff(.outcome(.replyFailed(.denied))))
         let drafts: [Explanation.Draft] = [.noReply(.sentByUser), .noReply(.answeredLater), .noReply(.listMail), .noDraft, .missing, .expired, .checked(DraftCheck.Result(draft: nil, language: .zh))]
         #expect(Set(drafts.compactMap(ProjectsWindowText.noDraft)).count == drafts.count)
         #expect(ProjectsWindowText.noDraft(.checked(DraftCheck.Result(draft: "Hi", language: .en))) == nil)

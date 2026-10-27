@@ -2443,7 +2443,10 @@ struct ProjectsRuntimeTests {
         choice.confirm()
         let handle = MailMessageRef(id: 999, mailbox: .inbox)
         try await waitUntil { runtime.mailReference(for: id) == handle }
+        #expect(try await store.save(MailStoreTests.explanation(id, project: nil), at: Self.today))
         let email = ProjectsEmailModel(messageID: id, actions: .live(runtime))
+        await email.load()
+        #expect(email.hasDraft)
         email.text = "Dear Mei, the plan is attached."
         await email.openReply(all: false)
         #expect(email.handoffNote == .messageNotFound)

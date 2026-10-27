@@ -797,7 +797,8 @@ final class ProjectsEmailModel {
 
     /// Open Reply in Mail, or Reply All with `all`, with the draft in the editor. Nothing
     /// happens while a handoff of the window runs. Mail first confirms that its message is
-    /// this email, and when it is not, or Mail cannot say, the draft is only copied.
+    /// this email, and when it is not, or Mail cannot say, the draft is only copied. Without
+    /// a draft, no step puts anything on the clipboard, see ReplyHandoff.
     func openReply(all: Bool) async {
         guard !handoffs.isRunning else { return }
         handoffs.isRunning = true
@@ -817,28 +818,24 @@ final class ProjectsEmailModel {
             // Mail was not asked to reply, so the note must not say that the reply may still
             // open.
             if error == .timedOut { error = .failed(code: -1712) }
-            let copied = actions.handoff.copyOnly(text)
-            guard copied == .copied else {
-                handoffNote = .outcome(copied)
-                return
-            }
-            handoffNote = .outcome(error == .mailNotRunning ? .copiedMailNotRunning : .copiedReplyFailed(error))
+            handoffNote = .outcome(actions.handoff.replyNotAsked(handoffDraft, because: error))
             return
         }
         guard !Task.isCancelled else { return }
         guard let reference else {
             // Mail's handles go when it quits, so say that Mail is not open rather than that
             // the email was not found.
-            guard actions.handoff.mail.isRunning() else {
-                let copied = actions.handoff.copyOnly(text)
-                handoffNote = .outcome(copied == .copied ? .copiedMailNotRunning : copied)
-                return
-            }
-            let copied = actions.handoff.copyOnly(text)
-            handoffNote = copied == .copied ? .messageNotFound : .outcome(copied)
+            let error: MailBridgeError = actions.handoff.mail.isRunning() ? .notFound : .mailNotRunning
+            let outcome = actions.handoff.replyNotAsked(handoffDraft, because: error)
+            handoffNote = outcome == .copiedReplyFailed(.notFound) ? .messageNotFound : .outcome(outcome)
             return
         }
-        handoffNote = .outcome(await actions.handoff.openReply(text, to: reference, all: all))
+        handoffNote = .outcome(await actions.handoff.openReply(handoffDraft, to: reference, all: all))
+    }
+
+    /// The draft in the editor for a handoff, nil when the email has no draft.
+    private var handoffDraft: String? {
+        hasDraft ? text : nil
     }
 
     /// Copy: puts the draft in the editor on the clipboard, unless a handoff of the window

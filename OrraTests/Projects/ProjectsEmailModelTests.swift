@@ -1022,7 +1022,7 @@ struct ProjectsEmailModelTests {
             state.replyRelease = nil
         }
         try await waitUntil { !model.isHandingOff }
-        #expect(model.handoffNote == .outcome(.replyOpened))
+        #expect(model.handoffNote == .outcome(.replyOpened(files: [])))
         #expect(fakes.value.copies == [Self.draft])
         #expect(fakes.value.broughtForward == 0)
     }
@@ -1117,11 +1117,11 @@ struct ProjectsEmailModelTests {
         await model.load()
         model.text = Self.draft + "\nLin"
         await model.openReply(all: false)
-        #expect(model.handoffNote == .outcome(.replyOpened))
+        #expect(model.handoffNote == .outcome(.replyOpened(files: [])))
         #expect(fakes.value.replies == [false])
         #expect(fakes.value.copies == [model.text, model.text])
         #expect(fakes.value.broughtForward == 1)
-        #expect(ProjectsWindowText.handoff(.outcome(.replyOpened)) == "Mail opened the reply, and the draft is on the clipboard. Press ⌘V in the reply window.")
+        #expect(ProjectsWindowText.handoff(.outcome(.replyOpened(files: []))) == "Mail opened the reply, and the draft is on the clipboard. Press ⌘V in the reply window.")
 
         await model.openReply(all: true)
         #expect(fakes.value.replies == [false, true])
@@ -1183,6 +1183,43 @@ struct ProjectsEmailModelTests {
         #expect(ProjectsWindowText.handoff(.outcome(.copiedReplyFailed(.failed(code: -1712)))) == "Mail did not open the reply. The draft is on the clipboard.")
     }
 
+    /// An email Projects wrote no draft for: Open Reply never puts anything on the clipboard,
+    /// whether Mail opens the reply, has no handle of the email, does not run or cannot say
+    /// whether its message is this email.
+    @Test func withoutADraftOpenReplyNeverCopies() async {
+        let noDraft = { Self.explanation(draft: nil) }
+        let opening = model(explanation: noDraft)
+        await opening.load()
+        #expect(!opening.hasDraft)
+        await opening.openReply(all: true)
+        #expect(opening.handoffNote == .outcome(.replyOpened(files: [])))
+        #expect(fakes.value.replies == [true])
+        #expect(fakes.value.broughtForward == 1)
+
+        let notFound = model(explanation: noDraft, reference: nil)
+        await notFound.load()
+        await notFound.openReply(all: false)
+        #expect(notFound.handoffNote == .outcome(.replyFailed(.notFound)))
+        fakes.update { $0.mailIsRunning = false }
+        await notFound.openReply(all: false)
+        #expect(notFound.handoffNote == .outcome(.mailNotRunning))
+        fakes.update { $0.mailIsRunning = true }
+
+        let failures: [(MailBridgeError, ReplyHandoff.Outcome)] = [
+            (.denied, .replyFailed(.denied)),
+            (.mailNotRunning, .mailNotRunning),
+            (.timedOut, .replyFailed(.failed(code: -1712))),
+        ]
+        for (failure, note) in failures {
+            let failing = model(explanation: noDraft, referenceFailure: failure)
+            await failing.load()
+            await failing.openReply(all: false)
+            #expect(failing.handoffNote == .outcome(note))
+        }
+        #expect(fakes.value.copies.isEmpty)
+        #expect(fakes.value.replies == [true])
+    }
+
     /// One handoff at a time for the whole window: while Mail opens the reply to one email,
     /// another email's Open Reply and Copy do nothing, so the clipboard keeps the draft of
     /// the reply window Mail brings forward.
@@ -1206,7 +1243,7 @@ struct ProjectsEmailModelTests {
         #expect(!second.isHandingOff)
         #expect(fakes.value.replies == [false])
         #expect(fakes.value.copies == ["First draft", "First draft"])
-        #expect(first.handoffNote == .outcome(.replyOpened))
+        #expect(first.handoffNote == .outcome(.replyOpened(files: [])))
     }
 
     // MARK: The deadline
