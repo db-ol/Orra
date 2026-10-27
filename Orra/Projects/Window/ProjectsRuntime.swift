@@ -1851,7 +1851,9 @@ final class ProjectsRuntime {
             search: { query in try await search.search(query) },
             newest: { project, limit in try await search.newest(project, limit: limit) },
             files: { project in try await index.versionFiles(project: project) },
-            terms: { email in try await Self.searchTerms(for: email, store: store, queue: queue, sleep: sleep) }
+            terms: { email in try await Self.searchTerms(for: email, store: store, queue: queue, sleep: sleep) },
+            chosenFiles: { messageID in try await store.chosenFiles(of: messageID) },
+            passages: { query, files, perFile in try await search.passages(query, in: files, perFile: perFile) }
         )
     }
 

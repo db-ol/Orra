@@ -1289,6 +1289,50 @@ struct MailStoreTests {
         await store.close()
     }
 
+    /// An explanation 0.6.0 wrote reads without a record of chosen files, and writes back
+    /// without one. A record of chosen files reads back as it was saved, and a reason a later
+    /// Orra gives for a file that gave nothing reads as none, so the explanation still reads.
+    @Test func anExplanationOf060ReadsWithoutChosenFilesAndARecordRoundTrips() throws {
+        let old = Data("""
+            {"messageID":"a@test.example","language":"en","today":783000000,"reply":{"reply":{"_0":"en"}},"warnings":[],"modelWarnings":[],\
+            "points":[{"text":"The sizes need a confirmation.","sources":["this email"],"flags":[]}],"questions":[],"draft":{"missing":{}},\
+            "sources":{"this email":{"message":{"_0":"a@test.example"}}},"removed":[],"problems":[],"unknownSources":[]}
+            """.utf8)
+        let read = try JSONDecoder().decode(Explanation.self, from: old)
+        #expect(read.chosenFiles == nil && read.searchTerms == nil)
+        #expect(read.points.map(\.text) == ["The sizes need a confirmation."])
+        #expect(!String(decoding: try JSONEncoder().encode(read), as: UTF8.self).contains("chosenFiles"))
+
+        var chosen = Self.explanation("a@test.example", project: Self.harbor)
+        chosen.chosenFiles = [
+            Explanation.ChosenFile(path: "/Projects/Harbor/plan.pdf", project: Self.harbor, sources: ["F1", "F2"]),
+            Explanation.ChosenFile(path: "/Projects/Harbor/moved.md", project: Self.harbor, sources: [], missing: .notInIndex),
+            Explanation.ChosenFile(path: "/Projects/Maple/long.md", project: Self.maple, sources: [], missing: .leftOut),
+        ]
+        #expect(try JSONDecoder().decode(Explanation.self, from: JSONEncoder().encode(chosen)) == chosen)
+        let later = Data(#"{"path":"/Projects/Harbor/plan.pdf","project":"8B1C2D3E-4F50-4617-8A9B-0C1D2E3F4A5B","sources":[],"missing":"encrypted"}"#.utf8)
+        let file = try JSONDecoder().decode(Explanation.ChosenFile.self, from: later)
+        #expect(file.missing == nil && file.path == "/Projects/Harbor/plan.pdf")
+    }
+
+    /// An explanation is saved only while the project of each file chosen for it exists, so
+    /// Forget Project during an Explain leaves no record of its files.
+    @Test func anExplanationIsNotSavedOnceTheProjectOfAChosenFileIsGone() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([Self.message("a@test.example", from: "kim@quay.example")], ownAddresses: [Self.work], at: Self.date(1))
+        var explanation = Self.explanation("a@test.example", project: nil)
+        explanation.chosenFiles = [Explanation.ChosenFile(path: "/Projects/Maple/tiles.md", project: Self.maple, sources: [], missing: .notInIndex)]
+        #expect(explanation.sourceProjects == [Self.maple])
+        #expect(explanation.holdsFiles(of: Self.maple))
+        try await store.forget(project: Self.maple)
+        #expect(try await store.save(explanation, at: Self.date(2)) == false)
+        #expect(try await store.explanation(for: "a@test.example") == nil)
+        explanation.chosenFiles = nil
+        #expect(try await store.save(explanation, at: Self.date(2)))
+        await store.close()
+    }
+
     @Test func keepTakesTheFilesOfAProjectTheListDoesNotHoldOutOfTheChoices() async throws {
         defer { cleanUp() }
         let store = try await openStore()
