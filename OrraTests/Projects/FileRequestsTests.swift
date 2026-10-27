@@ -56,6 +56,7 @@ struct FileRequestsTests {
             ("Could you send the contract over by Friday, please?", "the contract", [.contract]),
             ("There is no need to send the plan, but could you share the budget?", "the budget", [.budget]),
             ("Could you send me the drawings and specs for the lobby?", "the drawings and specs", [.drawing, .specification]),
+            ("Could you send me the price list for 2026?", "the price list", [.quote]),
         ])
     }
 
@@ -78,6 +79,7 @@ struct FileRequestsTests {
             ("麻烦您有空的时候发一下平面图给我", "平面图", [.floorPlan]),
             ("需要你们提供平面图", "平面图", [.floorPlan]),
             ("我们需要你提供最新的平面图和报价单。", "平面图和报价单", [.floorPlan, .quote]),
+            ("请把“平面图”发给我。", "平面图", [.floorPlan]),
             ("请问能否把施工图纸和效果图发给我们？", "施工图纸和效果图", [.drawing, .rendering]),
             ("你有最新的课件吗？", "课件", [.slides]),
             ("请把简历发到我的邮箱。", "简历", [.cv]),
@@ -131,6 +133,7 @@ struct FileRequestsTests {
             ("¿Puede remitirnos el catálogo?", "el catálogo", [.catalog]),
             ("Necesito que me envíes tu currículum.", "tu currículum", [.cv]),
             ("Adjunta la planilla, por favor.", "la planilla", [.spreadsheet]),
+            ("¿Puedes enviarme la hoja de cálculo?", "la hoja de cálculo", [.spreadsheet]),
         ])
     }
 
@@ -156,7 +159,11 @@ struct FileRequestsTests {
             "Adjunto el plano.",
             "Va adjunta la factura.",
             "Te envío el plano mañana.",
+            "Por favor, confirma que envié el contrato.",
+            "Por favor, confirma que mandé el contrato.",
         ])
+        // The sender's own attachment counts in its own clause only.
+        #expect(Self.found("我已附上合同，请发一下平面图。").first?.documentKinds == [.floorPlan])
     }
 
     @Test func negationsAreNoRequests() {
@@ -213,6 +220,11 @@ struct FileRequestsTests {
         #expect(spaced.fileNames == ["Harbor lobby floor plan v3.pdf", "quote-2026.xlsx"])
         let attached = try #require(Self.found("Please send the attached file report.pdf back to me.").first)
         #expect(attached.fileNames == ["report.pdf"])
+        let quoted = try #require(Self.found("Please send \"report.pdf\".").first)
+        #expect(quoted.fileNames == ["report.pdf"])
+        let named = try #require(Self.found("Please send the file \"report.pdf\".").first)
+        #expect(named.object == "the file report.pdf")
+        #expect(named.fileNames == ["report.pdf"])
         let chinese = try #require(Self.found("请把平面图草图.png发给我").first)
         #expect(chinese.fileNames == ["平面图草图.png"])
         #expect(FileRequests.searchTerms(for: chinese).fileNames == ["平面图草图.png"])
@@ -222,7 +234,8 @@ struct FileRequestsTests {
         let plain = try #require(Self.found("Please send me the file.").first)
         #expect(plain.documentKinds == [.document])
         #expect(!plain.saysWhichFile)
-        #expect(try #require(Self.found("资料请发一下。").first ?? Self.found("请发一下资料。").first).saysWhichFile == false)
+        #expect(try #require(Self.found("请发一下资料。").first).saysWhichFile == false)
+        #expect(try #require(Self.found("資料をご送付ください").first).saysWhichFile == false)
         #expect(try #require(Self.found("Please send me the Harbor documents.").first).saysWhichFile)
         #expect(try #require(Self.found("Please send the floor plan.").first).saysWhichFile)
     }
@@ -254,8 +267,11 @@ struct FileRequestsTests {
         }
     }
 
-    /// A sentence that ends in a colon asks for the items of the list under it.
+    /// A sentence that ends in a colon asks for the items of the list under it, once a frame
+    /// of it passed its checks.
     @Test func aListUnderAColonIsWhatIsAskedFor() {
+        #expect(Self.found("Please do not send the following:\n- contract").isEmpty)
+        #expect(Self.found("以下の資料を添付します：\n・契約書").isEmpty)
         #expect(Self.found("Please send the following:\n- floor plan\n- lighting spec\n- the budget for phase 2").first?.documentKinds == [.floorPlan, .specification, .budget])
         #expect(Self.found("请发送以下文件：\n1. 平面图\n2. 报价单").first?.documentKinds == [.floorPlan, .quote])
         #expect(Self.found("以下の資料を送ってください：\n・平面図\n・見積書").first?.documentKinds == [.floorPlan, .quote])
@@ -279,6 +295,7 @@ struct FileRequestsTests {
             String(repeating: "por favor puedes enviarme enviarme de de de ", count: 1_500),
             String(repeating: "floor plan.pdf ", count: 5_000),
             String(repeating: "Please send the following:\n", count: 3_000),
+            "a" + String(repeating: "\u{0301}", count: 200_000) + " Please send the floor plan.",
         ]
         let started = ContinuousClock.now
         for text in texts {

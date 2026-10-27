@@ -241,11 +241,12 @@ nonisolated enum FileRequests {
     /// signature, hidden text or lines to an assistant.
     static func find(in words: String, subject: String) -> [FileRequest] {
         var sentences: [String] = []
+        let subject = bounded(subject, to: sentenceLength)
         if !isReplyOrForward(subject) {
-            sentences.append(String(subject.prefix(sentenceLength)))
+            sentences.append(subject)
         }
         // An item of a list is a sentence of its own, so "1. 平面图" keeps its number.
-        let text = unwrapped(String(words.prefix(readLength)))
+        let text = unwrapped(bounded(words, to: readLength))
         for line in text.split(separator: "\n") {
             let line = String(line)
             let parts = listItem(line) != nil ? [line[...]] : DraftCheck.sentenceRanges(in: line).map { line[$0] }
@@ -258,10 +259,12 @@ nonisolated enum FileRequests {
         while index < sentences.count, requests.count < mostRequests {
             let sentence = sentences[index]
             index += 1
-            var found = request(in: sentence)
+            let asked = self.asked(in: sentence)
+            var found = request(in: sentence, asked: asked)
             // A sentence that ends in a colon with a list under it, as "Please send the
-            // following:", asks for the items of the list.
-            if found?.saysWhichFile != true, sentence.hasSuffix(":") || sentence.hasSuffix("："), found != nil || hasFrame(sentence) {
+            // following:", asks for the items of the list, once a frame of it passed its
+            // checks, so "Please do not send the following:" asks for nothing.
+            if found?.saysWhichFile != true, sentence.hasSuffix(":") || sentence.hasSuffix("："), !asked.isEmpty {
                 var items: [String] = []
                 while index < sentences.count, items.count < 8, let item = listItem(sentences[index]) {
                     items.append(item)
@@ -300,11 +303,16 @@ nonisolated enum FileRequests {
         var needsWhich: Bool
     }
 
-    /// The request of one sentence, nil when it asks for no file.
-    private static func request(in original: String) -> FileRequest? {
+    /// What the frames of a sentence ask for, each frame that passed its checks, in the order
+    /// of the sentence.
+    private static func asked(in original: String) -> [Asked] {
         let sentence = plain(original)
-        guard !sentence.isEmpty else { return nil }
-        let asked = (english(sentence) + spanish(sentence) + chinese(sentence) + japanese(sentence)).sorted { $0.position < $1.position }
+        guard !sentence.isEmpty else { return [] }
+        return (english(sentence) + spanish(sentence) + chinese(sentence) + japanese(sentence)).sorted { $0.position < $1.position }
+    }
+
+    /// The request of one sentence, nil when it asks for no file.
+    private static func request(in original: String, asked: [Asked]) -> FileRequest? {
         var objects: [String] = []
         var kinds: [DocumentKind] = []
         var fileNames: [String] = []
@@ -343,14 +351,6 @@ nonisolated enum FileRequests {
         )
     }
 
-    /// Whether a sentence holds a request frame, whatever it asks for.
-    private static func hasFrame(_ original: String) -> Bool {
-        let sentence = plain(original)
-        let frames = [englishAsk, englishSendMe, spanishAsk, spanishImperative, chineseAsk, japaneseAsk]
-        return frames.contains { $0.firstMatch(in: sentence, range: NSRange(sentence.startIndex..., in: sentence)) != nil }
-            || ContentChecks.matches([japaneseFollowing], sentence)
-    }
-
     /// The text of a list item, without its bullet or number, nil for a line that is none.
     private static func listItem(_ sentence: String) -> String? {
         let line = plain(sentence)
@@ -387,7 +387,7 @@ nonisolated enum FileRequests {
     /// Words before what is asked for that are none of it, as in "send me over the plan".
     private static let englishLead = latin(#"^(?:\s*\b(?:me|us|over|along|across|back|through|again|also|please|kindly|to me|to us|over to (?:me|us)|across to (?:me|us))\b)*\s*(?:the following(?: files?| documents?| items?)?\s*:|these\s*:|following\s*:)?"#)
     /// Where what is asked for ends.
-    private static let englishCut = latin(#"\s+(?:on|about|regarding|re|for|by|to|with|from|in|within|before|after|when|whenever|if|as soon as|asap|so that|so|because|since|once|until|till|today|tomorrow|tonight|this week|next week|at|via|through|back|over|along|across|again|and (?:let|tell|confirm|please|could|can|also|then|i|we)|but|thanks|thank you)\b|[,;:()\[\]"“”]|\s[-–—]\s"#)
+    private static let englishCut = latin(#"\s+(?:on|about|regarding|re|for|by|to|with|from|in|within|before|after|when|whenever|if|as soon as|asap|so that|so|because|since|once|until|till|today|tomorrow|tonight|this week|next week|at|via|through|back|over|along|across|again|and (?:let|tell|confirm|please|could|can|also|then|i|we)|but|thanks|thank you)\b|[,;:()\[\]]|\s[-–—]\s"#)
     /// The cut words after which "a copy of the contract" and "una copia de la factura" go on.
     private static let prepositions: Set<String> = ["on", "about", "for", "by", "to", "with", "from", "in", "sobre", "para", "por", "con", "de", "del", "en", "a", "al"]
     private static let englishKeepGoing: Set<String> = ["copy", "copies", "version", "versions", "scan", "scans", "pdf", "pdfs", "photo", "photos", "picture", "pictures", "image", "images"]
@@ -427,9 +427,9 @@ nonisolated enum FileRequests {
     // MARK: Spanish
 
     /// The verbs of sending, in the infinitive, the imperative and the subjunctive, with me
-    /// or nos and lo or la, accented or not. Never the first person, as in te envío or
-    /// adjunto, which the sender says of their own attachment.
-    private static let spanishVerbs = #"(?:re)?env[ií](?:[aá]r|[aá]|[eé]|es|en|[aá]ras?|[aá]ran|[aá]ses?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|m[aá]nd(?:[aá]r|[aá]|[eé]|es|en|[aá]ras?|[aá]ran)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|comp[aá]rt(?:[ií]r|[aá]|[eé]|as|an|en|[ií]eras?|[ií]eran)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|adj[uú]nt(?:[aá]r|[aá]|[eé]|es|en|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|p[aá]s(?:[aá]r|[aá]|[eé]|es|en|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|fac[ií]l[ií]t(?:[aá]r|[aá]|[eé]|es|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|proporci[oó]n(?:[aá]r|[aá]|[eé]|es|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|rem[ií]t(?:[ií]r|[aá]|[eé]|as|[ií]eras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?"#
+    /// or nos and lo or la, accented or not. Never the first person, as in te envío, adjunto
+    /// or envié, which the sender says of their own attachment or of what they sent.
+    private static let spanishVerbs = #"(?:re)?env[ií](?:[aá]r|[aá]|e|es|en|[aá]ras?|[aá]ran|[aá]ses?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|m[aá]nd(?:[aá]r|[aá]|e|es|en|[aá]ras?|[aá]ran)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|comp[aá]rt(?:[ií]r|[aá]|e|as|an|en|[ií]eras?|[ií]eran)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|adj[uú]nt(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|p[aá]s(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|fac[ií]l[ií]t(?:[aá]r|[aá]|e|es|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|proporci[oó]n(?:[aá]r|[aá]|e|es|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|rem[ií]t(?:[ií]r|[aá]|e|as|[ií]eras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?"#
     private static let spanishAsk = latin(#"\b(?:por favor|porfa|porfavor|favor de|puedes|podr[ií]as|puede|podr[ií]a|pueden|podr[ií]an|me puedes|me podr[ií]as|nos puedes|nos podr[ií]as|me puede|me podr[ií]a|nos puede|nos podr[ií]a|te agradecer[ií]a que|le agradecer[ií]a que|les agradecer[ií]a que|agradecer[ií]a que|necesito que|necesitamos que|ser[ií]a posible que|me har[ií]as el favor de|hazme el favor de)\b([^.!?;]{0,40}?)\b("# + spanishVerbs + #")\b"#)
     /// The imperatives with me or nos anywhere, and a bare imperative at the start of a
     /// clause, as in "adjunta el plano", not as in "va adjunta la factura".
@@ -438,7 +438,7 @@ nonisolated enum FileRequests {
     /// No before the verb, but not the polite no of "¿no me podrías enviar…?".
     private static let spanishNegation = latin(#"\b(?:no(?!\s+(?:me\s+|nos\s+|te\s+|le\s+)?(?:puedes|podr[ií]as|puede|podr[ií]a|pueden|podr[ií]an)\b)|nunca|jam[aá]s|tampoco|sin)\b"#)
     private static let spanishLead = latin(#"^(?:\s*\b(?:me|nos|te|le|les|tambi[eé]n|por favor|porfa|de nuevo|otra vez|nuevamente|ahora|ya)\b)*\s*(?:(?:lo|los|las) siguientes?(?: archivos| documentos)?\s*:)?"#)
-    private static let spanishCut = latin(#"\s+(?:sobre|para|por|con|de|del|a|al|antes|despu[eé]s|cuando|si|hoy|ma[nñ]ana|lo antes posible|en|porque|ya que|y (?:me|nos|te|le|av[ií]same|conf[ií]rmame)|pero|gracias)\b|[,;:()\[\]"“”«»]|\s[-–—]\s"#)
+    private static let spanishCut = latin(#"\s+(?:sobre|para|por|con|de|del|a|al|antes|despu[eé]s|cuando|si|hoy|ma[nñ]ana|lo antes posible|en|porque|ya que|y (?:me|nos|te|le|av[ií]same|conf[ií]rmame)|pero|gracias)\b|[,;:()\[\]]|\s[-–—]\s"#)
     private static let spanishKeepGoing: Set<String> = ["copia", "copias", "versión", "version", "versiones", "foto", "fotos", "escaneo", "escaneos", "pdf", "imagen", "imágenes", "imagenes"]
 
     private static func spanish(_ sentence: String) -> [Asked] {
@@ -492,10 +492,18 @@ nonisolated enum FileRequests {
     private static func chinese(_ sentence: String) -> [Asked] {
         guard sentence.contains(where: \.isHan) else { return [] }
         var asked: [Asked] = []
-        let own = ContentChecks.matches([chineseOwn], sentence)
+        // The sender's own attachment or a step done counts in its own clause only, so
+        // 我已附上合同，请发一下平面图 still asks for the plan.
+        func own(_ match: NSTextCheckingResult) -> Bool {
+            guard let range = Range(match.range, in: sentence) else { return true }
+            let boundaries = ",;:，；：。!?！？"
+            let start = sentence[..<range.lowerBound].lastIndex(where: { boundaries.contains($0) }).map { sentence.index(after: $0) } ?? sentence.startIndex
+            let end = sentence[range.upperBound...].firstIndex(where: { boundaries.contains($0) }) ?? sentence.endIndex
+            return ContentChecks.matches([chineseOwn], String(sentence[start..<end]))
+        }
         for (pattern, objectGroup, verbGroup) in [(chineseBa, 3, 4), (chineseAsk, 4, 3)] {
             for match in matches(pattern, sentence) {
-                guard !own,
+                guard !own(match),
                       let frame = Range(match.range(at: 1), in: sentence),
                       let verb = Range(match.range(at: verbGroup), in: sentence),
                       let object = Range(match.range(at: objectGroup), in: sentence) else { continue }
@@ -515,7 +523,7 @@ nonisolated enum FileRequests {
         for pattern in [chineseNeed, chineseHave] {
             for match in matches(pattern, sentence) {
                 let group = (1..<match.numberOfRanges).first { match.range(at: $0).location != NSNotFound } ?? 1
-                guard !own, let object = Range(match.range(at: group), in: sentence) else { continue }
+                guard !own(match), let object = Range(match.range(at: group), in: sentence) else { continue }
                 guard !negated(sentence, before: object.lowerBound, negation: chineseNegation) else { continue }
                 var text = String(sentence[object])
                 if let end = chineseObjectEnd.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)), let range = Range(end.range, in: text) {
@@ -539,8 +547,6 @@ nonisolated enum FileRequests {
     private static let japaneseGive = regex("(" + japaneseClause + "{1,30}?)を(?:いただけますか|いただけませんか|いただけますでしょうか|頂けますか|頂けませんか|ください|下さい|もらえますか|いただきたい|頂きたい)")
     /// A kind before が必要です.
     private static let japaneseNeed = regex("(" + japaneseClause + "{1,30}?)が(?:必要です|必要になります|必要となります|必要でして|必要でございます|必要なのですが|必要なので|ほしいです|欲しいです)")
-    /// 以下の資料を送ってください with a list after it.
-    private static let japaneseFollowing = regex(#"(?:以下|下記)の"#)
     private static let japaneseLead = regex(#"^(?:また|あと|それと|それから|さらに|念のため|ついでに|恐れ入りますが|お手数ですが|お手数をおかけしますが|すみませんが|申し訳ありませんが|至急)+"#)
 
     private static func japanese(_ sentence: String) -> [Asked] {
@@ -570,9 +576,14 @@ nonisolated enum FileRequests {
         if let match = lead.firstMatch(in: rest, range: NSRange(rest.startIndex..., in: rest)), let range = Range(match.range, in: rest) {
             rest = String(rest[range.upperBound...])
         }
+        // A word of the glossary stays whole, as "hoja de cálculo" or "price list".
+        let phrases = phraseTerms.flatMap { term in ranges(of: term, in: rest) }
         var end = rest.endIndex
         for match in matches(cut, rest) {
             guard let range = Range(match.range, in: rest) else { continue }
+            if phrases.contains(where: { $0.lowerBound < range.lowerBound && range.lowerBound < $0.upperBound }) {
+                continue
+            }
             let before = rest[..<range.lowerBound].split(whereSeparator: { !$0.isLetter && !$0.isNumber }).last.map { $0.lowercased() }
             let word = rest[range].trimmingCharacters(in: .whitespaces).lowercased()
             if let before, keepGoing.contains(before), prepositions.contains(word) {
@@ -581,21 +592,50 @@ nonisolated enum FileRequests {
             end = range.lowerBound
             break
         }
-        return trimmed(String(rest[..<end]).trimmingCharacters(in: CharacterSet(charactersIn: ".!?¿¡")))
+        return unquoted(String(rest[..<end]).trimmingCharacters(in: CharacterSet(charactersIn: ".!?¿¡")))
+    }
+
+    /// The words of the glossary that hold a space, which no cut may split.
+    private static let phraseTerms: [String] = {
+        var seen: Set<String> = []
+        return DocumentKind.allCases.flatMap(\.terms.all).filter { $0.contains(" ") && seen.insert($0).inserted }
+    }()
+
+    /// Where a term stands in a text as whole words, ignoring case and accents.
+    private static func ranges(of term: String, in text: String) -> [Range<String.Index>] {
+        var found: [Range<String.Index>] = []
+        var start = text.startIndex
+        while let range = text.range(of: term, options: [.caseInsensitive, .diacriticInsensitive], range: start..<text.endIndex) {
+            let before = range.lowerBound == text.startIndex ? nil : text[text.index(before: range.lowerBound)]
+            let after = range.upperBound == text.endIndex ? nil : text[range.upperBound]
+            if !(before?.isLetter ?? false), !(after?.isLetter ?? false) {
+                found.append(range)
+            }
+            start = range.upperBound
+        }
+        return found
+    }
+
+    /// What is asked for without the white space around it and without double quotes, as in
+    /// "the file "report.pdf"".
+    private static func unquoted(_ text: String) -> String {
+        let quotes = CharacterSet(charactersIn: "\"“”«»「」『』")
+        let inner = String(String.UnicodeScalarView(text.unicodeScalars.filter { !quotes.contains($0) }))
+        return trimmed(inner).trimmingCharacters(in: CharacterSet(charactersIn: "'‘’").union(.whitespaces))
     }
 
     /// What a Chinese or Japanese request asks for: the text after the last 的 or の, which
     /// heads it, so 对平面图的意见 asks for comments and 最新的平面图 for the plan. When that
     /// head names only a plain file, as 平面图的电子版, the whole object counts.
     private static func hanObject(_ text: String) -> String {
-        var object = trimmed(text)
+        var object = unquoted(text)
         for _ in 0..<3 {
             let stripped = removing(hanTrail, from: removing(hanLead, from: object))
             if stripped == object { break }
             object = trimmed(stripped)
         }
         guard let last = object.lastIndex(where: { $0 == "的" || $0 == "の" }) else { return object }
-        let head = trimmed(String(object[object.index(after: last)...]))
+        let head = unquoted(String(object[object.index(after: last)...]))
         let headKinds = kinds(in: head)
         let namesOnlyAFile = !headKinds.isEmpty && headKinds.allSatisfy(\.isGeneric)
         return namesOnlyAFile && kinds(in: object).contains(where: { !$0.isGeneric }) ? object : head
@@ -694,6 +734,12 @@ nonisolated enum FileRequests {
 
     private static func trimmed(_ text: String) -> String {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The first scalars of a text, so no work reads past the limit, whatever the text
+    /// holds, long runs of combining marks included.
+    private static func bounded(_ text: String, to length: Int) -> String {
+        String(String.UnicodeScalarView(text.unicodeScalars.prefix(length)))
     }
 
     /// The text cut to a length, at the end of a word where the text has spaces.
