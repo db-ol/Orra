@@ -830,7 +830,9 @@ extension ProjectsSettings {
             case .denied:
                 note = nil
             case .mailNotRunning:
-                note = .openMailFirst
+                // Read right after the answer: a Mail that still runs gave no answer, which
+                // the bridge reads so too.
+                note = mailIsRunning ? .noAnswer : .openMailFirst
             case .notAsked, .unknown:
                 note = .noAnswer
             }

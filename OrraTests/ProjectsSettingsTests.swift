@@ -201,6 +201,22 @@ struct ProjectsSettingsTests {
         #expect(access.isExplaining)
     }
 
+    /// A permission check that says Mail does not run while Mail still runs, as -600 from a
+    /// busy Mail may: the page says to try again, never to open the Mail that is open.
+    @Test func aMinus600WhileMailRunsAsksToTryAgain() async {
+        defer { cleanUp() }
+        mail.answer = .mailNotRunning
+        mail.remembered = .notAsked
+        let access = access()
+        access.allowClicked()
+        await access.ask()
+        #expect(mail.asks == [true])
+        #expect(access.mailIsRunning)
+        #expect(access.access == .unknown)
+        #expect(access.note == .noAnswer)
+        #expect(access.line == "macOS gave no answer. Try again.")
+    }
+
     /// macOS took longer than the limit, and the user answered its prompt later. The next
     /// look learns the answer from the listing, and the line about no answer goes, so it
     /// never hides the way to System Settings.
