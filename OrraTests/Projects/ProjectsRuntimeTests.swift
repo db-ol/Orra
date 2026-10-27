@@ -3218,6 +3218,31 @@ struct ProjectsRuntimeTests {
         #expect(await runtime.recheck(taken) == .failure(.notInAddedFolder))
     }
 
+    /// Projects turns off while a file is checked for a reply, after the folders of the
+    /// first project were read and while those of the next one are, as on a share that
+    /// hangs. The file in the first project's folder is refused, as Projects gives Mail
+    /// nothing once it is off.
+    @Test(.timeLimit(.minutes(1)), arguments: [false, true])
+    func aFileCheckThatEndsAfterProjectsTurnedOffRefusesTheFile(_ isTick: Bool) async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let (project, folder) = try await harborWithFiles(runtime)
+        let plan = folder.appending(path: "floor-plan-v3.txt")
+        let taken = try await runtime.replyFile(at: plan, first: project.id).get()
+        let kiln = Project(name: "Kiln", folders: [try Project.bookmark(of: self.folder("Kiln", holding: "kiln.txt"))])
+        try await runtime.add(kiln)
+        let reads = HeldReads(holding: "Kiln")
+        runtime.readRealPath = { await reads.read($0) }
+
+        let check = Task { isTick ? await runtime.replyFile(at: plan, first: project.id) : await runtime.recheck(taken) }
+        try await waitUntil { reads.isHolding }
+        #expect(reads.started == [folder.lastPathComponent, "Kiln"])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+        reads.letGo()
+        #expect(await check.value == .failure(.notInAddedFolder))
+    }
+
     /// The projects for the lines about people outside a file's project, and the folder Add
     /// File… starts in.
     @Test func theReplyKnowsTheProjectsAndWhereAddFileStarts() async throws {
@@ -3542,21 +3567,23 @@ struct ProjectsRuntimeTests {
         }
     }
 
-    /// Reads the real path of a folder as the email view does, but holds the first read
-    /// until the test lets it go, as a folder on a share that hangs would, and records the
-    /// names of the folders it was asked for, in order. With `holds` false it only records
-    /// them.
+    /// Reads the real path of a folder as the email view does, but holds the first read, or
+    /// the first of the folder `holding` names, until the test lets it go, as a folder on a
+    /// share that hangs would, and records the names of the folders it was asked for, in
+    /// order. With `holds` false it only records them.
     final class HeldReads: Sendable {
         private nonisolated struct State: Sendable {
             var started: [String] = []
             var held: CheckedContinuation<Void, Never>?
             var letGo = false
+            /// The name of the folder whose first read is held, nil for the first read of all.
+            var holding: String?
         }
 
         private let state: Mutex<State>
 
-        nonisolated init(holds: Bool = true) {
-            state = Mutex(State(letGo: !holds))
+        nonisolated init(holds: Bool = true, holding name: String? = nil) {
+            state = Mutex(State(letGo: !holds, holding: name))
         }
 
         nonisolated var isHolding: Bool {
@@ -3578,8 +3605,10 @@ struct ProjectsRuntimeTests {
 
         nonisolated func read(_ folder: URL) async -> URL? {
             let first = state.withLock { state in
-                state.started.append(folder.lastPathComponent)
-                return state.started.count == 1
+                let name = folder.lastPathComponent
+                state.started.append(name)
+                guard let holding = state.holding else { return state.started.count == 1 }
+                return name == holding && state.started.filter { $0 == holding }.count == 1
             }
             if first {
                 await withCheckedContinuation { continuation in
