@@ -28,6 +28,11 @@ import Observation
 ///   for this Mail session, and headers from Mail that show the message under it is this
 ///   email. Without them the draft is only copied. The window runs one handoff at a time,
 ///   for all its emails, see `Handoffs`.
+/// - The files the email asks for and the files the user ticks for the reply live in
+///   `replyFiles`, in memory only, for as long as the window keeps this email view. Open
+///   Reply in Mail and Reply All add the ticked files to the reply, each checked again right
+///   before its event. An email Projects wrote no draft for, and a blank draft with ticked
+///   files, open the reply with the files and put nothing on the clipboard.
 ///
 /// Every request of the model runs through ProjectsModelQueue as one of the user's, inside
 /// ProjectsRuntime.userRequest(_:), so turning Projects off ends it. The requests started
@@ -75,6 +80,9 @@ final class ProjectsEmailModel {
         /// Where a project's folders are now, nil when Projects did not read them, see
         /// ProjectsRuntime.folderRoots(of:). None by default, for tests that never ask.
         var folderRoots: (UUID) async -> ProjectsEmailFiles.Roots? = { _ in nil }
+        /// What the files of a reply need, see ProjectsReplyFiles. None by default, for tests
+        /// that never tick a file.
+        var replyFiles = ProjectsReplyFiles.Actions()
 
         /// The actions of the running app.
         static func live(_ runtime: ProjectsRuntime) -> Actions {
@@ -100,7 +108,8 @@ final class ProjectsEmailModel {
                 now: runtime.dependencies.now,
                 highlight: { await ProjectsDraftDiff.highlight(from: $0, to: $1) },
                 projectName: { [weak runtime] id in runtime?.projectList.first { $0.id == id }?.name },
-                folderRoots: { [weak runtime] id in await runtime?.folderRoots(of: id) }
+                folderRoots: { [weak runtime] id in await runtime?.folderRoots(of: id) },
+                replyFiles: .live(runtime)
             )
         }
     }
@@ -147,6 +156,24 @@ final class ProjectsEmailModel {
         /// Mail's handle of the email is not known in this Mail session, so no reply opened
         /// and the draft was only copied.
         case messageNotFound
+    }
+
+    /// What became of the files of the last handoff that had files or no draft, for the note
+    /// under the buttons.
+    nonisolated struct HandoffFiles: Equatable, Sendable {
+        /// A file Mail did not take, by the name it had, with why.
+        nonisolated struct NotAttached: Equatable, Sendable {
+            var name: String
+            var problem: ReplyHandoff.AttachProblem
+        }
+
+        /// Whether the draft went on the clipboard with the handoff.
+        var withDraft: Bool
+        /// How many files were given.
+        var given: Int
+        /// How many Mail took into the reply.
+        var attached: Int
+        var notAttached: [NotAttached]
     }
 
     /// What the line under the draft says about saving it.
@@ -252,6 +279,13 @@ final class ProjectsEmailModel {
     private(set) var isCheckingAnswers = false
     private(set) var answersNote: Note?
     private(set) var handoffNote: HandoffNote?
+    /// What became of the files of the last handoff that had files or no draft, shown with
+    /// `handoffNote`, nil for one without files that had a draft.
+    private(set) var handoffFiles: HandoffFiles?
+    /// Whether Mail adds the ticked files of this email's handoff, for the spinner's words.
+    private(set) var isAttaching = false
+    /// The files the email asks for and the files ticked for its reply.
+    let replyFiles: ProjectsReplyFiles
     /// Whether a translation or an answer check was asked for while one ran.
     @ObservationIgnored private var translateAgain = false
     @ObservationIgnored private var checkAgain = false
@@ -275,6 +309,7 @@ final class ProjectsEmailModel {
         self.messageID = messageID
         self.actions = actions
         self.handoffs = handoffs
+        replyFiles = ProjectsReplyFiles(messageID: messageID, actions: actions.replyFiles)
     }
 
     // MARK: What the view reads
@@ -330,10 +365,10 @@ final class ProjectsEmailModel {
         handoffs.isRunning
     }
 
-    /// Whether Open Reply in Mail and Reply All can run: no request runs on the draft and
-    /// no handoff of the window runs.
+    /// Whether Open Reply in Mail and Reply All can run: no request runs on the draft, no
+    /// handoff of the window runs, and without a draft, a file is ticked.
     var canHandOff: Bool {
-        !isBusy && !isHandingOff
+        !isBusy && !isHandingOff && (hasDraft || !replyFiles.handoffFiles.isEmpty)
     }
 
     /// Whether Copy can run: no handoff of the window runs and no undo puts text back. A
@@ -368,9 +403,13 @@ final class ProjectsEmailModel {
         draftCheck?.outsideRecipients ?? []
     }
 
-    /// Whether a reply to all reaches more people than the sender.
+    /// Whether a reply to all reaches more people than the sender. Without a draft, more
+    /// people than a reply reaches, as the explanation's facts of the reply give them.
     var offersReplyAll: Bool {
-        (explanation?.draftCheck?.recipients.count ?? 0) > 1
+        guard hasDraft else {
+            return explanation?.replyFacts.map { $0.replyAll.count > $0.reply.count } ?? false
+        }
+        return (explanation?.draftCheck?.recipients.count ?? 0) > 1
     }
 
     /// The language Show in My Language translates into: the one the user reads
@@ -446,6 +485,7 @@ final class ProjectsEmailModel {
             handoffNote = nil
             saveText()
         }
+        await replyFiles.explanationChanged(explanation)
         let email = await actions.email(messageID)
         var original: ProjectsEmailOriginal.Content?
         if let email {
@@ -531,6 +571,7 @@ final class ProjectsEmailModel {
         for task in running {
             task.cancel()
         }
+        replyFiles.cancel()
     }
 
     /// Whether a request started with `perform(_:)` runs, for tests.
@@ -554,6 +595,9 @@ final class ProjectsEmailModel {
                     // `saveTextNow()` saved in place of this task.
                     guard !Task.isCancelled else { return }
                 }
+                // Whether the draft says a file is attached, read when typing pauses, as the
+                // save is, never at each key press.
+                replyFiles.readClaims(in: text)
                 guard !Task.isCancelled, let save = startSave() else { return }
                 guard await save.write.value else {
                     saveFailed = true
@@ -832,20 +876,24 @@ final class ProjectsEmailModel {
 
     // MARK: Handoff
 
-    /// Open Reply in Mail, or Reply All with `all`, with the draft in the editor. Nothing
-    /// happens while a handoff of the window runs. Mail first confirms that its message is
-    /// this email, and when it is not, or Mail cannot say, the draft is only copied. Without
-    /// a draft, no step puts anything on the clipboard, see ReplyHandoff.
+    /// Open Reply in Mail, or Reply All with `all`, with the draft in the editor and the
+    /// files ticked for the reply. Nothing happens while a handoff of the window runs. Mail
+    /// first confirms that its message is this email, and when it is not, or Mail cannot say,
+    /// the draft is only copied and no file goes. Without a draft, no step puts anything on
+    /// the clipboard, see ReplyHandoff. Each file is checked again right before its attach
+    /// event, see ProjectsReplyFiles.checked(_:_:), and a sender that looks spoofed gets none.
     ///
-    /// The draft is the one in the editor at the click. When the explanation goes while Mail
-    /// answers, as after a move to another project, the handoff still takes that draft, so
-    /// the note never says that a draft is on the clipboard when none was copied.
+    /// The draft and the files are those of the click. When the explanation goes while Mail
+    /// answers, as after a move to another project, the handoff still takes them, so the
+    /// note never says that a draft is on the clipboard when none was copied.
     func openReply(all: Bool) async {
         guard !handoffs.isRunning else { return }
         handoffs.isRunning = true
         handoffNote = nil
+        handoffFiles = nil
         defer { handoffs.isRunning = false }
-        let draft = handoffDraft
+        let files = replyFiles.handoffFiles
+        let draft = handoffDraft(files: files)
         let reference: MailMessageRef?
         do {
             reference = try await actions.mailReference(messageID, all)
@@ -861,6 +909,7 @@ final class ProjectsEmailModel {
             // open.
             if error == .timedOut { error = .failed(code: -1712) }
             handoffNote = .outcome(actions.handoff.replyNotAsked(draft, because: error))
+            handoffFiles = Self.filesNote(withDraft: draft != nil, files: files, outcome: nil)
             return
         }
         guard !Task.isCancelled else { return }
@@ -870,14 +919,52 @@ final class ProjectsEmailModel {
             let error: MailBridgeError = actions.handoff.mail.isRunning() ? .notFound : .mailNotRunning
             let outcome = actions.handoff.replyNotAsked(draft, because: error)
             handoffNote = outcome == .copiedReplyFailed(.notFound) ? .messageNotFound : .outcome(outcome)
+            handoffFiles = Self.filesNote(withDraft: draft != nil, files: files, outcome: nil)
             return
         }
-        handoffNote = .outcome(await actions.handoff.openReply(draft, to: reference, all: all))
+        let checked = ReplyHandoff.Files(files) { [replyFiles, recheck = actions.replyFiles.recheck] file in
+            let result = await recheck(file)
+            await replyFiles.checked(file, result)
+            return result
+        }
+        isAttaching = !files.isEmpty
+        let outcome = await actions.handoff.openReply(draft, to: reference, all: all, files: checked)
+        isAttaching = false
+        handoffNote = .outcome(outcome)
+        handoffFiles = Self.filesNote(withDraft: draft != nil, files: files, outcome: outcome)
     }
 
-    /// The draft in the editor for a handoff, nil when the email has no draft.
-    private var handoffDraft: String? {
-        hasDraft ? text : nil
+    /// The draft in the editor for a handoff: nil when the email has no draft, and for a
+    /// blank draft with ticked files, which then opens the reply with the files and puts
+    /// nothing on the clipboard, as for an email without a draft.
+    private func handoffDraft(files: [ReplyFile]) -> String? {
+        guard hasDraft else { return nil }
+        if !files.isEmpty, text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return nil
+        }
+        return text
+    }
+
+    /// What became of the files of a handoff, by their order, nil for a handoff with a draft
+    /// and no file, whose note is as before. A reply that did not open took no file, and the
+    /// files after a cancel are left out, since Mail was never asked for them.
+    nonisolated static func filesNote(withDraft: Bool, files: [ReplyFile], outcome: ReplyHandoff.Outcome?) -> HandoffFiles? {
+        guard !files.isEmpty || !withDraft else { return nil }
+        var results: [ReplyHandoff.FileResult] = []
+        if case .replyOpened(let found)? = outcome {
+            results = found
+        }
+        var attached = 0
+        var notAttached: [HandoffFiles.NotAttached] = []
+        for (file, result) in zip(files, results) {
+            switch result {
+            case .attached:
+                attached += 1
+            case .notAttached(let problem):
+                notAttached.append(HandoffFiles.NotAttached(name: file.url.lastPathComponent, problem: problem))
+            }
+        }
+        return HandoffFiles(withDraft: withDraft, given: files.count, attached: attached, notAttached: notAttached)
     }
 
     /// Copy: puts the draft in the editor on the clipboard, unless a handoff of the window
@@ -885,6 +972,7 @@ final class ProjectsEmailModel {
     func copy() {
         guard canCopy else { return }
         handoffNote = .outcome(actions.handoff.copyOnly(text))
+        handoffFiles = nil
     }
 
     // MARK: Helpers
