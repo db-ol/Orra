@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 @testable import Orra
@@ -37,8 +38,16 @@ import Testing
 ///
 /// It searches with search terms from the model and with other projects' files where the
 /// app reads them, see ExplainService. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_TERMS=off searches
-/// with each mail's words alone, for a run without them from the same build. The terms job does not count toward the prompt tokens of a row. The runner
-/// does not sort, so no mail is set aside.
+/// with each mail's words alone, for a run without them from the same build, and a path in
+/// it names a retrieval-terms.jsonl of RetrievalEvaluationTests, whose terms it takes without
+/// the model, none for a mail the file lacks. The terms job does not count toward the prompt
+/// tokens of a row. The runner does not sort, so no mail is set aside.
+///
+/// Each row lists the prompts of the requests of its explanation, each with its tokens and
+/// its SHA-256, never its text, so two builds can be shown to send the same prompts.
+/// TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_PROMPTS=only builds the prompts without the model: it
+/// loads only the tokenizer, takes the terms from a file or none, and answers every request
+/// with nothing, so an explanation has no points and no draft.
 @Suite(.serialized, .enabled(if: ExplainEvaluationSet.folder != nil && !ExplainEvaluationSet.ownAddresses.isEmpty && RewriteTestModel.folder != nil))
 @MainActor
 struct ExplainEvaluationTests {
@@ -66,7 +75,19 @@ struct ExplainEvaluationTests {
         let chosen = picked.isEmpty ? Array(mails.dropFirst(first - 1).prefix(count)) : mails.filter { picked.contains($0.id) }
         try #require(!chosen.isEmpty)
         let ownText = environment["ORRA_PROJECTS_EXPLAIN_TEXT"] == "own"
-        let asksForTerms = environment["ORRA_PROJECTS_EXPLAIN_TERMS"] != "off"
+        let termsSetting = environment["ORRA_PROJECTS_EXPLAIN_TERMS"]
+        let termsFile = termsSetting.flatMap { $0 == "off" || $0.isEmpty ? nil : URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+        let asksForTerms = termsSetting != "off" && termsFile == nil
+        let promptsOnly = environment["ORRA_PROJECTS_EXPLAIN_PROMPTS"] == "only"
+        try #require(!promptsOnly || !asksForTerms, "a run of the prompts alone takes its terms from a file or none")
+        var termsByID: [String: [String]] = [:]
+        if let termsFile {
+            for line in try String(contentsOf: termsFile, encoding: .utf8).split(separator: "\n") where !line.allSatisfy(\.isWhitespace) {
+                let saved = try JSONDecoder().decode(SavedTerms.self, from: Data(line.utf8))
+                termsByID[saved.id] = saved.terms
+            }
+        }
+        let savedTerms = termsByID
 
         // The projects, with their files indexed in a folder of their own.
         let ids = Dictionary(uniqueKeysWithValues: setProjects.enumerated().map { index, project in
@@ -96,9 +117,11 @@ struct ExplainEvaluationTests {
         index.stopAll()
         let search = ChunkSearch(database: database)
 
-        // The model, as the app runs it for Projects.
+        // The model, as the app runs it for Projects, unless only the prompts are built.
         let engine = CleanupEngine.live(RewriteEngine(), gate: ModelGate())
-        try await engine.load(modelFolder)
+        if !promptsOnly {
+            try await engine.load(modelFolder)
+        }
         let counter = try await ProjectsTokenCounter.reading(modelFolder)
         let queue = ProjectsModelQueue(environment: ProjectsModelEnvironment(
             startJob: engine.startJob,
@@ -170,20 +193,27 @@ struct ExplainEvaluationTests {
                 }
             },
             terms: { email in
+                if termsFile != nil {
+                    return byMessageID[email.messageID].flatMap { savedTerms[$0.id] }
+                }
                 guard asksForTerms else { return nil }
                 return try await SearchTerms.ask(for: email, run: { request in try await queue.run(request) }, sleep: { try await Task.sleep(for: $0) })
             }
         )
         var promptTokens = 0
+        // Each request's prompt, by its tokens and its SHA-256.
+        var prompts: [Prompt] = []
         let service = ExplainService(
             lookups: lookups,
             run: { request in
                 // The explanation's own prompt, not the longer one of a second request
                 // for the rest of an answer that repeated itself.
+                let tokens = counter.count(request.prompt)
                 if promptTokens == 0 {
-                    promptTokens = counter.count(request.prompt)
+                    promptTokens = tokens
                 }
-                return try await queue.run(request)
+                prompts.append(Prompt(tokens: tokens, sha256: SHA256.hash(data: Data(request.prompt.utf8)).map { String(format: "%02x", $0) }.joined()))
+                return promptsOnly ? "" : try await queue.run(request)
             },
             loadTokenCounter: { counter.count },
             save: { _ in },
@@ -194,7 +224,7 @@ struct ExplainEvaluationTests {
 
         // Written after each mail, so a run stopped early keeps what it explained.
         let part = picked.isEmpty ? "\(String(format: "%03d", first))-\(String(format: "%03d", first + chosen.count - 1))" : "picked"
-        let name = "explain-\(language.rawValue)-\(part)" + (ownText ? "-own" : "") + (asksForTerms ? "" : "-noterms")
+        let name = "explain-\(language.rawValue)-\(part)" + (ownText ? "-own" : "") + (asksForTerms ? "" : termsFile == nil ? "-noterms" : "-savedterms") + (promptsOnly ? "-prompts" : "")
         let report = try Self.file(out.appendingPathComponent(name + ".md"))
         let rows = try Self.file(out.appendingPathComponent(name + ".jsonl"))
         defer {
@@ -213,6 +243,7 @@ struct ExplainEvaluationTests {
                 var email = Self.email(mail, project: mail.labels.project.flatMap { ids[$0] }, ownText: ownText, in: mails, byMessageID: byMessageID)
                 email.attachments = await Self.attachments(of: mail, files: projectFiles)
                 promptTokens = 0
+                prompts = []
                 let started = ContinuousClock.now
                 let explanation = try await service.explain(email)
                 let time = started.duration(to: .now)
@@ -224,7 +255,7 @@ struct ExplainEvaluationTests {
                     if explanation.reply.draftLanguage?.rawValue == mail.labels.reply_language { languagesRight += 1 }
                 }
                 try report.write(contentsOf: Data(Self.section(mail, explanation, time: time, promptTokens: promptTokens).utf8))
-                try rows.write(contentsOf: Data((Self.row(mail, explanation, time: time, promptTokens: promptTokens) + "\n").utf8))
+                try rows.write(contentsOf: Data((Self.row(mail, explanation, time: time, promptTokens: promptTokens, prompts: prompts) + "\n").utf8))
             }
         } catch {
             failure = error
@@ -270,6 +301,18 @@ struct ExplainEvaluationTests {
         let body: String
         let attachments: [Attachment]?
         let labels: Labels
+    }
+
+    /// A line of a retrieval-terms.jsonl of RetrievalEvaluationTests: a mail's id and its terms.
+    private struct SavedTerms: Decodable {
+        let id: String
+        let terms: [String]?
+    }
+
+    /// A prompt a request sent, without its text.
+    private struct Prompt {
+        let tokens: Int
+        let sha256: String
     }
 
     private struct SetProject: Decodable {
@@ -390,7 +433,7 @@ struct ExplainEvaluationTests {
         return text
     }
 
-    private static func row(_ mail: SetMail, _ explanation: Explanation, time: Duration, promptTokens: Int) -> String {
+    private static func row(_ mail: SetMail, _ explanation: Explanation, time: Duration, promptTokens: Int, prompts: [Prompt]) -> String {
         var draft: Any = NSNull()
         var removals: [String] = []
         var flags: [String] = []
@@ -433,6 +476,7 @@ struct ExplainEvaluationTests {
             "other_project_files": explanation.sources.keys.filter(ExplainPrompt.isOtherFileSource).sorted(),
             "seconds": time / .seconds(1),
             "prompt_tokens": promptTokens,
+            "prompts": prompts.map { ["tokens": $0.tokens, "sha256": $0.sha256] as [String: Any] },
             "reply": describe(explanation.reply),
             "warnings": explanation.warningKinds.map(\.rawValue),
             "model_warnings": explanation.modelWarnings,
