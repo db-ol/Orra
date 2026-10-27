@@ -10,7 +10,10 @@ import Foundation
 ///   query a bound value, so a name in a mail never reads as FTS5 syntax.
 /// - Each table ranks its matches by BM25 with a file's name counting four times its
 ///   folder, and the two lists are merged by reciprocal rank fusion with ChunkSearch's
-///   constant.
+///   constant. Files whose fused scores are equal keep the order of the words list.
+/// - A file whose whole name is the text, with or without its extension, comes first. The
+///   trigram list sees only Chinese, so it cannot tell 现场玻璃0380.docx from
+///   瓷砖现场玻璃1141.png by their numbers, and a name an email gives whole means that file.
 nonisolated struct FileNameSearch: Sendable {
     /// A file that matched.
     nonisolated struct Hit: Sendable, Equatable {
@@ -43,7 +46,7 @@ nonisolated struct FileNameSearch: Sendable {
     func search(_ text: String, in projects: [UUID]? = nil, limit: Int = 20) async throws -> [Hit] {
         guard projects?.isEmpty != true, limit > 0 else { return [] }
         let queries = [("index_file_names", ChunkSearch.wordQuery(text)), ("index_file_name_trigrams", ChunkSearch.trigramQuery(text))]
-        var lists: [[Int64]] = []
+        var lists: [(table: String, files: [Int64])] = []
         for case let (table, query?) in queries {
             var parameters: [ProjectsDatabase.Value] = [.text(query)]
             var sql = "SELECT \(table).rowid FROM \(table) JOIN index_files f ON f.id = \(table).rowid WHERE \(table) MATCH ?1"
@@ -52,35 +55,60 @@ nonisolated struct FileNameSearch: Sendable {
                 sql += " AND f.project IN (SELECT value FROM json_each(?2))"
             }
             sql += " ORDER BY bm25(\(table), \(Self.nameWeight), \(Self.folderWeight)) LIMIT \(ChunkSearch.listLength)"
-            lists.append(try await database.run(sql, parameters).compactMap { $0.first?.integer })
+            lists.append((table, try await database.run(sql, parameters).compactMap { $0.first?.integer }))
         }
         var scores: [Int64: Double] = [:]
+        var wordRanks: [Int64: Int] = [:]
         for list in lists {
-            for (rank, file) in list.enumerated() {
+            for (rank, file) in list.files.enumerated() {
                 scores[file, default: 0] += 1 / (ChunkSearch.fusionOffset + Double(rank))
+                if list.table == "index_file_names" {
+                    wordRanks[file] = rank
+                }
             }
         }
-        let best = scores.sorted { ($0.value, -$0.key) > ($1.value, -$1.key) }.prefix(limit)
-        guard !best.isEmpty else { return [] }
+        let ranked = scores.sorted { first, second in
+            if first.value != second.value { return first.value > second.value }
+            let firstRank = wordRanks[first.key] ?? .max, secondRank = wordRanks[second.key] ?? .max
+            return firstRank != secondRank ? firstRank < secondRank : first.key < second.key
+        }
+        guard !ranked.isEmpty else { return [] }
         let rows = try await database.run(
-            "SELECT id, project, path, size, modified, skip FROM index_files WHERE id IN (SELECT value FROM json_each(?))",
-            [.text(Self.json(best.map { String($0.key) }))])
-        var hits: [Int64: Hit] = [:]
-        for row in rows where row.count == 6 {
+            "SELECT f.id, f.project, f.path, f.size, f.modified, f.skip, n.name FROM index_files f LEFT JOIN index_file_names n ON n.rowid = f.id"
+                + " WHERE f.id IN (SELECT value FROM json_each(?))",
+            [.text(Self.json(ranked.map { String($0.key) }))])
+        var hits: [Int64: (hit: Hit, name: String?)] = [:]
+        for row in rows where row.count == 7 {
             guard let file = row[0].integer, let project = row[1].text.flatMap(UUID.init(uuidString:)), let path = row[2].text,
                   let size = row[3].integer, let modified = row[4].real else { continue }
             let skip = row[5].text.map { FileSkipReason(rawValue: $0) ?? .unsupportedFormat }
-            hits[file] = Hit(
+            hits[file] = (Hit(
                 file: file, project: project, url: URL(fileURLWithPath: path), size: size,
-                modified: Date(timeIntervalSince1970: modified), skip: skip, score: 0)
+                modified: Date(timeIntervalSince1970: modified), skip: skip, score: 0), row[6].text)
         }
-        return best.compactMap { file, score in
-            hits[file].map { hit in
-                var hit = hit
-                hit.score = score
-                return hit
+        // The words of the text as the name table holds a name, for a text short enough to be one.
+        let words = text.count <= ChunkSearch.maximumQueryCharacters ? ChunkSearch.indexedWords(FolderIndex.searchableText(text)) : ""
+        var whole: [Hit] = []
+        var rest: [Hit] = []
+        for (file, score) in ranked {
+            guard var found = hits[file] else { continue }
+            found.hit.score = score
+            if Self.isWholeName(words, entry: found.name, of: found.hit.url) {
+                whole.append(found.hit)
+            } else {
+                rest.append(found.hit)
             }
         }
+        return Array((whole + rest).prefix(limit))
+    }
+
+    /// Whether `words` are a file's whole name, with or without its extension: its name entry,
+    /// or the entry without the extension's words at its end.
+    private static func isWholeName(_ words: String, entry: String?, of file: URL) -> Bool {
+        guard !words.isEmpty, let entry else { return false }
+        if entry == words { return true }
+        guard entry.hasPrefix(words + " ") else { return false }
+        return entry.dropFirst(words.count + 1) == ChunkSearch.indexedWords(file.pathExtension)
     }
 
     /// A JSON array of values written as JSON already, for json_each.

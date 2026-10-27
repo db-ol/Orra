@@ -1107,12 +1107,12 @@ final class FolderIndex {
     }
 
     /// A file's name without its extension, with hyphens and underscores as spaces.
-    private nonisolated static func searchableName(_ file: URL) -> String {
+    nonisolated static func searchableName(_ file: URL) -> String {
         searchableText(file.deletingPathExtension().lastPathComponent)
     }
 
     /// A text with hyphens and underscores as spaces, as names and folders are searched.
-    private nonisolated static func searchableText(_ text: String) -> String {
+    nonisolated static func searchableText(_ text: String) -> String {
         text.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ")
     }
 
