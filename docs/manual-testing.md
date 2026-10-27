@@ -92,7 +92,22 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     that Hide Explanation lasts for the window until the next Explain, and what VoiceOver
     reads for the state of a disclosure row, and it renders How to Use Projects, and the
     window at its smallest size with an explained email and that email view 200 points
-    wide.
+    wide. It also renders Project Files for This Explanation open at 480 and 200 points
+    with its other states (projects-email-files), and the popover of a file's chip
+    (projects-excerpt), and checks that Edit Project… there keeps the email selected.
+  - ProjectsEmailFilesTests, added on 2026-10-26, checks Project Files for This Explanation
+    with made up files: why each file excerpt was in the prompt, as the explanation saves
+    it and Orra 0.6.0 reads it, also with a reason a later Orra adds, each file once in the
+    order of the prompt with its citation and warnings, the words of the list, chips that
+    tell two excerpts of one page apart, that the email view reads the folders only when
+    the list asks, and where a file is in the folders of its project, a folder that is not
+    available included, also inside one that is, and that the list reads the folders again
+    for another email. ProjectsRuntimeTests checks the folders' real paths, a bookmark that
+    finds nothing, a renamed folder that is gone, and that no folder is read once Projects
+    turned off or the project let go of the folder while its bookmark resolved or while
+    another folder was read, nor once the list closed.
+    ExplainPromptTests and ExplainServiceTests check that why a file is in the prompt
+    changes nothing in it.
   - ProjectSuggestionsTests, ProjectSuggestionPromptTests, ProjectSuggestionServiceTests and
     ProjectsSuggestedSectionTests, added on 2026-10-20, cover Suggested Projects with
     made up mail and a fake model: the groups, what each would take, the prompt and its
@@ -3269,8 +3284,8 @@ release build too, and the other Projects sections below check the details in a 
   “Always assign mail from … to …?”, and Add Rule files the sender's next email there. The
   project page lists the rule, and Remove Rule… takes it off after asking.
 - [ ] Explain an email of that project: Warnings, What it says with source chips, Before
-  you reply and the draft. A file's chip shows the passage with its page inside Orra, an
-  attachment's chip its passage, and an earlier email's chip that email. Nothing opens
+  you reply and the draft. A file's chip shows the saved excerpt with its page inside Orra,
+  an attachment's chip its passage, and an earlier email's chip that email. Nothing opens
   outside Orra. The email itself follows the draft under Original Email, and
   Hide Explanation puts it first. It shows To, Cc, the attachments, each forwarded message
   under its own header and Quoted Text folded.
@@ -3419,6 +3434,45 @@ Projects Data and Start Reading Mail again first.
   message in one stop, and names the Forwarded Message group.
 - [ ] Forward one synthetic mail to yourself from Mail and let Projects read it. The
   email view shows it as a forwarded message, and its explanation uses what it says.
+
+Project Files for This Explanation, added on 2026-10-26, not verified yet. Check in a Debug
+build with the synthetic mail imported and the five projects with their folders, as in the
+test guide, in English, then in 简体中文, 日本語 and Español.
+
+- [ ] Explain an email of a project. Under What it says a folded row reads Project Files for
+  This Explanation with a number. Open it: each file shows once, with its folder inside the
+  project folder that holds it, Cited in explanation or Not cited in explanation, and a
+  reason line, Found by search for a file that matched the email. A point's file chip and
+  the file's chip in the list show the same Saved excerpt, page N.
+- [ ] Explain a short email whose words are in no file of its project. Some rows say One of
+  the project's newest files, added because search found few matches.
+- [ ] Explain the email of the attack items in the test guide whose project file speaks to
+  an assistant. When the explanation used that file, its row shows "A line in a project
+  file speaks to an assistant.", its saved excerpt still shows that line, and the excerpt
+  ends with "The model read it without the lines listed under Taken out before the model
+  read it."
+- [ ] Explain an email in Needs a Project. Its Project Files for This Explanation shows (0),
+  the line about assigning, and Assign to Project. Assign it to a project: the email leaves
+  Needs a Project without its explanation. In that project's list, select it and click
+  Explain, and the files of that project show.
+- [ ] Edit Project… in the list opens the project's sheet, and the email stays selected.
+  Remove a folder and save. Its rows say Not in the project's folders now with the folder,
+  until Explain Again. Add the folder back. Indexing… shows under the list until the sweep
+  ends, and Explain Again lists its files again.
+- [ ] Add a folder on a disk image or a USB disk to a project, explain an email that uses
+  one of its files, then eject the disk. Opened again, the list shows that file's row with
+  its folder and Its project folder is not available now, not Not in the project's folders
+  now.
+- [ ] An email explained before the update shows its files without a reason line.
+- [ ] VoiceOver: the header reads its words with Collapsed or Expanded, and note whether it
+  says heading. Each row is one stop with name, folder, citation and reason. Each chip says
+  the file and the page. Escape closes the popover, and VoiceOver is back on the chip.
+- [ ] At 760 by 420 with an explained email selected, the open list fits the 200 point
+  column with no sideways scroll, the chips and buttons stack, and the window keeps its
+  size.
+- [ ] Clicking a file name or a folder opens nothing. Both can be selected and copied.
+- [ ] The log names no file: /usr/bin/log show --last 10m --predicate 'subsystem ==
+  "io.github.db-ol.Orra"' shows no file or folder name of the set.
 
 The words of the Projects window by what Orra knows, added on 2026-10-24, not verified
 yet. Check in a Debug build with the synthetic mail imported, as in the test guide, in
