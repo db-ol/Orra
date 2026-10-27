@@ -1862,6 +1862,28 @@
         }
       }
     },
+    "An image without text" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una imagen sin texto"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テキストのない画像"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不含文字的图片"
+          }
+        }
+      }
+    },
     "Another app came to the front, so the text was not pasted. Use Copy Last Dictation." : {
       "localizations" : {
         "es-419" : {
@@ -4768,28 +4790,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你说的内容都会以西班牙文粘贴。PR、iPhone 这类常用英文词可能保留英文。"
-          }
-        }
-      }
-    },
-    "Excel and PowerPoint files are not read yet" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Los archivos de Excel y PowerPoint aún no se leen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ExcelとPowerPointのファイルはまだ読み取らない"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "暂不读取 Excel 和 PowerPoint 文件"
           }
         }
       }
@@ -10395,6 +10395,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这次听写有一部分无法转写。"
+          }
+        }
+      }
+    },
+    "Past the number of files Projects reads" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Supera la cantidad de archivos que lee Proyectos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”が読み取るファイル数を超えている"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超出“项目”读取的文件数"
           }
         }
       }
@@ -18153,6 +18175,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请等听写结束后再录音。"
+          }
+        }
+      }
+    },
+    "Waiting for text recognition" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esperando el reconocimiento de texto"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テキスト認識待ち"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待识别文字"
           }
         }
       }

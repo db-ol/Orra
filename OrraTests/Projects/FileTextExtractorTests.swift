@@ -242,18 +242,37 @@ struct FileTextExtractorTests {
         #expect(text?.contains("<img src=") == true)
     }
 
+    /// What each extension means: a document in a format, an image, or a file known by its
+    /// name only.
+    @Test func eachExtensionHasItsKind() {
+        let kinds: [(String, FileTextExtractor.Kind)] = [
+            ("pdf", .text(.pdf)), ("DOCX", .text(.docx)), ("xlsx", .text(.xlsx)), ("xlsm", .text(.xlsx)), ("pptx", .text(.pptx)),
+            ("ppsx", .text(.pptx)), ("csv", .text(.text)), ("tsv", .text(.text)), ("md", .text(.text)), ("jpg", .image),
+            ("HEIC", .image), ("tiff", .image), ("webp", .image), ("zip", .nameOnly(.archive)), ("dwg", .nameOnly(.unsupportedFormat)),
+            ("dxf", .nameOnly(.unsupportedFormat)), ("mp4", .nameOnly(.unsupportedFormat)), ("key", .nameOnly(.unsupportedFormat)),
+            ("", .nameOnly(.unsupportedFormat)),
+        ]
+        for (fileExtension, kind) in kinds {
+            #expect(FileTextExtractor.kind(ofExtension: fileExtension) == kind, "\(fileExtension)")
+        }
+    }
+
     @Test func skipsWhatItDoesNotRead() async throws {
         let folder = try Folder()
         defer { folder.remove() }
         let extractor = FileTextExtractor()
         let reasons: [(String, FileSkipReason)] = [
-            ("budget.xlsx", .spreadsheetOrSlides), ("deck.pptx", .spreadsheetOrSlides), ("backup.zip", .archive),
-            ("photo.jpg", .unsupportedFormat),
+            ("budget.xlsx", .unreadable), ("deck.pptx", .unreadable), ("backup.zip", .archive),
+            ("photo.jpg", .waitsForRecognition), ("plan.dwg", .unsupportedFormat),
         ]
         for (name, reason) in reasons {
             let file = try folder.write(name, Data("PK\u{3}\u{4} not really".utf8))
             #expect(await extractor.text(of: file) == .failure(reason), "\(name)")
         }
+        let budget = try folder.write("budget.xlsx", try OfficeTestFiles.xlsx(lines: ["Lobby lamps", "12"]))
+        #expect(try await extractor.text(of: budget).get().pages.first?.text.contains("Lobby lamps") == true)
+        let deck = try folder.write("deck.pptx", try OfficeTestFiles.pptx(lines: ["Lobby lamps"]))
+        #expect(try await extractor.text(of: deck).get().pages.first?.text.contains("Lobby lamps") == true)
         #expect(await extractor.text(of: folder.url("missing.md")) == .failure(.noAccess))
         #expect(await extractor.text(of: try folder.write("empty.txt", Data())) == .failure(.noText))
         let binary = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52])
@@ -304,10 +323,38 @@ struct FileTextExtractorTests {
         defer { folder.remove() }
         let locked = try folder.pdf("locked.pdf", pages: [[Line("Salary review.")]], password: "example")
         #expect(await FileTextExtractor().text(of: locked) == .failure(.locked))
+        // A scan gives no text, and lists its pages for recognition.
         let scanned = try folder.pdf("scan.pdf", pages: [[Line("", onDarkBox: true)]])
-        #expect(await FileTextExtractor().text(of: scanned) == .failure(.noText))
+        let scan = try await FileTextExtractor().text(of: scanned).get()
+        #expect(scan.pages.isEmpty)
+        #expect(scan.pagesWithoutText == [1])
         let broken = try folder.write("broken.pdf", Data("%PDF-1.7 and nothing else".utf8))
         #expect(await FileTextExtractor().text(of: broken) == .failure(.unreadable))
+    }
+
+    /// A page whose text layer holds fewer than 20 letters or digits, such as a scanned page
+    /// with a page number, is listed for recognition, with its text kept. A page with text is
+    /// not.
+    @Test func aPDFListsItsPagesWithoutText() async throws {
+        let folder = try Folder()
+        defer { folder.remove() }
+        let file = try folder.pdf("mixed.pdf", pages: [
+            [Line("Quote for the 2027 calendar, printed in November.")],
+            [Line("", onDarkBox: true), Line("Page 2")],
+            [Line("第三页：纸张、装订和交货日期都在这里写明了，共二十多个字。")],
+        ])
+        let result = try await FileTextExtractor().text(of: file).get()
+        #expect(result.pagesWithoutText == [2])
+        #expect(result.pages.map(\.number) == [1, 2, 3])
+        #expect(result.pages[1].text.contains("Page 2"))
+    }
+
+    /// csv and tsv are text.
+    @Test func readsCSVAsText() async throws {
+        let folder = try Folder()
+        defer { folder.remove() }
+        let file = try folder.write("lamps.csv", Data("Item,Qty\nLobby lamps,12\n灯具,12\n".utf8))
+        #expect(try await FileTextExtractor().text(of: file).get().pages == [FileTextResult.Page(number: nil, text: "Item,Qty\nLobby lamps,12\n灯具,12\n")])
     }
 
     /// The time is checked after each page. Here each look at the clock moves it 4 s on.

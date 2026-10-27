@@ -83,10 +83,10 @@ struct ProjectsGateEvaluationTests {
         await index.waitUntilIdle()
         let indexTime = indexStarted.duration(to: .now)
         index.stopAll()
+        // The names sorting compares, as the app reads them.
         var fileNames: [UUID: [String]] = [:]
-        for row in try await database.run("SELECT project, path FROM index_files WHERE skip IS NULL") {
-            guard let project = row[0].text.flatMap(UUID.init(uuidString:)), let path = row[1].text else { continue }
-            fileNames[project, default: []].append((path as NSString).lastPathComponent)
+        for project in set.projects {
+            fileNames[project.id] = try await index.fileNames(project: project.id)
         }
         let files = fileNames.values.map(\.count).reduce(0, +)
         let search = ChunkSearch(database: database)

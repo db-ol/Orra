@@ -14,9 +14,14 @@ extension Logger {
 ///   at low priority does the work of all projects, one file at a time, and projects take
 ///   turns.
 /// - A sweep lists the folders with FolderWalk, removes the files that are gone, and reads
-///   the files that are new or whose size or modification date changed with
+///   the documents that are new or whose size or modification date changed with
 ///   FileTextExtractor. It cuts their text with TextChunker and keeps the chunks in two full
 ///   text tables, see ProjectsDatabase and ChunkSearch.
+/// - Every other file the walk lists gets a row without being opened: an image waits for
+///   text recognition, and any other file, such as a drawing, an archive or a video, is
+///   known by its name only. Every row has a name entry, the words of the file's name and
+///   of its folder in two full text tables of their own, see FileNameSearch, which stay
+///   apart from the chunks.
 /// - A project is swept when it starts, every hour, and at the first tick of the timer
 ///   (every `sweepGap`) after its folders changed (FolderEvents). So a folder that keeps
 ///   changing is swept at most once in that time. Renames and removals are taken in at
@@ -24,9 +29,12 @@ extension Logger {
 ///   drops its text.
 /// - It waits while a dictation is under way, before the walk, before each file and before
 ///   each write.
-/// - A project holds at most 5,000 files and about 200 MB of text. The new file that passes
-///   the text limit is the last new one read. A file the index holds is read again when it
-///   changes, even past the limit, so its old text never stays.
+/// - A project holds at most 5,000 documents and images, documents first, and 20,000 more
+///   files by name, and about 200 MB of text. Images the index holds keep their place, and
+///   new ones take the room the documents leave, newest first. The rest are known by name.
+///   The new document that passes the text limit is the last new one read. A file the index
+///   holds is read again when it changes, even past the limit, so its old text never stays,
+///   and a file with text never loses it for room.
 /// - A file that gives no text is kept with why and with its size and modification date,
 ///   so a file that took too long is not read again until it changes. Reasons that can pass
 ///   without a change, such as no access, are tried again at each sweep.
@@ -42,7 +50,12 @@ extension Logger {
 final class FolderIndex {
     /// The limits of one project.
     nonisolated struct Limits: Sendable, Equatable {
+        /// Documents and images, documents first. The pages recognition reads in one file
+        /// are the recognizer's limit.
         var files = 5_000
+        /// Files known by name only, besides `files`: documents and images past it, and
+        /// every other kind of file.
+        var names = 20_000
         /// UTF-8 bytes of text.
         var textBytes: Int64 = 200_000_000
     }
@@ -56,15 +69,22 @@ final class FolderIndex {
         var textBytes: Int64 = 0
         /// Files indexed after hidden text was dropped from them.
         var hiddenText = 0
-        /// Files and folders skipped, by reason: those the last walk skipped, and those that
-        /// gave no text.
+        /// Files and folders skipped without a row, by reason: those the last walk skipped,
+        /// and those whose read failed for a reason that can pass, such as no access.
         var skipped: [FileSkipReason: Int] = [:]
         /// Added folders that cannot be indexed, and why.
         var refusedFolders: [URL: FolderWalk.Refusal] = [:]
+        /// Whether documents or images are known by name only for lack of room.
         var reachedFileLimit = false
         var reachedTextLimit = false
         /// Whether the index works on this project now.
         var isIndexing = false
+        /// Files known by name only: their text is not read or not found, such as a
+        /// drawing, an archive, a locked PDF or an image without text. Files that wait for
+        /// recognition are not among them.
+        var nameOnly = 0
+        /// Whether the folders hold more files than the index lists by name.
+        var reachedNameLimit = false
     }
 
     /// A file that gives no text, and why.
@@ -82,6 +102,13 @@ final class FolderIndex {
     /// Reasons a file gives no text that can pass without a change to the file. They are not
     /// kept, so the file is tried again at the next sweep.
     nonisolated static let passingSkips: Set<FileSkipReason> = [.noAccess, .dataless, .notDownloaded, .cancelled]
+    /// Reasons of rows the project page only counts, since a folder may hold many such
+    /// files and they are expected.
+    nonisolated static let countedSkips: Set<FileSkipReason> = [.archive, .unsupportedFormat, .imageWithoutText, .overFileLimit, .waitsForRecognition]
+    /// Reasons of a stored row that the next sweep reads again, unchanged as its file may be:
+    /// a file past the limit of files may fit now, and a release may read a format it knew
+    /// by name before.
+    nonisolated static let rereadSkips: Set<FileSkipReason> = [.overFileLimit, .unsupportedFormat, .archive]
     /// How often the timer ticks. A project whose folders changed is swept at the next tick
     /// (a guess).
     nonisolated static let sweepGap: Duration = .seconds(60)
@@ -124,6 +151,7 @@ final class FolderIndex {
         var refusedFolders: [URL: FolderWalk.Refusal] = [:]
         var reachedFileLimit = false
         var reachedTextLimit = false
+        var reachedNameLimit = false
     }
 
     @ObservationIgnored private var projects: [UUID: Watched] = [:]
@@ -254,11 +282,13 @@ final class FolderIndex {
     // MARK: What it holds
 
     /// The files of a project that give no text, with why: those the index read and those
-    /// the last walk skipped for a reason worth telling, at most `limit`.
+    /// the last walk skipped for a reason worth telling, at most `limit`. Reasons the page
+    /// only counts, see `countedSkips`, are left out.
     func skippedFiles(project id: UUID, limit: Int = FolderWalk.maximumListedSkips) async throws -> [SkippedFile] {
+        let counted = "[" + Self.countedSkips.map { "\"\($0.rawValue)\"" }.sorted().joined(separator: ",") + "]"
         let rows = try await database.run(
-            "SELECT path, skip, modified FROM index_files WHERE project = ? AND skip IS NOT NULL ORDER BY path LIMIT ?",
-            [.text(id.uuidString), .integer(Int64(limit))])
+            "SELECT path, skip, modified FROM index_files WHERE project = ? AND skip IS NOT NULL AND skip NOT IN (SELECT value FROM json_each(?)) ORDER BY path LIMIT ?",
+            [.text(id.uuidString), .text(counted), .integer(Int64(limit))])
         var files = rows.compactMap { row -> SkippedFile? in
             guard row.count == 3, let path = row[0].text, let reason = row[1].text.flatMap(FileSkipReason.init(rawValue:)) else { return nil }
             return SkippedFile(url: URL(fileURLWithPath: path), reason: reason, modified: row[2].real.map(Date.init(timeIntervalSince1970:)))
@@ -275,13 +305,19 @@ final class FolderIndex {
         ).compactMap { $0.first?.text.map { URL(fileURLWithPath: $0) } }
     }
 
-    /// The names of a project's files with text in the index, for the attachment names that
-    /// sorting compares, see SortingService.Lookups.fileNames.
+    /// The names of a project's documents with text in the index, for the attachment names
+    /// that sorting compares, see SortingService.Lookups.fileNames. Images are left out
+    /// whatever their text, so a camera's names, such as IMG_2041, never become words of
+    /// sorting.
     func fileNames(project id: UUID) async throws -> [String] {
         try await database.run(
             "SELECT path FROM index_files WHERE project = ? AND skip IS NULL ORDER BY path",
             [.text(id.uuidString)]
-        ).compactMap { $0.first?.text.map { URL(fileURLWithPath: $0).lastPathComponent } }
+        ).compactMap { row in
+            guard let url = row.first?.text.map({ URL(fileURLWithPath: $0) }),
+                  case .text = FileTextExtractor.kind(ofExtension: url.pathExtension) else { return nil }
+            return url.lastPathComponent
+        }
     }
 
     /// A project's files with text in the index, each with its modification date and the
@@ -497,6 +533,26 @@ final class FolderIndex {
         var size: Int64
         var modified: Double
         var textBytes: Int64
+        /// The raw value of why the row holds no text, nil when it holds the file's text.
+        var skip: String?
+
+        /// Whether the row is of the file as the walk found it.
+        func matches(_ file: FolderWalk.File) -> Bool {
+            size == file.size && modified == file.modified.timeIntervalSince1970
+        }
+
+        /// Whether a sweep writes the row again even when its file did not change, see
+        /// `FolderIndex.rereadSkips`.
+        var mustBeWritten: Bool {
+            skip.flatMap(FileSkipReason.init(rawValue:)).map(FolderIndex.rereadSkips.contains) ?? false
+        }
+    }
+
+    /// A row a sweep writes without reading its file: a file known by name, or an image
+    /// that waits for recognition.
+    private nonisolated struct Unread: Sendable {
+        var file: FolderWalk.File
+        var skip: FileSkipReason
     }
 
     /// What a sweep must do, found off the main actor.
@@ -505,16 +561,24 @@ final class FolderIndex {
         var listed = 0
         /// The files the database holds that are gone, by path.
         var gone: [String] = []
-        /// The files to read: first those the database holds, then new ones.
+        /// The rows to write without reading their files.
+        var unread: [Unread] = []
+        /// The documents to read: first those the database holds, then new ones.
         var changed: [FolderWalk.File] = []
         /// The text bytes the database holds for the changed files it holds, by path.
         var storedBytes: [String: Int64] = [:]
         /// The text bytes of the files the database holds that stay as they are.
         var keptBytes: Int64 = 0
+        /// The real paths of the added folders, which give the folders of the names.
+        var roots: [String] = []
     }
 
-    /// Lists the folders, removes the files that are gone and reads the new and changed
-    /// ones. Returns whether text was removed.
+    /// The rows a sweep writes in one transaction when it writes them without reading.
+    nonisolated static let rowsPerWrite = 200
+
+    /// Lists the folders, removes the files that are gone, writes the files known by name
+    /// and the images that wait for recognition, and reads the new and changed documents.
+    /// Then it writes the name entries that rows lack. Returns whether text was removed.
     private func sweep(_ id: UUID, generation: Int) async throws -> Bool {
         guard let folders = projects[id]?.folders else { return false }
         let started = ContinuousClock.now
@@ -537,6 +601,26 @@ final class FolderIndex {
             }
         }
 
+        // The rows without a read go first, in batches, so every file can be found by its
+        // name while the documents are read.
+        var written = 0
+        var waiting = 0
+        for start in stride(from: 0, to: survey.unread.count, by: Self.rowsPerWrite) {
+            let batch = Array(survey.unread[start..<min(start + Self.rowsPerWrite, survey.unread.count)])
+            await waitWhileDictating()
+            guard isCurrent(id, generation) else { break }
+            let rows = await Self.prepare(batch, project: id)
+            await waitWhileDictating()
+            guard isCurrent(id, generation) else { break }
+            let removed = try await database.transaction { database in
+                try rows.reduce(false) { removed, row in try Self.store(row, in: database) || removed }
+            }
+            removedText = removedText || removed
+            written += batch.count
+            waiting += batch.count { $0.skip == .waitsForRecognition }
+            await refreshReport(id, generation: generation, isIndexing: true)
+        }
+
         var textBytes = survey.keptBytes
         var read = 0
         var skipped = 0
@@ -552,13 +636,12 @@ final class FolderIndex {
             guard isCurrent(id, generation) else { break }
             let result = await readText(file.url)
             if case .failure(.cancelled) = result { break }
-            let prepared: Prepared
-            switch result {
-            case .success(let text):
-                prepared = await Self.prepare(text, file: file, project: id, chunker: chunker)
-            case .failure(let reason):
-                prepared = Prepared(project: id, file: file, skip: reason)
+            let prepared = await Self.prepare(result, file: file, project: id, chunker: chunker)
+            if case .failure = result {
                 skipped += 1
+            }
+            if prepared.skip == .waitsForRecognition {
+                waiting += 1
             }
             await waitWhileDictating()
             guard isCurrent(id, generation) else { break }
@@ -583,12 +666,16 @@ final class FolderIndex {
                 await refreshReport(id, generation: generation, isIndexing: true)
             }
         }
+        var named = 0
+        if isCurrent(id, generation) {
+            named = try await writeMissingNames(id, roots: survey.roots, generation: generation)
+        }
         if isCurrent(id, generation) {
             projects[id]?.facts = facts
         }
         let milliseconds = started.duration(to: .now) / .milliseconds(1)
         Logger.projectsIndex.notice(
-            "Index sweep: \(survey.listed, privacy: .public) files listed, \(read, privacy: .public) read, \(skipped, privacy: .public) without text, \(survey.gone.count, privacy: .public) removed, in \(Int(milliseconds), privacy: .public) ms")
+            "Index sweep: \(survey.listed, privacy: .public) files listed, \(read, privacy: .public) read, \(skipped, privacy: .public) without text, \(written, privacy: .public) written without a read, \(waiting, privacy: .public) wait for recognition, \(named, privacy: .public) names added, \(survey.gone.count, privacy: .public) removed, in \(Int(milliseconds), privacy: .public) ms")
         return removedText
     }
 
@@ -601,26 +688,31 @@ final class FolderIndex {
         var survey = Survey()
         var listed: [(path: String, file: FolderWalk.File)] = []
         var paths = Set<String>()
-        var roots: [String] = []
+        var documents = 0
+        var names = 0
         for folder in folders {
-            let remaining = limits.files - listed.count
-            guard remaining > 0 else {
+            guard documents < limits.files || names < limits.names else {
                 survey.facts.reachedFileLimit = true
+                survey.facts.reachedNameLimit = true
                 break
             }
             let listing: FolderWalk.Listing
             do {
-                listing = try await walk.list(folder, limit: remaining)
+                listing = try await walk.list(folder, documents: max(0, limits.files - documents), names: max(0, limits.names - names))
             } catch {
                 survey.facts.refusedFolders[folder] = error
                 continue
             }
             guard !listing.wasCancelled else { return nil }
-            roots.append(listing.folder.path)
+            survey.roots.append(listing.folder.path)
             for file in listing.files {
                 let path = file.url.path
-                if paths.insert(path).inserted {
-                    listed.append((path, file))
+                guard paths.insert(path).inserted else { continue }
+                listed.append((path, file))
+                if case .text = file.kind {
+                    documents += 1
+                } else {
+                    names += 1
                 }
             }
             survey.facts.skipped.merge(listing.skipCounts, uniquingKeysWith: +)
@@ -628,17 +720,18 @@ final class FolderIndex {
                 survey.facts.skippedFiles.append(SkippedFile(url: skip.url, reason: skip.reason))
             }
             survey.facts.reachedFileLimit = survey.facts.reachedFileLimit || listing.reachedLimit
+            survey.facts.reachedNameLimit = survey.facts.reachedNameLimit || listing.reachedNameLimit
         }
         survey.listed = listed.count
 
         let rows = try await database.run(
-            "SELECT path, size, modified, text_bytes FROM index_files WHERE project = ?", [.text(id.uuidString)])
+            "SELECT path, size, modified, text_bytes, skip FROM index_files WHERE project = ?", [.text(id.uuidString)])
         var stored: [String: Stored] = [:]
-        for row in rows where row.count == 4 {
+        for row in rows where row.count == 5 {
             guard let path = row[0].text, let size = row[1].integer, let modified = row[2].real else { continue }
-            stored[path] = Stored(size: size, modified: modified, textBytes: row[3].integer ?? 0)
+            stored[path] = Stored(size: size, modified: modified, textBytes: row[3].integer ?? 0, skip: row[4].text)
         }
-        var away = AwayFromThisMac(roots: roots, walk: walk)
+        var away = AwayFromThisMac(roots: survey.roots, walk: walk)
         for (path, row) in stored where !paths.contains(path) {
             if away.holds(path) {
                 survey.keptBytes += row.textBytes
@@ -647,17 +740,66 @@ final class FolderIndex {
             }
         }
         survey.gone.sort()
+
         var new: [FolderWalk.File] = []
-        for (path, file) in listed {
+        var images: [(path: String, file: FolderWalk.File)] = []
+        func document(_ path: String, _ file: FolderWalk.File) {
             guard let row = stored[path] else {
                 new.append(file)
-                continue
+                return
             }
-            if row.size == file.size, row.modified == file.modified.timeIntervalSince1970 {
+            if row.matches(file), !row.mustBeWritten {
                 survey.keptBytes += row.textBytes
             } else {
                 survey.changed.append(file)
                 survey.storedBytes[path] = row.textBytes
+            }
+        }
+        func name(_ path: String, _ file: FolderWalk.File, _ reason: FileSkipReason) {
+            if let row = stored[path], row.matches(file), row.skip == reason.rawValue { return }
+            survey.unread.append(Unread(file: file, skip: reason))
+        }
+        func image(_ path: String, _ file: FolderWalk.File) {
+            if let row = stored[path], row.matches(file), !row.mustBeWritten {
+                survey.keptBytes += row.textBytes
+            } else {
+                survey.unread.append(Unread(file: file, skip: .waitsForRecognition))
+            }
+        }
+        for (path, file) in listed {
+            switch file.kind {
+            case .text:
+                document(path, file)
+            case .nameOnly(.overFileLimit) where stored[path].map({ $0.skip == nil }) == true:
+                // A document with text never loses it for room, as a changed file is read
+                // past the text limit.
+                document(path, file)
+            case .image:
+                images.append((path, file))
+            case .nameOnly(let reason):
+                name(path, file, reason)
+            }
+        }
+        // Images take the room the documents leave: those the database holds first, those
+        // with text whatever the room, then new ones, newest first. The rest are known by
+        // name.
+        let newestFirst = { (images: [(path: String, file: FolderWalk.File)]) in
+            images.sorted { $0.file.modified != $1.file.modified ? $0.file.modified > $1.file.modified : $0.path < $1.path }
+        }
+        let held = images.filter { stored[$0.path].map { !$0.mustBeWritten } ?? false }
+        let withText = held.filter { stored[$0.path]?.skip == nil }
+        let heldPaths = Set(held.map(\.path))
+        var room = max(0, limits.files - documents) - withText.count
+        for (path, file) in withText {
+            image(path, file)
+        }
+        for (path, file) in newestFirst(held.filter { stored[$0.path]?.skip != nil }) + newestFirst(images.filter { !heldPaths.contains($0.path) }) {
+            if room > 0 {
+                room -= 1
+                image(path, file)
+            } else {
+                survey.facts.reachedFileLimit = true
+                name(path, file, .overFileLimit)
             }
         }
         survey.changed += new
@@ -722,30 +864,82 @@ final class FolderIndex {
     }
 
     private func refreshReport(_ id: UUID, generation: Int, isIndexing: Bool) async {
-        let project: [ProjectsDatabase.Value] = [.text(id.uuidString)]
         guard let totals = try? await database.run("""
                 SELECT sum(CASE WHEN skip IS NULL THEN 1 ELSE 0 END), sum(CASE WHEN skip IS NULL AND hidden_runs > 0 THEN 1 ELSE 0 END),
-                sum(chunks), sum(text_bytes) FROM index_files WHERE project = ?
-                """, project).first,
-              let skips = try? await database.run("SELECT skip, count(*) FROM index_files WHERE project = ? AND skip IS NOT NULL GROUP BY skip", project),
-              let watched = projects[id], watched.generation == generation, totals.count == 4 else { return }
-        var report = Report(
+                sum(chunks), sum(text_bytes), sum(CASE WHEN skip IS NOT NULL AND skip != ?2 THEN 1 ELSE 0 END)
+                FROM index_files WHERE project = ?1
+                """, [.text(id.uuidString), .text(FileSkipReason.waitsForRecognition.rawValue)]).first,
+              let watched = projects[id], watched.generation == generation, totals.count == 5 else { return }
+        reports[id] = Report(
             indexed: Int(totals[0].integer ?? 0), chunks: Int(totals[2].integer ?? 0), textBytes: totals[3].integer ?? 0,
             hiddenText: Int(totals[1].integer ?? 0), skipped: watched.facts.skipped, refusedFolders: watched.facts.refusedFolders,
             reachedFileLimit: watched.facts.reachedFileLimit, reachedTextLimit: watched.facts.reachedTextLimit,
-            isIndexing: isIndexing)
-        for row in skips where row.count == 2 {
-            if let reason = row[0].text.flatMap(FileSkipReason.init(rawValue:)), let count = row[1].integer {
-                report.skipped[reason, default: 0] += Int(count)
+            isIndexing: isIndexing, nameOnly: Int(totals[4].integer ?? 0), reachedNameLimit: watched.facts.reachedNameLimit)
+    }
+
+    /// Writes the name entries that rows lack, those of an index from before names and
+    /// those of files a rename moved, with the folders the added folders' real paths give.
+    /// A row under none of them keeps none. Returns how many it wrote.
+    private func writeMissingNames(_ id: UUID, roots: [String], generation: Int) async throws -> Int {
+        let rows = try await database.run(
+            "SELECT id, path FROM index_files WHERE project = ? AND folder IS NULL ORDER BY id", [.text(id.uuidString)])
+        let missing = rows.compactMap { row -> Missing? in
+            guard row.count == 2, let id = row[0].integer, let path = row[1].text else { return nil }
+            return Missing(row: id, path: path)
+        }
+        var written = 0
+        for start in stride(from: 0, to: missing.count, by: Self.rowsPerWrite) {
+            let batch = Array(missing[start..<min(start + Self.rowsPerWrite, missing.count)])
+            await waitWhileDictating()
+            guard isCurrent(id, generation) else { break }
+            let named = await Self.names(of: batch, roots: roots)
+            await waitWhileDictating()
+            guard isCurrent(id, generation) else { break }
+            written += try await database.transaction { database in
+                var count = 0
+                for found in named {
+                    // Only a row that still lacks its entry, in case the row changed meanwhile.
+                    guard try !database.run("SELECT 1 FROM index_files WHERE id = ? AND folder IS NULL", [.integer(found.row)]).isEmpty else { continue }
+                    try database.run("UPDATE index_files SET folder = ? WHERE id = ?", [.text(found.folder), .integer(found.row)])
+                    try Self.writeName(found.entry, row: found.row, in: database)
+                    count += 1
+                }
+                return count
             }
         }
-        reports[id] = report
+        return written
+    }
+
+    /// A row without a name entry.
+    private nonisolated struct Missing: Sendable {
+        var row: Int64
+        var path: String
+    }
+
+    /// A row's folder inside its added folder and its name entry.
+    private nonisolated struct Named: Sendable {
+        var row: Int64
+        var folder: String
+        var entry: NameEntry
+    }
+
+    /// The folders and name entries of rows, from the real paths of the added folders. Off
+    /// the main actor, since NLTokenizer takes a while.
+    @concurrent
+    private nonisolated static func names(of rows: [Missing], roots: [String]) async -> [Named] {
+        let roots = roots.sorted { $0.count > $1.count }
+        var entries = NameEntries()
+        return rows.compactMap { missing in
+            guard let root = roots.first(where: { missing.path.hasPrefix($0 + "/") }) else { return nil }
+            let folder = (String(missing.path.dropFirst(root.count + 1)) as NSString).deletingLastPathComponent
+            return Named(row: missing.row, folder: folder, entry: entries.entry(path: missing.path, folder: folder))
+        }
     }
 
     // MARK: Rows
 
     /// A file ready to be written: its chunks with their words and trigram text, or why it
-    /// gives no text.
+    /// gives no text, and its name entry.
     private nonisolated struct Prepared: Sendable {
         nonisolated struct Chunk: Sendable {
             var page: Int?
@@ -755,14 +949,21 @@ final class FolderIndex {
             var words: String
             /// Nil for a chunk without Chinese characters, which the trigram table leaves out.
             var trigramText: String?
+            var sheet: String?
+            var recognized: Bool
         }
 
         var project: UUID
         var path: String
+        /// Its folder inside its added folder, "" at the top.
+        var folder: String
         var size: Int64
         var modified: Date
         var skip: FileSkipReason?
-        /// The file name as the words table and the trigram table hold it.
+        /// Whether pages of the file, or the image, wait for recognition.
+        var recognize = false
+        var name = NameEntry()
+        /// The file name as the chunk tables hold it.
         var nameWords = ""
         var nameTrigramText = ""
         var hiddenRuns = 0
@@ -772,18 +973,74 @@ final class FolderIndex {
         init(project: UUID, file: FolderWalk.File, skip: FileSkipReason?) {
             self.project = project
             path = file.url.path
+            folder = file.folder
             size = file.size
             modified = file.modified
             self.skip = skip
         }
     }
 
-    /// Cuts a file's text into chunks and finds their words. The heading counts as words of
-    /// each chunk under it, and the file name as words of each chunk of the file, since they
-    /// say what it is about.
+    /// A file's name entry: the words of its name, with its extension as one more word, and
+    /// the words of its folder, as index_file_names holds them, and the same text for
+    /// index_file_name_trigrams when either holds a Chinese character.
+    private nonisolated struct NameEntry: Sendable, Equatable {
+        var name = ""
+        var folder = ""
+        var trigramName: String?
+        var trigramFolder: String?
+    }
+
+    /// Makes name entries, keeping the words of each folder it saw, since many files share
+    /// one.
+    private nonisolated struct NameEntries {
+        private var folders: [String: (words: String, trigrams: String?)] = [:]
+
+        mutating func entry(path: String, folder: String) -> NameEntry {
+            let file = URL(fileURLWithPath: path)
+            let name = FolderIndex.searchableName(file)
+            let folderWords: (words: String, trigrams: String?)
+            if let known = folders[folder] {
+                folderWords = known
+            } else {
+                let text = FolderIndex.searchableText(folder.replacingOccurrences(of: "/", with: " "))
+                folderWords = (ChunkSearch.indexedWords(text), ChunkSearch.hasChinese(text) ? ChunkSearch.indexedTrigramText(text) : nil)
+                folders[folder] = folderWords
+            }
+            var entry = NameEntry(name: ChunkSearch.indexedWords(name), folder: folderWords.words)
+            let fileExtension = ChunkSearch.indexedWords(file.pathExtension)
+            if !fileExtension.isEmpty {
+                entry.name += entry.name.isEmpty ? fileExtension : " " + fileExtension
+            }
+            if ChunkSearch.hasChinese(name) || folderWords.trigrams != nil {
+                entry.trigramName = ChunkSearch.indexedTrigramText(name)
+                entry.trigramFolder = folderWords.trigrams ?? ChunkSearch.indexedTrigramText(FolderIndex.searchableText(folder))
+            }
+            return entry
+        }
+    }
+
+    /// Makes a file ready to be written from what its read gave: its chunks and their words,
+    /// or why it gives no text. A PDF with no text but with pages a scan may hold waits for
+    /// recognition. The heading counts as words of each chunk under it, and the file name as
+    /// words of each chunk of the file, since they say what it is about.
     @concurrent
-    private nonisolated static func prepare(_ text: FileTextResult, file: FolderWalk.File, project: UUID, chunker: TextChunker) async -> Prepared {
-        var prepared = Prepared(project: project, file: file, skip: nil)
+    private nonisolated static func prepare(
+        _ result: Result<FileTextResult, FileSkipReason>, file: FolderWalk.File, project: UUID, chunker: TextChunker
+    ) async -> Prepared {
+        var entries = NameEntries()
+        let text: FileTextResult
+        switch result {
+        case .success(let read):
+            text = read
+        case .failure(let reason):
+            var prepared = Prepared(project: project, file: file, skip: reason)
+            prepared.name = entries.entry(path: prepared.path, folder: file.folder)
+            return prepared
+        }
+        let skip: FileSkipReason? = text.pages.isEmpty ? (text.pagesWithoutText.isEmpty ? .noText : .waitsForRecognition) : nil
+        var prepared = Prepared(project: project, file: file, skip: skip)
+        prepared.recognize = !text.pagesWithoutText.isEmpty
+        prepared.name = entries.entry(path: prepared.path, folder: file.folder)
         prepared.hiddenRuns = text.hiddenRuns
         prepared.textBytes = text.pages.reduce(0) { $0 + Int64($1.text.utf8.count) }
         let name = searchableName(file.url)
@@ -797,14 +1054,33 @@ final class FolderIndex {
             return Prepared.Chunk(
                 page: chunk.page, heading: chunk.heading, modified: chunk.modified, text: chunk.text,
                 words: ChunkSearch.indexedWords(searchable),
-                trigramText: ChunkSearch.hasChinese(chunk.text) ? ChunkSearch.indexedTrigramText(searchable) : nil)
+                trigramText: ChunkSearch.hasChinese(chunk.text) ? ChunkSearch.indexedTrigramText(searchable) : nil,
+                sheet: chunk.sheet, recognized: chunk.recognized == true)
         }
         return prepared
     }
 
+    /// Makes rows ready to be written without a read: files known by name, and images that
+    /// wait for recognition.
+    @concurrent
+    private nonisolated static func prepare(_ rows: [Unread], project: UUID) async -> [Prepared] {
+        var entries = NameEntries()
+        return rows.map { row in
+            var prepared = Prepared(project: project, file: row.file, skip: row.skip)
+            prepared.recognize = row.skip == .waitsForRecognition
+            prepared.name = entries.entry(path: prepared.path, folder: row.file.folder)
+            return prepared
+        }
+    }
+
     /// A file's name without its extension, with hyphens and underscores as spaces.
     private nonisolated static func searchableName(_ file: URL) -> String {
-        file.deletingPathExtension().lastPathComponent.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ")
+        searchableText(file.deletingPathExtension().lastPathComponent)
+    }
+
+    /// A text with hyphens and underscores as spaces, as names and folders are searched.
+    private nonisolated static func searchableText(_ text: String) -> String {
+        text.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ")
     }
 
     /// Writes a file in place of what the database held for its path. Returns whether text
@@ -814,17 +1090,19 @@ final class FolderIndex {
         let removed = try removeRows(project: prepared.project, path: prepared.path, in: database)
         let skip: Value = prepared.skip.map { .text($0.rawValue) } ?? .null
         try database.run(
-            "INSERT INTO index_files (project, path, size, modified, skip, hidden_runs, text_bytes, chunks) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO index_files (project, path, size, modified, skip, hidden_runs, text_bytes, chunks, folder, recognize) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [project, .text(prepared.path), .integer(prepared.size), .real(prepared.modified.timeIntervalSince1970), skip,
-             .integer(Int64(prepared.hiddenRuns)), .integer(prepared.textBytes), .integer(Int64(prepared.chunks.count))])
+             .integer(Int64(prepared.hiddenRuns)), .integer(prepared.textBytes), .integer(Int64(prepared.chunks.count)),
+             .text(prepared.folder), .integer(prepared.recognize ? 1 : 0)])
         let file = database.lastInsertedRow
         for chunk in prepared.chunks {
             let page: Value = chunk.page.map { .integer(Int64($0)) } ?? .null
             let heading: Value = chunk.heading.map { .text($0) } ?? .null
+            let sheet: Value = chunk.sheet.map { .text($0) } ?? .null
             try database.run(
-                "INSERT INTO index_chunks (file, project, page, heading, modified, text, chinese) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO index_chunks (file, project, page, heading, modified, text, chinese, sheet, recognized) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [.integer(file), project, page, heading, .real(chunk.modified.timeIntervalSince1970), .text(chunk.text),
-                 .integer(chunk.trigramText == nil ? 0 : 1)])
+                 .integer(chunk.trigramText == nil ? 0 : 1), sheet, .integer(chunk.recognized ? 1 : 0)])
             let row = database.lastInsertedRow
             try database.run(
                 "INSERT INTO index_chunk_words (rowid, name, words) VALUES (?, ?, ?)",
@@ -835,7 +1113,18 @@ final class FolderIndex {
                     [.integer(row), .text(prepared.nameTrigramText), .text(trigramText)])
             }
         }
+        try writeName(prepared.name, row: file, in: database)
         return removed
+    }
+
+    /// Writes the name entry of a row, in place of any it had.
+    private static func writeName(_ entry: NameEntry, row: Int64, in database: isolated ProjectsDatabase) throws {
+        try database.run("DELETE FROM index_file_names WHERE rowid = ?", [.integer(row)])
+        try database.run("DELETE FROM index_file_name_trigrams WHERE rowid = ?", [.integer(row)])
+        try database.run("INSERT INTO index_file_names (rowid, name, folder) VALUES (?, ?, ?)", [.integer(row), .text(entry.name), .text(entry.folder)])
+        if let name = entry.trigramName, let folder = entry.trigramFolder {
+            try database.run("INSERT INTO index_file_name_trigrams (rowid, name, folder) VALUES (?, ?, ?)", [.integer(row), .text(name), .text(folder)])
+        }
     }
 
     private typealias Value = ProjectsDatabase.Value
@@ -847,15 +1136,22 @@ final class FolderIndex {
         "path >= \(name) AND path < \(name) || '0' AND (path = \(name) OR substr(path, length(\(name)) + 1, 1) = '/')"
     }
 
-    /// The rows of the files that match `condition`, with the project as the first parameter.
+    /// Removes the rows of the files that match `condition`, with the project as the first
+    /// parameter: their chunks, their name entries, and the pages tried for recognition with
+    /// them, see `fileTypesMigration`. Returns whether a row was removed, since each held at
+    /// least a name.
     private static func removeFiles(where condition: String, _ parameters: [Value], in database: isolated ProjectsDatabase) throws -> Bool {
         let files = "SELECT id FROM index_files WHERE project = ?1 AND \(condition)"
-        let chunks = try database.run("SELECT count(*) FROM index_chunks WHERE file IN (\(files))", parameters).first?.first?.integer ?? 0
+        let count = try database.run("SELECT count(*) FROM (\(files))", parameters).first?.first?.integer ?? 0
+        guard count > 0 else { return false }
         try database.run("DELETE FROM index_chunk_words WHERE rowid IN (SELECT id FROM index_chunks WHERE file IN (\(files)))", parameters)
         try database.run("DELETE FROM index_chunk_trigrams WHERE rowid IN (SELECT id FROM index_chunks WHERE file IN (\(files)))", parameters)
         try database.run("DELETE FROM index_chunks WHERE file IN (\(files))", parameters)
+        try database.run("DELETE FROM index_file_names WHERE rowid IN (\(files))", parameters)
+        try database.run("DELETE FROM index_file_name_trigrams WHERE rowid IN (\(files))", parameters)
+        // index_recognition_pages goes with its rows, ON DELETE CASCADE.
         try database.run("DELETE FROM index_files WHERE project = ?1 AND \(condition)", parameters)
-        return chunks > 0
+        return true
     }
 
     /// Removes the file at `path`. Returns whether text was removed.
@@ -875,21 +1171,66 @@ final class FolderIndex {
 
     /// Moves the rows of a renamed file, or of every file in a renamed folder. What the new
     /// place held before is replaced. A renamed file's chunks get the words of its new name.
-    /// A rename whose old place holds nothing, such as one a sweep already took in, changes
-    /// nothing. Returns whether text was removed.
+    /// The moved rows lose their name entries, which the next sweep writes again with their
+    /// new names and folders. A rename whose old place holds nothing, such as one a sweep
+    /// already took in, changes nothing. Returns whether text was removed.
     private static func applyRename(_ rename: FolderEvents.Rename, project: UUID, in database: isolated ProjectsDatabase) throws -> Bool {
         let old: [Value] = [.text(project.uuidString), .text(rename.from)]
         guard try !database.run("SELECT 1 FROM index_files WHERE project = ?1 AND \(atOrUnder("?2")) LIMIT 1", old).isEmpty else { return false }
-        let removed = try removeRows(project: project, under: rename.to, in: database)
+        // What the new place held goes. The moved rows lose their name entries, so text goes
+        // either way.
+        _ = try removeRows(project: project, under: rename.to, in: database)
         let name = searchableName(URL(fileURLWithPath: rename.to))
         let chunks = "SELECT id FROM index_chunks WHERE file IN (SELECT id FROM index_files WHERE project = ?1 AND path = ?2)"
         try database.run("UPDATE index_chunk_words SET name = ?3 WHERE rowid IN (\(chunks))", old + [.text(ChunkSearch.indexedWords(name))])
         try database.run("UPDATE index_chunk_trigrams SET name = ?3 WHERE rowid IN (\(chunks))", old + [.text(ChunkSearch.indexedTrigramText(name))])
+        let moved = "SELECT id FROM index_files WHERE project = ?1 AND \(atOrUnder("?2"))"
+        try database.run("DELETE FROM index_file_names WHERE rowid IN (\(moved))", old)
+        try database.run("DELETE FROM index_file_name_trigrams WHERE rowid IN (\(moved))", old)
+        try database.run("UPDATE index_files SET folder = NULL WHERE project = ?1 AND \(atOrUnder("?2"))", old)
         try database.run(
             "UPDATE index_files SET path = ?2 || substr(path, length(?3) + 1) WHERE project = ?1 AND \(atOrUnder("?3"))",
             [.text(project.uuidString), .text(rename.to), .text(rename.from)])
-        return removed
+        return true
     }
+
+    // MARK: Schema
+
+    /// The sixth step of ProjectsDatabase.migrations: what the index needs for more kinds of
+    /// files and for text recognition.
+    ///
+    /// - index_files gains `folder`, the file's folder inside its added folder, NULL until
+    ///   its name entry is written, and `recognize`, 1 while pages of the file, or the
+    ///   image, wait for recognition.
+    /// - index_chunks gains `sheet`, the name of a workbook's sheet, and `recognized`, 1 for
+    ///   text recognition gave.
+    /// - index_file_names and index_file_name_trigrams hold one name entry for each row, with
+    ///   the row's id as rowid, see NameEntry and FileNameSearch.
+    /// - index_recognition_pages keeps each page recognition tried, by the file's row and
+    ///   the page, 0 for an image, with the size and modification date the file had then and
+    ///   the outcome: text, blank, timedOut or failed. So a file moves on past pages that
+    ///   gave nothing, and a restart goes on where it stopped. A row's pages go with it.
+    /// - PDFs 0.6.0 stored, with text or as holding none, wait for recognition, which looks
+    ///   at their pages for ones without a text layer. Their text is not read again.
+    nonisolated static let fileTypesMigration = ProjectsDatabase.Migration(version: 6, sql: """
+        ALTER TABLE index_files ADD COLUMN folder TEXT;
+        ALTER TABLE index_files ADD COLUMN recognize INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE index_chunks ADD COLUMN sheet TEXT;
+        ALTER TABLE index_chunks ADD COLUMN recognized INTEGER NOT NULL DEFAULT 0;
+        CREATE INDEX index_files_waiting ON index_files (project, modified) WHERE recognize = 1;
+        CREATE VIRTUAL TABLE index_file_names USING fts5 (name, folder, tokenize = 'unicode61 remove_diacritics 2');
+        CREATE VIRTUAL TABLE index_file_name_trigrams USING fts5 (name, folder, tokenize = 'trigram');
+        CREATE TABLE index_recognition_pages (
+            file INTEGER NOT NULL REFERENCES index_files (id) ON DELETE CASCADE,
+            page INTEGER NOT NULL,
+            size INTEGER NOT NULL,
+            modified REAL NOT NULL,
+            outcome TEXT NOT NULL,
+            PRIMARY KEY (file, page)
+        ) WITHOUT ROWID;
+        UPDATE index_files SET recognize = 1 WHERE path LIKE '%.pdf' AND (skip IS NULL OR skip = 'noText');
+        UPDATE index_files SET skip = 'waitsForRecognition' WHERE recognize = 1 AND skip = 'noText';
+        """)
 
     // MARK: Watching
 

@@ -3,10 +3,15 @@ import Foundation
 import PDFKit
 
 /// Why a file in a project folder gives no text for the index. FolderWalk skips a file or a
-/// folder for one of the reasons up to `noAccess` before anything opens it.
-/// FileTextExtractor checks a file's reasons again before it reads, and adds the reasons
-/// after `noAccess`. The raw values stay the same from release to release, so the index can
-/// store them.
+/// folder for one of the reasons up to `noAccess` before anything opens it, except an
+/// archive, a file of a format Projects does not read and a file over its size limit, which
+/// it lists by name only. FileTextExtractor checks a file's reasons again before it reads,
+/// and adds the reasons from `noAccess` to `cancelled`. The index adds the last three.
+///
+/// A row of the index holds no reason when it holds the file's text, else one of: archive,
+/// tooLarge, unsupportedFormat, unreadable, locked, tooSlow, noText, waitsForRecognition,
+/// imageWithoutText and overFileLimit. The raw values stay the same from release to
+/// release, so the index can store them.
 nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable {
     /// A name that starts with a period, or a file Finder hides.
     case hidden
@@ -16,7 +21,8 @@ nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable 
     case gitFolder
     /// A node_modules folder.
     case nodeModules
-    /// A zip file, a disk image or another archive. Archives are never opened.
+    /// A zip file, a disk image or another archive, known by its name only. Archives are
+    /// never opened.
     case archive
     /// A symbolic link, which is never followed.
     case symbolicLink
@@ -38,11 +44,9 @@ nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable 
     case dataless
     /// An iCloud file whose newest version is not downloaded.
     case notDownloaded
-    /// A format Projects does not read.
+    /// A format Projects does not read, such as a drawing or a video, known by its name
+    /// only. Also anything that is not a regular file, such as a named pipe.
     case unsupportedFormat
-    /// An Excel or PowerPoint file (xlsx or pptx) in a project folder, which the index does
-    /// not read yet.
-    case spreadsheetOrSlides
     /// A file or folder Orra may not read, or one that went away.
     case noAccess
     /// Content that does not match the file's extension, or that its reader cannot read.
@@ -51,11 +55,20 @@ nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable 
     case locked
     /// A PDF that took longer than its time limit to read.
     case tooSlow
-    /// A file without text, such as a scanned PDF.
+    /// A file without text, such as a PDF whose only text is hidden, or a scan whose pages
+    /// gave no text when they were recognized.
     case noText
     /// The read stopped because its task was cancelled, so nothing is known about the file.
     /// The index does not store this reason.
     case cancelled
+    /// An image, or a PDF whose pages hold no text layer, whose text has not been
+    /// recognized yet.
+    case waitsForRecognition
+    /// An image in which recognition found no text.
+    case imageWithoutText
+    /// A document or an image past the number of files the index reads for a project,
+    /// known by its name only, see FolderIndex.Limits.
+    case overFileLimit
 }
 
 /// The text of one file, page by page.
@@ -67,8 +80,11 @@ nonisolated struct FileTextResult: Sendable, Equatable {
         var text: String
         /// The name of the sheet in a workbook, which is a page with no number.
         var sheet: String? = nil
+        /// Whether the text was recognized in an image or on a scanned page, so its words
+        /// and numbers may be wrong.
+        var isRecognized = false
         /// Whether the page stands alone, as a slide or a sheet does, so its chunks take
-        /// no heading from the pages before it.
+        /// no heading from the pages before it, see TextChunker.
         var isStandAlone = false
     }
 
@@ -86,11 +102,13 @@ nonisolated struct FileTextResult: Sendable, Equatable {
     /// Whether pages past `FileTextExtractor.Limits.pdfPages` were left out, or the later
     /// sheets, cells or slides of an xlsx or pptx.
     var isCut: Bool
+    /// The PDF pages whose text layer holds fewer than `FileTextExtractor.textLayerCharacters`
+    /// letters or digits, such as scanned pages, whose text only recognition can read.
+    var pagesWithoutText: [Int] = []
 }
 
-/// Reads the text of one file in a project folder: PDF, docx, doc, rtf, odt, md and txt.
-/// MailAttachment reads the bytes of an email's attachments with it too, xlsx and pptx
-/// among them.
+/// Reads the text of one file in a project folder: PDF, docx, doc, rtf, odt, xlsx, pptx, md,
+/// txt, csv and tsv. MailAttachment reads the bytes of an email's attachments with it too.
 ///
 /// The files may come from anyone and are read in Orra's own process, so:
 /// - A file is read only after a check of its type, flags and size, through a descriptor
@@ -114,9 +132,23 @@ nonisolated struct FileTextExtractor: Sendable {
         case xlsx
         /// pptx and ppsx.
         case pptx
-        /// md and txt.
+        /// md, txt, csv and tsv.
         case text
     }
+
+    /// What the index does with a file, by its extension.
+    nonisolated enum Kind: Sendable, Equatable {
+        /// A document whose text it reads in this format.
+        case text(Format)
+        /// An image, whose text only recognition can read.
+        case image
+        /// A file it knows by its name only, and why.
+        case nameOnly(FileSkipReason)
+    }
+
+    /// The letters and digits a PDF page's text layer holds at least, below which the page
+    /// may be a scan whose text only recognition can read.
+    static let textLayerCharacters = 20
 
     /// The limits for one file. All of them are guesses.
     nonisolated struct Limits: Sendable {
@@ -172,18 +204,21 @@ nonisolated struct FileTextExtractor: Sendable {
         return extract(data, format: format, modified: modified, keepsHiddenOnly: true)
     }
 
-    /// What a file extension means: the format to read, or why such a file is skipped.
-    static func format(ofExtension fileExtension: String) -> Result<Format, FileSkipReason> {
+    /// What a file extension means: a document to read in a format, an image, or a file
+    /// known by its name only.
+    static func kind(ofExtension fileExtension: String) -> Kind {
         switch fileExtension.lowercased() {
-        case "pdf": .success(.pdf)
-        case "docx": .success(.docx)
-        case "doc": .success(.doc)
-        case "rtf": .success(.rtf)
-        case "odt": .success(.odt)
-        case "md", "txt": .success(.text)
-        case "xlsx", "pptx": .failure(.spreadsheetOrSlides)
-        case let other where archiveExtensions.contains(other): .failure(.archive)
-        default: .failure(.unsupportedFormat)
+        case "pdf": .text(.pdf)
+        case "docx": .text(.docx)
+        case "doc": .text(.doc)
+        case "rtf": .text(.rtf)
+        case "odt": .text(.odt)
+        case "xlsx", "xlsm": .text(.xlsx)
+        case "pptx", "ppsx": .text(.pptx)
+        case "md", "txt", "csv", "tsv": .text(.text)
+        case "png", "jpg", "jpeg", "heic", "heif", "tif", "tiff", "gif", "bmp", "webp": .image
+        case let other where archiveExtensions.contains(other): .nameOnly(.archive)
+        default: .nameOnly(.unsupportedFormat)
         }
     }
 
@@ -195,9 +230,10 @@ nonisolated struct FileTextExtractor: Sendable {
     private func read(_ file: URL) -> Result<FileTextResult, FileSkipReason> {
         guard !Task.isCancelled else { return .failure(.cancelled) }
         let format: Format
-        switch Self.format(ofExtension: file.pathExtension) {
-        case .success(let found): format = found
-        case .failure(let reason): return .failure(reason)
+        switch Self.kind(ofExtension: file.pathExtension) {
+        case .text(let found): format = found
+        case .image: return .failure(.waitsForRecognition)
+        case .nameOnly(let reason): return .failure(reason)
         }
         let data: Data
         let modified: Date
@@ -220,15 +256,18 @@ nonisolated struct FileTextExtractor: Sendable {
     }
 
     /// The text of a file's bytes, read as `format`. Without visible text it gives `noText`,
-    /// or with `keepsHiddenOnly` a result without pages when hidden runs were dropped.
+    /// or with `keepsHiddenOnly` a result without pages when hidden runs were dropped. A PDF
+    /// with pages whose text layer is empty gives a result that lists them, with or without
+    /// pages, since recognition may read them.
     private func extract(_ data: Data, format: Format, modified: Date, keepsHiddenOnly: Bool = false) -> Result<FileTextResult, FileSkipReason> {
         var pages: [FileTextResult.Page]
         var hiddenRuns = 0
         var isCut = false
+        var pagesWithoutText: [Int] = []
         switch format {
         case .pdf:
             switch pdfText(data) {
-            case .success(let read): (pages, hiddenRuns, isCut) = read
+            case .success(let read): (pages, hiddenRuns, isCut, pagesWithoutText) = read
             case .failure(let reason): return .failure(reason)
             }
         case .docx, .doc, .rtf, .odt:
@@ -264,8 +303,8 @@ nonisolated struct FileTextExtractor: Sendable {
             return page
         }
         .filter { !$0.text.allSatisfy(\.isWhitespace) }
-        guard !pages.isEmpty || (keepsHiddenOnly && hiddenRuns > 0) else { return .failure(.noText) }
-        return .success(FileTextResult(pages: pages, hiddenRuns: hiddenRuns, modified: modified, isCut: isCut))
+        guard !pages.isEmpty || (keepsHiddenOnly && hiddenRuns > 0) || !pagesWithoutText.isEmpty else { return .failure(.noText) }
+        return .success(FileTextResult(pages: pages, hiddenRuns: hiddenRuns, modified: modified, isCut: isCut, pagesWithoutText: pagesWithoutText))
     }
 
     // MARK: Reading the bytes
@@ -327,44 +366,54 @@ nonisolated struct FileTextExtractor: Sendable {
 
     // MARK: PDF
 
-    private func pdfText(_ data: Data) -> Result<([FileTextResult.Page], Int, Bool), FileSkipReason> {
+    private func pdfText(_ data: Data) -> Result<([FileTextResult.Page], Int, Bool, [Int]), FileSkipReason> {
         let start = now()
         guard let document = PDFDocument(data: data) else { return .failure(.unreadable) }
         guard !document.isLocked else { return .failure(.locked) }
         let count = min(document.pageCount, limits.pdfPages)
         var pages: [FileTextResult.Page] = []
         var hiddenRuns = 0
+        var pagesWithoutText: [Int] = []
         for index in 0..<count {
-            let read: (text: String, hiddenRuns: Int)? = autoreleasepool {
+            let read: (text: String, hiddenRuns: Int, layer: Int)? = autoreleasepool {
                 document.page(at: index).map(Self.visibleText(of:))
             }
             if let read {
                 pages.append(FileTextResult.Page(number: index + 1, text: read.text))
                 hiddenRuns += read.hiddenRuns
             }
+            if (read?.layer ?? 0) < Self.textLayerCharacters {
+                pagesWithoutText.append(index + 1)
+            }
             if Task.isCancelled { return .failure(.cancelled) }
             if start.duration(to: now()) > limits.pdfTime { return .failure(.tooSlow) }
         }
-        return .success((pages, hiddenRuns, document.pageCount > count))
+        return .success((pages, hiddenRuns, document.pageCount > count, pagesWithoutText))
     }
 
-    /// The text of a PDF page without its hidden runs. PDFKit gives the size of each run but
-    /// not whether it is drawn: it reports transparent text as opaque, and says nothing of
+    /// The text of a PDF page without its hidden runs, and the letters and digits of its
+    /// whole text layer, hidden runs included. PDFKit gives the size of each run but not
+    /// whether it is drawn: it reports transparent text as opaque, and says nothing of
     /// invisible text (render mode 3) or of a shape drawn over text. So the page is drawn,
     /// and a line counts as hidden where it leaves no ink. A scan's invisible text layer lies
     /// on the scan's ink and is kept. Text drawn over other text is not found.
-    private static func visibleText(of page: PDFPage) -> (text: String, hiddenRuns: Int) {
-        guard let document = page.attributedString else { return (page.string ?? "", 0) }
+    private static func visibleText(of page: PDFPage) -> (text: String, hiddenRuns: Int, layer: Int) {
+        guard let document = page.attributedString else {
+            let text = page.string ?? ""
+            return (text, 0, lettersAndDigits(in: text))
+        }
+        let layer = lettersAndDigits(in: document.string)
         guard let drawing = PageDrawing(page) else {
             // Without a drawing, light and transparent text counts as hidden.
-            return visible(document) { attributes, _ in
+            let read = visible(document) { attributes, _ in
                 if isTiny(attributes) { return true }
                 guard let color = RGB(attributes[.foregroundColor] as? NSColor ?? .black) else { return false }
                 return color.isTransparent || color.isLight
             }
+            return (read.text, read.hiddenRuns, layer)
         }
         let string = document.string as NSString
-        return visible(document) { attributes, range in
+        let read = visible(document) { attributes, range in
             if isTiny(attributes) { return true }
             guard let box = page.selection(for: range)?.bounds(for: page) else { return false }
             // Punctuation alone leaves too little ink to judge, and hides nothing.
@@ -373,6 +422,11 @@ nonisolated struct FileTextExtractor: Sendable {
             let size = (attributes[.font] as? NSFont)?.pointSize ?? box.height
             return !drawing.showsInk(in: box, characters: characters, size: size)
         }
+        return (read.text, read.hiddenRuns, layer)
+    }
+
+    private static func lettersAndDigits(in text: String) -> Int {
+        text.count { $0.isLetter || $0.isNumber }
     }
 
     /// A PDF page drawn at up to one pixel a point, to see where text leaves ink.

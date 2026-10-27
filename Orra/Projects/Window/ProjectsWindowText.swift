@@ -103,7 +103,8 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
-    /// Why a file gives no text, for the project page.
+    /// Why a file gives no text, for the project page. The page only counts the files of
+    /// some reasons, see `FolderWalk.countedSkips` and `FolderIndex.countedSkips`.
     static func skipReason(_ reason: FileSkipReason) -> String {
         switch reason {
         case .hidden: String(localized: "Hidden")
@@ -117,13 +118,15 @@ nonisolated enum ProjectsWindowText {
         case .tooLarge: String(localized: "Too large")
         case .dataless, .notDownloaded: String(localized: "Not downloaded to this Mac")
         case .unsupportedFormat: String(localized: "A format Projects does not read")
-        case .spreadsheetOrSlides: String(localized: "Excel and PowerPoint files are not read yet")
         case .noAccess: String(localized: "Orra is not allowed to read it")
         case .unreadable: String(localized: "Could not be read")
         case .locked: String(localized: "Locked with a password")
         case .tooSlow: String(localized: "Took too long to read")
         case .noText: String(localized: "Holds no text")
         case .cancelled: String(localized: "Not read yet")
+        case .waitsForRecognition: String(localized: "Waiting for text recognition")
+        case .imageWithoutText: String(localized: "An image without text")
+        case .overFileLimit: String(localized: "Past the number of files Projects reads")
         }
     }
 

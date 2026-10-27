@@ -503,7 +503,9 @@ final class ExplainService {
     }
 
     private nonisolated static func chunk(_ hit: ChunkSearch.Hit) -> TextChunker.Chunk {
-        TextChunker.Chunk(file: hit.file, page: hit.page, modified: hit.modified, heading: hit.heading, text: hit.text)
+        TextChunker.Chunk(
+            file: hit.file, page: hit.page, modified: hit.modified, heading: hit.heading, text: hit.text, sheet: hit.sheet,
+            recognized: hit.recognized ? true : nil)
     }
 
     // MARK: After the model

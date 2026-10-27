@@ -5,7 +5,9 @@ import Testing
 /// What FolderWalk lists, skips and refuses, in a temporary tree with a stand in home
 /// folder. Nothing here opens a file.
 struct FolderWalkTests {
-    @Test func listsTheFilesItReadsAndSkipsTheRest() async throws {
+    /// Every regular file is listed with its kind and folder: documents, images and files
+    /// known by name. Hidden files, packages and code folders are only counted.
+    @Test func listsEveryFileWithItsKind() async throws {
         let tree = try Tree()
         defer { tree.remove() }
         let project = "home/Projects/Alpha"
@@ -20,45 +22,60 @@ struct FolderWalkTests {
         let modified = Date(timeIntervalSince1970: 1_760_000_000)
         try FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: tree.url("\(project)/notes.md").path)
 
+        // Keynote, Numbers and Pages documents saved as packages are listed by name, and
+        // the walk never enters them, whether or not this Mac knows them as packages.
+        for name in ["Deck.key/Index.zip", "Budget.numbers/Data/photo.jpg"] {
+            try tree.file("\(project)/\(name)")
+        }
         let listing = try await tree.walk().list(tree.url(project))
-        #expect(names(of: listing) == ["Brief.DOCX", "notes.md", "old.doc", "report.pdf", "sub/deeper/specs.odt", "sub/deeper/terms.rtf", "sub/plan.txt"])
-        #expect(listing.files.map(\.format) == [.docx, .text, .doc, .pdf, .odt, .rtf, .text])
+        #expect(names(of: listing) == [
+            "Brief.DOCX", "Budget.numbers", "Deck.key", "backup.zip", "budget.xlsx", "deck.pptx", "notes.md", "old.doc", "photo.jpg", "report.pdf",
+            "sub/deeper/specs.odt", "sub/deeper/terms.rtf", "sub/plan.txt",
+        ])
+        #expect(listing.files.map(\.kind) == [
+            .text(.docx), .nameOnly(.unsupportedFormat), .nameOnly(.unsupportedFormat), .nameOnly(.archive), .text(.xlsx), .text(.pptx),
+            .text(.text), .text(.doc), .image, .text(.pdf), .text(.odt), .text(.rtf), .text(.text),
+        ])
+        #expect(listing.files.map(\.folder) == ["", "", "", "", "", "", "", "", "", "", "sub/deeper", "sub/deeper", "sub"])
         let notes = try #require(listing.files.first { $0.url.lastPathComponent == "notes.md" })
         #expect(notes.size == 4)
         #expect(notes.modified == modified)
         // Expected skips are only counted.
-        #expect(skips(of: listing) == ["budget.xlsx": .spreadsheetOrSlides, "deck.pptx": .spreadsheetOrSlides])
-        #expect(listing.skipCounts == [
-            .hidden: 2, .gitFolder: 1, .package: 1, .archive: 1, .spreadsheetOrSlides: 2, .nodeModules: 1, .unsupportedFormat: 1,
-        ])
-        #expect(!listing.reachedLimit)
+        #expect(skips(of: listing).isEmpty)
+        #expect(listing.skipCounts == [.hidden: 2, .gitFolder: 1, .package: 1, .nodeModules: 1])
+        #expect(!listing.reachedLimit && !listing.reachedNameLimit)
         #expect(!listing.wasCancelled)
     }
 
     @Test func namesAtMostAThousandSkips() async throws {
         let tree = try Tree()
         defer { tree.remove() }
+        try tree.folder("home/Projects/Alpha")
         for number in 1...(FolderWalk.maximumListedSkips + 5) {
-            try tree.file("home/Projects/Alpha/sheet \(number).xlsx")
+            try tree.link("home/Projects/Alpha/link \(number).md", to: "notes.md")
         }
         let listing = try await tree.walk().list(tree.url("home/Projects/Alpha"))
         #expect(listing.skipped.count == FolderWalk.maximumListedSkips)
-        #expect(listing.skipCounts == [.spreadsheetOrSlides: FolderWalk.maximumListedSkips + 5])
+        #expect(listing.skipCounts == [.symbolicLink: FolderWalk.maximumListedSkips + 5])
     }
 
-    /// A sparse file has the size of a large one and takes no room.
-    @Test func skipsFilesOverFiftyMegabytes() async throws {
+    /// A sparse file has the size of a large one and takes no room. A document or image
+    /// over 50 MB is known by its name only, and any file known by name whatever its size.
+    @Test func filesOverFiftyMegabytesAreKnownByName() async throws {
         let tree = try Tree()
         defer { tree.remove() }
         let project = "home/Projects/Alpha"
-        for (name, size) in [("edge.pdf", FolderWalk.maximumFileSize), ("big.pdf", FolderWalk.maximumFileSize + 1)] {
+        let sizes = [("edge.pdf", FolderWalk.maximumFileSize), ("big.pdf", FolderWalk.maximumFileSize + 1),
+                     ("big.jpg", FolderWalk.maximumFileSize + 1), ("film.mp4", 3 * FolderWalk.maximumFileSize)]
+        for (name, size) in sizes {
             let handle = try FileHandle(forWritingTo: try tree.file("\(project)/\(name)", ""))
             try handle.truncate(atOffset: UInt64(size))
             try handle.close()
         }
         let listing = try await tree.walk().list(tree.url(project))
-        #expect(names(of: listing) == ["edge.pdf"])
-        #expect(skips(of: listing) == ["big.pdf": .tooLarge])
+        #expect(names(of: listing) == ["big.jpg", "big.pdf", "edge.pdf", "film.mp4"])
+        #expect(listing.files.map(\.kind) == [.nameOnly(.tooLarge), .nameOnly(.tooLarge), .text(.pdf), .nameOnly(.unsupportedFormat)])
+        #expect(skips(of: listing).isEmpty)
     }
 
     /// A temporary folder holds no dataless file, so the flags come from a stand in. The
@@ -115,9 +132,8 @@ struct FolderWalkTests {
 
         let listing = try await tree.walk().list(tree.url(project))
         #expect(names(of: listing) == ["notes.md"])
-        // An alias without an extension Projects reads is skipped for its name alone.
-        #expect(skips(of: listing) == ["secret.pdf": .alias])
-        #expect(listing.skipCounts == [.alias: 1, .unsupportedFormat: 1])
+        #expect(skips(of: listing) == ["secret alias": .alias, "secret.pdf": .alias])
+        #expect(listing.skipCounts == [.alias: 2])
     }
 
     /// The walk stays off other volumes, such as /System/Volumes/Data, which would lead back
@@ -210,19 +226,41 @@ struct FolderWalkTests {
         #expect(await walk.refusal(for: tree.url("home/notes.md")) == .notAFolder)
     }
 
-    @Test func stopsAtItsLimit() async throws {
+    /// Documents past their limit are listed by name. Once the names are full too, the walk
+    /// stops.
+    @Test func stopsAtItsLimits() async throws {
         let tree = try Tree()
         defer { tree.remove() }
         for number in 1...5 {
             try tree.file("home/Projects/Alpha/note \(number).md")
         }
         let walk = tree.walk()
-        let cut = try await walk.list(tree.url("home/Projects/Alpha"), limit: 3)
-        #expect(cut.files.count == 3)
-        #expect(cut.reachedLimit)
-        let whole = try await walk.list(tree.url("home/Projects/Alpha"), limit: 5)
+        let past = try await walk.list(tree.url("home/Projects/Alpha"), documents: 3)
+        #expect(past.files.map(\.kind) == [.text(.text), .text(.text), .text(.text), .nameOnly(.overFileLimit), .nameOnly(.overFileLimit)])
+        #expect(past.reachedLimit && !past.reachedNameLimit)
+        let cut = try await walk.list(tree.url("home/Projects/Alpha"), documents: 3, names: 1)
+        #expect(cut.files.count == 4)
+        #expect(cut.reachedLimit && cut.reachedNameLimit)
+        let whole = try await walk.list(tree.url("home/Projects/Alpha"), documents: 5)
         #expect(whole.files.count == 5)
         #expect(!whole.reachedLimit)
+    }
+
+    /// A folder of photos that fills the names never hides the documents after it: the
+    /// walk goes on for them. It takes the folders of a folder last name first.
+    @Test func documentsAfterAFolderFullOfPhotosAreStillListed() async throws {
+        let tree = try Tree()
+        defer { tree.remove() }
+        for number in 1...8 {
+            try tree.file("home/Projects/Alpha/b photos/IMG_\(2040 + number).jpg")
+        }
+        try tree.file("home/Projects/Alpha/a documents/plan.pdf")
+        try tree.file("home/Projects/Alpha/a documents/site.dwg")
+        let listing = try await tree.walk().list(tree.url("home/Projects/Alpha"), documents: 10, names: 3)
+        #expect(listing.files.filter { $0.kind == .image }.count == 3)
+        #expect(names(of: listing).contains("a documents/plan.pdf"))
+        #expect(!names(of: listing).contains("a documents/site.dwg"))
+        #expect(listing.reachedNameLimit && !listing.reachedLimit)
     }
 
     // MARK: Helpers
