@@ -1137,8 +1137,13 @@ struct ProjectsWindowViewTests {
     /// its smallest width, and the email view gets the room, with its panes side by side or
     /// one above the other as its width says. Exit Comparison shows the columns as before.
     /// At the first size, the sidebar shown again while comparing, as the toolbar's sidebar
-    /// button shows it, ends the comparison. It waits for each layout at most two seconds
-    /// while the main run loop runs, prints the widths it measured and closes the window.
+    /// button shows it, ends the comparison, a sidebar hidden before the comparison stays
+    /// hidden after it, and each pane is one area named for VoiceOver, where the Mac gives
+    /// this process an accessibility tree. At the smallest size, the window closed while
+    /// comparing, as the app closes it, keeps its size, which the app saves for the next
+    /// window. It waits for each layout at most two seconds while the main run loop runs,
+    /// prints the widths it measured, saves an image of the window while comparing where
+    /// TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS names a folder, and closes the window.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_PROJECTS_WINDOW_LIVE"] == "1"))
     func compareWithOriginalInAShownWindow() async throws {
         let fixture = try await Fixture()
@@ -1203,7 +1208,10 @@ struct ProjectsWindowViewTests {
             #expect(comparing.email >= contentWidth - comparing.list - 2, "\(size): \(comparing) in \(contentWidth)")
             #expect(arrangement == expected, "\(size): \(comparing)")
             #expect(Self.descendants(of: content).contains { $0 === editor })
-            print("Projects window \(Int(size.width)) by \(Int(size.height)), email view \(Int(pane.frame.width)) by \(Int(window.contentLayoutRect.height)) under the toolbar: before, sidebar \(before.sidebar), list \(before.list), email view \(before.email). Comparing, sidebar \(comparing.sidebar), list \(comparing.list), email view \(comparing.email), \(arrangement).")
+            // What each pane holds inside its padding, beside a scroll bar where it takes room.
+            let panes = Self.outerScrollViews(in: pane).map { Int($0.contentView.frame.width - 2 * ProjectsEmailArea.Panes.padding) }
+            print("Projects window \(Int(size.width)) by \(Int(size.height)), email view \(Int(pane.frame.width)) by \(Int(window.contentLayoutRect.height)) under the toolbar: before, sidebar \(before.sidebar), list \(before.list), email view \(before.email). Comparing, sidebar \(comparing.sidebar), list \(comparing.list), email view \(comparing.email), \(arrangement), panes holding \(panes) points of content with scroll bars of style \(NSScroller.preferredScrollerStyle.rawValue).")
+            try snapshot(window, "\(Int(size.width))-compare")
 
             model.endComparing()
             #expect(try await holdsSoon { shown().sidebar > 0 }, "\(size): the sidebar did not show again, \(shown())")
@@ -1238,14 +1246,49 @@ struct ProjectsWindowViewTests {
                 _ = try await holdsSoon { shown().sidebar > 0 }
                 try await settle()
                 print("Projects window sidebar round trip at \(size): before \(small), hidden \(smallHidden), shown \(shown()), window \(window.frame.width) wide, its smallest content \(window.contentMinSize).")
-            }
 
-            if size == ProjectsWindow.defaultSize {
-                // The sidebar shown again, as the toolbar's sidebar button or View > Show
-                // Sidebar shows it, ends the comparison and stays.
+                // Closed while comparing, as the app closes it: the window lets go of its
+                // email views, which ends the comparison and asks for the columns from before
+                // in the closing window. It keeps its size, which the app saves for the next
+                // window.
+                window.setContentSize(size)
+                try await settle()
                 model.compare(id)
                 #expect(try await holdsSoon { shown().sidebar == 0 })
                 try await settle()
+                let open = window.frame
+                let closing = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak model] _ in
+                    MainActor.assumeIsolated {
+                        model?.forgetEmails()
+                    }
+                }
+                window.close()
+                NotificationCenter.default.removeObserver(closing)
+                try await settle()
+                #expect(!model.isComparing)
+                #expect(window.frame.size == open.size, "\(size): the window closed while comparing went from \(open) to \(window.frame)")
+                print("Projects window closed while comparing at \(size): frame \(open) then \(window.frame).")
+            }
+
+            if size == ProjectsWindow.defaultSize {
+                // Each pane is one area named for VoiceOver, and the text and the buttons in
+                // it keep their own names. Read where the Mac gives this process an
+                // accessibility tree, which a window that is never shown does not have.
+                model.compare(id)
+                #expect(try await holdsSoon { shown().sidebar == 0 })
+                try await settle()
+                let names = [String(localized: "Original Email"), String(localized: "Explanation and Draft")]
+                let nodes = Self.accessibilityNodes(under: content)
+                let named = nodes.filter { names.contains($0.label) }
+                print("Projects window accessibility while comparing: \(nodes.count) elements, those with a pane's name: \(named.map { "\($0.role) \($0.label)" }).")
+                if nodes.count > 1 {
+                    let areas = named.filter { $0.role == NSAccessibility.Role.scrollArea.rawValue }
+                    #expect(Set(areas.map(\.label)) == Set(names), "\(named)")
+                    // The two areas and the headings of the same names, nothing inside them.
+                    #expect(named.count <= 4, "\(named)")
+                }
+                // The sidebar shown again, as the toolbar's sidebar button or View > Show
+                // Sidebar shows it, ends the comparison and stays.
                 let controller = try #require(split.delegate as? NSSplitViewController)
                 controller.toggleSidebar(nil)
                 #expect(try await holdsSoon { !model.isComparing }, "\(size): the comparison went on, \(asked.asked)")
@@ -1253,11 +1296,54 @@ struct ProjectsWindowViewTests {
                 #expect(shown().sidebar > 0)
                 let toolbar = window.toolbar?.items.map(\.itemIdentifier.rawValue) ?? []
                 print("Projects window toolbar: \(toolbar)")
+
+                // A sidebar the user hid before the comparison stays hidden after it.
+                controller.toggleSidebar(nil)
+                #expect(try await holdsSoon { shown().sidebar == 0 })
+                try await settle()
+                model.compare(id)
+                try await settle()
+                #expect(model.isComparing)
+                #expect(shown().sidebar == 0)
+                model.endComparing()
+                try await settle()
+                #expect(shown().sidebar == 0, "\(size): the sidebar hidden before came back, \(asked.asked)")
+                #expect(asked.last == .doubleColumn, "\(size): the split view was asked for \(asked.asked)")
+                print("Projects window with the sidebar hidden before the comparison, after it: \(shown()), asked \(asked.asked).")
             }
             window.close()
             #expect(!window.isVisible)
         }
         await fixture.stop()
+    }
+
+    /// The role and the name of each accessibility element under an element, depth first,
+    /// at most 5,000.
+    private static func accessibilityNodes(under root: NSView) -> [(role: String, label: String)] {
+        var nodes: [(role: String, label: String)] = []
+        var next: [Any] = [root]
+        while let element = next.popLast(), nodes.count < 5_000 {
+            guard let element = element as? NSAccessibilityProtocol else { continue }
+            nodes.append((element.accessibilityRole()?.rawValue ?? "", element.accessibilityLabel() ?? ""))
+            next.append(contentsOf: (element.accessibilityChildren() ?? []).reversed())
+        }
+        return nodes
+    }
+
+    /// Saves an image of a shown window with its title bar and toolbar, as the window draws
+    /// itself, where ORRA_PROJECTS_WINDOW_SNAPSHOTS names a folder, as for
+    /// `renderTheWindowsParts()`, for the widths of its columns. The rows of the list, the
+    /// translucent sidebar and the email view before the comparison do not draw in it.
+    private func snapshot(_ window: NSWindow, _ name: String) throws {
+        guard let path = ProcessInfo.processInfo.environment["ORRA_PROJECTS_WINDOW_SNAPSHOTS"] else { return }
+        let folder = URL(fileURLWithPath: path, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let language = Bundle.main.preferredLocalizations.first ?? "en"
+        let frame = try #require(window.contentView?.superview)
+        let image = try #require(frame.bitmapImageRepForCachingDisplay(in: frame.bounds))
+        frame.cacheDisplay(in: frame.bounds, to: image)
+        let png = try #require(image.representation(using: .png, properties: [:]))
+        try png.write(to: folder.appendingPathComponent("\(language)-projects-window-shown-\(name).png"))
     }
 
     /// Waits until a condition holds, at most two seconds, while the main run loop runs, and
@@ -2246,6 +2332,7 @@ struct ProjectsWindowViewTests {
     /// draws its third column empty, the same after an earlier email's chip showed the email,
     /// with Back to Previous Email in the bar, at the smallest size and the narrowest, then
     /// the This email popover and Original Email with the sender's words first.
+    /// `compareWithOriginalInAShownWindow()` saves the whole window.
     private func renderTheComparison(of explained: MailStore.Listed, runtime: ProjectsRuntime, language: String, to folder: URL) async throws {
         let model = ProjectsWindowModel(runtime: runtime)
         await model.show(explained.messageID)
