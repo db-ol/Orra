@@ -100,9 +100,11 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     reads for the state of a disclosure row, and it renders How to Use Projects, and the
     window at its smallest size with an explained email and that email view 200 points
     wide. For 0.6.1 it also checks that the lines above and under the mail list keep the
-    columns inside the window, at its first size and its smallest, and the words of the line
-    about the cleanup model, and it renders Open Mail under the line that says Mail is not
-    open, in How to Use with Mail closed, and the line about the cleanup model.
+    columns inside the window, at its first size and its smallest, the words of the line
+    about the cleanup model for each state of the model's installer, and How to Use as the
+    window builds it, with Open Mail only while Mail is closed and Suggested Projects named
+    only once the sidebar shows one, and it renders Open Mail under the line that says Mail
+    is not open, in How to Use with Mail closed, and the line about the cleanup model.
   - ProjectSuggestionsTests, ProjectSuggestionPromptTests, ProjectSuggestionServiceTests and
     ProjectsSuggestedSectionTests, added on 2026-10-20, cover Suggested Projects with
     made up mail and a fake model: the groups, what each would take, the prompt and its
@@ -518,7 +520,8 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     and Chinese, and the step the guide talks about.
   - WelcomeSuggestionTests covers the three rows the welcome window suggests once Orra is
     ready, and since 2026-10-26 Projects as a fourth only where it can be turned on: that
-    they show only with setup complete, their lines and buttons in English and Chinese, the translation line in the translation key's mode since 2026-10-19, the
+    they show only with setup complete, their lines and buttons in English and Chinese,
+    the translation line in the translation key's mode since 2026-10-19, the
     meeting row's line on Meeting Interpretation in Settings and in the Orra menu, On in
     place of the button for a feature that is on, no On and no button while cleanup is on
     and its model is not on the Mac, and the page of Settings each button opens.
@@ -529,7 +532,10 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     literal in the language of the environment's locale, and that
     closing the window restarts Orra only with setup complete, no dictation running, a
     language picked in the window other than the one it started with, and no other Orra
-    window open.
+    window open. Since 2026-10-26 it also checks the words of each step's state that
+    VoiceOver reads after the step's title, in Chinese, Japanese and Spanish. A view hosted
+    in a test gives none of SwiftUI's accessibility elements, so VoiceOver itself on the
+    steps is checked by hand.
   - TranscriptGuardTests and ChineseTextTests cover loop cutting that leaves phone numbers
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
