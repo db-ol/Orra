@@ -451,11 +451,14 @@ nonisolated enum ProjectsWindowText {
     }
 
     /// What the list says when the explanation gave the model no excerpt of a project file,
-    /// for an email in a project or in none.
+    /// for an email in a project or in none. Assigning an email in no project takes its
+    /// explanation away, see MailStore.move(_:to:), and the window then shows the next email
+    /// of its list, see ProjectsWindowModel.move(_:to:), so the line says to explain the
+    /// email in its project's list.
     static func noProjectFiles(inProject: Bool) -> String {
         inProject
             ? String(localized: "No project file excerpts were included in this explanation. The project's folders may hold no file Projects reads yet, or a long email or thread left no room for them.")
-            : String(localized: "No project file excerpts were included in this explanation. Assign the email to a project, then click Explain Again to include that project's files.")
+            : String(localized: "No project file excerpts were included in this explanation. Assign the email to a project, then click Explain in that project's list to include the project's files.")
     }
 
     /// Whether a point under What it says names one of a file's excerpts as its source. The

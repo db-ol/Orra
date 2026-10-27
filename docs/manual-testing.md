@@ -3450,8 +3450,10 @@ test guide, in English, then in 简体中文, 日本語 and Español.
   file speaks to an assistant.", its saved excerpt still shows that line, and the excerpt
   ends with "The model read it without the lines listed under Taken out before the model
   read it."
-- [ ] An email in Needs a Project shows (0), the line about assigning, and Assign to Project.
-  Assign it, click Explain Again, and the files of that project show.
+- [ ] Explain an email in Needs a Project. Its Project Files for This Explanation shows (0),
+  the line about assigning, and Assign to Project. Assign it to a project: the email leaves
+  Needs a Project without its explanation. In that project's list, select it and click
+  Explain, and the files of that project show.
 - [ ] Edit Project… in the list opens the project's sheet, and the email stays selected.
   Remove a folder and save. Its rows say Not in the project's folders now with the folder,
   until Explain Again. Add the folder back. Indexing… shows under the list until the sweep

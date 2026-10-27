@@ -8370,24 +8370,24 @@
         }
       }
     },
-    "No project file excerpts were included in this explanation. Assign the email to a project, then click Explain Again to include that project's files." : {
+    "No project file excerpts were included in this explanation. Assign the email to a project, then click Explain in that project's list to include the project's files." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esta explicación no incluyó fragmentos de archivos del proyecto. Asigna el correo a un proyecto y haz clic en Explicar de nuevo para incluir los archivos de ese proyecto."
+            "value" : "Esta explicación no incluyó fragmentos de archivos del proyecto. Asigna el correo a un proyecto y luego, en la lista de ese proyecto, haz clic en Explicar para incluir los archivos del proyecto."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "この説明には、プロジェクトのファイルの抜粋が含まれていません。メールをプロジェクトに割り当ててから“もう一度説明する”をクリックすると、そのプロジェクトのファイルも使われます。"
+            "value" : "この説明には、プロジェクトのファイルの抜粋が含まれていません。メールをプロジェクトに割り当ててから、そのプロジェクトのリストで“説明する”をクリックすると、そのプロジェクトのファイルも使われます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "本次解释没有用到项目文件的摘录。将这封邮件归入项目后点按“重新解释”，即可结合该项目的文件。"
+            "value" : "本次解释没有用到项目文件的摘录。将这封邮件归入项目后，在该项目的列表中点按“解释”，即可结合该项目的文件。"
           }
         }
       }
