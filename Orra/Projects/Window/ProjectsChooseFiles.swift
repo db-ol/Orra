@@ -424,6 +424,14 @@ final class ProjectsFileChoice {
         }
         return true
     }
+
+    /// The line under Explain or Explain Again for the email's choice as saved now, against
+    /// the explanation the store holds now, also for an email whose view did not show in
+    /// this window, see ProjectsEmailModel.choiceNote(chosen:explanation:).
+    func choiceNote() async -> ProjectsEmailModel.ChoiceNote? {
+        let explanation = await runtime.explanation(for: email.messageID)
+        return ProjectsEmailModel.choiceNote(chosen: emailModel.chosenFiles, explanation: explanation)
+    }
 }
 
 /// Choose Files for This Email, a sheet of the Projects window: the files of every folder the
@@ -484,6 +492,12 @@ struct ProjectsChooseFiles: View {
 
     private var email: MailStore.Listed {
         choice.email
+    }
+
+    /// The email as the window's list shows it now, so the sheet says Explain Again once a
+    /// first explanation ended while it showed, as the email's header does.
+    private var current: MailStore.Listed {
+        model.listed(email.messageID) ?? email
     }
 
     var body: some View {
@@ -728,7 +742,7 @@ struct ProjectsChooseFiles: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Orra puts the passages of these files that best fit this email first, or a file's beginning, then adds what its own search finds. Of a file without text, the model gets only its name.")
                 Group {
-                    if email.isExplained {
+                    if current.isExplained {
                         Text("This choice is for this email only. Explain Again uses it.")
                     } else {
                         Text("This choice is for this email only. Explain uses it.")
@@ -853,7 +867,7 @@ struct ProjectsChooseFiles: View {
             Task {
                 guard await choice.save() else { return }
                 // The line under Explain says what the next explanation uses, once.
-                if let note = model.emailModel(for: email.messageID).choiceNote {
+                if let note = await choice.choiceNote() {
                     AccessibilityNotification.Announcement(ProjectsWindowText.choiceNote(note)).post()
                 }
                 model.choosingFiles = nil
@@ -867,7 +881,7 @@ struct ProjectsChooseFiles: View {
                 model.explainFromTheSheet(email.messageID)
             }
         } label: {
-            if email.isExplained {
+            if current.isExplained {
                 Text("Explain Again")
             } else {
                 Text("Explain")
@@ -881,6 +895,6 @@ struct ProjectsChooseFiles: View {
     /// Projects is on.
     private var canExplain: Bool {
         model.explaining[email.messageID] != .explaining && !model.emailModel(for: email.messageID).isBusy
-            && ProjectsWindowText.noText(email) == nil && runtime.phase == .on
+            && ProjectsWindowText.noText(current) == nil && runtime.phase == .on
     }
 }

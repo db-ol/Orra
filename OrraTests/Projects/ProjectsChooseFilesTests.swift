@@ -397,7 +397,56 @@ struct ProjectsChooseFilesTests {
         await projects.fixture.stop()
     }
 
+    /// After Save, the line read out compares the choice with the explanation the store
+    /// holds, also for an explained email whose view did not show in this window, so it says
+    /// Explain Again as the header will.
+    @Test func theLineAfterSaveReadsTheSavedExplanation() async throws {
+        let projects = try await Self.projects()
+        defer { projects.fixture.cleanUp() }
+        let runtime = projects.fixture.runtime
+        let store = try #require(runtime.running?.store)
+        let email = try await Self.email(in: projects.harbor.id, runtime: runtime)
+        var explanation = Explanation(
+            messageID: email.messageID, project: projects.harbor.id, language: .en, today: Self.today, reply: .reply(.en), warnings: [], modelWarnings: [],
+            points: [], questions: [], draft: .missing, draftCheck: nil, sources: [:], removed: [:], problems: [], unknownSources: [])
+        #expect(try await store.save(explanation, at: Self.today))
+        let model = ProjectsWindowModel(runtime: runtime)
+        let choice = await Self.choice(for: email, runtime: runtime, model: model)
+        choice.toggle(try Self.row("plan.dwg", in: choice))
+        #expect(await choice.save())
+        #expect(await choice.choiceNote() == .explainAgainUses(1))
+        // The same choice as the explanation's says nothing.
+        explanation.chosenFiles = choice.ticks.map { Explanation.ChosenFile(path: $0.path, project: $0.project, sources: []) }
+        #expect(try await store.save(explanation, at: Self.today))
+        #expect(await choice.choiceNote() == nil)
+        await projects.fixture.stop()
+    }
+
     // MARK: The window
+
+    /// The window gives the sheet the email as its list shows it now, so the sheet says
+    /// Explain Again once a first explanation ended while it showed.
+    @Test func theWindowGivesTheSheetTheEmailAsItsListShowsItNow() async throws {
+        let projects = try await Self.projects()
+        defer { projects.fixture.cleanUp() }
+        let runtime = projects.fixture.runtime
+        let store = try #require(runtime.running?.store)
+        let email = try await Self.email(in: projects.harbor.id, runtime: runtime)
+        let model = ProjectsWindowModel(runtime: runtime)
+        model.place = .project(projects.harbor.id)
+        await model.reload()
+        model.chooseFiles(for: try #require(model.listed(email.messageID)))
+        #expect(model.listed(email.messageID)?.isExplained == false)
+        let explanation = Explanation(
+            messageID: email.messageID, project: projects.harbor.id, language: .en, today: Self.today, reply: .reply(.en), warnings: [], modelWarnings: [],
+            points: [], questions: [], draft: .missing, draftCheck: nil, sources: [:], removed: [:], problems: [], unknownSources: [])
+        #expect(try await store.save(explanation, at: Self.today))
+        await model.reload()
+        #expect(model.listed(email.messageID)?.isExplained == true)
+        #expect(model.choosingFiles?.email.isExplained == false)
+        #expect(model.listed("gone@harbor.example") == nil)
+        await projects.fixture.stop()
+    }
 
     /// Explain Again in the sheet saves and closes the sheet first, and the Explain that
     /// follows asks before it replaces a changed draft. Edit Project from Settings does not

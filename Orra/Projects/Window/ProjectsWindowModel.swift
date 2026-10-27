@@ -206,7 +206,13 @@ final class ProjectsWindowModel {
 
     /// The selected email as the list shows it, or as it was read alone.
     var selectedEmail: MailStore.Listed? {
-        selectedMessageID.flatMap { id in rows.first { $0.messageID == id } ?? aloneEmail.flatMap { $0.messageID == id ? $0 : nil } }
+        selectedMessageID.flatMap(listed)
+    }
+
+    /// An email as the list shows it now, or as it was read alone, nil when the window shows
+    /// it in neither.
+    func listed(_ messageID: String) -> MailStore.Listed? {
+        rows.first { $0.messageID == messageID } ?? aloneEmail.flatMap { $0.messageID == messageID ? $0 : nil }
     }
 
     /// Whether the chosen list holds older emails than the window read, for Load Older

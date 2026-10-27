@@ -997,10 +997,15 @@ extension ProjectsEmailModel {
     }
 
     /// The line under Explain or Explain Again: what the saved choice changes against the
-    /// choice the saved explanation records, compared by path, so the same files in another
-    /// order count as the same. Nil when they agree.
+    /// choice the saved explanation records, see `choiceNote(chosen:explanation:)`.
     var choiceNote: ChoiceNote? {
-        let chosen = Set(chosenFiles.map(\.path))
+        Self.choiceNote(chosen: chosenFiles, explanation: explanation)
+    }
+
+    /// What `chosen` changes against the choice `explanation` records, compared by path, so
+    /// the same files in another order count as the same. Nil when they agree.
+    nonisolated static func choiceNote(chosen files: [MailStore.ChosenFile], explanation: Explanation?) -> ChoiceNote? {
+        let chosen = Set(files.map(\.path))
         guard let explanation else {
             return chosen.isEmpty ? nil : .explainUses(chosen.count)
         }
