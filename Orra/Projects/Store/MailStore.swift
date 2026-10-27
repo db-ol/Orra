@@ -21,7 +21,10 @@ import os
 ///   mail_projects, so Forget Project removes them all in one write, and nothing can be
 ///   filed in the project after it. `add(project:)` registers a new project.
 /// - An explanation belongs to the project it was made for. When an email changes project,
-///   its explanation and draft go, so no text of the project before stays with it.
+///   its explanation and draft go, so no text of the project before stays with it. An
+///   explanation may hold excerpts of other projects' files too, so it is saved only while
+///   every project it names exists, and Forget Project removes it with its draft, as it
+///   removes the project's own mail.
 /// - The text the user typed into a draft is kept apart from the versions the model made,
 ///   with the key of the draft it was typed into, see `draftKey(_:version:explained:)`. A
 ///   new explanation or a new version takes its place. A version keeps the text it was made
@@ -301,18 +304,43 @@ nonisolated struct MailStore: Sendable {
     }
 
     /// Forget Project, for the store: removes the project with its emails, their drafts and
-    /// the counts of moves to it, in one write. Mail filed in it after this is not saved,
-    /// and the scan never reads its emails again. The project's index of files is
-    /// FolderIndex's, see `FolderIndex.forget`.
+    /// the counts of moves to it, and the explanations and drafts of other emails that hold
+    /// excerpts of its files, in one write. Mail filed in it after this is not saved, the
+    /// scan never reads its emails again, and no explanation that names it is saved. The
+    /// project's index of files is FolderIndex's, see `FolderIndex.forget`.
     func forget(project: UUID) async throws {
         let id = project.uuidString
-        let emails = try await database.transaction { database in
+        let (emails, explanations) = try await database.transaction { database in
+            let explanations = try Self.dropExplanations(holdingFilesOf: project, in: database)
             let emails = try Self.deleteGone(where: "project = ?", [.text(id)], in: database)
             try database.run("DELETE FROM mail_projects WHERE id = ?", [.text(id)])
-            return emails
+            return (emails, explanations)
         }
         try await database.compactAfterDeletes()
-        Logger.projects.notice("Mail store: forgot a project with \(emails, privacy: .public) emails")
+        Logger.projects.notice("Mail store: forgot a project with \(emails, privacy: .public) emails, and the explanations of \(explanations, privacy: .public) other emails that held its files")
+    }
+
+    /// Removes the explanation, the draft versions and the text typed into the draft of
+    /// every email whose explanation holds an excerpt of a file of `project`, since its
+    /// points may repeat that file too. The rows are found by the project's ID in the JSON,
+    /// and each is read to check, so no other explanation goes. One that does not read, as
+    /// from a later Orra, goes too, since it names the project. Returns how many went.
+    private static func dropExplanations(holdingFilesOf project: UUID, in database: isolated ProjectsDatabase) throws -> Int {
+        let rows = try database.run(
+            "SELECT id, explanation FROM mail_messages WHERE explanation IS NOT NULL AND instr(CAST(explanation AS TEXT), ?) > 0",
+            [.text(project.uuidString)])
+        var dropped = 0
+        for row in rows where row.count == 2 {
+            guard let id = row[0].integer else { continue }
+            if let explanation = decoded(Explanation.self, row[1]), !explanation.holdsFiles(of: project) { continue }
+            try database.run(
+                "UPDATE mail_messages SET explanation = NULL, explained = NULL, explanation_draft = 0, draft_changed = NULL WHERE id = ?",
+                [.integer(id)])
+            try database.run("DELETE FROM mail_draft_versions WHERE message = ?", [.integer(id)])
+            try database.run("DELETE FROM mail_edited_drafts WHERE message = ?", [.integer(id)])
+            dropped += 1
+        }
+        return dropped
     }
 
     /// Registers the projects of the list, and removes the store's data of every other
@@ -334,6 +362,9 @@ nonisolated struct MailStore: Sendable {
                 """).compactMap { $0.first?.text }
             let gone = Set(known).subtracting(kept)
             for id in gone {
+                if let project = UUID(uuidString: id) {
+                    _ = try Self.dropExplanations(holdingFilesOf: project, in: database)
+                }
                 try database.run("DELETE FROM mail_projects WHERE id = ?", [.text(id)])
             }
             return gone
@@ -813,14 +844,19 @@ nonisolated struct MailStore: Sendable {
     /// Saves the email's latest explanation in place of the one before, and adds its
     /// warnings to the email's. A new explanation starts the draft again, so the versions of
     /// the draft before and the text the user typed into it go. Says whether it saved:
-    /// nothing is saved for an email the store does not hold, or one that moved to another
-    /// project while it was explained.
+    /// nothing is saved for an email the store does not hold, one that moved to another
+    /// project while it was explained, or one whose explanation holds excerpts of a project
+    /// that was forgotten meanwhile, see `Explanation.sourceProjects`.
     @discardableResult
     func save(_ explanation: Explanation, at now: Date) async throws -> Bool {
         let data = try JSONEncoder().encode(explanation)
+        let projects = explanation.sourceProjects.map(\.uuidString)
+        let named = try Self.json(projects)
         return try await database.transaction { database in
             let hasDraft: Bool = if case .checked = explanation.draft { true } else { false }
             let kinds = explanation.warningKinds
+            let held = try database.run("SELECT count(*) FROM mail_projects WHERE id IN (SELECT value FROM json_each(?))", [.text(named)])
+            guard held.first?.first?.integer == Int64(projects.count) else { return false }
             guard let row = try database.run(
                 "SELECT id, warnings FROM mail_messages WHERE message_id = ? AND project IS ?",
                 [.text(explanation.messageID), Self.value(explanation.project?.uuidString)]).first,
@@ -1185,7 +1221,8 @@ nonisolated struct MailStore: Sendable {
                 messageID: messageID, date: date, sender: MailStore.promptPerson(sender),
                 replyTo: replyTo.map(MailStore.promptPerson), to: to.map(MailStore.promptPerson), cc: cc.map(MailStore.promptPerson),
                 subject: subject, attachments: attachments,
-                text: text ?? "", visibleText: visibleText ?? "", hiddenText: hiddenText, list: list, project: project)
+                text: text ?? "", visibleText: visibleText ?? "", hiddenText: hiddenText, list: list, project: project,
+                isSetAside: project == nil && level == .setAside)
         }
 
         var promptMail: ExplainPrompt.Mail {
