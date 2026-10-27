@@ -236,8 +236,9 @@ nonisolated enum DraftCheck {
     /// The sentences of the text: up to 。！？!?… or a full stop before a space, with the
     /// closing quotes and brackets after them, or up to the end of the line. White space
     /// between sentences belongs to none. A sentence placeholder of the check stands for a
-    /// sentence, so it ends the one before it and is left out.
-    private static func sentenceRanges(in text: String) -> [Range<String.Index>] {
+    /// sentence, so it ends the one before it and is left out. FileRequests cuts its text
+    /// the same way.
+    static func sentenceRanges(in text: String) -> [Range<String.Index>] {
         var ranges: [Range<String.Index>] = []
         var start: String.Index?
         var index = text.startIndex
