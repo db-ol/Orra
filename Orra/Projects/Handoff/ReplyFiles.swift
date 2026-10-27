@@ -81,10 +81,10 @@ nonisolated enum ReplyFiles {
     /// project. `roots` gives the folders of every project as they are now, by project.
     /// `first` is the email's project, which comes first among the file's projects.
     ///
-    /// It first places the file by its path alone, as Choose Files for This Email places a
-    /// dropped file, and refuses one outside every folder before it reads anything on the
-    /// disk, so Projects never looks up a file the user drops or adds outside them, also when
-    /// a link there leads into a folder.
+    /// It first places the file by the names of its path alone, as Choose Files for This
+    /// Email places a dropped file, and refuses one outside every folder before it reads
+    /// anything on the disk, so Projects never looks up a file the user drops or adds outside
+    /// them, also when a link there leads into a folder.
     static func file(
         at url: URL,
         roots: @Sendable () async -> [UUID: [URL]],
@@ -93,12 +93,12 @@ nonisolated enum ReplyFiles {
     ) async -> Result<ReplyFile, ReplyFileProblem> {
         guard url.isFileURL else { return .failure(.moved) }
         let roots = await roots()
-        let path = lexicalPath(url.path)
-        guard roots.values.joined().contains(where: { samePath(path, lexicalPath($0.path)) || isInside(path, root: lexicalPath($0.path)) }) else {
+        let names = lexicalNames(url.path)
+        guard roots.values.joined().contains(where: { mayHold($0, names) }) else {
             return .failure(.notInAddedFolder)
         }
         return await onItsOwnThread {
-            guard let real = realPath(path) else { return .failure(.moved) }
+            guard let real = realPath("/" + names.joined(separator: "/")) else { return .failure(.moved) }
             return check(real, roots: roots, order: first.map { [$0] } ?? [], isDownloaded: isDownloaded) { $0 }
         }
     }
@@ -251,18 +251,30 @@ nonisolated enum ReplyFiles {
         first.map { Array($0.utf8) == Array(second.utf8) } ?? false
     }
 
-    /// An absolute path with its `.` and empty names dropped and each `..` taking away the
-    /// name before it, worked out from the path alone, without reading the disk.
-    private static func lexicalPath(_ path: String) -> String {
-        var names: [Substring] = []
+    /// The names of an absolute path, its `.` and empty names dropped and each `..` taking
+    /// away the name before it, worked out from the path alone, without reading the disk.
+    private static func lexicalNames(_ path: String) -> [String] {
+        var names: [String] = []
         for name in path.split(separator: "/") {
             switch name {
             case ".": continue
             case "..": _ = names.popLast()
-            default: names.append(name)
+            default: names.append(String(name))
             }
         }
-        return "/" + names.joined(separator: "/")
+        return names
+    }
+
+    /// Whether a folder of a project is the path of `names` or may hold it, by the names
+    /// alone, as Choose Files for This Email places a dropped file, see
+    /// ProjectsEmailFiles.place(of:in:): each name compared as text and without case. The
+    /// open panel and a drop may give a name as the disk keeps it, precomposed or not, while
+    /// a folder's path comes as FolderWalk gives it, and both name the same folder. This only
+    /// keeps the checks from a path outside every folder. They compare real paths by their
+    /// bytes.
+    private static func mayHold(_ folder: URL, _ names: [String]) -> Bool {
+        let folderNames = lexicalNames(folder.path)
+        return folderNames.count <= names.count && zip(folderNames, names).allSatisfy { $0.lowercased() == $1.lowercased() }
     }
 
     /// `path` with every symbolic link and `..` resolved, nil when it does not exist.

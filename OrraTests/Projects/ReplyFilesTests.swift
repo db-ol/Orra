@@ -71,6 +71,52 @@ struct ReplyFilesTests {
         #expect(looks.count == 1)
     }
 
+    /// A file is placed by the names of its path as text and without case, so it goes into a
+    /// reply however the open panel, a drop or the index spells them: here in a folder whose
+    /// name the disk keeps precomposed, as a sync app, git or an archive may write it, with
+    /// the folder's path as FolderWalk gives it, and a name with é and プ given precomposed
+    /// and decomposed. A folder whose name only looks alike is still refused before any look.
+    @Test func aFileIsPlacedHoweverItsNamesAreSpelled() async throws {
+        let tree = try Tree()
+        defer { tree.remove() }
+        let base = try #require(FolderWalk.realPath(tree.root.path))
+        let name = "Caf\u{E9} \u{30D7}\u{30ED}\u{30B8}\u{30A7}\u{30AF}\u{30C8}"
+        // mkdir keeps the bytes of the name as given, which FileManager would decompose.
+        #expect(mkdir(base + "/" + name, 0o755) == 0)
+        try Data("plan".utf8).write(to: URL(fileURLWithPath: base + "/" + name + "/plan.pdf"))
+        let root = try #require(await FolderWalk.realPath(of: URL(fileURLWithPath: base + "/" + name, isDirectory: true)))
+        let roots = [Self.harbor: [root]]
+        // A file URL that keeps the bytes of its path as given.
+        func url(_ path: String) throws -> URL {
+            let encoded = try #require(path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed))
+            return try #require(URL(string: "file://" + encoded))
+        }
+        let precomposed = try url(base + "/" + name.precomposedStringWithCanonicalMapping + "/plan.pdf")
+        let decomposed = try url(base + "/" + name.decomposedStringWithCanonicalMapping + "/plan.pdf")
+        let ticked = try await ReplyFiles.file(at: precomposed, roots: { roots }).get()
+        let again = try await ReplyFiles.file(at: decomposed, roots: { roots }).get()
+        #expect(ticked.id == again.id)
+        #expect(ticked.identity == again.identity)
+        #expect(ticked.projects == [Self.harbor])
+        #expect(await ReplyFiles.recheck(ticked, roots: { roots }) == .success(ticked))
+        // Another case names the same folder on a volume that ignores case.
+        let otherCase = try url(base + "/" + name.uppercased() + "/plan.pdf")
+        if FileManager.default.fileExists(atPath: otherCase.path) {
+            #expect(try await ReplyFiles.file(at: otherCase, roots: { roots }).get().id == ticked.id)
+        }
+
+        let looks = Looks()
+        let isDownloaded: @Sendable (URL) -> Bool = { _ in
+            looks.add()
+            return true
+        }
+        let alike = "Cafe \u{30D7}\u{30ED}\u{30B8}\u{30A7}\u{30AF}\u{30C8}"
+        try tree.file(alike + "/plan.pdf")
+        let alikePlan = try url(base + "/" + alike + "/plan.pdf")
+        #expect(await ReplyFiles.file(at: alikePlan, roots: { roots }, isDownloaded: isDownloaded) == .failure(.notInAddedFolder))
+        #expect(looks.count == 0)
+    }
+
     /// How often a check asked whether a file is on this Mac.
     private final class Looks: Sendable {
         private let value = Mutex(0)
