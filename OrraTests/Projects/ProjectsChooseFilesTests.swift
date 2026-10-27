@@ -347,7 +347,8 @@ struct ProjectsChooseFilesTests {
         ("/Users/lin/Plans/plan.pdf", true), ("~/Desktop/a.docx", true), ("plan-v3.dwg", true), ("用 /Users/lin/平面图.pdf 改", true),
         ("请按平面图.dwg修改", true), ("Use Plans/plan.PDF", true),
         ("send the plan by Friday", false), ("version 2.0", false), ("1.5 m", false), ("and/or the plan", false), ("1/2 of the budget", false),
-        ("e.g. the lamps", false), ("Hi Mei. Thanks", false),
+        ("e.g. the lamps", false), ("Hi Mei. Thanks", false), ("数量/单价按合同", false), ("是/否", false),
+        ("see https://harbor.example/docs", false), ("用/Users/lin/平面图.pdf改", true), ("~/Plans/plan-v3", true),
     ])
     func theWordsOfTheChangeBoxNameAFileByTheirPatternOnly(_ words: String, _ names: Bool) {
         #expect(ProjectsEmailModel.namesAFile(words) == names, "\(words)")

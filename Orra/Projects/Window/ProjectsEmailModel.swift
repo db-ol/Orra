@@ -1043,9 +1043,10 @@ extension ProjectsEmailModel {
         }
     }
 
-    /// A path: a slash, ~/, ./ or ../ that no letter or digit stands right before, then a name.
+    /// A path: a slash, ~/, ./ or ../ that no letter, digit, slash or colon stands right
+    /// before, then a name. So 数量/单价, and/or and the slashes of a link name no file.
     private nonisolated static let pathPattern = try! NSRegularExpression(
-        pattern: #"(?<![A-Za-z0-9])(?:~|\.{1,2})?/[^\s/"'“”‘’<>|]*[\p{L}\p{N}][^\s"'“”‘’<>|]*"#)
+        pattern: #"(?<![\p{L}\p{N}/:])(?:~|\.{1,2})?/[^\s/"'“”‘’<>|]*[\p{L}\p{N}][^\s"'“”‘’<>|]*"#)
 
     /// A name with an extension of up to 8 letters or digits, which no Latin letter or digit
     /// follows.
