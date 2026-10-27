@@ -211,6 +211,20 @@ struct MailEventsTests {
         #expect(Self.session != MailEvents.Session(processIdentifier: 811, launched: Date(timeIntervalSince1970: 1_761_500_000)))
     }
 
+    /// The send thread sends an attachment only to the Mail session of its reply: another
+    /// Mail, the same process id launched again, and a Mail without a session refuse it as
+    /// a Mail that is gone. The other requests go to whichever Mail runs.
+    @Test func theSendThreadRefusesAnAttachmentForAnotherMail() {
+        let attach = MailEvents.Request.attach(Self.file, toReply: 77, in: Self.session)
+        #expect(MailEvents.refusal(of: attach, by: Self.session) == nil)
+        #expect(MailEvents.refusal(of: attach, by: MailEvents.Session(processIdentifier: 942, launched: Date(timeIntervalSince1970: 1_761_403_600))) == -600)
+        #expect(MailEvents.refusal(of: attach, by: MailEvents.Session(processIdentifier: 811, launched: Date(timeIntervalSince1970: 1_761_403_600))) == -600)
+        #expect(MailEvents.refusal(of: attach, by: nil) == -600)
+        for request in [MailEvents.Request.reply(to: Self.message, all: true), .get(.property(Code.source, of: Self.message)), .count(Code.message, in: Self.mailbox)] {
+            #expect(MailEvents.refusal(of: request, by: nil) == nil)
+        }
+    }
+
     /// Mail names the reply it made as outgoing message id N of the application, which a
     /// specifier reads back as it came.
     @Test func theReplyComesBackAsAnOutgoingMessage() throws {

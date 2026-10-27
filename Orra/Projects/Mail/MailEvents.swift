@@ -58,7 +58,8 @@ nonisolated struct MailEvents: Sendable {
     /// 0 allowed, -1743 denied, -1744 not asked yet, -600 Mail not running. With `ask` true,
     /// macOS may show its prompt and the answer waits for the user.
     var permission: @Sendable (_ ask: Bool) async -> Int
-    /// The session of the Mail that runs now, nil when none runs.
+    /// The session of the Mail that runs now, nil when none runs or macOS does not say when
+    /// it launched.
     var session: @Sendable () -> Session?
 }
 
@@ -78,16 +79,19 @@ nonisolated extension MailEvents {
     /// that starts again may give the same id to another message.
     nonisolated struct Session: Sendable, Hashable {
         let processIdentifier: pid_t
-        /// Nil when macOS does not say, and then the process id alone tells sessions apart.
-        let launched: Date?
+        let launched: Date
 
-        init(processIdentifier: pid_t, launched: Date?) {
+        init(processIdentifier: pid_t, launched: Date) {
             self.processIdentifier = processIdentifier
             self.launched = launched
         }
 
-        init(_ mail: NSRunningApplication) {
-            self.init(processIdentifier: mail.processIdentifier, launched: mail.launchDate)
+        /// The session of a running Mail, nil when macOS does not say when it launched, as
+        /// for a Mail started without Launch Services. A process id alone could name a later
+        /// process, so such a Mail gets no session, and no reply of it gets a file.
+        init?(_ mail: NSRunningApplication) {
+            guard let launched = mail.launchDate else { return nil }
+            self.init(processIdentifier: mail.processIdentifier, launched: launched)
         }
     }
 
@@ -467,7 +471,7 @@ nonisolated extension MailEvents {
         isRunning: { runningMail() != nil },
         send: { request in try await sendThread.run { try sendNow(request) } },
         permission: { ask in await permissionOnItsOwnThread(ask: ask) },
-        session: { runningMail().map(Session.init) }
+        session: { runningMail().flatMap(Session.init) }
     )
 
     private static let mailIdentifier = "com.apple.mail"
@@ -491,9 +495,9 @@ nonisolated extension MailEvents {
             Logger.projectsMail.info("Mail is not running, \(String(describing: request.event), privacy: .public) not sent")
             throw Failure(code: notRunning)
         }
-        if let session = request.session, Session(mail) != session {
+        if let code = refusal(of: request, by: Session(mail)) {
             Logger.projectsMail.info("Mail started again since the reply, \(String(describing: request.event), privacy: .public) not sent")
-            throw Failure(code: notRunning)
+            throw Failure(code: code)
         }
         let target = NSAppleEventDescriptor(processIdentifier: mail.processIdentifier)
         let event = try request.appleEvent(target: target)
@@ -513,6 +517,16 @@ nonisolated extension MailEvents {
         }
         log(request, since: started, code: 0)
         return Value(reply.paramDescriptor(forKeyword: keyDirectObject))
+    }
+
+    /// The code with which the send thread refuses a request before it builds the event, nil
+    /// when it may go. A request bound to a Mail session goes only to that session's Mail, so
+    /// another Mail refuses it with -600, as a Mail that is gone does. The event then goes to
+    /// the process id of the Mail checked here, which a later Mail cannot have taken in the
+    /// moment between.
+    static func refusal(of request: Request, by running: Session?) -> Int? {
+        guard let session = request.session else { return nil }
+        return running == session ? nil : notRunning
     }
 
     private static func log(_ request: Request, since started: ContinuousClock.Instant, code: Int) {
