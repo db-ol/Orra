@@ -877,7 +877,8 @@ struct FolderIndexTests {
     /// Past the limit of names, the files are left out, and the walk goes on for documents.
     @Test func aProjectListsAtMostItsNames() async throws {
         try await withFixture(limits: FolderIndex.Limits(files: 1, names: 2)) { fixture in
-            for name in ["a.dwg", "b.dwg", "c.dwg"] {
+            // The walk takes them in the order of their names.
+            for name in ["lobby.dwg", "plan.dwg", "site.dwg"] {
                 try fixture.write(name, "drawing")
             }
             try fixture.write("notes.txt", "Calendars.")
@@ -886,7 +887,9 @@ struct FolderIndexTests {
             #expect(report.indexed == 1)
             #expect(report.nameOnly == 2)
             #expect(report.reachedNameLimit && !report.reachedFileLimit)
-            #expect(try await fixture.names("c").isEmpty)
+            #expect(try await fixture.names("lobby") == ["lobby.dwg"])
+            #expect(try await fixture.names("plan") == ["plan.dwg"])
+            #expect(try await fixture.names("site").isEmpty)
         }
     }
 
