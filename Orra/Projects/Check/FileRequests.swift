@@ -375,9 +375,9 @@ nonisolated enum FileRequests {
 
     // MARK: English
 
-    /// please, could you, would you mind and their like, then within 40 characters a verb
-    /// of sending, with the gap before the verb and the verb.
-    private static let englishAsk = latin(#"\b(?:please|pls|plz|kindly|could you|can you|would you|will you|would you mind|could u|can u|(?:i|we)(?:['’]d| would) appreciate (?:it )?if you could|(?:i|we)(?:['’]d| would) be grateful if you could|would it be possible (?:for you )?to|(?:i|we) (?:also |still |really )?need you to|(?:i|we)(?:['’]d| would) like you to|(?:i|we) want you to)\b([^.!?;]{0,40}?)\b(send|resend|re-send|forward|share|attach|provide|upload|email|e-mail|sending|resending|forwarding|sharing|attaching|providing|uploading|emailing)\b"#)
+    /// please, could you, would you mind, don't forget to and their like, then within 40
+    /// characters a verb of sending, with the gap before the verb and the verb.
+    private static let englishAsk = latin(#"\b(?:please|pls|plz|kindly|could you|can you|would you|will you|would you mind|could u|can u|don['’]?t forget to|do not forget to|(?:i|we)(?:['’]d| would) appreciate (?:it )?if you could|(?:i|we)(?:['’]d| would) be grateful if you could|would it be possible (?:for you )?to|(?:i|we) (?:also |still |really )?need you to|(?:i|we)(?:['’]d| would) like you to|(?:i|we) want you to)\b([^.!?;]{0,40}?)\b(send|resend|re-send|forward|share|attach|provide|upload|email|e-mail|sending|resending|forwarding|sharing|attaching|providing|uploading|emailing)\b"#)
     /// Send me or send us at the start of a sentence, after a greeting.
     private static let englishSendMe = latin(#"^(?:(?:hi|hello|hey|dear|good (?:morning|afternoon|evening))\b[^,!]{0,40}[,!]\s*)?(?:and |also |just |so |ok,? |okay,? )?(send|forward|email|e-mail|share)\s+(?:me|us)\b"#)
     /// We need or I need, with a kind as the object.
@@ -438,7 +438,7 @@ nonisolated enum FileRequests {
     /// or nos and lo or la, accented or not. Never the first person, as in te envío, adjunto
     /// or envié, which the sender says of their own attachment or of what they sent.
     private static let spanishVerbs = #"(?:re)?env[ií](?:[aá]r|[aá]|e|es|en|[aá]ras?|[aá]ran|[aá]ses?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|m[aá]nd(?:[aá]r|[aá]|e|es|en|[aá]ras?|[aá]ran)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|comp[aá]rt(?:[ií]r|[aá]|e|as|an|en|[ií]eras?|[ií]eran)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|adj[uú]nt(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|p[aá]s(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|fac[ií]l[ií]t(?:[aá]r|[aá]|e|es|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|proporci[oó]n(?:[aá]r|[aá]|e|es|[aá]ras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?|rem[ií]t(?:[ií]r|[aá]|e|as|[ií]eras?)(?:me|nos|te|le|les)?(?:lo|la|los|las)?"#
-    private static let spanishAsk = latin(#"\b(?:por favor|porfa|porfavor|favor de|puedes|podr[ií]as|puede|podr[ií]a|pueden|podr[ií]an|me puedes|me podr[ií]as|nos puedes|nos podr[ií]as|me puede|me podr[ií]a|nos puede|nos podr[ií]a|te agradecer[ií]a que|le agradecer[ií]a que|les agradecer[ií]a que|agradecer[ií]a que|necesito que|necesitamos que|ser[ií]a posible que|me har[ií]as el favor de|hazme el favor de)\b([^.!?;]{0,40}?)\b("# + spanishVerbs + #")\b"#)
+    private static let spanishAsk = latin(#"\b(?:por favor|porfa|porfavor|favor de|puedes|podr[ií]as|puede|podr[ií]a|pueden|podr[ií]an|me puedes|me podr[ií]as|nos puedes|nos podr[ií]as|me puede|me podr[ií]a|nos puede|nos podr[ií]a|te agradecer[ií]a que|le agradecer[ií]a que|les agradecer[ií]a que|agradecer[ií]a que|necesito que|necesitamos que|ser[ií]a posible que|me har[ií]as el favor de|hazme el favor de|no olvides|no te olvides de|no se olvide de|no olvide|recuerda|recuerde)\b([^.!?;]{0,40}?)\b("# + spanishVerbs + #")\b"#)
     /// The imperatives with me or nos anywhere, and a bare imperative at the start of a
     /// clause, as in "adjunta el plano", not as in "va adjunta la factura", and not the
     /// participle that brings the sender's own file, as in "adjunta encontrarás la factura",
@@ -485,10 +485,20 @@ nonisolated enum FileRequests {
     // MARK: Chinese
 
     /// The words that make a request, before the verb: 请, 麻烦, 能否, 也 and their like.
-    private static let chineseFrames = #"请|麻烦|劳烦|烦请|能否|可否|能不能|可不可以|可以|方便时|方便的话|记得|顺便|也|再|帮忙|帮我们|帮我|务必|还请|需要(?:你|您)们?|希望(?:你|您)们?(?:能)?|想请(?:你|您)?"#
+    private static let chineseFrames = #"请|麻烦|劳烦|烦请|能否|可否|能不能|可不可以|可以|方便时|方便的话|记得|顺便|也|再|帮忙|帮我们|帮我|务必|还请|需要(?:你|您)们?|希望(?:你|您)们?(?:能)?|想请(?:你|您)?|别忘了?|别忘记了?|不要忘了?|不要忘记了?|千万别忘了?|千万不要忘了?|可别忘了?"#
     /// The verbs of sending. A verb of one character stands only before 给, 我, 一下 and the
-    /// like, so 发票 or 发现 is no verb.
-    private static let chineseVerbs = #"发送|发给|发过来|发一下|发一份|发个|发到|传给|传过来|传一下|传一份|传到|寄给|寄过来|寄一下|寄一份|寄到|分享|提供|附上|转发|共享|发(?=我|吧|呗|来|回|$|[,.!?;。，！？；\s])|传(?=我|吧|来|$|[,.!?;。，！？；\s])|寄(?=我|吧|来|$|[,.!?;。，！？；\s])"#
+    /// like, or right before a word of the glossary, as in 请发平面图给我, so 发票 or 发现 is
+    /// no verb.
+    private static let chineseVerbs = #"发送|发给|发过来|发一下|发一份|发个|发到|传给|传过来|传一下|传一份|传到|寄给|寄过来|寄一下|寄一份|寄到|分享|提供|附上|转发|共享|发(?=我|吧|呗|来|回|$|[,.!?;。，！？；\s])|传(?=我|吧|来|$|[,.!?;。，！？；\s])|寄(?=我|吧|来|$|[,.!?;。，！？；\s])|(?:发|传|寄)(?=(?:(?:最新|最终|新|完整|正式|修改后|更新后|那|这)(?:版|个|份|些)?的?)?(?:"# + hanTerms + "))"
+    /// The words of the glossary in Chinese characters, longest first, as a pattern.
+    private static let hanTerms: String = {
+        var seen: Set<String> = []
+        return DocumentKind.allCases.flatMap { $0.terms.chinese + $0.terms.japanese }
+            .filter { $0.contains(where: \.isHan) && seen.insert($0).inserted }
+            .sorted { $0.count > $1.count }
+            .map(NSRegularExpression.escapedPattern(for:))
+            .joined(separator: "|")
+    }()
     /// A character of a clause: no punctuation that ends one, but the dot of a file name.
     private static let chineseClause = #"(?:[^,.!?;:。，！？；：、\n]|\.(?=[A-Za-z0-9]))"#
     /// 把 or 将 with the object before the verb, as in 请把平面图发给我.
@@ -590,12 +600,14 @@ nonisolated enum FileRequests {
     private static let japaneseGive = regex("(" + japaneseClause + "{1,30}?)を(?:いただけますか|いただけませんか|いただけますでしょうか|頂けますか|頂けませんか|ください|下さい|もらえますか|いただきたい|頂きたい)")
     /// A kind before が必要です.
     private static let japaneseNeed = regex("(" + japaneseClause + "{1,30}?)が(?:必要です|必要になります|必要となります|必要でして|必要でございます|必要なのですが|必要なので|ほしいです|欲しいです)")
+    /// The object before を, a verb of sending and 忘れないでください, don't forget to send.
+    private static let japaneseForget = regex("(" + japaneseClause + "{1,30}?)を(?:送る|送付する|共有する|添付する|お送りする|転送する)の(?:を)?忘れないで(?:ください|下さい|くださいね|ね)?")
     private static let japaneseLead = regex(#"^(?:また|あと|それと|それから|さらに|念のため|ついでに|恐れ入りますが|お手数ですが|お手数をおかけしますが|すみませんが|申し訳ありませんが|至急)+"#)
 
     private static func japanese(_ sentence: String) -> [Asked] {
         guard sentence.contains(where: { $0.isHan || $0.isKana }) else { return [] }
         var asked: [Asked] = []
-        for (pattern, needsWhich) in [(japaneseAsk, false), (japaneseNoun, false), (japaneseGive, false), (japaneseNeed, true)] {
+        for (pattern, needsWhich) in [(japaneseAsk, false), (japaneseNoun, false), (japaneseGive, false), (japaneseForget, false), (japaneseNeed, true)] {
             for match in matches(pattern, sentence) {
                 guard let object = Range(match.range(at: 1), in: sentence) else { continue }
                 var text = String(sentence[object])
@@ -669,7 +681,8 @@ nonisolated enum FileRequests {
 
     /// What a Chinese or Japanese request asks for: the text after the last 的 or の, which
     /// heads it, so 对平面图的意见 asks for comments and 最新的平面图 for the plan. When that
-    /// head names only a plain file, as 平面图的电子版, the whole object counts.
+    /// head names only a plain file, as 平面图的电子版, or only a version or a format, as
+    /// 平面图的最新版 or 平面図のPDF, the whole object counts.
     private static func hanObject(_ text: String) -> String {
         var object = unquoted(text)
         for _ in 0..<3 {
@@ -681,10 +694,15 @@ nonisolated enum FileRequests {
         let head = unquoted(String(object[object.index(after: last)...]))
         let headKinds = kinds(in: head)
         let namesOnlyAFile = !headKinds.isEmpty && headKinds.allSatisfy(\.isGeneric)
-        return namesOnlyAFile && kinds(in: object).contains(where: { !$0.isGeneric }) ? object : head
+        let namesOnlyAVersion = headKinds.isEmpty && ContentChecks.matches([hanVersion], head)
+        return (namesOnlyAFile || namesOnlyAVersion) && kinds(in: object).contains(where: { !$0.isGeneric }) ? object : head
     }
 
-    private static let hanLead = regex(#"^(?:一下|一份|一个|一张|个|下|给我们|给我|过来|我们|我|你们的|您的|贵司的|贵方的|以下的?|下面的?|如下的?)"#)
+    /// A version or a format of a file, without a kind of its own: 最新版, 修改稿, 定稿, PDF版,
+    /// 最終版, データ and their like.
+    private static let hanVersion = latin(#"^(?:(?:最新|最终|最終|最后|最後|新|旧|修改|修订|修正|改訂|更新|正式|完整|当前|現行|初|定|终|終|草|原)(?:版本|版|稿|バージョン)?|版本|バージョン|(?:pdf|cad|dwg|word|excel|jpe?g|png|tiff?|zip|ppt|pptx|xlsx?|docx?)(?:版|格式|形式|ファイル|档|文件)?)$"#)
+
+    private static let hanLead = regex(#"^(?:一下|一份|一个|一张|个|以下的?|下面的?|下列的?|如下的?|上述的?|以上的?|下|给我们|给我|过来|我们|我|你们的|您的|贵司的|贵方的)"#)
     private static let hanTrail = regex(#"(?:吧|吗|呢|啊|哦|哈|呗|一下|也|过来|给我们|给我|好吗|可以吗|谢谢|嗎)$"#)
 
     /// The kinds a text names, each once, in the order the text names them.
@@ -754,11 +772,11 @@ nonisolated enum FileRequests {
         "the", "a", "an", "your", "our", "my", "his", "her", "their", "its", "this", "that", "these", "those", "me", "us", "you",
         "it", "them", "latest", "last", "new", "newest", "updated", "final", "current", "recent", "most", "version", "versions",
         "of", "and", "or", "also", "please", "both", "all", "any", "some", "from", "for", "to", "in", "on", "at", "with", "by",
-        "about", "attached", "enclosed", "signed", "back",
+        "about", "attached", "enclosed", "signed", "back", "below", "above", "listed", "following", "mentioned",
         "el", "la", "los", "las", "un", "una", "unos", "unas", "del", "al", "de", "tu", "tus", "su", "sus", "mi", "mis",
         "nuestro", "nuestra", "nuestros", "nuestras", "este", "esta", "estos", "estas", "ese", "esa", "esos", "esas",
         "ultimo", "ultima", "nuevo", "nueva", "actualizado", "actualizada", "final", "y", "o", "tambien", "version",
-        "para", "por", "con", "en", "a", "sobre",
+        "para", "por", "con", "en", "a", "sobre", "siguiente", "siguientes", "abajo", "indicados", "listados",
     ]
     /// Words before a file name that are none of it, as in "the attached file report.pdf".
     private static let fileNameLead: Set<String> = ["attached", "enclosed", "file", "files", "document", "documents", "archivo", "documento", "adjunto"]
@@ -859,10 +877,15 @@ nonisolated enum FileRequests {
         return text
     }
 
+    /// Whether a text holds a negation, other than one that asks all the same.
     private static func hasNegation(_ text: some StringProtocol, _ negation: NSRegularExpression) -> Bool {
-        let text = String(text)
+        let text = removing(askingNegations, from: String(text))
         return negation.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
+
+    /// Negations that ask all the same: "don't forget to", "do not hesitate to", "no
+    /// olvides", 别忘了 and their like.
+    private static let askingNegations = latin(#"\b(?:don['’]?t|do not) (?:forget|hesitate)\b|\bno (?:te |se |os )?olvid(?:es|e|éis|eis|en)\b|(?:千万|可)?(?:别|不要)忘(?:记|了)*"#)
 
     /// An if clause, up to the comma that ends it.
     private static let conditionalClause = latin(#"\b(?:if|si)\b[^,;:]*(?:[,;:]|$)"#)

@@ -57,6 +57,9 @@ struct FileRequestsTests {
             ("There is no need to send the plan, but could you share the budget?", "the budget", [.budget]),
             ("Could you send me the drawings and specs for the lobby?", "the drawings and specs", [.drawing, .specification]),
             ("Could you send me the price list for 2026?", "the price list", [.quote]),
+            ("Please don't forget to send the floor plan.", "the floor plan", [.floorPlan]),
+            ("Don't forget to send me the drawings.", "the drawings", [.drawing]),
+            ("Please do not hesitate to send me the floor plan.", "the floor plan", [.floorPlan]),
         ])
     }
 
@@ -83,6 +86,12 @@ struct FileRequestsTests {
             ("请问能否把施工图纸和效果图发给我们？", "施工图纸和效果图", [.drawing, .rendering]),
             ("你有最新的课件吗？", "课件", [.slides]),
             ("请把简历发到我的邮箱。", "简历", [.cv]),
+            ("请发平面图给我。", "平面图", [.floorPlan]),
+            ("可以发平面图给我吗？", "平面图", [.floorPlan]),
+            ("麻烦发平面图过来。", "平面图", [.floorPlan]),
+            ("请把平面图的最新版发给我。", "平面图的最新版", [.floorPlan]),
+            ("请别忘了把平面图发给我。", "平面图", [.floorPlan]),
+            ("不要忘记发报价单给我。", "报价单", [.quote]),
         ])
     }
 
@@ -108,6 +117,8 @@ struct FileRequestsTests {
             ("工程表を送付してください", "工程表", [.schedule]),
             ("申請書を転送してください", "申請書", [.form]),
             ("カタログを送っていただけますでしょうか", "カタログ", [.catalog]),
+            ("平面図の最新版を送っていただけますか。", "平面図の最新版", [.floorPlan]),
+            ("図面を送るのを忘れないでください。", "図面", [.drawing]),
         ])
     }
 
@@ -134,6 +145,8 @@ struct FileRequestsTests {
             ("Necesito que me envíes tu currículum.", "tu currículum", [.cv]),
             ("Adjunta la planilla, por favor.", "la planilla", [.spreadsheet]),
             ("¿Puedes enviarme la hoja de cálculo?", "la hoja de cálculo", [.spreadsheet]),
+            ("No olvides enviarme el plano.", "el plano", [.floorPlan, .drawing]),
+            ("No te olvides de enviarme la factura.", "la factura", [.invoice]),
         ])
     }
 
@@ -260,6 +273,9 @@ struct FileRequestsTests {
             "平面图收到了吗？",
             "我们需要讨论一下平面图",
             "请把发票开给我们公司",
+            "请开发票。",
+            "我们发现平面图有问题。",
+            "请发表意见。",
             "先日お送りいただいた図面を確認しました",
             "お時間をいただけますか",
             "¿Recibiste el plano?",
@@ -343,6 +359,10 @@ struct FileRequestsTests {
         #expect(Self.found("Please send the following:\n- floor plan\n- lighting spec\n- the budget for phase 2").first?.documentKinds == [.floorPlan, .specification, .budget])
         #expect(Self.found("请发送以下文件：\n1. 平面图\n2. 报价单").first?.documentKinds == [.floorPlan, .quote])
         #expect(Self.found("以下の資料を送ってください：\n・平面図\n・見積書").first?.documentKinds == [.floorPlan, .quote])
+        // A lead that names no file, as "the files below" or 下列文件, still reads the list.
+        #expect(Self.found("Please send the files below:\n- floor plan\n- lighting spec").first?.documentKinds == [.floorPlan, .specification])
+        #expect(Self.found("Please send the documents listed below:\n- floor plan\n- lighting spec").first?.documentKinds == [.floorPlan, .specification])
+        #expect(Self.found("请把下列文件发给我：\n1. 平面图\n2. 报价单").first?.documentKinds == [.floorPlan, .quote])
     }
 
     /// A sentence hard wrapped in a plain text email reads as one.
