@@ -105,6 +105,15 @@ struct ReplyHandoff {
         case notAllowed
         /// The Mail that made the reply quit, also when another Mail runs now.
         case mailQuit
+
+        /// Whether Orra kept the file back itself, by its check or since it was no longer
+        /// ticked, rather than Mail not taking it.
+        var isOrras: Bool {
+            switch self {
+            case .notChecked, .unticked: true
+            case .noReplyNamed, .replyClosed, .refused, .timedOut, .afterTimeOut, .notAllowed, .mailQuit: false
+            }
+        }
     }
 
     /// The files the user ticked for a reply, in their order, with the check each passes

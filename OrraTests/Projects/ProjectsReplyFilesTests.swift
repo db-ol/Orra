@@ -404,7 +404,16 @@ struct ProjectsReplyFilesTests {
         #expect(!fakes.value.steps.contains(.attach(Self.plan)))
         #expect(fakes.value.steps.contains(.attach(Self.sketch)))
         #expect(model.replyFiles.problem(at: Self.plan) == .notInAddedFolder)
-        #expect(model.handoffFiles?.notAttached == [.init(name: "floor-plan-v3.pdf", problem: .notChecked(.notInAddedFolder))])
+        #expect(model.handoffFiles?.notAttached == [.init(file: Self.file(Self.plan), problem: .notChecked(.notInAddedFolder))])
+        // Orra kept it back, so the note does not ask to drag it, and its row cannot be
+        // dragged out.
+        #expect(ProjectsWindowText.handoffLines(try #require(model.handoffNote), files: model.shownHandoffFiles) == [
+            "Mail opened the reply with 1 file attached, and the draft is on the clipboard. Press ⌘V in the reply window.",
+            "Orra checked these files again and did not attach them:",
+            "floor-plan-v3.pdf: No longer in a folder you added to a project.",
+        ])
+        #expect(!model.replyFiles.canDrag(try #require(model.replyFiles.ticked.first { $0.url == Self.plan })))
+        #expect(model.replyFiles.canDrag(try #require(model.replyFiles.ticked.first { $0.url == Self.sketch })))
     }
 
     @Test func theNoteListsTheFilesMailDidNotTake() async throws {
@@ -416,7 +425,7 @@ struct ProjectsReplyFilesTests {
         await model.openReply(all: false)
         let note = try #require(model.handoffFiles)
         #expect(note.attached == 1)
-        #expect(note.notAttached == [.init(name: "平面图草图.png", problem: .refused(code: -10000))])
+        #expect(note.notAttached == [.init(file: Self.file(Self.sketch), problem: .refused(code: -10000))])
         let lines = ProjectsWindowText.handoffLines(try #require(model.handoffNote), files: note)
         #expect(lines.first == "Mail opened the reply with 1 file attached, and the draft is on the clipboard. Press ⌘V in the reply window.")
         #expect(lines.contains("These files are not attached. Drag them from Attachments for the Reply into the reply window:"))
@@ -492,6 +501,63 @@ struct ProjectsReplyFilesTests {
         try await loaded(none)
         await none.replyFiles.setTicked(Self.plan, true)
         #expect(!none.handsOffDraft)
+    }
+
+    /// A ticked file's row can be dragged out only while its file passed its last check. The
+    /// pointer on the row checks it again, at most once in a pause, and a rename the check
+    /// follows moves the row to the new name.
+    @Test func aRowCanBeDraggedOnlyWhileItsFilePassedItsLastCheck() async throws {
+        let model = model()
+        try await loaded(model)
+        await model.replyFiles.setTicked(Self.plan, true)
+        let ticked = try #require(model.replyFiles.ticked.first)
+        #expect(model.replyFiles.canDrag(ticked))
+        // Its folder left the project.
+        fakes.update { $0.checks[Self.plan.path] = .failure(.notInAddedFolder) }
+        await model.replyFiles.recheck(ticked)
+        #expect(!model.replyFiles.canDrag(ticked))
+        #expect(model.replyFiles.problem(at: Self.plan) == .notInAddedFolder)
+        // Within the pause the pointer checks nothing again.
+        fakes.update { $0.checks[Self.plan.path] = nil }
+        await model.replyFiles.recheck(ticked)
+        #expect(fakes.value.rechecked == [Self.plan.path])
+        #expect(!model.replyFiles.canDrag(ticked))
+        // After it, the file passes again, and so does its row.
+        model.replyFiles.recheckPause = .zero
+        await model.replyFiles.recheck(ticked)
+        #expect(fakes.value.rechecked == [Self.plan.path, Self.plan.path])
+        #expect(model.replyFiles.canDrag(ticked))
+        #expect(model.replyFiles.problem(at: Self.plan) == nil)
+        let final = Self.drawings.appending(path: "floor-plan-v3-final.pdf")
+        fakes.update { $0.checks[Self.plan.path] = .success(Self.renamed(Self.plan, to: final)) }
+        await model.replyFiles.recheck(ticked)
+        #expect(model.replyFiles.ticked.map(\.url) == [final])
+        #expect(model.replyFiles.canDrag(try #require(model.replyFiles.ticked.first)))
+    }
+
+    /// A file the note says Mail did not take shows there by the name its row has now, and
+    /// leaves the note once the user takes it off the reply, as Attachments for the Reply no
+    /// longer holds it to drag, with the line that says to drag files from there.
+    @Test func theNoteFollowsTheRowsOfTheFilesItNames() async throws {
+        fakes.update { $0.attachFailures[Self.sketch] = -10000 }
+        let model = model()
+        try await loaded(model)
+        await model.replyFiles.setTicked(Self.plan, true)
+        await model.replyFiles.setTicked(Self.sketch, true)
+        await model.openReply(all: false)
+        let note = try #require(model.handoffNote)
+        let attached = "Mail opened the reply with 1 file attached, and the draft is on the clipboard. Press ⌘V in the reply window."
+        #expect(ProjectsWindowText.handoffLines(note, files: model.shownHandoffFiles) == [
+            attached,
+            "These files are not attached. Drag them from Attachments for the Reply into the reply window:",
+            "平面图草图.png: Mail did not take it.",
+        ])
+        let renamed = Self.sketch.deletingLastPathComponent().appending(path: "平面图草图-2.png")
+        fakes.update { $0.checks[Self.sketch.path] = .success(Self.renamed(Self.sketch, to: renamed)) }
+        await model.replyFiles.recheck(try #require(model.replyFiles.ticked.first { $0.url == Self.sketch }))
+        #expect(ProjectsWindowText.handoffLines(note, files: model.shownHandoffFiles).last == "平面图草图-2.png: Mail did not take it.")
+        model.replyFiles.remove(try #require(model.replyFiles.ticked.first { $0.url == renamed }))
+        #expect(ProjectsWindowText.handoffLines(note, files: model.shownHandoffFiles) == [attached])
     }
 
     /// Where the files are looked for follows the warnings about the email itself and its
@@ -679,7 +745,7 @@ struct ProjectsReplyFilesTests {
         #expect(ProjectsWindowText.handoffLines(.outcome(.replyOpened(files: [])), files: nil) == [ProjectsWindowText.handoff(.outcome(.replyOpened(files: [])))])
         let three = ProjectsEmailModel.HandoffFiles(withDraft: true, given: 3, attached: 3, notAttached: [])
         #expect(ProjectsWindowText.handoffLines(.outcome(.replyOpened(files: [.attached, .attached, .attached])), files: three) == ["Mail opened the reply with 3 files attached, and the draft is on the clipboard. Press ⌘V in the reply window."])
-        let none = ProjectsEmailModel.HandoffFiles(withDraft: false, given: 1, attached: 0, notAttached: [.init(name: "plan.pdf", problem: .replyClosed)])
+        let none = ProjectsEmailModel.HandoffFiles(withDraft: false, given: 1, attached: 0, notAttached: [.init(file: Self.file(Self.drawings.appending(path: "plan.pdf")), problem: .replyClosed)])
         #expect(ProjectsWindowText.handoffLines(.outcome(.replyOpened(files: [.notAttached(.replyClosed)])), files: none) == [
             "Mail opened the reply. Write your reply there.",
             "These files are not attached. Drag them from Attachments for the Reply into the reply window:",

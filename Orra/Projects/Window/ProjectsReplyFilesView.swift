@@ -203,9 +203,9 @@ extension ProjectsEmailArea {
     /// outside its project in orange and why it cannot go when a check found it, then the
     /// footer, the total size when it is large, the cap, and Add File… with what it refused.
     /// Files dropped on it from Finder go through the same check as Add File…, and a row can
-    /// be dragged out as its file, such as into the reply window. Remove, Add File… and
-    /// dropping wait while a handoff runs. A sender that looks spoofed gets only the line
-    /// that Orra attaches no files.
+    /// be dragged out as its file, such as into the reply window, while its file passed its
+    /// last check. Remove, Add File… and dropping wait while a handoff runs. A sender that
+    /// looks spoofed gets only the line that Orra attaches no files.
     struct ReplyAttachments: View {
         let emailModel: ProjectsEmailModel
         @State private var isChoosing = false
@@ -227,7 +227,6 @@ extension ProjectsEmailArea {
                     }
                     ForEach(files.ticked) { file in
                         TickedFileRow(file: file, emailModel: emailModel)
-                            .draggable(file.url)
                     }
                     Group {
                         // Said before the click, as the files reach Mail with it. A blank draft
@@ -287,32 +286,66 @@ extension ProjectsEmailArea {
         }
     }
 
-    /// A ticked file of the reply: its name with Remove beside it, or under it in a column
-    /// too narrow for both, its folder, its project when that is not the email's, the people
-    /// a reply may reach outside its project, and why it cannot go.
+    /// A ticked file of the reply: its name, its folder and its project when that is not the
+    /// email's, as one element for VoiceOver, with Remove beside them, or under them in a
+    /// column too narrow for both, then the people a reply may reach outside its project and
+    /// why it cannot go. When the pointer comes onto the row, the file is checked again, and
+    /// the row can be dragged out as its file only while that check, or the one before it,
+    /// found nothing, see ProjectsReplyFiles.canDrag(_:).
     struct TickedFileRow: View {
         let file: ReplyFile
         let emailModel: ProjectsEmailModel
 
         var body: some View {
             let files = emailModel.replyFiles
-            Label {
+            let row = VStack(alignment: .leading, spacing: 4) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline) {
+                        info
+                        Spacer()
+                        removeButton
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        info
+                        removeButton
+                            .padding(.leading, 26)
+                    }
+                }
+                Group {
+                    let outside = files.outside(of: file)
+                    if !outside.isEmpty {
+                        ReplyWarningLine(text: ProjectsWindowText.outside(project: projectName, addresses: outside))
+                    }
+                    if let problem = files.problem(at: file.url) {
+                        Text(verbatim: ProjectsWindowText.replyFileProblem(problem))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .font(.caption)
+                .padding(.leading, 26)
+            }
+            .onHover { inside in
+                if inside {
+                    Task { await files.recheck(file) }
+                }
+            }
+            if files.canDrag(file) {
+                row.draggable(file.url)
+            } else {
+                row
+            }
+        }
+
+        /// The file's name, its folder and its project when that is not the email's.
+        private var info: some View {
+            let files = emailModel.replyFiles
+            return Label {
                 VStack(alignment: .leading, spacing: 2) {
-                    let name = Text(verbatim: file.url.lastPathComponent)
+                    Text(verbatim: file.url.lastPathComponent)
                         .lineLimit(2)
                         .truncationMode(.middle)
                         .help(Text(verbatim: file.url.path))
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .firstTextBaseline) {
-                            name
-                            Spacer()
-                            removeButton
-                        }
-                        VStack(alignment: .leading, spacing: 4) {
-                            name
-                            removeButton
-                        }
-                    }
                     Group {
                         if let project = file.projects.first, let roots = emailModel.folderRoots[project] {
                             Text(verbatim: ProjectsWindowText.folder(ProjectsEmailFiles.place(of: file.url, in: roots)))
@@ -326,22 +359,12 @@ extension ProjectsEmailArea {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    let outside = files.outside(of: file)
-                    if !outside.isEmpty {
-                        ReplyWarningLine(text: ProjectsWindowText.outside(project: projectName, addresses: outside))
-                            .font(.caption)
-                    }
-                    if let problem = files.problem(at: file.url) {
-                        Text(verbatim: ProjectsWindowText.replyFileProblem(problem))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
                 }
             } icon: {
                 Image(systemName: "doc")
                     .foregroundStyle(.secondary)
             }
+            .accessibilityElement(children: .combine)
         }
 
         /// The name of the file's project for its orange line: the email's when its folders

@@ -11180,6 +11180,28 @@
         }
       }
     },
+    "Orra checked these files again and did not attach them:" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra volvió a revisar estos archivos y no los adjuntó:"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraは次のファイルを再確認し、添付しませんでした:"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 再次检查了以下文件，没有附加它们："
+          }
+        }
+      }
+    },
     "Orra could not add itself to Login Items" : {
       "localizations" : {
         "es-419" : {

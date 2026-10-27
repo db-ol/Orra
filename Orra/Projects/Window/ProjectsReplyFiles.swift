@@ -8,7 +8,9 @@ import Observation
 /// - the files the user ticked for the reply, in the order ticked, each once by its real
 ///   path. Nothing is ticked by default, after Explain Again or from another email, and at
 ///   most `ReplyFiles.maximum` are. Each tick checks the file, see
-///   ProjectsRuntime.replyFile(at:first:), and a file that cannot go keeps its reason.
+///   ProjectsRuntime.replyFile(at:first:), and a file that cannot go keeps its reason. A
+///   ticked file is checked again right before its attach event, and when the pointer comes
+///   onto its row, which can be dragged out only while its file passed its last check.
 /// - Add File… and dropped files, which take only files the index holds in the folders the
 ///   user added to a project.
 /// - the people a reply reaches outside the projects of a ticked file, and whether the draft
@@ -135,6 +137,16 @@ final class ProjectsReplyFiles {
     @ObservationIgnored private var looking: Task<Void, Never>?
     /// The draft as the claim was last read in.
     @ObservationIgnored private var draftText = ""
+    /// When each ticked file was last checked again for its row, by its path.
+    @ObservationIgnored private var lastRecheck: [String: ContinuousClock.Instant] = [:]
+    /// How long a check of a ticked file for its row holds, `rowCheckPause` in the app.
+    /// Tests may set none.
+    @ObservationIgnored var recheckPause = ProjectsReplyFiles.rowCheckPause
+
+    /// How long a check of a ticked file for its row holds before the pointer on the row
+    /// checks it again (a guess): a drag starts within it, and moving the pointer over the
+    /// list reads the folders no more often.
+    nonisolated static let rowCheckPause: Duration = .seconds(2)
 
     init(messageID: String, actions: Actions) {
         self.messageID = messageID
@@ -221,6 +233,13 @@ final class ProjectsReplyFiles {
     /// user took off the reply, and every file once the sender looks spoofed, does not.
     func isStillTicked(_ file: ReplyFile) -> Bool {
         handoffFiles.contains { $0.identity == file.identity }
+    }
+
+    /// Whether a ticked file's row can be dragged out, such as into the reply window: only
+    /// while its file passed its last check, which ticking it, a handoff and the pointer on
+    /// its row run, see `recheck(_:)`.
+    func canDrag(_ file: ReplyFile) -> Bool {
+        problems[file.url.path] == nil
     }
 
     /// The people a reply to all reaches who are neither people of any project whose
@@ -344,6 +363,7 @@ final class ProjectsReplyFiles {
         refusals = []
         reachedCap = false
         claimsAttachment = false
+        lastRecheck = [:]
     }
 
     // MARK: Ticks
@@ -417,16 +437,41 @@ final class ProjectsReplyFiles {
         readClaims()
     }
 
-    /// What the check right before a file's attach event found: a file at a new place after
-    /// a rename stays ticked at that place, and one that cannot go keeps its reason.
+    /// What a check of a ticked file found, right before its attach event or for its row: a
+    /// file that passed loses the reason an earlier check gave, one at a new place after a
+    /// rename stays ticked at that place, once, and one that cannot go keeps its reason.
     func checked(_ file: ReplyFile, _ result: Result<ReplyFile, ReplyFileProblem>) {
         switch result {
         case .success(let now):
-            guard now.url.path != file.url.path, let index = ticked.firstIndex(where: { $0.url.path == file.url.path }) else { return }
-            ticked[index] = now
+            problems[file.url.path] = nil
+            problems[now.url.path] = nil
+            guard now.url.path != file.url.path, let index = ticked.firstIndex(where: { $0.identity == file.identity && $0.url.path == file.url.path }) else { return }
+            if ticked.contains(where: { $0.url.path == now.url.path }) {
+                // The user ticked it at its new name too.
+                ticked.remove(at: index)
+            } else {
+                ticked[index] = now
+            }
         case .failure(let problem):
-            problems[file.url.path] = problem
+            // Under the row's path, also when its row follows a rename that an earlier check
+            // found.
+            let row = ticked.first { $0.url.path == file.url.path } ?? ticked.first { $0.identity == file.identity }
+            problems[row?.url.path ?? file.url.path] = problem
         }
+    }
+
+    /// Checks a ticked file again, when the pointer comes onto its row in Attachments for
+    /// the Reply, so the row can be dragged out only while its file passed a check of that
+    /// moment: still the file the user ticked, in a folder a project holds now, on this Mac.
+    /// At most once in `recheckPause` for a file. What it finds goes as a handoff's check
+    /// goes, see `checked(_:_:)`, while the file is still ticked.
+    func recheck(_ file: ReplyFile) async {
+        let now = ContinuousClock.now
+        if let last = lastRecheck[file.url.path], now < last + recheckPause { return }
+        lastRecheck[file.url.path] = now
+        let result = await actions.recheck(file)
+        guard ticked.contains(where: { $0.identity == file.identity && $0.url.path == file.url.path }) else { return }
+        checked(file, result)
     }
 
     // MARK: The claim of the draft

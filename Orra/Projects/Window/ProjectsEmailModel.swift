@@ -161,10 +161,14 @@ final class ProjectsEmailModel {
     /// What became of the files of the last handoff that had files or no draft, for the note
     /// under the buttons.
     nonisolated struct HandoffFiles: Equatable, Sendable {
-        /// A file Mail did not take, by the name it had, with why.
+        /// A file that is not in the reply, as it was ticked, with why.
         nonisolated struct NotAttached: Equatable, Sendable {
-            var name: String
+            var file: ReplyFile
             var problem: ReplyHandoff.AttachProblem
+
+            var name: String {
+                file.url.lastPathComponent
+            }
         }
 
         /// Whether the draft went on the clipboard with the handoff.
@@ -978,10 +982,23 @@ final class ProjectsEmailModel {
             case .notAttached(.unticked):
                 continue
             case .notAttached(let problem):
-                notAttached.append(HandoffFiles.NotAttached(name: file.url.lastPathComponent, problem: problem))
+                notAttached.append(HandoffFiles.NotAttached(file: file, problem: problem))
             }
         }
         return HandoffFiles(withDraft: withDraft, given: files.count, attached: attached, notAttached: notAttached)
+    }
+
+    /// The files of the last handoff's note as the window shows them now: each file that is
+    /// not in the reply by the name its row has now, as after a rename a check followed, and
+    /// none that the user took off the reply since, or ticked anew as another file, which
+    /// Attachments for the Reply no longer shows as the file of the note.
+    var shownHandoffFiles: HandoffFiles? {
+        guard var files = handoffFiles else { return nil }
+        let ticked = replyFiles.ticked
+        files.notAttached = files.notAttached.compactMap { entry in
+            ticked.first { $0.identity == entry.file.identity }.map { HandoffFiles.NotAttached(file: $0, problem: entry.problem) }
+        }
+        return files
     }
 
     /// Copy: puts the draft in the editor on the clipboard, unless a handoff of the window

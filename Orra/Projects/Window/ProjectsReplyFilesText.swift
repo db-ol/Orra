@@ -93,9 +93,10 @@ extension ProjectsWindowText {
     }
 
     /// The note under the buttons after a handoff, a line each: what the handoff did, and
-    /// for one with files or without a draft, how many files Mail took and each file it did
-    /// not take with why, or that no file went when the reply did not open. A handoff with a
-    /// draft and no file says what `handoff(_:)` says.
+    /// for one with files or without a draft, how many files Mail took, each file Mail did
+    /// not take with why, which the user can drag into the reply, and each file Orra kept
+    /// back after its check with why, which the user cannot, or that no file went when the
+    /// reply did not open. A handoff with a draft and no file says what `handoff(_:)` says.
     static func handoffLines(_ note: ProjectsEmailModel.HandoffNote, files: ProjectsEmailModel.HandoffFiles?) -> [String] {
         guard let files else { return [handoff(note)] }
         guard case .outcome(.replyOpened) = note else {
@@ -110,9 +111,15 @@ extension ProjectsWindowText {
         case (false, 1): lines.append(String(localized: "Mail opened the reply with 1 file attached. Write your reply there."))
         case (false, let count): lines.append(String(localized: "Mail opened the reply with \(count) files attached. Write your reply there."))
         }
-        if !files.notAttached.isEmpty {
+        let notTaken = files.notAttached.filter { !$0.problem.isOrras }
+        if !notTaken.isEmpty {
             lines.append(String(localized: "These files are not attached. Drag them from Attachments for the Reply into the reply window:"))
-            lines += files.notAttached.map { notAttachedLine(name: $0.name, problem: $0.problem) }
+            lines += notTaken.map { notAttachedLine(name: $0.name, problem: $0.problem) }
+        }
+        let keptBack = files.notAttached.filter(\.problem.isOrras)
+        if !keptBack.isEmpty {
+            lines.append(String(localized: "Orra checked these files again and did not attach them:"))
+            lines += keptBack.map { notAttachedLine(name: $0.name, problem: $0.problem) }
         }
         return lines
     }

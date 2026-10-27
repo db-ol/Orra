@@ -449,7 +449,7 @@ extension ProjectsEmailArea {
         private var handoffNote: some View {
             if let note = emailModel.handoffNote {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(ProjectsWindowText.handoffLines(note, files: emailModel.handoffFiles).enumerated()), id: \.offset) { _, line in
+                    ForEach(Array(ProjectsWindowText.handoffLines(note, files: emailModel.shownHandoffFiles).enumerated()), id: \.offset) { _, line in
                         Text(verbatim: line)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)

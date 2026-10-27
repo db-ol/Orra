@@ -4148,8 +4148,10 @@ PY
   in the log.
 - [ ] Tick floor-plan-v3.pdf, rename it in Finder to floor-plan-v3-final.pdf, wait two
   seconds and click Open Reply in Mail. The renamed file is attached, and its row shows
-  the new name. Move it out of every project folder and try again: it is not attached, and
-  its row and the note say No longer in a folder you added to a project.
+  the new name. Move it out of every project folder and try again: it is not attached, its
+  row says No longer in a folder you added to a project, and the note lists it under Orra
+  checked these files again and did not attach them, not under the line that says to drag
+  files into the reply.
 - [ ] Tick floor-plan-v3.pdf, open it in Preview, change and save it, and click Open Reply in
   Mail. It is not attached, and its row and the note say It changed after you ticked it.
   Tick it again.
@@ -4188,6 +4190,13 @@ PY
 - [ ] Tick ten files, then an eleventh: it stays off, and the line says Orra attaches at most
   10 files to one reply. VoiceOver announces it once.
 - [ ] Drag a row of the area into Mail's reply window: Mail attaches it.
+- [ ] Tick floor-plan-v3.pdf, then take its folder out of the project with Edit Project….
+  Point at its row in Attachments for the Reply: the row says No longer in a folder you
+  added to a project, and it no longer drags. Add the folder again, wait until the
+  project's page counts its files, and point at the row again after two seconds: the line
+  goes and the row drags again.
+- [ ] After a note that names a file Mail did not take, click Remove on that file: its line
+  and the line that says to drag files go from the note.
 - [ ] Add a test folder in iCloud Drive to a project, tick a downloaded file in it and open
   the reply: note whether Mail attaches it. Remove its download in Finder and click Open
   Reply in Mail again: the row says Not downloaded to this Mac.
