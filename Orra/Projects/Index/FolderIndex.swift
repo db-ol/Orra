@@ -1216,10 +1216,11 @@ final class FolderIndex {
 
     /// Writes what a job read, once no dictation is under way, in one transaction and only
     /// while the row is still the job's file: the chunks of the recognized pages, the pages
-    /// tried, its text and hidden runs, and whether pages are left. A file that failed as a
-    /// whole stops waiting and keeps any text it has. A reason that can pass, a file that
-    /// changed, and a job that made no progress without being stopped leave the row until
-    /// the next sweep.
+    /// tried, its text and hidden runs, and whether pages are left. A file without text
+    /// whose pages all failed is unreadable once none is left. A file that failed as a whole
+    /// stops waiting and keeps any text it has. A reason that can pass, a file that changed,
+    /// and a job that made no progress without being stopped leave the row until the next
+    /// sweep.
     private func store(
         _ result: Result<RecognitionResult, FileSkipReason>, of next: Waiting, job: RecognitionJob, wasInterrupted: Bool,
         started: ContinuousClock.Instant
@@ -1289,9 +1290,19 @@ final class FolderIndex {
                     "UPDATE index_files SET text_bytes = text_bytes + ?, chunks = chunks + ?, hidden_runs = hidden_runs + ? WHERE id = ?",
                     [.integer(prepared.textBytes), .integer(Int64(prepared.chunks.count)), .integer(Int64(read.hiddenRuns)), .integer(row)])
                 // The file has text once any page gave some. Without, it waits while pages
-                // are left, and then holds no text.
+                // are left, and then holds no text, or is unreadable when no page of it
+                // could be read at all, such as an image whose data is broken.
                 let hasText = try database.run("SELECT text_bytes > 0 OR chunks > 0 FROM index_files WHERE id = ?", [.integer(row)]).first?.first?.integer == 1
-                let skip: FileSkipReason? = hasText ? nil : !read.isDone ? .waitsForRecognition : isPDF ? .noText : .imageWithoutText
+                let skip: FileSkipReason?
+                if hasText {
+                    skip = nil
+                } else if !read.isDone {
+                    skip = .waitsForRecognition
+                } else if try Self.noPageWasRead(row: row, size: size, modified: modified, in: database) {
+                    skip = .unreadable
+                } else {
+                    skip = isPDF ? .noText : .imageWithoutText
+                }
                 try database.run(
                     "UPDATE index_files SET skip = ?, recognize = ? WHERE id = ?",
                     [skip.map { .text($0.rawValue) } ?? .null, .integer(read.isDone ? 0 : 1), .integer(row)])
@@ -1307,6 +1318,16 @@ final class FolderIndex {
             Self.logRecognitionFailure(error)
         }
         await refreshReport(id, generation: next.generation, isIndexing: reports[id]?.isIndexing ?? false)
+    }
+
+    /// Whether no page tried in this version of a file gave text or was found blank, and at
+    /// least one failed, any others having timed out.
+    private static func noPageWasRead(row: Int64, size: Int64, modified: Double, in database: isolated ProjectsDatabase) throws -> Bool {
+        let counts = try database.run(
+            "SELECT sum(outcome IN (?4, ?5)), sum(outcome = ?6) FROM index_recognition_pages WHERE file = ?1 AND size = ?2 AND modified = ?3",
+            [.integer(row), .integer(size), .real(modified), .text(RecognitionOutcome.text.rawValue), .text(RecognitionOutcome.blank.rawValue),
+             .text(RecognitionOutcome.failed.rawValue)]).first
+        return (counts?.first?.integer ?? 0) == 0 && (counts?.last?.integer ?? 0) > 0
     }
 
     private nonisolated static func logRecognitionFailure(_ error: any Error) {

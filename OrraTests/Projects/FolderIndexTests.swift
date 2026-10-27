@@ -1286,6 +1286,39 @@ struct FolderIndexTests {
         }
     }
 
+    /// A file none of whose pages could be read, such as an image whose data is broken, is
+    /// unreadable and listed with why, also when its pages failed in two jobs. A scan with a
+    /// blank page among its failed ones holds no text.
+    @Test func aFileWhosePagesAllFailedIsUnreadable() async throws {
+        try await withFixture(read: Self.readingScans(["broken.pdf": [1, 2], "scan.pdf": [1, 2]]), recognize: { job, _ in
+            var result = RecognitionResult(isDone: true)
+            switch (job.file.lastPathComponent, job.done) {
+            case ("broken.pdf", []):
+                result.tried = [1: .failed]
+                result.isDone = false
+            case ("broken.pdf", _): result.tried = [2: .failed]
+            case ("scan.pdf", _): result.tried = [1: .blank, 2: .failed]
+            default: result.tried = [0: .failed]
+            }
+            return .success(result)
+        }) { fixture in
+            for name in ["broken.pdf", "scan.pdf", "photo.jpg"] {
+                try fixture.write(name, "x")
+            }
+            await fixture.start()
+            #expect(fixture.jobs.names.sorted() == ["broken.pdf", "broken.pdf", "photo.jpg", "scan.pdf"])
+            let rows = try await fixture.rows()
+            #expect(rows["broken.pdf"].map { $0.skip == "unreadable" && $0.recognize == 0 } == true)
+            #expect(rows["photo.jpg"].map { $0.skip == "unreadable" && $0.recognize == 0 } == true)
+            #expect(rows["scan.pdf"].map { $0.skip == "noText" && $0.recognize == 0 } == true)
+            let skipped = try await fixture.index.skippedFiles(project: fixture.alpha)
+            #expect(skipped.map(\.url.lastPathComponent) == ["broken.pdf", "photo.jpg", "scan.pdf"])
+            #expect(skipped.map(\.reason) == [.unreadable, .unreadable, .noText])
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.indexed == 0 && report.nameOnly == 3 && report.recognitionLeft == 0)
+        }
+    }
+
     /// The pages tried are kept as each job ends, so after a restart recognition goes on
     /// where it stopped. The page under way at the stop was not kept and is read again.
     @Test func aRestartGoesOnWhereRecognitionStopped() async throws {
