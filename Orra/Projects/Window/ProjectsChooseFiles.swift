@@ -344,8 +344,10 @@ struct ProjectsChooseFiles: View {
     /// for both, so the list keeps its rows.
     @State private var height: CGFloat = 560
 
-    /// The lowest sheet whose footer stays under the list (a guess, from the renders at
-    /// 520 by 380 in Spanish).
+    /// The lowest sheet whose footer stays under the list. In Spanish at 520 points wide,
+    /// the header, the footer and the buttons in two rows take about 310 points, so a lower
+    /// sheet would leave the list less than its 120 points, and some room is left for larger
+    /// text.
     static let compactHeight: CGFloat = 470
 
     /// A folder to add to a project, with the dropped file it is for, if any.
