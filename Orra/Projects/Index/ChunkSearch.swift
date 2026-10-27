@@ -9,6 +9,11 @@ import NaturalLanguage
 ///   matches. The trigram table holds the chunks with Chinese characters, so three
 ///   characters in a row match where NLTokenizer split the words another way.
 /// - Both tables are ranked by BM25, and the two lists are merged by reciprocal rank fusion.
+/// - A search may also carry search terms, such as the cleanup model gives for an email in
+///   Chinese and English with other words for the same things, see SearchTerms. Each term
+///   is one phrase: its words in a row in the words table, and a term of three or more
+///   Chinese characters as a substring in the trigram table. The two lists of the terms
+///   join the fusion with those of the text, so a chunk both find ranks first.
 /// - Every term goes into MATCH quoted, with its quotes doubled, so text from a mail or a
 ///   file never reads as FTS5 syntax. The query itself is a bound value, never SQL.
 ///
@@ -16,6 +21,20 @@ import NaturalLanguage
 /// list lengths and fusion constant. Unlike it, a trigram query holds no Latin words, since
 /// the trigram table holds only the chunks with Chinese.
 nonisolated struct ChunkSearch: Sendable {
+    /// What a search looks for.
+    nonisolated struct Query: Sendable, Equatable {
+        /// The text whose words are searched, such as an email's subject and own text.
+        var text: String
+        /// Search terms, each searched as a phrase, the first `maximumTerms` of them.
+        var terms: [String] = []
+        /// The projects searched, nil for all of them.
+        var projects: [UUID]?
+        /// Whether only the chunks a term matched count, such as for the files of other
+        /// projects, which the words of an email alone never bring in.
+        var termsOnly = false
+        var limit = 6
+    }
+
     /// A chunk that matched.
     nonisolated struct Hit: Sendable, Equatable {
         var chunk: Int64
@@ -33,6 +52,8 @@ nonisolated struct ChunkSearch: Sendable {
         var fileHiddenRuns: Int
         /// The fused rank score, higher is better. Zero for `newest(_:limit:)`.
         var score: Double
+        /// Whether a list of the query's terms holds the chunk.
+        var matchedTerm = false
     }
 
     /// The constant of reciprocal rank fusion: a chunk at rank r of a list adds 1 / (60 + r).
@@ -48,6 +69,8 @@ nonisolated struct ChunkSearch: Sendable {
     /// The characters of a text a query is made from. A long mail gives its terms well
     /// before the end, so the rest is not cut into words.
     static let maximumQueryCharacters = 20_000
+    /// The most search terms in one query.
+    static let maximumTerms = 12
 
     let database: ProjectsDatabase
 
@@ -55,13 +78,26 @@ nonisolated struct ChunkSearch: Sendable {
     /// the main actor, since NLTokenizer and the full text queries take a while.
     @concurrent
     func search(_ text: String, in projects: [UUID]? = nil, limit: Int = 6) async throws -> [Hit] {
-        guard projects?.isEmpty != true, limit > 0 else { return [] }
+        try await search(Query(text: text, projects: projects, limit: limit))
+    }
+
+    /// The best chunks for the query's text and terms, in its projects. The lists of the
+    /// text and of the terms are fused, and each hit says whether a term matched it. Without
+    /// terms it gives what a search of the text alone gives, in the same order. Off the main
+    /// actor, since NLTokenizer and the full text queries take a while.
+    @concurrent
+    func search(_ query: Query) async throws -> [Hit] {
+        let terms = Array(query.terms.prefix(Self.maximumTerms))
+        guard query.projects?.isEmpty != true, query.limit > 0, !query.termsOnly || !terms.isEmpty else { return [] }
         var lists: [[Int64]] = []
-        for (table, query) in Self.queries(for: text) {
-            var parameters: [ProjectsDatabase.Value] = [.text(query)]
-            if let projects { parameters.append(.text(Self.json(projects.map(\.uuidString)))) }
-            let rows = try await database.run(Self.matchSQL(table, filtered: projects != nil), parameters)
-            lists.append(rows.compactMap { $0.first?.integer })
+        for (table, match) in Self.queries(for: query.text) {
+            lists.append(try await rows(table, match, in: query.projects))
+        }
+        var matched = Set<Int64>()
+        for (table, match) in Self.termQueries(for: terms) {
+            let list = try await rows(table, match, in: query.projects)
+            matched.formUnion(list)
+            lists.append(list)
         }
         var scores: [Int64: Double] = [:]
         for list in lists {
@@ -69,7 +105,10 @@ nonisolated struct ChunkSearch: Sendable {
                 scores[chunk, default: 0] += 1 / (Self.fusionOffset + Double(rank))
             }
         }
-        let best = scores.sorted { ($0.value, -$0.key) > ($1.value, -$1.key) }.prefix(limit)
+        if query.termsOnly {
+            scores = scores.filter { matched.contains($0.key) }
+        }
+        let best = scores.sorted { ($0.value, -$0.key) > ($1.value, -$1.key) }.prefix(query.limit)
         guard !best.isEmpty else { return [] }
         let rows = try await database.run(Self.hitSQL + " WHERE c.id IN (SELECT value FROM json_each(?))", [.text(Self.json(best.map { String($0.key) }, quoted: false))])
         let hits = Dictionary(rows.compactMap { Self.hit($0, score: 0) }.map { ($0.chunk, $0) }, uniquingKeysWith: { first, _ in first })
@@ -77,9 +116,17 @@ nonisolated struct ChunkSearch: Sendable {
             hits[chunk].map { hit in
                 var hit = hit
                 hit.score = score
+                hit.matchedTerm = matched.contains(chunk)
                 return hit
             }
         }
+    }
+
+    /// The chunks one table gives for a MATCH query, best first, in `projects` or in all.
+    private func rows(_ table: String, _ match: String, in projects: [UUID]?) async throws -> [Int64] {
+        var parameters: [ProjectsDatabase.Value] = [.text(match)]
+        if let projects { parameters.append(.text(Self.json(projects.map(\.uuidString)))) }
+        return try await database.run(Self.matchSQL(table, filtered: projects != nil), parameters).compactMap { $0.first?.integer }
     }
 
     /// The chunks of a project's most recently changed files, a file's chunks in order, to
@@ -198,6 +245,44 @@ nonisolated struct ChunkSearch: Sendable {
         return matchQuery(terms)
     }
 
+    /// The MATCH query of search terms for the words table: each term as one phrase of its
+    /// words, cut and folded as the table holds them, so a term of several words matches
+    /// them in a row. A term without a letter or a digit, one of stop words only, and one of
+    /// a single letter or character other than a digit are left out, and so is a phrase
+    /// seen before. Nil when none is left.
+    static func termWordQuery(_ terms: [String]) -> String? {
+        var phrases: [String] = []
+        var seen = Set<String>()
+        for term in terms.prefix(maximumTerms) {
+            let words = words(in: String(term.prefix(maximumTermCharacters))).map(cleaned).filter { !$0.isEmpty }
+            guard words.contains(where: { $0.contains(where: { $0.isLetter || $0.isNumber }) }),
+                  !words.allSatisfy(stopWords.contains) else { continue }
+            if words.count == 1, words[0].count == 1, words[0].first?.isNumber != true { continue }
+            let phrase = words.joined(separator: " ")
+            guard seen.insert(phrase).inserted else { continue }
+            phrases.append(phrase)
+        }
+        return matchQuery(phrases)
+    }
+
+    /// The MATCH query of search terms for the trigram table: each term of three or more
+    /// Chinese characters and nothing else, in compatibility form, which the table matches
+    /// as a substring. Shorter Chinese terms and Latin ones are left to the words table, as
+    /// `trigramQuery(_:)` leaves Latin words out. Nil when none is left.
+    static func termTrigramQuery(_ terms: [String]) -> String? {
+        var strings: [String] = []
+        var seen = Set<String>()
+        for term in terms.prefix(maximumTerms) {
+            let form = cleaned(indexedTrigramText(String(term.prefix(maximumTermCharacters))))
+            guard form.count >= 3, form.unicodeScalars.allSatisfy(ChineseText.isHan), seen.insert(form).inserted else { continue }
+            strings.append(form)
+        }
+        return matchQuery(strings)
+    }
+
+    /// The characters of a term a query reads at most. SearchTerms keeps terms far shorter.
+    private static let maximumTermCharacters = 80
+
     /// Terms joined by OR, each quoted.
     static func matchQuery(_ terms: [String]) -> String? {
         terms.isEmpty ? nil : terms.map(quoted).joined(separator: " OR ")
@@ -213,6 +298,17 @@ nonisolated struct ChunkSearch: Sendable {
     private static func queries(for text: String) -> [(table: String, query: String)] {
         [("index_chunk_words", wordQuery(text)), ("index_chunk_trigrams", trigramQuery(text))]
             .compactMap { table, query in query.map { (table, $0) } }
+    }
+
+    private static func termQueries(for terms: [String]) -> [(table: String, query: String)] {
+        guard !terms.isEmpty else { return [] }
+        return [("index_chunk_words", termWordQuery(terms)), ("index_chunk_trigrams", termTrigramQuery(terms))]
+            .compactMap { table, query in query.map { (table, $0) } }
+    }
+
+    /// Whether a word, as `words(in:)` gives it, is one that queries leave out.
+    static func isStopWord(_ word: String) -> Bool {
+        stopWords.contains(word)
     }
 
     /// Words the prototype leaves out of queries, in Chinese and English.
