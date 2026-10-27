@@ -499,6 +499,9 @@ APPLE_EVENT_FILES = frozenset({MAIL_EVENTS_FILE})
 FILE_TEXT_FILE = "Orra/Projects/Index/FileText.swift"
 # The only file in Orra/Projects that may remove, move, replace or trash files (rule 7).
 STORAGE_FILE = "Orra/Projects/ProjectsStorage.swift"
+# The only file in Orra/Projects that may read a file by a URL with Foundation, Orra's own
+# list of projects, which never lies in a project folder (rule 1).
+PROJECT_LIST_FILE = "Orra/Projects/Store/ProjectList.swift"
 # The only files in Orra/Projects that may use UserDefaults (rule 8).
 DEFAULTS_FILES = frozenset({"Orra/Projects/ProjectsSwitch.swift", "Orra/Projects/Mail/MailChoice.swift"})
 # This check and its tests name the script words of rule 5.
@@ -514,9 +517,11 @@ SKIPPED_FILES = frozenset({".DS_Store"})
 SOURCE_RULES = {
     1: "Code in Orra/Projects never types, uses Accessibility or the pasteboard, runs a process, "
        "loads code by name, shows web content, Markdown or remote images, opens a URL, connects "
-       "to the network, quits an app or removes a file with a C call, or reads a file by a URL "
-       "or a path, or resolves XML entities. No member there may be named html or webArchive, "
-       "the document types that read through WebKit.",
+       "to the network, quits an app, removes a file with a C call or resolves XML entities. It "
+       "hands no URL or path to a reader of files, such as Data(contentsOf:) or "
+       "PDFDocument(url:), except in Store/ProjectList.swift, which reads Orra's list of "
+       "projects. No member there may be named html or webArchive, the document types that read "
+       "through WebKit.",
     2: "In Orra/Projects only Index/FileText.swift makes an NSAttributedString, from data with the "
        "documentType named in the same call, never from a URL, a path or HTML.",
     3: "In Orra only the files in APPLE_EVENT_FILES build or send an Apple Event. Reading the launch event is fine.",
@@ -607,6 +612,20 @@ def _c_call(code, match):
     return bool(arguments.strip()) and all(label is None for label in _labels(arguments))
 
 
+def _not_array_literal(code, match):
+    """perform( counts unless its first argument is a whole array literal, as in Vision's
+    handler.perform([request]). NSObject's perform(_:) takes a selector, which is never an
+    array, while an element of one, as in perform([#selector(run)][0]), still counts."""
+    arguments = _arguments(code, match.end() - 1)
+    if arguments is None:
+        return True
+    first = _top_level_items(arguments)[0].strip()
+    if not first.startswith("["):
+        return True
+    inner = _arguments(first, 0)
+    return inner is None or len(inner) + 2 != len(first)
+
+
 def _rule(*patterns, flags=0):
     """Compiles the patterns of a rule. A pattern is a regular expression, or a pair of one
     and a function of the view and the match that says whether the match counts."""
@@ -640,10 +659,8 @@ PROJECTS_BANNED = _rule(
     r"\bNSClassFromString\b",
     r"\bNSSelectorFromString\b",
     # Every Selector initializer takes a string. #selector( is checked by the compiler.
-    # NSObject's perform(_:) takes a selector, never an array, and Vision's request handler
-    # takes an array of requests.
     r"\bSelector\s*\(",
-    r"\.\s*perform\s*\((?!\s*\[)",
+    (r"\.\s*perform\s*\(", _not_array_literal),
     r"\bperformSelector\w*",
     # The Objective-C runtime and Bundle find a class by its name, and these attributes bind
     # a C function by its name.
@@ -682,7 +699,7 @@ PROJECTS_BANNED = _rule(
     r"\bPDFDocument\s*\(\s*url",
     r"\bCGPDFDocumentCreateWithURL\b",
     r"\bCGImageSourceCreateWithURL\b",
-    r"\bCGDataProviderCreateWithURL\b",
+    r"\bCGDataProviderCreateWith(?:URL|Filename)\b",
     r"\bVNImageRequestHandler\s*\(\s*url",
     r"\bXMLParser\s*\(\s*contentsOf",
     r"\bXMLDocument\s*\(\s*contentsOf",
@@ -691,6 +708,19 @@ PROJECTS_BANNED = _rule(
     r"\bexternalEntityResolvingPolicy\b",
     r"\bshouldResolveExternalEntities\b",
     r"\ballowedExternalEntityURLs\b",
+)
+
+# Rule 1, in the code of Orra/Projects but PROJECT_LIST_FILE: the readers of Foundation and C
+# that read a file by a URL or a path, which follow links and download a file that is not on
+# this Mac.
+PROJECTS_FILE_READERS = _rule(
+    r"\b(?:NS)?(?:Mutable)?(?:Data|String)\s*\(\s*contentsOf",
+    r"\bNS(?:Mutable)?(?:Dictionary|Array)\s*\(\s*contentsOf",
+    r"\bFileHandle\s*\(\s*for(?:Reading|Updating)",
+    r"\.\s*contents\s*\(\s*atPath",
+    r"\b(?:NS)?InputStream\s*\(\s*(?:url|fileAtPath)",
+    r"\.\s*resourceBytes\b",
+    r"\bfopen\b",
 )
 
 # Rule 2, in the code of Orra/Projects.
@@ -1344,6 +1374,8 @@ def check_sources(root, apple_event_files=APPLE_EVENT_FILES):
             problems += _find(uncommented, path, 5, SCRIPT_TEXT)
         if in_projects:
             problems += _find(code, path, 1, PROJECTS_BANNED)
+            if path != PROJECT_LIST_FILE:
+                problems += _find(code, path, 1, PROJECTS_FILE_READERS)
             problems += _attributed_strings(code, path)
             if path != STORAGE_FILE:
                 problems += _find(code, path, 7, FILE_REMOVAL)
