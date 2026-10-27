@@ -753,15 +753,61 @@ struct ProjectsWindowViewTests {
         return nil
     }
 
+    /// The scroll views in a view that no other scroll view in it holds: the email view's
+    /// one, or its two panes while comparing.
+    private static func outerScrollViews(in view: NSView) -> [NSScrollView] {
+        if let scroll = view as? NSScrollView {
+            return [scroll]
+        }
+        return view.subviews.flatMap { outerScrollViews(in: $0) }
+    }
+
+    /// How the panes of the email view stand.
+    enum Arrangement: Equatable {
+        /// The one scroll of the email view.
+        case one
+        /// Original Email on the left, Explanation and Draft on the right.
+        case sideBySide
+        /// Original Email above Explanation and Draft.
+        case stacked
+        case other(String)
+    }
+
+    /// How the panes stand in a view that holds the email view, from the frames of its outer
+    /// scroll views in the window. The pane with the draft's editor is Explanation and Draft.
+    private static func arrangement(in view: NSView, editor: NSTextView) -> Arrangement {
+        let scrolls = outerScrollViews(in: view)
+        if scrolls.count == 1, editor.isDescendant(of: scrolls[0]) {
+            return .one
+        }
+        guard scrolls.count == 2, let explanation = scrolls.first(where: { editor.isDescendant(of: $0) }),
+              let original = scrolls.first(where: { $0 !== explanation }) else { return .other("\(scrolls.count) scroll views") }
+        // In the window's coordinates, whose y grows upward.
+        let left = original.convert(original.bounds, to: nil)
+        let right = explanation.convert(explanation.bounds, to: nil)
+        func near(_ first: CGFloat, _ second: CGFloat) -> Bool { abs(first - second) <= 1 }
+        if near(left.minY, right.minY), near(left.height, right.height), left.maxX <= right.minX + 1 {
+            return .sideBySide
+        }
+        if near(left.minX, right.minX), near(left.width, right.width), right.maxY <= left.minY + 1 {
+            return .stacked
+        }
+        return .other("original \(left), explanation \(right)")
+    }
+
     /// Compare with Original asks the split view for the list and the email view in the
     /// window as the app makes it, never for the detail column alone, and Exit Comparison
     /// asks for the columns from before. The window is never ordered front, as in
     /// `theWindowKeepsItsSizeWhenItsContentGrows()`. Such a window applies the columns it
     /// asks for only once it is resized, so this checks what it asks for, and after a resize
-    /// that the split view collapsed the sidebar and kept the list. The draft keeps its
-    /// editor with its text, selection, focus, the marked text of an input method and the
-    /// typing it can undo, through the comparison, the window narrowing to its smallest size
-    /// and widening again, and its end.
+    /// that the split view collapsed the sidebar and kept the list, and the opt in
+    /// `compareWithOriginalInAShownWindow()` checks what a shown window does. The comparison
+    /// starts and ends as a click on the buttons does, which moves no focus, see
+    /// `theFocusFollowsOnlyAPressFromVoiceOverOrTheKeyboard()`. The draft keeps its editor
+    /// with its text, selection, focus, the marked text of an input method and the typing it
+    /// can undo, through the comparison, its panes going from side by side to one above the
+    /// other and back as the window narrows to its smallest size and widens again, and its
+    /// end.
     @Test func compareWithOriginalAsksForTwoColumnsAndKeepsTheDraftEditor() async throws {
         let fixture = try await Fixture()
         defer { fixture.cleanUp() }
@@ -775,16 +821,19 @@ struct ProjectsWindowViewTests {
         let asked = Columns()
         let window = ProjectsWindow.window(hosting: ProjectsWindowView(runtime: runtime, model: model, openSettings: {}, columnsChanged: asked.hear))
         defer { window.close() }
-        // A wide window, which then narrows to its smallest size and widens again.
+        // Wide enough for the panes side by side, also beside the sidebar and the list, which
+        // a window that is never shown keeps until it is resized, and the window's smallest
+        // size, where they stand one above the other with or without the sidebar.
         let wide = CGSize(width: 1_440, height: ProjectsWindow.defaultSize.height)
         window.setContentSize(wide)
         try await layOut(window)
         let content = try #require(window.contentView)
         let editor = try #require(Self.descendants(of: content).compactMap { $0 as? NSTextView }.first { !$0.isFieldEditor && $0.string == emailModel.text })
-        let split = try #require(Self.pane(holding: editor)).split
+        let (split, pane) = try #require(Self.pane(holding: editor))
         let controller = try #require(split.delegate as? NSSplitViewController)
         let sidebar = try #require(controller.splitViewItems.first { $0.behavior == .sidebar })
         let list = try #require(controller.splitViewItems.first { $0.behavior == .contentList })
+        #expect(Self.arrangement(in: pane, editor: editor) == .one)
         #expect(window.makeFirstResponder(editor))
         // Typing to undo, a selection, and an unfinished word of an input method.
         editor.setSelectedRange(NSRange(location: 0, length: 0))
@@ -816,14 +865,17 @@ struct ProjectsWindowViewTests {
         try await layOut(window)
         #expect(model.isComparing)
         #expect(asked.last == .doubleColumn, "The split view was asked for \(asked.asked)")
+        #expect(Self.arrangement(in: pane, editor: editor) == .sideBySide)
         editorKept("compared")
         window.setContentSize(ProjectsWindow.minimumSize)
         try await layOut(window)
         // Resized, the window has taken the columns asked for.
         #expect(sidebar.isCollapsed && !list.isCollapsed)
+        #expect(Self.arrangement(in: pane, editor: editor) == .stacked, "The panes of the split view are \(split.arrangedSubviews.map(\.frame)) in \(window.contentLayoutRect)")
         editorKept("one above the other")
         window.setContentSize(wide)
         try await layOut(window)
+        #expect(Self.arrangement(in: pane, editor: editor) == .sideBySide)
         editorKept("side by side again")
 
         model.endComparing()
@@ -831,6 +883,7 @@ struct ProjectsWindowViewTests {
         #expect(!model.isComparing)
         #expect(asked.last == before, "The split view was asked for \(asked.asked)")
         #expect(!asked.asked.contains(.detailOnly), "The split view was asked for \(asked.asked)")
+        #expect(Self.arrangement(in: pane, editor: editor) == .one)
         editorKept("after Exit Comparison")
         window.setContentSize(ProjectsWindow.defaultSize)
         try await layOut(window)
@@ -843,6 +896,80 @@ struct ProjectsWindowViewTests {
         }
         #expect(!editor.string.hasPrefix("Q"))
         #expect(!window.isVisible)
+        await fixture.stop()
+    }
+
+    /// The focus follows a press of Compare with Original or Exit Comparison to the other
+    /// button only from VoiceOver's cursor or the keyboard focus on the button pressed, each
+    /// for itself. A click with the mouse moves neither.
+    @Test func theFocusFollowsOnlyAPressFromVoiceOverOrTheKeyboard() {
+        typealias Area = ProjectsEmailArea
+        #expect(Area.focusAfterPress(.compare, voiceOver: nil, keyboard: nil) == nil)
+        #expect(Area.focusAfterPress(.exit, voiceOver: nil, keyboard: nil) == nil)
+        // The other button has the focus, so the press was a click.
+        #expect(Area.focusAfterPress(.compare, voiceOver: .exit, keyboard: .exit) == nil)
+        #expect(Area.focusAfterPress(.compare, voiceOver: .compare, keyboard: nil) == Area.FocusMove(button: .exit, voiceOver: true, keyboard: false))
+        #expect(Area.focusAfterPress(.compare, voiceOver: nil, keyboard: .compare) == Area.FocusMove(button: .exit, voiceOver: false, keyboard: true))
+        #expect(Area.focusAfterPress(.exit, voiceOver: .exit, keyboard: .exit) == Area.FocusMove(button: .compare, voiceOver: true, keyboard: true))
+    }
+
+    /// Hosts a view in a window that is never ordered front, lays it out and returns both,
+    /// for reading its views. The caller closes the window.
+    private func host(_ view: some View, size: NSSize) async throws -> (window: NSWindow, view: NSView) {
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(contentRect: hosting.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        for _ in 0..<10 {
+            hosting.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        return (window, hosting)
+    }
+
+    /// The panes of the comparison stand side by side from 681 points, two panes that keep
+    /// 300 points for their content inside their padding and the line between them, and one
+    /// above the other in a narrower email view, where the lower one keeps the draft's
+    /// editor whole. The email view itself switches at that width.
+    @Test func thePanesStandSideBySideFromTheirThreshold() async throws {
+        typealias Panes = ProjectsEmailArea.Panes
+        #expect(Panes.sideBySideWidth == 681)
+        #expect(!Panes.isSideBySide(width: 680))
+        #expect(Panes.isSideBySide(width: 681))
+        let room = CGRect(x: 0, y: 50, width: 681, height: 590)
+        #expect(Panes.frames(in: room, panes: 1) == [room])
+        #expect(Panes.frames(in: room, panes: 3) == [
+            CGRect(x: 0, y: 50, width: 340, height: 590), CGRect(x: 340, y: 50, width: 1, height: 590), CGRect(x: 341, y: 50, width: 340, height: 590),
+        ])
+        #expect(Panes.frames(in: CGRect(x: 0, y: 50, width: 680, height: 590), panes: 3) == [
+            CGRect(x: 0, y: 50, width: 680, height: 294), CGRect(x: 0, y: 344, width: 680, height: 1), CGRect(x: 0, y: 345, width: 680, height: 295),
+        ])
+        // At the window's smallest size, under the bar, the lower pane keeps the editor
+        // whole.
+        #expect(Panes.frames(in: CGRect(x: 0, y: 51, width: 480, height: 369), panes: 3).map(\.height) == [156, 1, 212])
+
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let model = ProjectsWindowModel(runtime: runtime)
+        await model.show(explained.messageID)
+        let emailModel = model.emailModel(for: explained.messageID)
+        await emailModel.load()
+        model.compare(explained.messageID)
+        #expect(model.isComparing)
+        for (size, expected) in [(NSSize(width: 680, height: 640), Arrangement.stacked), (NSSize(width: 681, height: 640), .sideBySide), (NSSize(width: 480, height: 420), .stacked)] {
+            let (window, view) = try await host(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: size)
+            defer { window.close() }
+            let editor = try #require(Self.descendants(of: view).compactMap { $0 as? NSTextView }.first { !$0.isFieldEditor && $0.string == emailModel.text })
+            #expect(Self.arrangement(in: view, editor: editor) == expected, "\(size)")
+            // The editor keeps at least its smallest height, and its pane shows it whole.
+            let editorScroll = try #require(editor.enclosingScrollView)
+            #expect(editorScroll.frame.height >= 200, "\(size)")
+            let pane = try #require(Self.outerScrollViews(in: view).first { editor.isDescendant(of: $0) })
+            #expect(pane.frame.height >= Panes.lowerPaneMinimumHeight, "\(size)")
+        }
         await fixture.stop()
     }
 

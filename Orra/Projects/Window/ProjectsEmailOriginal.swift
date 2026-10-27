@@ -11,6 +11,10 @@ import SwiftUI
 /// the draft under Original Email, or comes first while the explanation is hidden, so the
 /// email's own text never goes out of reach.
 ///
+/// With `wordsFirst`, for Original Email while comparing and for the This email chip, the
+/// sender's words come first, and To and Cc, then the attachments, fold into a row each
+/// after them, Recipients and Attachments with their counts.
+///
 /// It shows the visible text the scan kept, so text the email hides from its reader is not
 /// here. The warnings above it say that it was there. Plain text only, with
 /// `Text(verbatim:)`: no HTML, no links that open, no images, and an attachment is a name.
@@ -69,17 +73,22 @@ struct ProjectsEmailOriginal: View {
     let content: Content
     /// The attachments with their states, from the list of the window.
     var attachments: [MailAttachment] = []
+    /// Whether the sender's words come first, with the recipients and the attachments folded
+    /// after them.
+    var wordsFirst = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             let people = rows([("To:", content.to.joined(separator: ", ")), ("Cc:", content.cc.joined(separator: ", "))])
-            if !people.isEmpty {
-                Fields(rows: people)
-                Divider()
-            }
-            if !attachments.isEmpty {
-                ProjectsAttachmentList(attachments: attachments)
-                Divider()
+            if !wordsFirst {
+                if !people.isEmpty {
+                    Fields(rows: people)
+                    Divider()
+                }
+                if !attachments.isEmpty {
+                    ProjectsAttachmentList(attachments: attachments)
+                    Divider()
+                }
             }
             if !content.note.isEmpty {
                 Self.text(content.note)
@@ -105,8 +114,44 @@ struct ProjectsEmailOriginal: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            if wordsFirst {
+                folded(people)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The recipients and the attachments in a folded row each, under a line, for the words
+    /// first order. A row with nothing in it is left out.
+    @ViewBuilder
+    private func folded(_ people: [Row]) -> some View {
+        if !people.isEmpty || !attachments.isEmpty {
+            Divider()
+        }
+        if !people.isEmpty {
+            DisclosureGroup {
+                Fields(rows: people)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+            } label: {
+                Text("Recipients (\(content.to.count + content.cc.count))")
+            }
+            .disclosureGroupStyle(RowDisclosureStyle())
+        }
+        if !attachments.isEmpty {
+            DisclosureGroup {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(attachments.enumerated()), id: \.offset) { _, attachment in
+                        ProjectsAttachmentList.Row(attachment: attachment)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 4)
+            } label: {
+                Text("Attachments (\(attachments.count))")
+            }
+            .disclosureGroupStyle(RowDisclosureStyle())
+        }
     }
 
     /// Mail text as plain text the user can select.
