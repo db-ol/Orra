@@ -3784,6 +3784,44 @@ English and 简体中文, and the toolbar and the email view in 日本語 and Es
   and screenshots of mail for a problem in Projects. The bug report form on GitHub has an
   Area field with Projects (Preview).
 
+More file types and the names of every file in project folders, added on 2026-10-26, not
+verified yet. ZipArchiveTests, OfficeXMLTextTests, FolderWalkTests, FolderIndexTests,
+FileNameSearchTests and MailAttachmentTests check the readers, the walk, the names and the
+upgrade of an index 0.6.0 wrote with files built by the tests, among them thousands of broken
+ones. Files from Excel, PowerPoint, Numbers, Keynote and WPS are not among them. Check in a
+Debug build with Projects on, a project whose folder holds the files below, and the index
+watched with `/usr/bin/log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND
+category == "projects-index"'`, which shows counts and times, never a name. This change adds
+step 6 to the Projects database, so an older build cannot open the data afterwards, see
+Projects in a Debug build in docs/development.md. Images and scanned PDF pages wait for text
+recognition, which a later change adds, so they show in no count yet.
+
+- [ ] Put an xlsx saved by Excel and one exported by Numbers or WPS, a pptx with speaker
+  notes saved by PowerPoint and one exported by Keynote, a csv, a dwg, a zip, a video and a
+  Keynote document saved as a package into the folder. Files with text counts the xlsx,
+  pptx and csv files, Files found by name only counts the dwg, the zip, the video and the
+  Keynote document, and Why Files Were Skipped lists none of them.
+- [ ] Explain an email that names a value only the xlsx holds, and one that names a value
+  only a slide's speaker notes hold. Each comes back as a source. The sheet's chip reads
+  "budget.xlsx, sheet “Lamps”" and the slide's "deck.pptx, slide 3", and their popovers say
+  Sheet “Lamps” with the sheet's columns, or Slide 3.
+- [ ] An xlsx with a hidden sheet, a hidden row and white text, and a pptx with a hidden slide
+  and a hidden shape, are listed under Files with Hidden Text, and no explanation shows
+  their hidden text.
+- [ ] Rename the dwg and move it into another folder of the project. A minute later it is
+  still counted once. Delete it, and the count drops.
+- [ ] With 0.6.0, index a folder with a scanned PDF, an xlsx and a docx, then update to this
+  build. The log's first sweep reads the xlsx and not the docx, and the scanned PDF leaves
+  Why Files Were Skipped, since it waits for text recognition.
+- [ ] With an iCloud Drive folder set to Optimize Mac Storage, an evicted dwg is not
+  downloaded, as Finder keeps its cloud icon, and is not counted.
+- [ ] An email with an xlsx attachment and one with a pptx attachment show them as read under
+  Original Email, and their explanations can cite them.
+- [ ] VoiceOver on the project page reads "Files found by name only" with its number. At 760
+  by 420, every line of the Index section wraps and none is cut, in all four languages.
+- [ ] In 简体中文, the Index section reads 仅能按文件名找到的文件, and a slide's chip reads
+  “deck.pptx，第 3 张幻灯片”.
+
 ## Not implemented
 
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is
