@@ -55,12 +55,9 @@ struct ProjectsWindowView: View {
         .onChange(of: model.isComparing, initial: true) { _, comparing in
             if comparing {
                 columnsBeforeComparing = columns
-                ask(Self.columnsWhileComparing(columns))
-            } else if Self.columnCount(columns) <= Self.columnCount(Self.columnsWhileComparing(columnsBeforeComparing)) {
-                // Every end but a column the user showed, which stays as the user left it:
-                // Exit Comparison, another list, no email shown. A sidebar the user hid
-                // before stays hidden.
-                ask(columnsBeforeComparing, animated: true)
+            }
+            if let wanted = Self.columnsToAsk(comparing: comparing, shown: columns, before: columnsBeforeComparing) {
+                ask(wanted, animated: !comparing)
             }
         }
         .onChange(of: columns) { _, shown in
@@ -307,6 +304,18 @@ struct ProjectsWindowView: View {
     /// sidebar hidden. Columns that hide the sidebar already stay as they are.
     static func columnsWhileComparing(_ shown: NavigationSplitViewVisibility) -> NavigationSplitViewVisibility {
         columnCount(shown) < 3 ? shown : .doubleColumn
+    }
+
+    /// What the window asks its split view for as the comparison starts or ends, from the
+    /// columns shown and those before the comparison, nil for nothing: the columns of the
+    /// comparison at its start, and at every end the columns from before, so a sidebar the
+    /// user hid before stays hidden. Not after a column the user showed while comparing,
+    /// which ended it and stays as the user left it.
+    static func columnsToAsk(comparing: Bool, shown: NavigationSplitViewVisibility, before: NavigationSplitViewVisibility) -> NavigationSplitViewVisibility? {
+        if comparing {
+            return columnsWhileComparing(shown)
+        }
+        return columnCount(shown) <= columnCount(columnsWhileComparing(before)) ? before : nil
     }
 
     /// Asks the split view for columns, when they differ from those asked before. The

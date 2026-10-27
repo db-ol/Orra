@@ -565,14 +565,30 @@ struct ProjectsWindowViewTests {
 
     /// Compare with Original asks the split view to hide the sidebar and keep the list,
     /// never for the detail column alone, and leaves columns that hide the sidebar already as
-    /// they are. The window never asks for `.automatic`, which compares equal to
-    /// `.doubleColumn`, so it could not tell a sidebar the user showed from one it hid.
+    /// they are. Every end asks for the columns from before, so a sidebar the user hid stays
+    /// hidden, except after a column the user showed while comparing, which stays. The
+    /// window never asks for `.automatic`, which compares equal to `.doubleColumn`, so it
+    /// could not tell a sidebar the user showed from one it hid.
     @Test func theComparisonAsksForTheListAndTheEmailView() {
         typealias View = ProjectsWindowView
         let asked: [NavigationSplitViewVisibility] = [.all, .doubleColumn, .detailOnly]
         #expect(asked.map(View.columnCount) == [3, 2, 1])
         #expect(asked.map(View.columnsWhileComparing) == [.doubleColumn, .doubleColumn, .detailOnly])
         #expect(NavigationSplitViewVisibility.automatic == .doubleColumn)
+
+        // All three columns before: the comparison hides the sidebar, and its end shows it.
+        #expect(View.columnsToAsk(comparing: true, shown: .all, before: .all) == .doubleColumn)
+        #expect(View.columnsToAsk(comparing: false, shown: .doubleColumn, before: .all) == .all)
+        // A sidebar the user hid before: the comparison keeps the columns, and so does its
+        // end, so the sidebar stays hidden.
+        #expect(View.columnsToAsk(comparing: true, shown: .doubleColumn, before: .doubleColumn) == .doubleColumn)
+        #expect(View.columnsToAsk(comparing: false, shown: .doubleColumn, before: .doubleColumn) == .doubleColumn)
+        #expect(View.columnsToAsk(comparing: false, shown: .detailOnly, before: .detailOnly) == .detailOnly)
+        // The sidebar the user showed while comparing ended the comparison and stays, also
+        // when it was hidden before. A window that starts without a comparison asks for
+        // nothing.
+        #expect(View.columnsToAsk(comparing: false, shown: .all, before: .doubleColumn) == nil)
+        #expect(View.columnsToAsk(comparing: false, shown: .all, before: .all) == nil)
     }
 
     /// An email read alone, such as one sorting moved to another list, has no row in the
@@ -694,8 +710,7 @@ struct ProjectsWindowViewTests {
     }
 
     /// A window made while its model compares, as a render makes it, keeps the comparison
-    /// and asks its split view for the list and the email view, also after the split view
-    /// wrote the columns it shows for its `.automatic` start. The email losing its
+    /// and asks its split view for the list and the email view. The email losing its
     /// explanation, as when Retention removes it, keeps the comparison, and its end asks for
     /// the columns from before.
     @Test func aWindowMadeWhileComparingKeepsItAlsoWhenTheExplanationGoes() async throws {
