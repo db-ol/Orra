@@ -384,7 +384,7 @@ struct TextRecognitionMeasurementTests {
         let results = Results()
         let recognizer = TextRecognizer(read: { image in
             let started = ContinuousClock.now
-            let read = await VisionText.read(image, languages: TextRecognizer.languages, minimumTextHeight: 0)
+            let read = await VisionText.read(image, languages: VisionText.languages, minimumTextHeight: 0)
             reads.seconds.withLock { $0.append(started.duration(to: .now) / .seconds(1)) }
             return read
         })
@@ -491,10 +491,10 @@ struct TextRecognitionMeasurementTests {
         samples.append(("ja", japanese, try Self.page(japanese, points: 10, dpi: 200, using: &random)))
         samples.append(("es", spanish, try Self.page(spanish, points: 10, dpi: 200, using: &random)))
         let lists: [(name: String, languages: [String], automatic: Bool)] = [
-            ("zh-Hans zh-Hant en-US (the app)", TextRecognizer.languages, false),
-            ("plus ja-JP es-ES after", TextRecognizer.languages + ["ja-JP", "es-ES"], false),
-            ("ja-JP first", ["ja-JP"] + TextRecognizer.languages, false),
-            ("automatic detection", TextRecognizer.languages + ["ja-JP", "es-ES"], true),
+            ("the app on this Mac, \(VisionText.languages.joined(separator: " "))", VisionText.languages, false),
+            ("zh-Hans zh-Hant en-US", TextRecognizer.chineseAndEnglish, false),
+            ("ja-JP first", ["ja-JP"] + TextRecognizer.chineseAndEnglish + ["es-ES"], false),
+            ("automatic detection", TextRecognizer.languages, true),
         ]
         for list in lists {
             var errors: [String: Errors] = [:]
@@ -508,7 +508,7 @@ struct TextRecognitionMeasurementTests {
             var seconds: [Double] = []
             for sample in samples where sample.language == "en" || sample.language == "zh" {
                 let started = ContinuousClock.now
-                errors[sample.language, default: Errors()].add(truth: sample.lines, read: Self.read(sample.image, languages: TextRecognizer.languages, automatic: false, minimum: minimum))
+                errors[sample.language, default: Errors()].add(truth: sample.lines, read: Self.read(sample.image, languages: VisionText.languages, automatic: false, minimum: minimum))
                 seconds.append(started.duration(to: .now) / .seconds(1))
             }
             var row = errors.mapValues(\.rate)

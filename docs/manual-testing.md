@@ -3955,12 +3955,14 @@ Projects in a Debug build in docs/development.md.
 
 Text recognition in images and scanned PDF pages, added on 2026-10-26, not verified yet.
 TextRecognitionTests and FolderIndexTests check the pages read, the caps, the order, the
-hidden text, the page time, the pauses before every page and during a page, the pages
-kept across a restart, and a file given up after two jobs that never ended, which is read
-again once it changes, with a stand in for Vision. VisionTextRecognitionTests reads one
-image with Vision, and TextRecognitionMeasurementTests measures Vision on synthetic scans
-and images. No scan from a scanner app or photo from an iPhone is among them. Check in a Debug
-build with Projects on and the index watched with the log stream above.
+hidden text, the page time, the pauses before every page and during a page, the pages kept
+across a restart, a file given up after two jobs that never ended, which is read again
+once it changes, and the languages Vision is asked for, those of Chinese, English,
+Japanese and Spanish that it reads, with a stand in for Vision. VisionTextRecognitionTests
+reads one image with Vision, and TextRecognitionMeasurementTests measures Vision on
+synthetic scans and images. No scan from a scanner app or photo from an iPhone is among
+them. Check in a Debug build with Projects on and the index watched with the log stream
+above.
 
 - [ ] Put a scanned PDF from a scanner app or Notes, a PDF with text and one scanned page, an
   iPhone HEIC photo of a printed page, a PNG screenshot and a photo without text into the
@@ -3983,6 +3985,9 @@ build with Projects on and the index watched with the log stream above.
   recognition waits while Low Power Mode is on." and the count stops. Turn it off, and
   within a minute it goes on.
 - [ ] Turn Wi-Fi off and add an image with text. Its text is found.
+- [ ] On macOS 15.6, put a scan with Chinese and English text and one with Japanese and
+  Spanish text into the folder. The Chinese and English words are found, and the log shows
+  no failed page. Orra asks Vision only for the languages it says it reads there.
 - [ ] Quit Orra while a long scan is recognized, open it again, and the log shows the scan
   goes on after the pages it had read.
 - [ ] Activity Monitor shows Orra's memory during recognition. Note the peak.

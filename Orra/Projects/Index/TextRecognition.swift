@@ -82,13 +82,14 @@ nonisolated struct RecognitionResult: Sendable, Equatable {
 /// - The lines Vision finds are put in reading order, also on a scan turned a little, and
 ///   text that shows no ink on the image Vision read is dropped and counted as hidden, as on
 ///   a PDF page. A page that gives fewer than two letters or digits counts as blank.
-/// - Languages, `languages`: Chinese, simplified and traditional, and English, read by
-///   Vision's Chinese model, which reads English too. Japanese and Spanish are not asked
-///   for: the first language decides the model, so adding them after Chinese changes
-///   nothing, a Japanese one first reads Chinese worse, and letting Vision detect the
-///   language reads the Chinese words of an English page as Latin letters (measured on
-///   synthetic pages on 2026-10-26). Kanji are read, kana often not, and Spanish without
-///   its accents, which search ignores anyway.
+/// - Languages, `languages`: Chinese, simplified and traditional, and English, then
+///   Japanese and Spanish, those of them Vision reads on this Mac, in that order, so a macOS
+///   whose Vision lacks one still reads the others. The first language decides the model,
+///   so Vision's Chinese model reads every page, and it reads English too. On synthetic
+///   pages on macOS 26.6.2 (2026-10-26), Japanese and Spanish after Chinese changed no
+///   output, a Japanese one first read Chinese worse, and letting Vision detect the
+///   language read the Chinese words of an English page as Latin letters. Kanji are read,
+///   kana often not, and Spanish without its accents, which search ignores anyway.
 nonisolated struct TextRecognizer: Sendable {
     /// The limits of recognition. All of them are guesses, see the measurement in
     /// TextRecognitionMeasurementTests.
@@ -144,8 +145,22 @@ nonisolated struct TextRecognizer: Sendable {
         case cancelled
     }
 
-    /// The languages Vision reads, in order, see the type's documentation.
-    static let languages = ["zh-Hans", "zh-Hant", "en-US"]
+    /// Chinese, simplified and traditional, and English, which Vision's revision 3 has read
+    /// since macOS 13.
+    static let chineseAndEnglish = ["zh-Hans", "zh-Hant", "en-US"]
+
+    /// The languages Vision is asked for, in this order, those of them it reads on this Mac,
+    /// see the type's documentation and `languages(among:)`.
+    static let languages = chineseAndEnglish + ["ja-JP", "es-ES"]
+
+    /// The languages of `languages` that Vision says it reads, `supported`, in the order of
+    /// `languages`, so a Mac whose Vision lacks one still reads the others and no read fails
+    /// for a language Vision does not have. Chinese and English when Vision cannot say.
+    /// Internal for tests.
+    static func languages(among supported: [String]?) -> [String] {
+        guard let supported else { return chineseAndEnglish }
+        return languages.filter(supported.contains)
+    }
 
     /// The letters and digits a page gives at least to count as text, since a shape alone
     /// can read as one character, such as a rectangle read as 门.
@@ -169,7 +184,7 @@ nonisolated struct TextRecognizer: Sendable {
         self.limits = limits
         let minimumTextHeight = limits.minimumTextHeight
         self.read = read ?? { image in
-            await VisionText.read(image, languages: TextRecognizer.languages, minimumTextHeight: minimumTextHeight)
+            await VisionText.read(image, languages: VisionText.languages, minimumTextHeight: minimumTextHeight)
         }
         self.sleep = sleep
         self.flags = flags
@@ -552,6 +567,10 @@ nonisolated enum VisionText {
         }
     }
 
+    /// The languages Vision is asked for on this Mac, those of `TextRecognizer.languages` it
+    /// reads, see `TextRecognizer.languages(among:)`. Looked up once.
+    static let languages = TextRecognizer.languages(among: supportedLanguages())
+
     /// The languages Vision reads in the accurate level of revision 3 on this Mac, nil when
     /// it cannot say.
     static func supportedLanguages() -> [String]? {
@@ -580,7 +599,10 @@ nonisolated enum VisionText {
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
             request.revision = VNRecognizeTextRequestRevision3
-            request.recognitionLanguages = languages
+            // A Vision that reads none of them reads with its own languages.
+            if !languages.isEmpty {
+                request.recognitionLanguages = languages
+            }
             request.usesLanguageCorrection = true
             request.minimumTextHeight = minimumTextHeight
             request.preferBackgroundProcessing = true

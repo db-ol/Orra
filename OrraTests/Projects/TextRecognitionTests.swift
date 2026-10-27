@@ -544,10 +544,25 @@ struct TextRecognitionTests {
     }
 
     /// The languages Vision is asked for: Chinese, simplified and traditional, and English,
-    /// in that order, since the first one decides the model, see TextRecognizer.
-    @Test func recognitionReadsChineseAndEnglish() {
-        #expect(TextRecognizer.languages == ["zh-Hans", "zh-Hant", "en-US"])
+    /// then Japanese and Spanish, in that order, since the first one decides the model, see
+    /// TextRecognizer.
+    @Test func recognitionAsksForChineseAndEnglishThenJapaneseAndSpanish() {
+        #expect(TextRecognizer.languages == ["zh-Hans", "zh-Hant", "en-US", "ja-JP", "es-ES"])
+        #expect(TextRecognizer.chineseAndEnglish == ["zh-Hans", "zh-Hant", "en-US"])
         #expect(TextRecognizer.imageTypes(ofExtension: "JPG") == ["public.jpeg"])
         #expect(TextRecognizer.imageTypes(ofExtension: "dwg").isEmpty)
+    }
+
+    /// Only the languages Vision says it reads are asked for, in TextRecognizer's order
+    /// whatever Vision's own, so a macOS whose Vision lacks one still reads the others.
+    /// Chinese and English when Vision cannot say.
+    @Test func recognitionAsksOnlyForTheLanguagesVisionReads() {
+        let listed = ["en-US", "fr-FR", "es-ES", "zh-Hans", "zh-Hant", "ko-KR", "ja-JP"]
+        #expect(TextRecognizer.languages(among: listed) == ["zh-Hans", "zh-Hant", "en-US", "ja-JP", "es-ES"])
+        #expect(TextRecognizer.languages(among: listed.filter { $0 != "ja-JP" }) == ["zh-Hans", "zh-Hant", "en-US", "es-ES"])
+        #expect(TextRecognizer.languages(among: listed.filter { $0 != "es-ES" && $0 != "zh-Hant" }) == ["zh-Hans", "en-US", "ja-JP"])
+        #expect(TextRecognizer.languages(among: ["es-ES", "en-US"]) == ["en-US", "es-ES"])
+        #expect(TextRecognizer.languages(among: ["fr-FR"]).isEmpty)
+        #expect(TextRecognizer.languages(among: nil) == ["zh-Hans", "zh-Hant", "en-US"])
     }
 }

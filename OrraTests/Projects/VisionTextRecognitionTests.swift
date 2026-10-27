@@ -10,14 +10,17 @@ import UniformTypeIdentifiers
 /// locally, it runs Vision, so only under the lock the GPU work of the tests shares.
 @Suite(.timeLimit(.minutes(1)))
 struct VisionTextRecognitionTests {
-    /// Whether Vision's accurate recognition lists every language TextRecognizer asks for.
-    static var readsTheLanguages: Bool {
+    /// Whether Vision's accurate recognition lists Chinese and English, which the test reads.
+    static var readsChineseAndEnglish: Bool {
         guard let languages = VisionText.supportedLanguages() else { return false }
-        return TextRecognizer.languages.allSatisfy(languages.contains)
+        return TextRecognizer.chineseAndEnglish.allSatisfy(languages.contains)
     }
 
-    @Test(.enabled(if: readsTheLanguages, "Vision reads Chinese and English on this Mac"))
+    @Test(.enabled(if: readsChineseAndEnglish, "Vision reads Chinese and English on this Mac"))
     func recognizesEnglishAndChineseOnThisMac() async throws {
+        // The app asks for Chinese and English first on such a Mac, then what it reads of
+        // Japanese and Spanish.
+        #expect(VisionText.languages.starts(with: TextRecognizer.chineseAndEnglish))
         let folder = try TextRecognitionTests.Folder()
         defer { folder.remove() }
         let image = try RecognitionTestFiles.image(["Lobby lamps 12 pcs", "灯具清单"], width: 1_200, height: 300, points: 64)
