@@ -255,7 +255,20 @@ nonisolated enum ProjectsWindowText {
         case .actionClaim: String(localized: "A sentence that claims something was done was taken out. Orra does nothing in Mail for you.")
         case .assistantVoice: String(localized: "A sentence that speaks as an assistant was taken out.")
         case .projectData: String(localized: "Project data was taken out, since the reply reaches someone outside the project.")
+        case .otherProjectData: String(localized: "Data from another project's files was taken out.")
+        case .otherProjectText: String(localized: "A sentence from another project's file was taken out.")
         }
+    }
+
+    /// The line under the points when one cites an excerpt of another project's file. It says
+    /// that a request without those excerpts wrote the draft, see ExplainService.explain(_:),
+    /// only when the explanation has a draft: none is written when no reply is due or the
+    /// email is in another language, and the draft's request may fail.
+    static func otherProjectsNote(_ explanation: Explanation) -> String {
+        if case .checked = explanation.draft {
+            return String(localized: "Some sources are files of other projects. They are only for you, and the draft was written without them.")
+        }
+        return String(localized: "Some sources are files of other projects. They are only for you.")
     }
 
     /// Why the explanation holds no draft to change.
@@ -446,9 +459,26 @@ nonisolated enum ProjectsWindowText {
             return String(localized: "An earlier email")
         case .file(let chunk):
             return file(chunk.file.lastPathComponent, at: place(of: chunk))
+        case .otherProjectFile(let chunk, let project):
+            let file = Self.source(.file(chunk))
+            return String(
+                localized: "\(file) (\(project ?? String(localized: "another project")))",
+                comment: "A file of another project with that project, such as floor-plan.pdf, page 1 (Kiln studio)")
         case .attachment(let name, _):
             return name
         }
+    }
+
+    /// The label of another project's file in two parts, the file and then the project in
+    /// its brackets, as `source(_:)` writes them, so the chip can shorten the file's name and
+    /// keep the project's. Nil for any other source, and when a translation puts the file
+    /// elsewhere than first.
+    static func sourceParts(_ source: ProjectsEmailModel.Source) -> (file: String, project: String)? {
+        guard case .otherProjectFile(let chunk, _) = source else { return nil }
+        let file = Self.source(.file(chunk))
+        let whole = Self.source(source)
+        guard whole.hasPrefix(file), whole.count > file.count else { return nil }
+        return (file, String(whole.dropFirst(file.count)))
     }
 
     /// Where an excerpt lies in its file: a page of a PDF, a slide of a deck or a sheet of a
@@ -493,11 +523,20 @@ nonisolated enum ProjectsWindowText {
         chunk.recognized == true ? String(localized: "Recognized from an image, so words and numbers may be wrong.") : nil
     }
 
-    /// What VoiceOver reads for a source's chip: its text, and for an attachment that it is
-    /// one, since its chip may show the name of a project file too.
+    /// What VoiceOver reads for a source's chip: its text, for an attachment that it is
+    /// one, since its chip may show the name of a project file too, and for another
+    /// project's file the project it is from.
     static func sourceLabel(_ source: ProjectsEmailModel.Source) -> String {
-        guard case .attachment(let name, _) = source else { return Self.source(source) }
-        return String(localized: "Attachment \(name)")
+        switch source {
+        case .attachment(let name, _):
+            return String(localized: "Attachment \(name)")
+        case .otherProjectFile(let chunk, let project?):
+            return String(localized: "\(sourceLabel(.file(chunk))), from the project \(project)")
+        case .otherProjectFile(let chunk, nil):
+            return String(localized: "\(sourceLabel(.file(chunk))), from another project")
+        case .thisEmail, .mail, .file:
+            return Self.source(source)
+        }
     }
 
     /// The line under a file's name in the popover of its excerpt, with its page, slide or

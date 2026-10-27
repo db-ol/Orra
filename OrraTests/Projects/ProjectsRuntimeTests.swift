@@ -1757,6 +1757,215 @@ struct ProjectsRuntimeTests {
         #expect(model.holds.value == 0)
     }
 
+    // MARK: Search terms
+
+    /// The first Explain of an email asks the model for search terms, a request of the user
+    /// before the explanation's own, and saves them with the explanation. Explain Again
+    /// searches with the saved ones and asks the model for the explanation only.
+    @Test(.timeLimit(.minutes(1))) func explainAsksForTermsOnceAndThenUsesTheSavedOnes() async throws {
+        defer { cleanUp() }
+        model.isThere.withLock { $0 = true }
+        let (runtime, projects, _) = try await started(installed: Installed(true), countsTokens: true)
+        let harbor = Project(name: "Harbor", people: [Project.Person(name: "Mei Tan", address: "mei@harbor.example")])
+        try await runtime.add(harbor)
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("e@harbor.example", from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("e@harbor.example", in: .project(harbor.id), runtime) { $0.level == .sure }
+        runtime.windowOpened()
+        let before = model.jobs.value
+        let first = try await runtime.explain("e@harbor.example")
+        #expect(first.searchTerms == ["lamp", "fixture"])
+        #expect(model.termsJobs.value == 1)
+        #expect(model.jobs.value == before + 2)
+        #expect(await runtime.explanation(for: "e@harbor.example")?.searchTerms == ["lamp", "fixture"])
+
+        let again = try await runtime.explain("e@harbor.example")
+        #expect(again.searchTerms == ["lamp", "fixture"])
+        #expect(model.termsJobs.value == 1)
+        #expect(model.jobs.value == before + 3)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// An answer without terms leaves the explanation as before terms: nothing is saved, so
+    /// the next Explain asks again.
+    @Test(.timeLimit(.minutes(1))) func anAnswerWithoutTermsLeavesTheExplanationAsBefore() async throws {
+        defer { cleanUp() }
+        model.isThere.withLock { $0 = true }
+        model.terms.withLock { $0 = "I cannot find any terms." }
+        let (runtime, projects, _) = try await started(installed: Installed(true), countsTokens: true)
+        let harbor = Project(name: "Harbor", people: [Project.Person(name: "Mei Tan", address: "mei@harbor.example")])
+        try await runtime.add(harbor)
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("e@harbor.example", from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("e@harbor.example", in: .project(harbor.id), runtime) { $0.level == .sure }
+        runtime.windowOpened()
+        let first = try await runtime.explain("e@harbor.example")
+        #expect(first.searchTerms == nil)
+        #expect(model.termsJobs.value == 1)
+        _ = try await runtime.explain("e@harbor.example")
+        #expect(model.termsJobs.value == 2)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Forget Project ends the explanations under way, since one may hold excerpts of the
+    /// project's files, and the store saves nothing of them.
+    @Test(.timeLimit(.minutes(1))) func forgetProjectEndsAnExplanationUnderWay() async throws {
+        defer { cleanUp() }
+        model.isThere.withLock { $0 = true }
+        let (runtime, projects, _) = try await started(installed: Installed(true), countsTokens: true)
+        let harbor = Project(name: "Harbor", people: [Project.Person(name: "Mei Tan", address: "mei@harbor.example")])
+        let maple = Project(name: "Maple")
+        try await runtime.add(harbor)
+        try await runtime.add(maple)
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("e@harbor.example", from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("e@harbor.example", in: .project(harbor.id), runtime) { $0.level == .sure }
+        runtime.windowOpened()
+        model.blocks.withLock { $0 = true }
+        let jobs = model.jobs.value
+        let explaining = Task { try await runtime.explain("e@harbor.example") }
+        try await waitUntil { model.jobs.value == jobs + 1 }
+        #expect(runtime.userRequestCount == 1)
+        try await runtime.forget(maple.id)
+        await #expect(throws: CancellationError.self) {
+            _ = try await explaining.value
+        }
+        #expect(model.ended.value == 1)
+        #expect(runtime.userRequestCount == 0)
+        #expect(await runtime.explanation(for: "e@harbor.example") == nil)
+        #expect(runtime.projectList.map(\.id) == [harbor.id])
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    // MARK: The draft apart from other projects' passages
+
+    /// An email of Harbor, whose folders hold nothing, while the folder of Kiln holds a file
+    /// about the lamps that the model's search terms name, so its prompt shows that file of
+    /// Kiln.
+    private func harborEmailWithKilnLamps() async throws -> (ProjectsRuntime, ProjectsSwitch, Project) {
+        model.isThere.withLock { $0 = true }
+        let (runtime, projects, _) = try await started(installed: Installed(true), countsTokens: true)
+        let harbor = Project(name: "Harbor", people: [Project.Person(name: "Mei Tan", address: "mei@harbor.example")])
+        let folder = root.appendingPathComponent("Kiln", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try "A lamp fixture for the studio lobby, hung along the north wall.".write(to: folder.appendingPathComponent("lamps.txt"), atomically: true, encoding: .utf8)
+        let kiln = Project(name: "Kiln", folders: [try Project.bookmark(of: folder)])
+        try await runtime.add(harbor)
+        try await runtime.add(kiln)
+        try await waitUntil { runtime.indexReport(kiln.id)?.indexed == 1 }
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("e@harbor.example", from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("e@harbor.example", in: .project(harbor.id), runtime) { $0.level == .sure }
+        runtime.windowOpened()
+        return (runtime, projects, kiln)
+    }
+
+    /// The explanation's prompt shows the file of Kiln and asks for no draft, and a second
+    /// request of the user, whose prompt holds nothing of Kiln, writes the draft.
+    @Test(.timeLimit(.minutes(1))) func anotherProjectsPassageGetsTheDraftFromASecondRequest() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, kiln) = try await harborEmailWithKilnLamps()
+        let jobs = model.jobs.value
+        let explanation = try await runtime.explain("e@harbor.example")
+        #expect(model.jobs.value == jobs + 3)
+        let prompts = model.prompts.withLock { Array($0.suffix(3)) }
+        #expect(prompts[0].hasSuffix(SearchTermsPrompt.prefill))
+        #expect(prompts[1].contains("<other_files>") && prompts[1].contains("north wall") && prompts[1].contains("its draft is written apart"))
+        #expect(!prompts[2].contains("other_files") && !prompts[2].contains("north wall") && !prompts[2].contains("Kiln"))
+        #expect(explanation.sourceProjects.contains(kiln.id))
+        #expect(await runtime.explanation(for: "e@harbor.example") == explanation)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Forget Project ends both requests of an explanation that shows a file of the
+    /// project: while the first one runs, the draft's request is never sent, and while the
+    /// draft's request runs, it ends. Nothing is saved.
+    @Test(.timeLimit(.minutes(1)), arguments: [false, true])
+    func forgetProjectEndsBothRequestsOfAnExplanation(duringTheDraft: Bool) async throws {
+        defer { cleanUp() }
+        let (runtime, projects, kiln) = try await harborEmailWithKilnLamps()
+        model.blocksWhen.withLock {
+            $0 = { prompt in !prompt.hasSuffix(SearchTermsPrompt.prefill) && prompt.contains("<other_files>") != duringTheDraft }
+        }
+        let jobs = model.jobs.value
+        let explaining = Task { try await runtime.explain("e@harbor.example") }
+        let started = jobs + (duringTheDraft ? 3 : 2)
+        try await waitUntil { model.jobs.value == started }
+        #expect(runtime.userRequestCount == 1)
+        try await runtime.forget(kiln.id)
+        await #expect(throws: CancellationError.self) {
+            _ = try await explaining.value
+        }
+        #expect(model.ended.value == 1)
+        #expect(model.jobs.value == started)
+        #expect(runtime.userRequestCount == 0)
+        #expect(await runtime.explanation(for: "e@harbor.example") == nil)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A dictation that starts as the first request ends holds the draft's request, which
+    /// waits in the queue and runs once the dictation is over.
+    @Test(.timeLimit(.minutes(1))) func aDictationHoldsTheDraftsRequestUntilItEnds() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await harborEmailWithKilnLamps()
+        model.dictatesAfter.withLock { $0 = { $0.contains("<other_files>") } }
+        let queue = try #require(runtime.running?.queue)
+        let jobs = model.jobs.value
+        let explaining = Task { try await runtime.explain("e@harbor.example") }
+        try await waitUntil { queue.pause == .dictation }
+        #expect(model.jobs.value == jobs + 2)
+        model.dictating.withLock { $0 = false }
+        let explanation = try await explaining.value
+        #expect(model.jobs.value == jobs + 3)
+        #expect(explanation.sources.keys.contains(where: ExplainPrompt.isOtherFileSource))
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Closing the window while an explanation waits lets it go on, and the explanation
+    /// holds the model from start to end, so the last holder does not let go between the
+    /// request of the explanation and the draft's, which would unload the model and load it
+    /// again.
+    @Test(.timeLimit(.minutes(1))) func anExplanationHoldsTheModelBetweenItsRequestsAfterTheWindowCloses() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, kiln) = try await harborEmailWithKilnLamps()
+        // A dictation starts as the terms job ends, so the explanation's request waits.
+        model.dictatesAfter.withLock { $0 = { $0.hasSuffix(SearchTermsPrompt.prefill) } }
+        let queue = try #require(runtime.running?.queue)
+        let jobs = model.jobs.value
+        let explaining = Task { try await runtime.explain("e@harbor.example") }
+        try await waitUntil { queue.pause == .dictation }
+        #expect(model.jobs.value == jobs + 1)
+        runtime.windowClosed()
+        let emptied = model.emptied.value
+        #expect(model.holds.value > 0)
+        model.dictatesAfter.withLock { $0 = nil }
+        model.dictating.withLock { $0 = false }
+        let explanation = try await explaining.value
+        #expect(model.jobs.value == jobs + 3)
+        #expect(explanation.sourceProjects.contains(kiln.id))
+        #expect(model.emptied.value == emptied + 1)
+        #expect(model.holds.value == 0)
+        #expect(await runtime.explanation(for: "e@harbor.example") == explanation)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     // MARK: Explain Message Selected in Mail
 
     @Test func explainSelectedMessageReadsOnlyAMessageInAChosenMailbox() async throws {
@@ -3299,23 +3508,44 @@ struct ProjectsRuntimeTests {
     }
 
     /// The model, missing until a test puts it there. A job answers the first candidate of
-    /// a sorting prompt at once, or with `blocks` waits until it is cancelled. Counts the
-    /// jobs, those ended by a cancel, and the holders the window and the requests of the
-    /// user take.
+    /// a sorting prompt at once, and the terms of `terms` to a prompt for search terms, or
+    /// with `blocks` waits until it is cancelled. Counts the jobs, those ended by a cancel,
+    /// those for search terms, the holders the window and the requests of the user take, and
+    /// the times the last of them let go.
     final class FakeModel: Sendable {
         let holds = Count()
         let releases = Count()
+        let emptied = Count()
         let jobs = Count()
         let ended = Count()
+        let termsJobs = Count()
         let isThere = Mutex(false)
         let blocks = Mutex(false)
         let captionsOn = Mutex(false)
+        /// Blocks, as `blocks` does, each job whose prompt it holds true for.
+        let blocksWhen = Mutex<(@Sendable (String) -> Bool)?>(nil)
+        /// Whether a dictation is under way, which pauses every job.
+        let dictating = Mutex(false)
+        /// Starts a dictation as a job whose prompt it holds true for ends.
+        let dictatesAfter = Mutex<(@Sendable (String) -> Bool)?>(nil)
+        /// The prompt of every job, in order.
+        let prompts = Mutex<[String]>([])
+        /// What the model writes after the prefill of the search terms prompt.
+        let terms = Mutex(#"lamp", "fixture"]}"#)
+        /// Whether the job under way is for search terms. One job runs at a time.
+        private let asksForTerms = Mutex(false)
 
         @MainActor var environment: ProjectsModelEnvironment {
             ProjectsModelEnvironment(
-                startJob: { [self] _, _ in
+                startJob: { [self] prompt, _ in
                     jobs.add()
-                    if blocks.withLock({ $0 }) {
+                    prompts.withLock { $0.append(prompt) }
+                    let forTerms = prompt.hasSuffix(SearchTermsPrompt.prefill)
+                    asksForTerms.withLock { $0 = forTerms }
+                    if forTerms {
+                        termsJobs.add()
+                    }
+                    if blocks.withLock({ $0 }) || blocksWhen.withLock({ $0 })?(prompt) == true {
                         do {
                             try await Task.sleep(for: .seconds(3_600))
                         } catch {
@@ -3327,17 +3557,25 @@ struct ProjectsRuntimeTests {
                 },
                 readSlice: { _, _ in RewriteEngine.SliceRun(read: 10, remaining: 0, ran: .zero) },
                 writeBurst: { _, _ in RewriteEngine.BurstRun(written: 4, finished: true, ran: .zero) },
-                endJob: { _ in #"P1", "reason": "fits"}"# },
-                isDictating: { false },
+                endJob: { [self] _ in
+                    if let prompt = prompts.withLock({ $0.last }), dictatesAfter.withLock({ $0 })?(prompt) == true {
+                        dictating.withLock { $0 = true }
+                    }
+                    return asksForTerms.withLock { $0 } ? terms.withLock { $0 } : #"P1", "reason": "fits"}"#
+                },
+                isDictating: { [self] in dictating.withLock { $0 } },
                 captionsOn: { [self] in captionsOn.withLock { $0 } },
                 memoryPressure: { .normal },
                 voiceLoaded: { false },
                 physicalMemory: 32 << 30,
                 waitUntilLoaded: { [self] in isThere.withLock { $0 } },
                 holdModel: { [holds] in holds.add() },
-                releaseModel: { [holds, releases] in
+                releaseModel: { [holds, releases, emptied] in
                     holds.add(-1)
                     releases.add()
+                    if holds.value == 0 {
+                        emptied.add()
+                    }
                 },
                 sleep: { try await Task.sleep(for: $0) }
             )

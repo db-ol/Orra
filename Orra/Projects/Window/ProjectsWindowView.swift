@@ -120,7 +120,7 @@ struct ProjectsWindowView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("This removes the project with its index, mail and drafts from Projects. Your mail in Mail and the files in its folders stay as they are.")
+            Text("This removes the project with its index, mail and drafts from Projects, and the explanations and drafts of other emails that used its files. Your mail in Mail and the files in its folders stay as they are.")
         }
         .confirmationDialog(
             "Change this email's project?",

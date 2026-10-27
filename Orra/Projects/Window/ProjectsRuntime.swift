@@ -404,10 +404,12 @@ final class ProjectsRuntime {
     /// started, by Message-ID, which stopping waits for, see `saveEditedDraft(_:for:)`.
     @ObservationIgnored private var draftSaves: [String: Task<Bool, Never>] = [:]
 
-    /// A request of the user under way: how to end it, and a task that ends with it.
+    /// A request of the user under way: how to end it, a task that ends with it, and
+    /// whether it reads project files, as an explanation does, so Forget Project ends it.
     private struct UserRequest {
         let cancel: () -> Void
         let ended: Task<Void, Never>
+        var readsFiles = false
     }
 
     init(projects: ProjectsSwitch, dependencies: Dependencies) {
@@ -1288,10 +1290,16 @@ final class ProjectsRuntime {
     }
 
     /// Forget Project: removes the project with its mail, drafts, counts and index, and
-    /// sorts again the mail the change reaches, since the project no longer counts among
-    /// the candidates. Its linked mailbox is not read further.
+    /// the explanations and drafts of other emails that hold excerpts of its files, and sorts
+    /// again the mail the change reaches, since the project no longer counts among the
+    /// candidates. Its linked mailbox is not read further. The explanations under way end
+    /// first, since one may hold excerpts of its files, which the store would not save
+    /// anyway, see MailStore.save.
     func forget(_ project: UUID) async throws {
         guard let running else { throw Failure.off }
+        for request in userRequests.values where request.readsFiles {
+            request.cancel()
+        }
         let before = running.list.project(project)
         let linked = linkedNames
         try await running.list.forget(project, mail: running.store, index: running.index)
@@ -1666,29 +1674,35 @@ final class ProjectsRuntime {
     /// open, and only while the store keeps the email's text: the window offers no Explain
     /// without it, but Explain Message Selected in Mail may reach an email its list does not
     /// show. Throws what ExplainService throws, and CancellationError when Projects stops.
+    /// Closing the window lets it go on, and it holds the model from start to end, so the
+    /// model stays loaded between its requests for the search terms, the explanation and a
+    /// draft written apart, see ExplainService.explain(_:).
     func explain(_ messageID: String) async throws -> Explanation {
         guard let running else { throw Failure.off }
         guard let service = explainService else { throw Failure.windowClosed }
         let store = running.store
+        let model = running.model
         defer { mailChanged() }
-        return try await userRequest {
+        return try await userRequest(readsFiles: true) {
             guard let email = try await store.explainEmail(messageID) else { throw Failure.unknownEmail }
             guard try await store.hasText(messageID) else { throw Failure.noText }
+            model.holdModel()
+            defer { model.releaseModel() }
             return try await service.explain(email)
         }
     }
 
     /// Runs a request of the user, such as an explanation or a revision of the email view,
     /// in a task the runtime keeps. Turning Projects off or Delete All ends it, and waits
-    /// for it before the files close, so nothing of it runs or saves after that. Cancelling
-    /// the caller's task ends it too. A request that finds no model throws
-    /// Failure.modelNotLoaded while the model is on this Mac, so the window offers Try
-    /// Loading Again rather than a download.
-    func userRequest<T: Sendable>(_ work: @escaping @MainActor () async throws -> T) async throws -> T {
+    /// for it before the files close, so nothing of it runs or saves after that. Forget
+    /// Project ends one that `readsFiles`. Cancelling the caller's task ends it too. A
+    /// request that finds no model throws Failure.modelNotLoaded while the model is on this
+    /// Mac, so the window offers Try Loading Again rather than a download.
+    func userRequest<T: Sendable>(readsFiles: Bool = false, _ work: @escaping @MainActor () async throws -> T) async throws -> T {
         guard running != nil else { throw Failure.off }
         let task = Task { try await work() }
         let id = UUID()
-        userRequests[id] = UserRequest(cancel: { task.cancel() }, ended: Task { _ = await task.result })
+        userRequests[id] = UserRequest(cancel: { task.cancel() }, ended: Task { _ = await task.result }, readsFiles: readsFiles)
         defer { userRequests[id] = nil }
         // Text recognition waits while a request of the user runs, and the page it reads
         // gives way now.
@@ -1825,6 +1839,8 @@ final class ProjectsRuntime {
         let store = running.store
         let search = running.search
         let index = running.index
+        let queue = running.queue
+        let sleep = dependencies.sleep
         return ExplainService.Lookups(
             known: { [weak self] email in
                 guard let self else { throw CancellationError() }
@@ -1832,10 +1848,27 @@ final class ProjectsRuntime {
             },
             thread: { email in try await store.threadMail(of: email) },
             projectMail: { query in try await store.projectMail(query) },
-            search: { text, project, limit in try await search.search(text, in: [project], limit: limit) },
+            search: { query in try await search.search(query) },
             newest: { project, limit in try await search.newest(project, limit: limit) },
-            files: { project in try await index.versionFiles(project: project) }
+            files: { project in try await index.versionFiles(project: project) },
+            terms: { email in try await Self.searchTerms(for: email, store: store, queue: queue, sleep: sleep) }
         )
+    }
+
+    /// The email's search terms: those saved with its explanation, so Explain Again, also
+    /// after the window or Orra closed, asks the model nothing, or else new ones from the
+    /// model, see SearchTerms.ask. The log says which, with counts only.
+    private nonisolated static func searchTerms(
+        for email: ExplainService.Email,
+        store: MailStore,
+        queue: ProjectsModelQueue,
+        sleep: @escaping @Sendable (Duration) async throws -> Void
+    ) async throws -> [String]? {
+        if let saved = try? await store.explanation(for: email.messageID)?.searchTerms, !saved.isEmpty {
+            Logger.projects.notice("Search terms: \(saved.count, privacy: .public) saved with the email's explanation")
+            return saved
+        }
+        return try await SearchTerms.ask(for: email, run: { request in try await queue.run(request) }, sleep: sleep)
     }
 
     private func known(before email: ExplainService.Email) async throws -> ExplainService.Known {

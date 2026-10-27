@@ -100,11 +100,14 @@ trusted once in Xcode. docs/dependencies.md has the details.
   only the names and rare words taken from it, and never logs or saves the text or the names.
 - Projects code must read mail only through the Mail app's scripting, only from the mailboxes
   the user chose and only while Mail runs. It must read files only in the folders the user
-  added to a project, and nothing at all while Projects is off. Orra opens Mail only when the
-  user clicks Open Mail, through MailApp.open() in Orra/MailApp.swift, which code in
-  Orra/Projects gets as a closure. Nothing else launches Mail. Projects code must never read
-  ~/Library/Mail or ask for Full Disk Access. It must never log mail or file text,
-  subjects, addresses, names or file names, only counts, timings and error codes.
+  added to any project, and nothing at all while Projects is off. An explanation may use
+  passages of other projects' folders, labeled with their project. A draft's text never
+  carries another project's passages or facts unless the user chose that file for the email.
+  Orra opens Mail only when the user clicks Open Mail, through MailApp.open() in
+  Orra/MailApp.swift, which code in Orra/Projects gets as a closure. Nothing else launches
+  Mail. Projects code must never read ~/Library/Mail or ask for Full Disk Access. It must
+  never log mail or file text, subjects, addresses, names or file names, only counts,
+  timings and error codes.
 - Projects code recognizes text in images and scanned pages only with Vision on this Mac,
   which is no language model, sends nothing, downloads nothing and runs only between
   dictations. It reads the bytes of a file in a project folder only through the checked read

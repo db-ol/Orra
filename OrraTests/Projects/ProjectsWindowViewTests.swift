@@ -483,9 +483,9 @@ struct ProjectsWindowViewTests {
         for warning in ProjectsWarning.allCases {
             #expect(!ProjectsWindowText.warning(warning).isEmpty)
         }
-        for kind in [DraftCheck.Removal.Kind.link, .actionClaim, .assistantVoice, .projectData] {
-            #expect(!ProjectsWindowText.removal(kind).isEmpty)
-        }
+        let kinds: [DraftCheck.Removal.Kind] = [.link, .actionClaim, .assistantVoice, .projectData, .otherProjectData, .otherProjectText]
+        #expect(Set(kinds.map(ProjectsWindowText.removal)).count == kinds.count)
+        #expect(!kinds.map(ProjectsWindowText.removal).contains(""))
         for tone in RevisePrompt.Tone.allCases {
             #expect(!ProjectsWindowText.tone(tone).isEmpty)
         }
@@ -511,6 +511,64 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsWindowText.noDraft(.checked(DraftCheck.Result(draft: "Hi", language: .en))) == nil)
         #expect(ProjectsWindowText.takenOut(.hidden(.tinyFont)) != ProjectsWindowText.takenOut(.addressesAssistant))
         #expect(ProjectsWindowText.finding(OutputChecks.Finding(kind: .dateWeekdayMismatch, text: "10月20日（周一）")) == "Check this date, its weekday is wrong: 10月20日（周一）")
+    }
+
+    /// The chip of another project's file names the project in brackets after the file and
+    /// its page, as the chip of a file of the project says them, and VoiceOver reads where
+    /// it is from. Once the project is gone, it says another project.
+    @Test func anotherProjectsChipNamesItsProject() {
+        let plan = TextChunker.Chunk(file: URL(fileURLWithPath: "/Projects/Kiln/floor-plan.pdf"), page: 1, modified: Self.today, heading: nil, text: "Lobby floor plan.")
+        var notes = plan
+        notes.file = URL(fileURLWithPath: "/Projects/Kiln/notes.docx")
+        notes.page = nil
+        #expect(ProjectsWindowText.source(.otherProjectFile(plan, project: "Kiln studio")) == "floor-plan.pdf, page 1 (Kiln studio)")
+        #expect(ProjectsWindowText.source(.otherProjectFile(notes, project: "Kiln studio")) == "notes.docx (Kiln studio)")
+        #expect(ProjectsWindowText.source(.otherProjectFile(plan, project: nil)) == "floor-plan.pdf, page 1 (another project)")
+        #expect(ProjectsWindowText.source(.otherProjectFile(plan, project: "Kiln studio")).hasPrefix(ProjectsWindowText.source(.file(plan))))
+        #expect(ProjectsWindowText.sourceLabel(.otherProjectFile(plan, project: "Kiln studio")) == "floor-plan.pdf, page 1, from the project Kiln studio")
+        #expect(ProjectsWindowText.sourceLabel(.otherProjectFile(notes, project: nil)) == "notes.docx, from another project")
+        #expect(ProjectsWindowText.otherProject("Kiln studio") == "From the folders of Kiln studio")
+        #expect(ProjectsWindowText.otherProject(nil) == "From the folders of another project")
+        // The chip shortens the file's part and keeps the project's.
+        let parts = ProjectsWindowText.sourceParts(.otherProjectFile(plan, project: "Kiln studio"))
+        #expect(parts?.file == "floor-plan.pdf, page 1")
+        #expect(parts?.project == " (Kiln studio)")
+        #expect(ProjectsWindowText.sourceParts(.otherProjectFile(notes, project: nil))?.project == " (another project)")
+        #expect(ProjectsWindowText.sourceParts(.file(plan)) == nil)
+    }
+
+    /// The line under the points shows only when a point cites another project's file:
+    /// not for one the prompt held but no point cites, not for a file the user chose, and
+    /// not for one of the email's project. It speaks of the draft only when there is one.
+    @Test func theNoteShowsOnlyWhenAPointCitesAnotherProjectsFile() {
+        let project = UUID()
+        let other = UUID()
+        let plan = TextChunker.Chunk(file: URL(fileURLWithPath: "/Projects/Kiln/floor-plan.pdf"), page: 1, modified: Self.today, heading: nil, text: "Lobby floor plan.")
+        var explanation = Explanation(
+            messageID: "plan@harbor.example", project: project, language: .en, today: Self.today, reply: .reply(.en), warnings: [], modelWarnings: [],
+            points: [Explanation.Point(text: "The plan is ready.", sources: ["F1"], flags: [])], questions: [], draft: .missing, draftCheck: nil,
+            sources: [
+                "F1": .file(plan, origin: ExplainPrompt.FileOrigin(reason: .match, project: project)),
+                "F2": .file(plan, origin: ExplainPrompt.FileOrigin(reason: .chosen, project: other)),
+                "O1": .file(plan, origin: ExplainPrompt.FileOrigin(reason: .match, project: other)),
+            ],
+            removed: [:], problems: [], unknownSources: [])
+        #expect(!explanation.citesOtherProjectFile)
+        explanation.points[0].sources = ["F2"]
+        #expect(!explanation.citesOtherProjectFile)
+        explanation.points[0].sources = ["F1", "O1"]
+        #expect(explanation.citesOtherProjectFile)
+        // Without a project, every project's file is another's.
+        explanation.project = nil
+        explanation.points[0].sources = ["F1"]
+        #expect(explanation.citesOtherProjectFile)
+        // It says that the draft was written without them only when there is a draft.
+        for draft in [Explanation.Draft.missing, .noReply(.sentByUser), .noDraft, .expired] {
+            explanation.draft = draft
+            #expect(ProjectsWindowText.otherProjectsNote(explanation) == "Some sources are files of other projects. They are only for you.")
+        }
+        explanation.draft = .checked(DraftCheck.Result(draft: "Hi Iris,\n\nThe plan is ready.", language: .en))
+        #expect(ProjectsWindowText.otherProjectsNote(explanation) == "Some sources are files of other projects. They are only for you, and the draft was written without them.")
     }
 
     /// The email view says why an email has no text to explain: Projects removed it after
@@ -1213,6 +1271,21 @@ struct ProjectsWindowViewTests {
         try await render(ProjectsWindowView(runtime: runtime, model: smallest, openSettings: {}, openMail: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-window-760-email.png"))
         try await render(ProjectsEmailArea(runtime: runtime, model: smallest, email: explained), size: NSSize(width: 200, height: 3_800), to: folder.appendingPathComponent("\(language)-projects-email-200.png"))
 
+        // An email whose explanation cites a file of another project, with the note under the
+        // points and another project's data taken out of the draft, at the width of the
+        // window's first size and at the width of its smallest. Then that file's excerpt.
+        let kiln = Project(name: "Kiln studio")
+        try await runtime.add(kiln)
+        let citing = try await Self.emailCitingAnotherProject(in: runtime, other: kiln.id)
+        let otherModel = ProjectsWindowModel(runtime: runtime)
+        await otherModel.show(citing.messageID)
+        await otherModel.emailModel(for: citing.messageID).load()
+        try await render(ProjectsEmailArea(runtime: runtime, model: otherModel, email: citing), size: NSSize(width: 620, height: 1_500), to: folder.appendingPathComponent("\(language)-projects-email-other-projects.png"))
+        try await render(ProjectsEmailArea(runtime: runtime, model: otherModel, email: citing), size: NSSize(width: 200, height: 3_400), to: folder.appendingPathComponent("\(language)-projects-email-other-projects-200.png"))
+        try await render(
+            ProjectsEmailArea.Excerpt(source: .otherProjectFile(Self.kilnPlan, project: kiln.name), emailText: ""),
+            size: NSSize(width: 420, height: 260), to: folder.appendingPathComponent("\(language)-projects-excerpt-other-project.png"))
+
         // How to Use Projects shows with nothing selected, without its step about Settings,
         // since the fixture confirmed its mailboxes. Then with that step.
         let window = ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}, openMail: {})
@@ -1450,6 +1523,60 @@ struct ProjectsWindowViewTests {
             messageID: id, change: .tone(.formal),
             check: DraftCheck.Result(draft: draft.replacingOccurrences(of: "Hi Mei", with: "Dear Mei").replacingOccurrences(of: "today", with: "on Monday"), language: .en, outsideRecipients: ["kai@kiln.example"]))
         #expect(try await store.save(version, startedAt: today, at: today) == 1)
+        return try #require(try await runtime.list(.project(project)).first { $0.messageID == id })
+    }
+
+    /// The excerpt of a file of another project that `emailCitingAnotherProject` cites.
+    static let kilnPlan = TextChunker.Chunk(
+        file: URL(fileURLWithPath: "/Kiln studio/Drawings/lobby-floor-plan-revision-c.pdf"), page: 1, modified: today, heading: "Lighting",
+        text: "The lamps hang along the north wall of the lobby, next to the reception desk. Deposit ¥8,400 to the lamp maker.")
+
+    /// An email of the fixture's project, explained with a point that cites a file of
+    /// `other` and a draft that another project's data and a copied sentence were taken
+    /// out of.
+    private static func emailCitingAnotherProject(in runtime: ProjectsRuntime, other: UUID) async throws -> MailStore.Listed {
+        let store = try #require(runtime.running?.store)
+        let id = "lamps-3@harbor.example"
+        let text = "Hi Lin,\n\nWhere do the lobby lamps go? Please send the plan for them.\n\nMei"
+        try await store.save([MailStore.Message(
+            messageID: id, mailbox: nil, date: today, sender: MailStore.Person(name: "Mei Tan", address: "mei@harbor.example"),
+            to: [MailStore.Person(address: "me@studio.example")], subject: "Where the lamps go", text: text, visibleText: text)],
+            ownAddresses: ["me@studio.example"], at: today)
+        runtime.requestSort()
+        var filed: SortingService.Filed?
+        for _ in 0..<2_000 {
+            filed = try await store.filed(id)
+            if filed?.project != nil { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let project = try #require(filed?.project)
+        let own = TextChunker.Chunk(file: URL(fileURLWithPath: "/Harbor lobby/schedule.txt"), page: nil, modified: today, heading: nil, text: "The lobby lamps arrive on 22 November.")
+        let draft = "Hi Mei,\n\nThe lamps arrive on 22 November. They go along the north wall, and the deposit is [another project's data removed].\n\n[sentence removed: it is from another project's file]\n\nLin"
+        let check = DraftCheckInput(
+            draft: "", language: .en, recipients: [DraftCheckInput.Person(name: "Mei Tan", address: "mei@harbor.example")],
+            projectPeople: [DraftCheckInput.Person(name: "Mei Tan", address: "mei@harbor.example")],
+            incomingText: text, sourceTexts: [own.text], today: today, otherProjectTexts: [kilnPlan.text])
+        let explanation = Explanation(
+            messageID: id, project: project, language: .en, today: today, reply: .reply(.en), warnings: [], modelWarnings: [],
+            points: [
+                Explanation.Point(text: "Mei asks where the lobby lamps go and for the plan.", sources: ["this email"], flags: []),
+                Explanation.Point(text: "The lamps arrive on 22 November.", sources: ["F1"], flags: []),
+                Explanation.Point(text: "A drawing of Kiln studio puts lamps along the north wall of a lobby.", sources: ["O1"], flags: []),
+            ],
+            questions: [],
+            draft: .checked(DraftCheck.Result(
+                draft: draft, language: .en,
+                removals: [
+                    DraftCheck.Removal(kind: .otherProjectText, text: "The lamps hang along the north wall of the lobby, next to the reception desk."),
+                    DraftCheck.Removal(kind: .otherProjectData, text: "¥8,400"),
+                ])),
+            draftCheck: check,
+            sources: [
+                "this email": .message(id), "F1": .file(own, origin: ExplainPrompt.FileOrigin(reason: .match, project: project)),
+                "O1": .file(kilnPlan, origin: ExplainPrompt.FileOrigin(reason: .match, project: other)),
+            ],
+            removed: [:], problems: [], unknownSources: [], searchTerms: ["lamps", "灯具", "floor plan"])
+        #expect(try await store.save(explanation, at: today))
         return try #require(try await runtime.list(.project(project)).first { $0.messageID == id })
     }
 

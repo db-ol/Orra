@@ -13,8 +13,10 @@ import SwiftUI
 /// - What it says: the points, each with chips for its sources, or a line that it has
 ///   none. A file's chip shows the excerpt the explanation saved, with its page, slide or
 ///   sheet, inside Orra, an attachment's chip the excerpt the model read, and an earlier
-///   email's chip shows that email in the window (decision 20). Nothing opens outside Orra.
-///   A line says when Projects could not read an attachment.
+///   email's chip shows that email in the window (decision 20). The chip of another
+///   project's file names that project in brackets, and a line under the points says that
+///   such files are for the user only and that the draft was written without them. Nothing
+///   opens outside Orra. A line says when Projects could not read an attachment.
 /// - Project Files for This Explanation, folded: each project file the explanation gave the
 ///   model, with Edit Project…, see FilesSection
 /// - Before you reply: the questions only the user can answer
@@ -357,6 +359,12 @@ extension ProjectsEmailArea {
                 ForEach(Array(explanation.points.enumerated()), id: \.offset) { _, point in
                     PointRow(point: point, model: model, emailModel: emailModel)
                 }
+                if explanation.citesOtherProjectFile {
+                    Text(verbatim: ProjectsWindowText.otherProjectsNote(explanation))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let notice = ProjectsWindowText.unreadAttachments(email.attachments) {
                     Text(verbatim: notice)
                         .font(.caption)
@@ -558,7 +566,9 @@ extension ProjectsEmailArea {
     /// The chips of a point's sources. A file's chip shows its saved excerpt with its page,
     /// slide or sheet in a popover, an attachment's chip the excerpt the model read, this
     /// email's chip its text, and an earlier email's chip shows that email in the window
-    /// (decision 20). The chips go one under another in a column too narrow for a row.
+    /// (decision 20). The chips go one under another in a column too narrow for a row. A chip
+    /// keeps one line and is cut in the middle, and the chip of another project's file cuts
+    /// only the file's name, so the project's stays whole.
     struct SourceChips: View {
         let ids: [String]
         let model: ProjectsWindowModel
@@ -603,9 +613,21 @@ extension ProjectsEmailArea {
                 }
             } label: {
                 Label {
-                    Text(verbatim: ProjectsWindowText.source(source))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    if let parts = ProjectsWindowText.sourceParts(source) {
+                        // The project's name stays whole, and the file's name gives way.
+                        HStack(spacing: 0) {
+                            Text(verbatim: parts.file)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Text(verbatim: parts.project)
+                                .lineLimit(1)
+                                .layoutPriority(1)
+                        }
+                    } else {
+                        Text(verbatim: ProjectsWindowText.source(source))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                 } icon: {
                     Image(systemName: icon)
                 }
@@ -624,6 +646,8 @@ extension ProjectsEmailArea {
             switch source {
             case .thisEmail, .mail: "envelope"
             case .file: "doc.text"
+            // As the project chip shows a project.
+            case .otherProjectFile: "folder"
             case .attachment: "paperclip"
             }
         }
@@ -635,9 +659,10 @@ extension ProjectsEmailArea {
     }
 
     /// The text behind a chip: a file's excerpt as the explanation saved it, with its page,
-    /// slide or sheet and heading, and whether its text was recognized, the excerpt of an
-    /// attachment the model read, or the email's own text. A file's saved excerpt keeps the
-    /// lines the hygiene took out before the model read it, so it says so when it holds any.
+    /// slide or sheet and heading, whether its text was recognized, and the project of
+    /// another project's file, the excerpt of an attachment the model read, or the email's
+    /// own text. A file's saved excerpt keeps the lines the hygiene took out before the model
+    /// read it, so it says so when it holds any.
     struct Excerpt: View {
         let source: ProjectsEmailModel.Source
         let emailText: String
@@ -648,9 +673,13 @@ extension ProjectsEmailArea {
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     switch source {
-                    case .file(let chunk):
+                    case .file(let chunk), .otherProjectFile(let chunk, _):
                         Text(verbatim: chunk.file.lastPathComponent)
                             .font(.headline)
+                        if case .otherProjectFile(_, let project) = source {
+                            Text(verbatim: ProjectsWindowText.otherProject(project))
+                                .foregroundStyle(.secondary)
+                        }
                         Text(verbatim: ProjectsWindowText.savedExcerpt(chunk))
                             .font(.caption)
                             .foregroundStyle(.secondary)

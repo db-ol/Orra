@@ -250,4 +250,174 @@ struct ChunkSearchTests {
         #expect(try await search.projectScores("…").isEmpty)
         await database.close()
     }
+
+    // MARK: Search terms
+
+    /// A Chinese email shares no word with an English file. A term in English finds it.
+    @Test func aTermFindsAChunkTheEmailsWordsMiss() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        let plan = try await add(["The floor plan of the lobby, revision C. Lamps along the north wall."], file: "lobby.pdf", project: alpha, to: database)
+        try await add(["Opening hours of the studio."], file: "hours.md", project: alpha, to: database)
+        let search = ChunkSearch(database: database)
+        let email = "大堂平面图\n大堂的平面图改好了吗？"
+        #expect(try await search.search(ChunkSearch.Query(text: email, projects: [alpha])).isEmpty)
+        let hits = try await search.search(ChunkSearch.Query(text: email, terms: ["平面图", "floor plan"], projects: [alpha]))
+        #expect(hits.map(\.chunk) == plan)
+        #expect(hits.allSatisfy { $0.matchedTerm })
+        await database.close()
+    }
+
+    @Test func aTermOfSeveralWordsMatchesThemInARow() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        let inARow = try await add(["The Floor Plan of the lobby."], file: "a.md", project: alpha, to: database)
+        try await add(["A plan for the floor tiles."], file: "b.md", project: alpha, to: database)
+        #expect(ChunkSearch.termWordQuery(["floor plan", "Floor  Plan", "lamp", "the", "x", "7"]) == #""floor plan" OR "lamp" OR "7""#)
+        #expect(ChunkSearch.termWordQuery(["", "!!!", "of the"]) == nil)
+        let hits = try await ChunkSearch(database: database).search(ChunkSearch.Query(text: "", terms: ["floor plan"], projects: [alpha]))
+        #expect(hits.map(\.chunk) == inARow)
+        await database.close()
+    }
+
+    /// A Chinese term of three characters or more matches as a substring, through the
+    /// trigram table, wherever NLTokenizer cut the words.
+    @Test func aChineseTermMatchesAsASubstring() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        let ids = try await add(["请按新的平面图纸施工，灯具另算。"], file: "a.md", project: alpha, to: database)
+        #expect(ChunkSearch.termTrigramQuery(["平面图", "图", "灯具", "plan", "平面 图", "平面图"]) == #""平面图""#)
+        #expect(try await matches(ChunkSearch.termTrigramQuery(["平面图"]), in: "index_chunk_trigrams", database) == ids)
+        let hits = try await ChunkSearch(database: database).search(ChunkSearch.Query(text: "", terms: ["平面图"], projects: [alpha]))
+        #expect(hits.map(\.chunk) == ids)
+        #expect(hits.first?.matchedTerm == true)
+        await database.close()
+    }
+
+    /// Reciprocal rank fusion over the lists of the text and of the terms: a chunk both find
+    /// goes first.
+    @Test func chunksTheTextAndATermBothFindComeFirst() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        let termOnly = try await add(["Floor plan of the lobby."], file: "a.md", project: alpha, to: database)
+        let both = try await add(["Lamps in the lobby, as the floor plan shows them."], file: "b.md", project: alpha, to: database)
+        let textOnly = try await add(["Lamps for the hall."], file: "c.md", project: alpha, to: database)
+        let hits = try await ChunkSearch(database: database).search(ChunkSearch.Query(text: "lamps", terms: ["floor plan"], projects: [alpha]))
+        #expect(hits.first?.chunk == both.first)
+        #expect(Set(hits.map(\.chunk)) == Set(termOnly + both + textOnly))
+        #expect(Set(hits.filter(\.matchedTerm).map(\.chunk)) == Set(termOnly + both))
+        await database.close()
+    }
+
+    /// Each hit says which terms match it, each term alone as the lists of the terms search
+    /// it: a phrase of its words in a row, and a Chinese term of three characters or more as
+    /// a substring.
+    @Test func eachHitSaysWhichTermsMatchIt() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        let three = try await add(["The floor plan of the lobby, 平面图纸 revision C."], file: "a.md", project: alpha, to: database)
+        let one = try await add(["A plan for the floor tiles of the lobby."], file: "b.md", project: alpha, to: database)
+        let none = try await add(["Opening hours of the lobby."], file: "c.md", project: alpha, to: database)
+        let search = ChunkSearch(database: database)
+        let hits = try await search.search(ChunkSearch.Query(text: "opening hours", terms: ["floor plan", "平面图", "tiles", "hall", "Floor Plan"], projects: [alpha]))
+        let terms = Dictionary(uniqueKeysWithValues: hits.map { ($0.chunk, $0.matchedTerms) })
+        #expect(terms[three[0]] == ["floor plan", "平面图", "Floor Plan"])
+        #expect(terms[one[0]] == ["tiles"])
+        #expect(terms[none[0]] == [])
+        #expect(hits.allSatisfy { $0.matchedTerm == !$0.matchedTerms.isEmpty })
+        #expect(try await search.search(ChunkSearch.Query(text: "lobby", projects: [alpha])).allSatisfy { $0.matchedTerms.isEmpty && !$0.matchedTerm })
+        await database.close()
+    }
+
+    @Test func termsOnlyKeepsWhatATermMatched() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        let term = try await add(["Floor plan of the lobby."], file: "a.md", project: alpha, to: database)
+        try await add(["Lamps for the hall."], file: "c.md", project: alpha, to: database)
+        let search = ChunkSearch(database: database)
+        #expect(try await search.search(ChunkSearch.Query(text: "lamps", terms: ["floor plan"], projects: [alpha], termsOnly: true)).map(\.chunk) == term)
+        #expect(try await search.search(ChunkSearch.Query(text: "lamps", projects: [alpha], termsOnly: true)).isEmpty)
+        #expect(try await search.search(ChunkSearch.Query(text: "lamps", terms: ["floor plan"], projects: [alpha], termsOnly: true, limit: 0)).isEmpty)
+        await database.close()
+    }
+
+    /// A term from the model is data too: each is one quoted phrase, so nothing in it is
+    /// FTS5 syntax, and the query is a bound value.
+    @Test func hostileSearchTermsFindOnlyThemselves() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        let calendars = try await add(["Calendars near the desk, 合同付款。"], file: "a.txt", project: alpha, to: database)
+        try await add(["Unrelated text about lamps."], file: "b.txt", project: alpha, to: database)
+        let hostile = [
+            "\"", String(repeating: "\"", count: 3), "*", "calend*", "^start", "-minus", "NEAR(calendars desk)", "col:x", "words:calendars", "name:a",
+            "AND", "OR", "NOT", "(", ")", "a\u{0}b", "合同\"付款", "\\", "'; DROP TABLE index_chunks; --", "{name words}: lamps",
+        ]
+        for term in hostile {
+            for (table, query) in [("index_chunk_words", ChunkSearch.termWordQuery([term])), ("index_chunk_trigrams", ChunkSearch.termTrigramQuery([term]))] {
+                let found = try await matches(query, in: table, database)
+                #expect(found.isEmpty || found == calendars, "\(term) in \(table)")
+            }
+        }
+        // As syntax, each of these would match: a prefix, NEAR, a column filter and a set of
+        // columns.
+        for term in ["calend*", "NEAR(calendars desk)", "name:a", "{name words}: lamps"] {
+            #expect(try await matches(ChunkSearch.termWordQuery([term]), in: "index_chunk_words", database).isEmpty, "\(term)")
+        }
+        let search = ChunkSearch(database: database)
+        for start in stride(from: 0, to: hostile.count, by: ChunkSearch.maximumTerms) {
+            let terms = Array(hostile[start..<min(start + ChunkSearch.maximumTerms, hostile.count)])
+            let found = try await search.search(ChunkSearch.Query(text: "", terms: terms, projects: [alpha], termsOnly: true))
+            #expect(found.isEmpty || found.map(\.chunk) == calendars)
+        }
+        #expect(try await database.run("SELECT count(*) FROM index_chunks") == [[.integer(2)]])
+        await database.close()
+    }
+
+    /// Without terms, a search gives the two lists of the text fused as before, worked out
+    /// here from the tables themselves.
+    @Test func withoutTermsTheSearchGivesWhatItGaveBefore() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        try await add(["灯具采购合同已经签好，灯具下周到。"], file: "a.md", project: alpha, to: database)
+        try await add(["印刷厂交货时间改到周五，灯具另算。"], file: "b.md", project: alpha, to: database)
+        try await add(["The lamps arrive on Friday.", "Lamps and calendars."], file: "c.md", project: alpha, to: database)
+        try await add(["灯具采购 in the other project."], file: "d.md", project: beta, to: database)
+        let search = ChunkSearch(database: database)
+        for text in ["灯具采购合同", "lamps calendars", "交货 灯具 lamps", "周五"] {
+            var scores: [Int64: Double] = [:]
+            for (table, query) in [("index_chunk_words", ChunkSearch.wordQuery(text)), ("index_chunk_trigrams", ChunkSearch.trigramQuery(text))] {
+                guard let query else { continue }
+                let rows = try await database.run(
+                    "SELECT \(table).rowid FROM \(table) JOIN index_chunks c ON c.id = \(table).rowid WHERE \(table) MATCH ? AND c.project = ? ORDER BY bm25(\(table)) LIMIT 50",
+                    [.text(query), .text(alpha.uuidString)])
+                for (rank, row) in rows.enumerated() {
+                    scores[row[0].integer!, default: 0] += 1 / (60 + Double(rank))
+                }
+            }
+            let expected = scores.sorted { ($0.value, -$0.key) > ($1.value, -$1.key) }.prefix(6)
+            let hits = try await search.search(ChunkSearch.Query(text: text, projects: [alpha]))
+            #expect(hits.map(\.chunk) == expected.map(\.key), "\(text)")
+            #expect(zip(hits.map(\.score), expected.map(\.value)).allSatisfy { abs($0 - $1) < 1e-12 }, "\(text)")
+            #expect(!hits.contains { $0.matchedTerm })
+            #expect(try await search.search(text, in: [alpha]) == hits)
+        }
+        await database.close()
+    }
+
+    @Test func termSearchStaysInTheProjectsItIsGiven() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        let inAlpha = try await add(["Floor plan of the lobby."], file: "a.md", project: alpha, to: database)
+        let inBeta = try await add(["Floor plan of the hall."], file: "b.md", project: beta, to: database)
+        let search = ChunkSearch(database: database)
+        func found(_ projects: [UUID]?) async throws -> Set<Int64> {
+            Set(try await search.search(ChunkSearch.Query(text: "", terms: ["floor plan"], projects: projects, termsOnly: true)).map(\.chunk))
+        }
+        #expect(try await found([alpha]) == Set(inAlpha))
+        #expect(try await found([beta]) == Set(inBeta))
+        #expect(try await found(nil) == Set(inAlpha + inBeta))
+        #expect(try await found([]).isEmpty)
+        #expect(try await found([UUID()]).isEmpty)
+        await database.close()
+    }
 }

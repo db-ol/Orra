@@ -55,8 +55,9 @@ nonisolated struct Explanation: Sendable, Equatable, Codable {
     /// wrote no draft, and nil otherwise. Its draft is empty, since `draft` holds the
     /// checked one.
     var draftCheck: DraftCheckInput?
-    /// What the source ids of the points stand for: 本邮件 or this email, F1, M1, T1 and A1.
-    /// A file's excerpt says why it was in the prompt, see ExplainPrompt.FileOrigin.
+    /// What the source ids of the points stand for: 本邮件 or this email, F1, O1, M1, T1 and
+    /// A1. A file's excerpt says why it was in the prompt, see ExplainPrompt.FileOrigin, and
+    /// an O id is an excerpt of a file of another project, whose origin names it.
     var sources: [String: ExplainPrompt.Source]
     /// What PromptHygiene took out of each place of the prompt, for the user to see. Never
     /// for the model or a log.
@@ -65,11 +66,55 @@ nonisolated struct Explanation: Sendable, Equatable, Codable {
     var problems: [ExplainAnswer.Problem]
     /// Source ids the model named that the prompt does not have, each once.
     var unknownSources: [String]
+    /// The search terms the model gave for the email, which the search used, so Explain
+    /// Again searches with them too. Nil before 0.6.1, and when the model gave none.
+    var searchTerms: [String]? = nil
 
     /// The kinds of `warnings`, each once, in the order of `ProjectsWarning.allCases`.
     var warningKinds: [ProjectsWarning] {
         let kinds = Set(warnings.map(\.warning))
         return ProjectsWarning.allCases.filter(kinds.contains)
+    }
+
+    /// The projects the explanation names: the email's, and the project of each file whose
+    /// excerpt it holds. MailStore saves it only while they all exist.
+    var sourceProjects: Set<UUID> {
+        var projects = Set(sources.values.compactMap { source -> UUID? in
+            guard case .file(_, let origin?) = source else { return nil }
+            return origin.project
+        })
+        if let project {
+            projects.insert(project)
+        }
+        return projects
+    }
+
+    /// Whether it holds an excerpt of a file in the folders of `project`, for Forget Project.
+    func holdsFiles(of project: UUID) -> Bool {
+        sources.values.contains { source in
+            guard case .file(_, let origin?) = source else { return false }
+            return origin.project == project
+        }
+    }
+
+    /// Whether a point cites an excerpt of another project's file, see
+    /// `ExplainPrompt.Source.isOtherProjectFile(emailProject:)`.
+    var citesOtherProjectFile: Bool {
+        points.contains { point in
+            point.sources.contains { sources[$0]?.isOtherProjectFile(emailProject: project) == true }
+        }
+    }
+}
+
+nonisolated extension ExplainPrompt.Source {
+    /// Whether this is an excerpt of a file of another project than `project`, the email's
+    /// project or nil: a file whose origin names another project, which the user did not
+    /// choose. A file the user chose for the email counts as the email's own, whatever its
+    /// folder. The draft check, the window's note and Forget Project go by it, while the
+    /// window labels every file whose origin names another project with that project.
+    func isOtherProjectFile(emailProject project: UUID?) -> Bool {
+        guard case .file(_, let origin?) = self, let other = origin.project, other != project else { return false }
+        return origin.reason != .chosen
     }
 }
 
@@ -78,13 +123,32 @@ nonisolated struct Explanation: Sendable, Equatable, Codable {
 /// For one email it:
 /// - gathers by closure the user's own addresses, the projects and the people the user
 ///   knows, the other messages of the thread, and for an email in a project the chunks
-///   that search finds, the newest files when search finds fewer than 3, the project's
-///   files for their versions, and the project's other mail. Search reads the email's
-///   subject and text after PromptHygiene, so hidden lines never steer it.
-/// - decides the reply with ReplyRule, and runs the sender and content checks.
+///   that search finds, at most 2 of one file before the other files, the newest files
+///   when search finds fewer than 3, the project's files for their versions, and the
+///   project's other mail. Search reads the email's subject and text after PromptHygiene,
+///   so hidden lines never steer it.
+/// - runs the sender and content checks and the hygiene of the email and its attachments
+///   before the search, and searches with the email's search terms too, see
+///   `files(for:project:known:query:warnings:lookups:rule:perFileChunks:)`: the terms saved
+///   with the email's explanation or new ones from the model, see SearchTerms. An email in
+///   Needs a Project gets passages of the folders of the user's projects that match three of
+///   its terms, and an email in a project up to two passages of other projects' folders
+///   that match two of its terms and rank above every passage of its own project that a term
+///   matches, after its project's own passages, see `OtherProjectsRule`. A term that names
+///   the user, the sender or a recipient or that is a date brings in none of them, and
+///   neither does an email with a warning of `otherProjectWarnings`. They go into
+///   <other_files>, for the warnings, points and questions only. Mail set aside gets no
+///   files and asks for no terms. Without terms only the email's words search, and only its
+///   project's folders.
+/// - decides the reply with ReplyRule.
 /// - builds ExplainPrompt off the main actor, counting with the cleanup model's own
 ///   tokenizer, see ProjectsTokenCounter, and runs it through ProjectsModelQueue as a
-///   request of the user with at most `ExplainPrompt.maximumTokens` tokens.
+///   request of the user with at most `ExplainPrompt.maximumTokens` tokens. A prompt with
+///   passages of other projects asks for no draft, and a second request with the prompt the
+///   email would get without them writes the draft, see `explain(_:)`. A prompt whose budget
+///   left none of them is built again without them. The draft check still takes out of the
+///   draft the data, the copied sentences and the names of those projects, see
+///   `otherProjectNames(_:)`, as a second guard.
 /// - asks the model once more when its answer repeated an item of a list and wrote no
 ///   draft, since a small model that repeats a few lines goes on until its limit. The
 ///   second prompt goes on from the answer up to the repeat, see
@@ -137,6 +201,9 @@ final class ExplainService {
         var list = ListMail()
         /// The email's project, or nil while it has none.
         var project: UUID? = nil
+        /// Whether sorting set the email aside as list mail, which gets no files and no
+        /// search terms.
+        var isSetAside = false
     }
 
     /// A project as the explanation needs it.
@@ -183,12 +250,16 @@ final class ExplainService {
         var thread: @Sendable (Email) async throws -> [ExplainPrompt.Mail]
         /// The project's other mail, best first for the query.
         var projectMail: @Sendable (MailQuery) async throws -> [ExplainPrompt.Mail]
-        /// The best chunks of a project's files for a text, see ChunkSearch.search.
-        var search: @Sendable (_ text: String, _ project: UUID, _ limit: Int) async throws -> [ChunkSearch.Hit]
+        /// The best chunks for a query, see ChunkSearch.search(_:).
+        var search: @Sendable (ChunkSearch.Query) async throws -> [ChunkSearch.Hit]
         /// The chunks of a project's newest files, see ChunkSearch.newest.
         var newest: @Sendable (_ project: UUID, _ limit: Int) async throws -> [ChunkSearch.Hit]
         /// A project's files with their start, for FileVersions.
         var files: @Sendable (_ project: UUID) async throws -> [FileVersions.File]
+        /// The email's search terms: those saved with its explanation, or new ones from the
+        /// model, see SearchTerms.ask. Nil when there are none, which searches with the
+        /// email's words alone, as before search terms.
+        var terms: @Sendable (Email) async throws -> [String]? = { _ in nil }
     }
 
     /// The chunks asked for to fill up the prompt. ChunkSearch.newest gives a file's
@@ -198,6 +269,25 @@ final class ExplainService {
     nonisolated static let newestChunks = 200
     /// The most of the project's other mail asked for, as many as the prompt shows.
     nonisolated static let projectMailLimit = 3
+    /// The passages of other projects an email in a project gets at most, after its project's
+    /// own. An email in Needs a Project gets up to `ExplainPrompt.chunkLimit`.
+    nonisolated static let otherProjectChunks = 2
+    /// The passages of one file the prompt takes before those of other files, so a long file
+    /// that matches many words, such as a log, leaves room for other files. In the synthetic
+    /// set's retrieval supplement one log took five or six of the six places of many emails.
+    /// The email's project fills the places other files leave with more of its passages, see
+    /// `capped(_:perFile:limit:fill:)`, and other projects never get more than this.
+    nonisolated static let perFileChunks = 2
+    /// The chunks a search asks for, so `perFileChunks` leaves enough of other files.
+    nonisolated static let searchedChunks = ExplainPrompt.chunkLimit * 4
+    /// The warnings that keep the files of other projects out of an explanation, in the
+    /// email, its header or an attachment: a stranger's mail must not pull the user's other
+    /// projects into the prompt, and a request for a file is a common phishing pattern.
+    nonisolated static let otherProjectWarnings: Set<ProjectsWarning> = [
+        .hiddenText, .instructionToAssistant, .claimsToBeOrra, .lookalikeDomain, .senderNameMismatch, .forgedQuote,
+        .paymentChange, .unknownSenderPayment, .forwardRequest, .confidentialDataRequest, .personalDataRequest,
+        .credentialRequest, .attachmentNameSpoofing,
+    ]
 
     private let lookups: Lookups
     /// Runs a prompt on the model, see ProjectsModelQueue.run.
@@ -209,12 +299,16 @@ final class ExplainService {
     private let language: ProjectsLanguage
     private let timeZone: TimeZone
     private let now: () -> Date
+    private let draftApart: Bool
     /// Loaded once.
     private var countTokens: (@Sendable (String) -> Int)?
 
     /// - Parameters:
     ///   - language: the language of explanations, see ProjectsLanguage.forExplanations.
     ///   - now: today, which evaluations pin.
+    ///   - draftApart: whether the draft of an email whose prompt shows passages of other
+    ///     projects comes from a second prompt without them, see
+    ///     `explain(_:)`. Evaluations turn it off to measure one request, as before.
     init(
         lookups: Lookups,
         run: @escaping (ProjectsModelRequest) async throws -> String,
@@ -222,7 +316,8 @@ final class ExplainService {
         save: @escaping (Explanation) async -> Void,
         language: ProjectsLanguage,
         timeZone: TimeZone = .current,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        draftApart: Bool = true
     ) {
         self.lookups = lookups
         self.run = run
@@ -231,12 +326,33 @@ final class ExplainService {
         self.language = language == .zh ? .zh : .en
         self.timeZone = timeZone
         self.now = now
+        self.draftApart = draftApart
     }
 
     /// Explains the email, saves the explanation and returns it. Throws
     /// RewriteError.notLoaded when the model is not on this Mac, RewriteError.promptTooLong
     /// when even the trimmed prompt is too long, CancellationError when the caller's task
     /// is cancelled, and what a lookup throws.
+    ///
+    /// When the prompt shows a passage of another project, which the user did not choose for
+    /// the email, the model gets two requests of the user, one after the other: that prompt,
+    /// for the warnings, points and questions, which asks for no draft, and the prompt the
+    /// email would get had no other project been searched, the project's own passages with
+    /// the newest files that fill them up, for the draft alone. So no draft is written from
+    /// another project's passages, whatever the model does with them. The budget trims those
+    /// passages before anything else, so the first prompt holds every part the second one
+    /// holds, and a prompt that lost all of them is built again without them, which is then
+    /// the one request. Every other email gets one request, whose prompt is as it was.
+    /// Neither request has a time limit, as one had none, and both wait for a dictation, Live
+    /// Captions, memory pressure and the voice rule in ProjectsModelQueue. A cancel, as by
+    /// Forget Project, turning Projects off or Delete All, ends the request under way and
+    /// saves nothing, and the draft's request is not sent after the first one was cancelled.
+    /// Closing the window is no cancel: the explanation goes on and is saved, and
+    /// ProjectsRuntime holds the model until it ends. When the first request fails, nothing
+    /// is saved and the second is not sent, as with one request. When only the draft's
+    /// request fails, or its prompt is over the budget, the explanation is saved without a
+    /// draft, as when the model writes none, as a failed second request of
+    /// `rest(_:written:countTokens:)` leaves the first answer.
     func explain(_ email: Email) async throws -> Explanation {
         let started = ContinuousClock.now
         do {
@@ -245,41 +361,92 @@ final class ExplainService {
             let project = email.project.flatMap { id in known.projects.first { $0.id == id } }
             let thread = try await lookups.thread(email)
             var gathered = Gathered(email: email, known: known, project: project, thread: thread, today: now())
+            // Every warning that keeps other projects out is found before the search.
+            let rules = await Self.ruleWarnings(email, known: known)
+            let attachments = await Self.attachmentWarnings(email, known: known)
+            gathered.ruleWarnings = rules
+            gathered.attachmentWarnings = attachments
+            let warnings = await Self.retrievalWarnings(email, rules: rules, attachments: attachments)
+            let query = await Self.searchText(email)
+            gathered.take(try await Self.files(for: email, project: project, known: known, query: query, warnings: warnings, lookups: lookups))
             if let project {
-                let query = await Self.searchText(email)
-                gathered.hits = try await lookups.search(query, project.id, ExplainPrompt.chunkLimit)
-                if gathered.hits.count < ExplainPrompt.fillUpTo {
-                    gathered.newest = try await lookups.newest(project.id, Self.newestChunks)
-                }
-                gathered.files = try await lookups.files(project.id)
                 let excluding = Set(thread.map(\.messageID) + [email.messageID])
                 gathered.projectMail = try await lookups.projectMail(MailQuery(project: project.id, text: query, excluding: excluding, limit: Self.projectMailLimit))
             }
             try Task.checkCancellation()
 
-            let prepared = await Self.prepare(gathered, language: language, timeZone: timeZone, countTokens: countTokens)
+            var prepared = await Self.prepare(gathered, language: language, timeZone: timeZone, countTokens: countTokens, draftApart: draftApart)
+            if !gathered.others.isEmpty, !prepared.prompt.sources.keys.contains(where: ExplainPrompt.isOtherFileSource) {
+                // The budget left no passage of another project, and may have trimmed more for
+                // them, so the prompt is the one without them, as for the draft.
+                prepared = await Self.prepare(gathered.withoutOtherProjects, language: language, timeZone: timeZone, countTokens: countTokens)
+            }
             guard prepared.prompt.tokens <= ExplainPrompt.tokenBudget else { throw RewriteError.promptTooLong }
             let modelStarted = ContinuousClock.now
-            var written = try await run(ProjectsModelRequest(prompt: prepared.prompt.text, maximumTokens: ExplainPrompt.maximumTokens, priority: .user))
-            if let rest = await Self.rest(prepared, written: written, countTokens: countTokens) {
-                let looped = modelStarted.duration(to: .now)
-                do {
-                    written = rest.text + (try await run(rest.request))
-                    Logger.projects.notice("The model repeated an item of its \(rest.section.rawValue, privacy: .public) and wrote no draft in \(Self.seconds(looped), privacy: .public), and a second request wrote the rest in \(Self.seconds(modelStarted.duration(to: .now) - looped), privacy: .public)")
-                } catch let error where !(error is CancellationError) {
-                    // The first answer, without its repeats, is better than none.
-                    try Task.checkCancellation()
-                    Logger.projects.notice("The model repeated an item of its \(rest.section.rawValue, privacy: .public) and wrote no draft in \(Self.seconds(looped), privacy: .public), and a second request for the rest ended by \(Self.logName(error), privacy: .public) after \(Self.seconds(modelStarted.duration(to: .now) - looped), privacy: .public)")
-                }
+            let written = try await answer(prepared, countTokens: countTokens)
+            var draft: DraftApart?
+            if draftApart, prepared.reply.draftLanguage != nil, prepared.prompt.sources.keys.contains(where: ExplainPrompt.isOtherFileSource) {
+                try Task.checkCancellation()
+                draft = try await self.draft(gathered, countTokens: countTokens)
             }
             let modelTime = modelStarted.duration(to: .now)
-            let explanation = await Self.finish(prepared, written: written, timeZone: timeZone)
+            let explanation = await Self.finish(prepared, written: written, draft: draft, timeZone: timeZone)
             await save(explanation)
-            Logger.projects.notice("Explained an email in \(Self.seconds(started.duration(to: .now)), privacy: .public), the model took \(Self.seconds(modelTime), privacy: .public): \(Self.summary(prepared.prompt, explanation), privacy: .public)")
+            Logger.projects.notice("Explained an email in \(Self.seconds(started.duration(to: .now)), privacy: .public), the model took \(Self.seconds(modelTime), privacy: .public): \(Self.summary(prepared.prompt, explanation, prepared.gathered, draft: draft), privacy: .public)")
             return explanation
         } catch {
             Logger.projects.notice("Explaining an email ended by \(Self.logName(error), privacy: .public) after \(Self.seconds(started.duration(to: .now)), privacy: .public)")
             throw error
+        }
+    }
+
+    /// Runs a prompt as a request of the user and returns what the model wrote. An answer
+    /// that repeated an item of a list and wrote no draft gets a second request for the
+    /// rest, see `rest(_:written:countTokens:)`.
+    private func answer(_ prepared: Prepared, countTokens: @escaping @Sendable (String) -> Int) async throws -> String {
+        let started = ContinuousClock.now
+        var written = try await run(ProjectsModelRequest(prompt: prepared.prompt.text, maximumTokens: ExplainPrompt.maximumTokens, priority: .user))
+        if let rest = await Self.rest(prepared, written: written, countTokens: countTokens) {
+            let looped = started.duration(to: .now)
+            do {
+                written = rest.text + (try await run(rest.request))
+                Logger.projects.notice("The model repeated an item of its \(rest.section.rawValue, privacy: .public) and wrote no draft in \(Self.seconds(looped), privacy: .public), and a second request wrote the rest in \(Self.seconds(started.duration(to: .now) - looped), privacy: .public)")
+            } catch let error where !(error is CancellationError) {
+                // The first answer, without its repeats, is better than none.
+                try Task.checkCancellation()
+                Logger.projects.notice("The model repeated an item of its \(rest.section.rawValue, privacy: .public) and wrote no draft in \(Self.seconds(looped), privacy: .public), and a second request for the rest ended by \(Self.logName(error), privacy: .public) after \(Self.seconds(started.duration(to: .now) - looped), privacy: .public)")
+            }
+        }
+        return written
+    }
+
+    /// The draft written apart from other projects' passages: the prompt the email gets
+    /// without them, and what the model wrote for it, nil when that request failed or its
+    /// prompt was over the budget. Throws only a cancel.
+    nonisolated struct DraftApart: Sendable {
+        var prepared: Prepared
+        var written: String?
+    }
+
+    /// Asks for the draft with the prompt the email would get had no other project been
+    /// searched: the gathered passages without those of other projects, so the project's own
+    /// passages take every place and the newest files fill them up as for any email.
+    private func draft(_ gathered: Gathered, countTokens: @escaping @Sendable (String) -> Int) async throws -> DraftApart {
+        let prepared = await Self.prepare(gathered.withoutOtherProjects, language: language, timeZone: timeZone, countTokens: countTokens)
+        guard prepared.prompt.tokens <= ExplainPrompt.tokenBudget else {
+            Logger.projects.notice("The prompt for the draft without other projects' passages is over the budget, so the explanation has no draft")
+            return DraftApart(prepared: prepared, written: nil)
+        }
+        let started = ContinuousClock.now
+        do {
+            let written = try await answer(prepared, countTokens: countTokens)
+            Logger.projects.notice("The draft without other projects' passages took \(Self.seconds(started.duration(to: .now)), privacy: .public)")
+            return DraftApart(prepared: prepared, written: written)
+        } catch let error where !(error is CancellationError) {
+            // The explanation is better than none, as when the model writes no draft.
+            try Task.checkCancellation()
+            Logger.projects.notice("The request for the draft without other projects' passages ended by \(Self.logName(error), privacy: .public) after \(Self.seconds(started.duration(to: .now)), privacy: .public), so the explanation has no draft")
+            return DraftApart(prepared: prepared, written: nil)
         }
     }
 
@@ -305,6 +472,255 @@ final class ExplainService {
         var newest: [ChunkSearch.Hit] = []
         var files: [FileVersions.File] = []
         var projectMail: [ExplainPrompt.Mail] = []
+        /// The email's search terms, nil without any.
+        var terms: [String]? = nil
+        /// Passages of other projects' files, for <other_files>.
+        var others: [ChunkSearch.Hit] = []
+        /// The files of each project of `others`, for their versions.
+        var otherFiles: [UUID: [FileVersions.File]] = [:]
+        /// Whether other projects were searched, or why not, for the log.
+        var otherProjects: Files.OtherProjects? = nil
+        /// The warnings of `ruleWarnings(_:known:)` and `attachmentWarnings(_:known:)`, as
+        /// `explain` found them before the search, or nil, which has `prepare` find them.
+        var ruleWarnings: [ProjectsWarning]? = nil
+        var attachmentWarnings: [Int: [ProjectsWarning]]? = nil
+
+        /// Takes what the search gave.
+        mutating func take(_ files: Files) {
+            hits = files.hits
+            newest = files.newest
+            self.files = files.files
+            terms = files.terms
+            others = files.others
+            otherFiles = files.otherFiles
+            otherProjects = files.otherProjects
+        }
+
+        /// The same without the passages of other projects, so the project's own passages
+        /// take every place and the newest files fill them up as for any email.
+        var withoutOtherProjects: Gathered {
+            var own = self
+            own.others = []
+            own.otherFiles = [:]
+            return own
+        }
+    }
+
+    /// The passages of project files an email gets, see
+    /// `files(for:project:known:query:warnings:lookups:)`.
+    nonisolated struct Files: Sendable, Equatable {
+        /// Whether the folders of other projects were searched, or why not, by kind.
+        nonisolated enum OtherProjects: String, Sendable {
+            case searched
+            /// No passage of another project that matches enough terms ranks above the best
+            /// passage of the email's project that a term matches, see
+            /// `OtherProjectsRule.InProject.rankedAbove`.
+            case notNeeded = "not needed"
+            /// There are no search terms, so the email's words search its project alone.
+            case noTerms = "no terms"
+            /// The terms only name the user, the sender or a recipient, or a date, see
+            /// `SearchTerms.withoutNamesAndDates(_:people:own:)`.
+            case namesAndDates = "only names and dates"
+            /// A check found one of `otherProjectWarnings`.
+            case warned
+            /// The email is set aside.
+            case setAside = "set aside"
+            /// The user has no other project.
+            case none = "no other project"
+        }
+
+        /// The passages of the email's project that search found, best first.
+        var hits: [ChunkSearch.Hit] = []
+        /// The chunks of its newest files, when search found fewer than
+        /// `ExplainPrompt.fillUpTo`.
+        var newest: [ChunkSearch.Hit] = []
+        /// The project's files with their start, for FileVersions.
+        var files: [FileVersions.File] = []
+        /// The search terms, nil without any.
+        var terms: [String]? = nil
+        /// Passages a term matched in the folders of the user's other projects, best first,
+        /// none of a file that the email's project holds too.
+        var others: [ChunkSearch.Hit] = []
+        /// The files of each project of `others`, for their versions.
+        var otherFiles: [UUID: [FileVersions.File]] = [:]
+        var otherProjects: OtherProjects
+    }
+
+    /// How the passages of other projects' folders come into an email, see
+    /// `files(for:project:known:query:warnings:lookups:rule:perFileChunks:)`. The app keeps
+    /// the default, and evaluations try the others.
+    nonisolated struct OtherProjectsRule: Sendable, Equatable {
+        /// For an email in a project.
+        nonisolated enum InProject: Sendable, Equatable {
+            /// One ranking of the passages of all the user's projects, with the query of the
+            /// email's own project: its words and its terms. A passage of another project comes
+            /// in only when it ranks above every passage of the email's project that a term
+            /// matches, and matches `OtherProjectsRule.inProjectTerms` different terms. A
+            /// project that holds what the email is about keeps its own files. The rank alone
+            /// does not say that a passage answers the terms better: the fusion adds a share for
+            /// each list that holds a passage, and only passages with Chinese are in the two
+            /// trigram lists, so one that holds a rare word of the email, such as the name of a
+            /// city, can top all four lists and outrank a passage of the project that matches
+            /// four terms. The passages come after the project's own, which are those it would
+            /// have without them, and the budget trims them first, see ExplainPrompt.
+            case rankedAbove
+            /// The rule before: the folders of other projects are searched when fewer than this
+            /// many of the project's own passages matched a term. Above
+            /// `ExplainPrompt.chunkLimit` they are searched for every email.
+            case ownTermMatches(Int)
+        }
+
+        var inProject = InProject.rankedAbove
+        /// The terms, of those that name no one and no date, that a passage of another project
+        /// must match for an email in a project with `InProject.rankedAbove`, each a different
+        /// term, as for `needsProjectTerms`. One word in common, such as a city, a contract or
+        /// an onboarding, brought another project's passage into one email of a project in six
+        /// in the synthetic set's retrieval supplement, most of them passages that answer
+        /// nothing in it.
+        var inProjectTerms = 2
+        /// The terms, of those that name no one and no date, that a passage of another project
+        /// must match for an email in Needs a Project, each a different term. A word as common
+        /// as appointment, service or garden matches some file of almost every user. Each term
+        /// counts on its own, so a term and its other language count as two when a passage
+        /// holds both, and so do two words for the same thing. Three kept every negative of the
+        /// synthetic set's retrieval supplement out where two let one in, and cost passages
+        /// that match two of an email's terms.
+        var needsProjectTerms = 3
+        /// Whether the terms that only name a person or a date search the email's own project
+        /// too. They never search another project's folders.
+        var namesSearchTheProject = true
+    }
+
+    /// The passages of project files for an email, with its search terms. Off the main
+    /// actor, since the search reads the index. In order:
+    /// 1. Mail set aside gets nothing and asks for no terms.
+    /// 2. Other projects are allowed when none of `otherProjectWarnings` is among
+    ///    `warnings`, those of the email and of its attachments.
+    /// 3. The terms come from the lookup for an email in a project, and for one without a
+    ///    project while other projects are allowed and the user has a project to search.
+    /// 4. In a project: the best passages for the email's words and terms, the newest files
+    ///    when fewer than `ExplainPrompt.fillUpTo` come back, and the project's files. When
+    ///    other projects are allowed, up to `otherProjectChunks` passages of their folders that
+    ///    rank above the project's own and match `OtherProjectsRule.inProjectTerms` different
+    ///    terms, after them, see `OtherProjectsRule.InProject.rankedAbove`, none of a file the
+    ///    project holds, so a folder added to two projects stays the email's own.
+    /// 5. Without a project, with other projects allowed and terms: up to
+    ///    `ExplainPrompt.chunkLimit` passages of all projects' folders, each matching
+    ///    `OtherProjectsRule.needsProjectTerms` different terms.
+    /// 6. The files of each project of those passages, for their versions.
+    ///
+    /// A term that names the user, the sender or a recipient, or that is only a date, never
+    /// brings in a passage of another project, also when it comes from a list saved before,
+    /// see `SearchTerms.withoutNamesAndDates(_:people:own:)`: such a term matches passages of
+    /// every project. With only such terms no other project is searched.
+    ///
+    /// Each list takes at most `perFileChunks` passages of one file from the best
+    /// `searchedChunks` of its search, and the email's project's list then fills the places
+    /// that are left with the passages it passed over, so a project whose matching text sits
+    /// in one long file still gets `ExplainPrompt.chunkLimit` passages, as in 0.6.0. `rule`
+    /// and `perFileChunks` are the app's, evaluations try others, and a nil `perFileChunks`
+    /// searches for `ExplainPrompt.chunkLimit` chunks and takes them all, as 0.6.0 did.
+    @concurrent
+    nonisolated static func files(
+        for email: Email, project: Project?, known: Known, query: String, warnings: Set<ProjectsWarning>, lookups: Lookups,
+        rule: OtherProjectsRule = OtherProjectsRule(), perFileChunks: Int? = ExplainService.perFileChunks
+    ) async throws -> Files {
+        guard !email.isSetAside else { return Files(otherProjects: .setAside) }
+        let allowed = warnings.isDisjoint(with: otherProjectWarnings)
+        guard project != nil || allowed else { return Files(otherProjects: .warned) }
+        let others = known.projects.map(\.id).filter { $0 != project?.id }
+        // Without a project and without any project to search, terms would serve nothing.
+        guard project != nil || !others.isEmpty else { return Files(otherProjects: .none) }
+        var found = Files(terms: try await lookups.terms(email), otherProjects: .searched)
+        let terms = found.terms ?? []
+        // Names and dates match passages of every project, so they search no other project.
+        let people = ([email.sender] + email.replyTo + email.to + email.cc).map(\.name)
+        let usable = SearchTerms.withoutNamesAndDates(found.terms, people: people, own: known.ownName) ?? []
+        let searched = perFileChunks == nil ? ExplainPrompt.chunkLimit : searchedChunks
+        var ownQuery: ChunkSearch.Query?
+        if let project {
+            let query = ChunkSearch.Query(text: query, terms: rule.namesSearchTheProject ? terms : usable, projects: [project.id], limit: searched)
+            ownQuery = query
+            let hits = try await lookups.search(query)
+            found.hits = capped(hits, perFile: perFileChunks, limit: ExplainPrompt.chunkLimit, fill: true)
+            if found.hits.count < ExplainPrompt.fillUpTo {
+                found.newest = try await lookups.newest(project.id, newestChunks)
+            }
+            found.files = try await lookups.files(project.id)
+        }
+        if !allowed {
+            found.otherProjects = .warned
+        } else if terms.isEmpty {
+            found.otherProjects = .noTerms
+        } else if others.isEmpty {
+            found.otherProjects = .none
+        } else if usable.isEmpty {
+            found.otherProjects = .namesAndDates
+        } else {
+            // A file the email's project holds stays its own, and a passage in the folders of
+            // two other projects comes once.
+            let own = Set(found.files.map(\.url.path) + (found.hits + found.newest).map(\.file.path))
+            var seen = Set<String>()
+            func isNew(_ hit: ChunkSearch.Hit) -> Bool {
+                hit.project != project?.id && !own.contains(hit.file.path)
+                    && seen.insert(hit.file.path + "\u{0}" + String(hit.page ?? 0) + "\u{0}" + hit.text).inserted
+            }
+            func matchesUsable(_ hit: ChunkSearch.Hit, least: Int = 1) -> Bool {
+                Set(hit.matchedTerms).intersection(usable).count >= least
+            }
+            if let project, var ranking = ownQuery {
+                var candidates: [ChunkSearch.Hit] = []
+                switch rule.inProject {
+                case .rankedAbove:
+                    ranking.projects = [project.id] + others
+                    let ranked = try await lookups.search(ranking)
+                    let gate = ranked.firstIndex { $0.project == project.id && $0.matchedTerm } ?? ranked.endIndex
+                    candidates = ranked[..<gate].filter { matchesUsable($0, least: rule.inProjectTerms) && isNew($0) }
+                case .ownTermMatches(let least):
+                    if found.hits.count(where: \.matchedTerm) < least {
+                        let hits = try await lookups.search(ChunkSearch.Query(text: query, terms: usable, projects: others, termsOnly: true, limit: searched))
+                        candidates = hits.filter(isNew)
+                    }
+                }
+                found.others = capped(candidates, perFile: perFileChunks, limit: otherProjectChunks)
+                if found.others.isEmpty {
+                    found.otherProjects = .notNeeded
+                }
+            } else {
+                let hits = try await lookups.search(ChunkSearch.Query(text: query, terms: usable, projects: others, termsOnly: true, limit: searched))
+                found.others = capped(hits.filter { matchesUsable($0, least: rule.needsProjectTerms) && isNew($0) }, perFile: perFileChunks, limit: ExplainPrompt.chunkLimit)
+            }
+            var projects: [UUID] = []
+            for hit in found.others where !projects.contains(hit.project) {
+                projects.append(hit.project)
+            }
+            for id in projects {
+                found.otherFiles[id] = try await lookups.files(id)
+            }
+        }
+        return found
+    }
+
+    /// The first `limit` hits, in their order, with at most `perFile` of one file, then with
+    /// `fill` the hits it passed over, in their order, while places are left. The first
+    /// `limit` of all when `perFile` is nil.
+    nonisolated static func capped(_ hits: [ChunkSearch.Hit], perFile: Int?, limit: Int, fill: Bool = false) -> [ChunkSearch.Hit] {
+        guard let perFile else { return Array(hits.prefix(limit)) }
+        var taken: [String: Int] = [:]
+        var kept: [ChunkSearch.Hit] = []
+        var passed: [ChunkSearch.Hit] = []
+        for hit in hits where kept.count < limit {
+            if taken[hit.file.path, default: 0] < perFile {
+                taken[hit.file.path, default: 0] += 1
+                kept.append(hit)
+            } else {
+                passed.append(hit)
+            }
+        }
+        if fill {
+            kept += passed.prefix(max(limit - kept.count, 0))
+        }
+        return kept
     }
 
     /// The prompt and what the checks after the model need.
@@ -316,10 +732,12 @@ final class ExplainService {
         var recipients: [ExplainPrompt.Person]
     }
 
-    /// Decides the reply, runs the sender and content checks and builds the prompt. Off
-    /// the main actor, since the checks, the hygiene and the token counts read long text.
+    /// Decides the reply, runs the sender and content checks and builds the prompt, which
+    /// with `draftApart` asks for no draft when it shows passages of other projects, see
+    /// `ExplainPrompt.Input.draftApart`. Off the main actor, since the checks, the hygiene
+    /// and the token counts read long text.
     @concurrent
-    nonisolated static func prepare(_ gathered: Gathered, language: ProjectsLanguage, timeZone: TimeZone, countTokens: @Sendable (String) -> Int) async -> Prepared {
+    nonisolated static func prepare(_ gathered: Gathered, language: ProjectsLanguage, timeZone: TimeZone, countTokens: @Sendable (String) -> Int, draftApart: Bool = true) async -> Prepared {
         let email = gathered.email
         let known = gathered.known
         let ownAddresses = Set(known.ownAddresses.compactMap(ProjectsAddress.normalized))
@@ -332,7 +750,7 @@ final class ExplainService {
             subject: email.subject
         )
         let recipients = replyRecipients(of: email, ownAddresses: ownAddresses)
-        var warnings = await ruleWarnings(email, known: known)
+        var warnings = if let found = gathered.ruleWarnings { found } else { await ruleWarnings(email, known: known) }
         if let project = gathered.project, case .reply = reply, recipients.contains(where: { !isInProject($0.address, project) }) {
             warnings.append(.recipientNotInProjectPeople)
         }
@@ -369,12 +787,17 @@ final class ExplainService {
             input.fileOrigins[hit.file] = ExplainPrompt.FileOrigin(reason: .match, project: hit.project)
         }
         input.versions = FileVersions(gathered.files)
-        input.filesWithHiddenText = Set((gathered.hits + gathered.newest).filter { $0.fileHiddenRuns > 0 }.map(\.file))
+        input.otherChunks = gathered.others.map { hit in
+            ExplainPrompt.OtherChunk(chunk: chunk(hit), project: hit.project, projectName: known.projects.first { $0.id == hit.project }?.name ?? "")
+        }
+        input.otherVersions = gathered.otherFiles.mapValues(FileVersions.init)
+        input.filesWithHiddenText = Set((gathered.hits + gathered.newest + gathered.others).filter { $0.fileHiddenRuns > 0 }.map(\.file))
         input.projectMail = gathered.projectMail
         input.thread = gathered.thread
         input.attachments = email.attachments
-        input.attachmentWarnings = await attachmentWarnings(email, known: known)
+        input.attachmentWarnings = if let found = gathered.attachmentWarnings { found } else { await attachmentWarnings(email, known: known) }
         input.warnings = ProjectsWarning.allCases.filter(Set(warnings).contains)
+        input.draftApart = draftApart
         let prompt = ExplainPrompt(input, countTokens: countTokens)
         return Prepared(gathered: gathered, reply: reply, prompt: prompt, recipients: recipients)
     }
@@ -424,6 +847,20 @@ final class ExplainService {
             }
         }
         return found
+    }
+
+    /// Every warning that keeps the files of other projects out, found before the search:
+    /// `rules` and `attachments`, the warnings of `ruleWarnings(_:known:)` and
+    /// `attachmentWarnings(_:known:)`, and what PromptHygiene finds in the email's header,
+    /// subject, attachment names and text and in the text of each attachment, with hidden
+    /// text where an attachment's reader dropped hidden runs, see
+    /// ExplainPrompt.hygieneWarnings. The prompt notes the same findings once it is built.
+    @concurrent
+    nonisolated static func retrievalWarnings(_ email: Email, rules: [ProjectsWarning], attachments: [Int: [ProjectsWarning]]) async -> Set<ProjectsWarning> {
+        let mail = ExplainPrompt.Mail(
+            messageID: email.messageID, date: email.date, sender: email.sender, to: email.to, cc: email.cc,
+            subject: email.subject, attachmentNames: email.attachments.map(\.name), text: email.text)
+        return Set(rules).union(attachments.values.joined()).union(ExplainPrompt.hygieneWarnings(of: mail, attachments: email.attachments))
     }
 
     /// The user, by name and each address, for the checks.
@@ -553,14 +990,30 @@ final class ExplainService {
     }
 
     /// Reads the answer and runs the checks on it. Off the main actor, since the checks
-    /// read every source of the prompt.
+    /// read every source of the prompt. With `apart`, the draft written without other
+    /// projects' passages, the explanation takes its warnings, points, questions and sources
+    /// from `written` and its draft from `apart`, which DraftCheck checks with the sources of
+    /// its own prompt and, as a second guard, with the passages of other projects that the
+    /// first prompt held, and whose placeholders count against the longer of the two lists
+    /// of questions.
     @concurrent
-    nonisolated static func finish(_ prepared: Prepared, written: String, timeZone: TimeZone) async -> Explanation {
+    nonisolated static func finish(_ prepared: Prepared, written: String, draft apart: DraftApart? = nil, timeZone: TimeZone) async -> Explanation {
         let gathered = prepared.gathered
         let email = gathered.email
         let prompt = prepared.prompt
         let answer = ExplainAnswer(ExplainPrompt.prefill(prompt.language) + written, sources: prompt.sources.keys, rules: prompt.rules)
         let texts = sourceTexts(prepared)
+        let draftAnswer = apart.flatMap { apart in
+            apart.written.map { ExplainAnswer(ExplainPrompt.prefill(apart.prepared.prompt.language) + $0, sources: apart.prepared.prompt.sources.keys, rules: apart.prepared.prompt.rules) }
+        }
+        // The draft of a prompt that asked for none says nothing, so the form of the draft is
+        // that of the answer the draft comes from.
+        var problems = answer.problems
+        if apart != nil {
+            let ofDraft: (ExplainAnswer.Problem) -> Bool = { $0 == .missing(.draft) || $0 == .repeated(.draft) }
+            problems.removeAll(where: ofDraft)
+            problems += draftAnswer?.problems.filter(ofDraft) ?? []
+        }
 
         // What the window shows of the model's text: links by their host, and with a
         // request for data from someone outside the project none of the values the
@@ -578,7 +1031,8 @@ final class ExplainService {
 
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
-        let allSources = [texts.incoming] + texts.other
+        // An amount a point takes from another project's file has a source too.
+        let allSources = [texts.incoming] + texts.other + texts.otherProjects
         let points = answer.points.map { point in
             let text = shown(point.text)
             return Explanation.Point(
@@ -603,21 +1057,32 @@ final class ExplainService {
             if let project = gathered.project {
                 people += recipients.filter { isInProject($0.address, project) && !people.contains($0) }
             }
+            // A draft written apart is checked with what its own prompt held, and the passages
+            // of other projects in the first prompt stay a second guard. Its placeholders answer
+            // the questions of its own answer, while the window lists those of the first, which
+            // may see a question that the draft's prompt cannot, so they count against the
+            // longer list.
+            let draftTexts = apart.map { sourceTexts($0.prepared) } ?? texts
+            let questions = answer.questions.map(shown)
+            let draftQuestions = draftAnswer?.questions.map(shown) ?? []
             let input = DraftCheckInput(
                 draft: "",
                 language: language,
                 recipients: recipients,
                 projectPeople: people,
                 own: own,
-                incomingText: imitating.isEmpty ? texts.incoming : "",
-                sourceTexts: texts.other,
-                questionsForUser: answer.questions.map(shown),
+                incomingText: imitating.isEmpty ? draftTexts.incoming : "",
+                sourceTexts: draftTexts.other,
+                questionsForUser: draftQuestions.count > questions.count ? draftQuestions : questions,
                 today: gathered.today,
                 imitatingDomains: imitating,
-                asksForData: asksForData
+                asksForData: asksForData,
+                otherProjectTexts: texts.otherProjects.isEmpty ? nil : texts.otherProjects,
+                otherProjectNames: texts.otherProjects.isEmpty ? nil : otherProjectNames(prepared)
             )
             draftCheck = input
-            if case .reply(let text) = answer.draft {
+            let written = apart == nil ? answer.draft : (draftAnswer?.draft ?? .missing)
+            if case .reply(let text) = written {
                 var checked = input
                 checked.draft = text
                 draft = .checked(await DraftCheck.check(checked))
@@ -640,17 +1105,20 @@ final class ExplainService {
             draftCheck: draftCheck,
             sources: prompt.sources,
             removed: prompt.removed,
-            problems: answer.problems,
-            unknownSources: answer.unknownSources
+            problems: problems,
+            unknownSources: answer.unknownSources,
+            searchTerms: gathered.terms
         )
     }
 
     /// The texts of the prompt for the checks after the model. `incoming` is what the
     /// recipients of a reply already have: the email with its quoted history, and the
     /// earlier messages of its thread that every recipient outside the project was on.
-    /// `other` is the rest of what the model read: the project's description, the excerpts
-    /// of its files and the other mail in the prompt, with the people of its headers.
-    nonisolated static func sourceTexts(_ prepared: Prepared) -> (incoming: String, other: [String]) {
+    /// `other` is the rest of what the model read of the email's project: the project's
+    /// description, the excerpts of its files and the other mail in the prompt, with the
+    /// people of its headers. `otherProjects` holds the excerpts of other projects' files,
+    /// see `ExplainPrompt.Source.isOtherProjectFile(emailProject:)`, which no draft carries.
+    nonisolated static func sourceTexts(_ prepared: Prepared) -> (incoming: String, other: [String], otherProjects: [String]) {
         let gathered = prepared.gathered
         let email = gathered.email
         let own = Set(gathered.known.ownAddresses.compactMap(ProjectsAddress.normalized))
@@ -668,13 +1136,19 @@ final class ExplainService {
         // The recipients have the attachments too.
         var incoming = [email.subject, email.visibleText] + email.attachments.compactMap(\.text)
         var other: [String] = []
+        var otherProjects: [String] = []
         if let description = gathered.project?.description, !description.isEmpty {
             other.append(description)
         }
         for id in prepared.prompt.sources.keys.sorted() {
-            switch prepared.prompt.sources[id] {
+            let source = prepared.prompt.sources[id]
+            switch source {
             case .file(let chunk, _):
-                other.append(chunk.text)
+                if source?.isOtherProjectFile(emailProject: gathered.project?.id) == true {
+                    otherProjects.append(chunk.text)
+                } else {
+                    other.append(chunk.text)
+                }
             case .attachment:
                 // In `incoming` already.
                 continue
@@ -696,7 +1170,41 @@ final class ExplainService {
                 continue
             }
         }
-        return (incoming.joined(separator: "\n\n"), other)
+        return (incoming.joined(separator: "\n\n"), other, otherProjects)
+    }
+
+    /// The names that belong to the projects whose excerpts are among the other projects'
+    /// texts of `sourceTexts(_:)`, which no draft carries either: each project's name, or each
+    /// part of a name such as "2027 台历印制 / 2027 desk calendar print run", the names of its
+    /// people, and the names its domains spell in two words or more, as
+    /// bridgeway-talent.example spells Bridgeway Talent. A domain the email's own project lists
+    /// stays out. Nil when there are none.
+    nonisolated static func otherProjectNames(_ prepared: Prepared) -> [String]? {
+        let gathered = prepared.gathered
+        var projects: [UUID] = []
+        for id in prepared.prompt.sources.keys.sorted() {
+            guard let source = prepared.prompt.sources[id], source.isOtherProjectFile(emailProject: gathered.project?.id),
+                  case .file(_, let origin?) = source, let project = origin.project, !projects.contains(project) else { continue }
+            projects.append(project)
+        }
+        let ownDomains = Set((gathered.project?.domains ?? []).map(domainForm))
+        var names: [String] = []
+        for id in projects {
+            guard let project = gathered.known.projects.first(where: { $0.id == id }) else { continue }
+            names += project.name.split(whereSeparator: { "/／|｜".contains($0) }).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            names += project.people.map(\.name)
+            for domain in project.domains.map(domainForm) where !ownDomains.contains(domain) {
+                for label in domain.split(separator: ".").dropLast() {
+                    let words = label.split(separator: "-")
+                    if words.count >= 2 {
+                        names.append(words.joined(separator: " "))
+                    }
+                }
+            }
+        }
+        var seen = Set<String>()
+        let unique = names.filter { !$0.isEmpty && seen.insert($0).inserted }
+        return unique.isEmpty ? nil : unique
     }
 
     /// The people of a mail's header, which the prompt shows with it, one a line and
@@ -712,19 +1220,23 @@ final class ExplainService {
 
     // MARK: Log
 
-    /// Counts only.
-    private nonisolated static func summary(_ prompt: ExplainPrompt, _ explanation: Explanation) -> String {
+    /// Counts and kinds only.
+    private nonisolated static func summary(_ prompt: ExplainPrompt, _ explanation: Explanation, _ gathered: Gathered, draft apart: DraftApart?) -> String {
         let files = prompt.sources.keys.filter { $0.hasPrefix("F") }.count
-        let reasons = prompt.sources.values.compactMap { source -> ExplainPrompt.FileOrigin.Reason? in
-            guard case .file(_, let origin) = source else { return nil }
+        let otherFiles = prompt.sources.keys.filter(ExplainPrompt.isOtherFileSource).count
+        // The reasons of the project's own excerpts, the F ids.
+        let reasons = prompt.sources.compactMap { id, source -> ExplainPrompt.FileOrigin.Reason? in
+            guard id.hasPrefix("F"), case .file(_, let origin) = source else { return nil }
             return origin?.reason
         }
         let found = reasons.filter { $0 == .match }.count
         let newest = reasons.filter { $0 == .newest }.count
+        let terms = gathered.terms.map { "\($0.count) search terms" } ?? "no search terms"
+        let otherProjects = gathered.otherProjects.map { "other projects \($0.rawValue)" } ?? "other projects not searched"
         let thread = prompt.sources.keys.filter { $0.hasPrefix("T") }.count
         let projectMail = prompt.sources.keys.filter { $0.hasPrefix("M") }.count
         let attachments = prompt.sources.keys.filter { $0.hasPrefix("A") }.count
-        let draft: String
+        var draft: String
         switch explanation.draft {
         case .checked(let result):
             draft = (result.draft == nil ? "held back" : "checked") + " with \(result.removals.count) removals and \(result.flags.count) flags"
@@ -733,8 +1245,11 @@ final class ExplainService {
         case .missing: draft = "missing"
         case .expired: draft = "expired"
         }
+        if let apart {
+            draft += apart.written == nil ? ", its request without other projects' passages failed" : ", written by a request of \(apart.prepared.prompt.tokens) prompt tokens without other projects' passages"
+        }
         let flagged = explanation.points.filter { !$0.flags.isEmpty }.count
-        return "\(prompt.tokens) prompt tokens with \(files) excerpts (\(found) found by search, \(newest) of the newest files), \(thread) thread messages, \(projectMail) project mails and \(attachments) attachments, \(explanation.points.count) points of which \(flagged) flagged, \(explanation.questions.count) questions, \(explanation.warnings.count) warnings in code and \(explanation.modelWarnings.count) from the model, draft \(draft), \(explanation.problems.count) problems of form"
+        return "\(terms), \(otherProjects), \(prompt.tokens) prompt tokens with \(files) excerpts (\(found) found by search, \(newest) of the newest files), \(otherFiles) excerpts of other projects, \(thread) thread messages, \(projectMail) project mails and \(attachments) attachments, \(explanation.points.count) points of which \(flagged) flagged, \(explanation.questions.count) questions, \(explanation.warnings.count) warnings in code and \(explanation.modelWarnings.count) from the model, draft \(draft), \(explanation.problems.count) problems of form"
     }
 
     private nonisolated static func seconds(_ duration: Duration) -> String {

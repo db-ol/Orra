@@ -70,6 +70,8 @@ final class ProjectsEmailModel {
         /// What a change changed, worked out off the main actor, ProjectsDraftDiff.highlight
         /// in the app.
         var highlight: (_ before: String, _ after: String) async -> [ProjectsDraftDiff.Segment]
+        /// The name of a project the list holds now, nil for one that is gone.
+        var projectName: (UUID) -> String? = { _ in nil }
         /// Where a project's folders are now, nil when Projects did not read them, see
         /// ProjectsRuntime.folderRoots(of:). None by default, for tests that never ask.
         var folderRoots: (UUID) async -> ProjectsEmailFiles.Roots? = { _ in nil }
@@ -97,6 +99,7 @@ final class ProjectsEmailModel {
                 userLanguage: runtime.userLanguage,
                 now: runtime.dependencies.now,
                 highlight: { await ProjectsDraftDiff.highlight(from: $0, to: $1) },
+                projectName: { [weak runtime] id in runtime?.projectList.first { $0.id == id }?.name },
                 folderRoots: { [weak runtime] id in await runtime?.folderRoots(of: id) }
             )
         }
@@ -111,6 +114,11 @@ final class ProjectsEmailModel {
         case mail(messageID: String, sender: String?, date: Date?)
         /// The excerpt of a project file the model read.
         case file(TextChunker.Chunk)
+        /// The excerpt of a file in the folders of another project than the email's, with
+        /// that project's name, nil once the project is gone. A file the user chose for the
+        /// email shows its project too, though the draft may use it, see
+        /// `ExplainPrompt.Source.isOtherProjectFile(emailProject:)`.
+        case otherProjectFile(TextChunker.Chunk, project: String?)
         /// An attachment of the email, with the excerpt of its text the model read.
         case attachment(name: String, excerpt: String)
     }
@@ -465,8 +473,14 @@ final class ProjectsEmailModel {
                 let email = await actions.email(messageID)
                 let sender = email.map { $0.sender.name.isEmpty ? $0.sender.address : $0.sender.name }
                 sources[id] = .mail(messageID: messageID, sender: sender, date: email?.date)
-            case .file(let chunk, _):
-                sources[id] = .file(chunk)
+            case .file(let chunk, let origin):
+                // Every file of another project's folders shows that project, a file the
+                // user chose for the email too.
+                if let project = origin?.project, project != explanation.project {
+                    sources[id] = .otherProjectFile(chunk, project: actions.projectName(project))
+                } else {
+                    sources[id] = .file(chunk)
+                }
             case .attachment(let name, let excerpt):
                 sources[id] = .attachment(name: name, excerpt: excerpt)
             }
