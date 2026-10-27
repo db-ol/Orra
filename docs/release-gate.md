@@ -203,8 +203,10 @@ they ask for that the set lacks, among them images without text and drawings tha
 knows by name only, and `labels.jsonl`, one line a mail of the set, the supplement, the
 requests or the attack items that asks the user for a file, with the kinds of document it
 asks for, the files that answer it and whether its sender is spoofed. Its README gives the
-rule of the labels. One reader labeled them, and the second reader's check of a random
-third is still to do.
+rule of the labels. One reader labeled them. A second reader checked a third of the request
+mails, 11 of the 32 drawn at random with the seed 20261027, against the mails, the folders
+and the labels, and changed no label. The labels of the set, the supplement and the attack
+items were not part of that check.
 
 The runner indexes each project with its folders of the set, the supplement and the
 requests. For each mail the user received it finds the warnings, the reply and the facts of
