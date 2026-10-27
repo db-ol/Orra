@@ -7,8 +7,9 @@ import os
 /// never uses NSWorkspace (rule 1), and gets it as a closure. Tests pass a fake closure and
 /// never call it (rule 4).
 ///
-/// Opening Mail sends it no Apple Event and reads nothing. Mail comes to the front, as a
-/// click on its Dock icon brings it. What follows is what follows when the user opens Mail
+/// Orra's code builds and sends Mail no Apple Event here, needs no Automation consent and
+/// reads nothing. macOS sends Mail the same open or reopen event as a click on its Dock
+/// icon, and Mail comes to the front. What follows is what follows when the user opens Mail
 /// any other way: Settings lists the names of its mailboxes with events that never bring up
 /// the prompt, and the scan reads mail only after Start Reading Mail confirmed the choice
 /// and macOS allowed access.

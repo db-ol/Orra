@@ -106,7 +106,8 @@ nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
         if isOn || waitsForModel {
             button = nil
         } else if kind == .meeting || kind == .projects {
-            // Turning Projects on is one step of its checklist in Settings.
+            // Projects is set up in Settings, with its switch and then the Set Up Projects
+            // checklist.
             button = text("Set Up in Settings…")
         } else {
             button = text("Turn On in Settings…")
