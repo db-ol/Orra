@@ -1240,6 +1240,9 @@ final class FolderIndex {
                         [.text(reason.rawValue), .integer(row), .integer(size), .real(modified)])
                 }
             } catch {
+                // So a database that cannot write, such as on a full disk, never makes the
+                // pass read the same file again and again.
+                leaveUntilSweep(next.row, project: id)
                 Self.logRecognitionFailure(error)
             }
             Logger.projectsIndex.notice("Index could not recognize the text of a file: \(reason.rawValue, privacy: .public)")
@@ -1289,13 +1292,16 @@ final class FolderIndex {
                     "UPDATE index_files SET skip = ?, recognize = ? WHERE id = ?",
                     [skip.map { .text($0.rawValue) } ?? .null, .integer(read.isDone ? 0 : 1), .integer(row)])
             }
+            let outcomes = read.tried.values
+            let milliseconds = started.duration(to: .now) / .milliseconds(1)
+            Logger.projectsIndex.notice(
+                "Index recognized \(read.tried.count, privacy: .public) pages of a file in \(Int(milliseconds), privacy: .public) ms: \(outcomes.count { $0 == .text }, privacy: .public) with text, \(outcomes.count { $0 == .blank }, privacy: .public) blank, \(outcomes.count { $0 == .timedOut }, privacy: .public) timed out, \(outcomes.count { $0 == .failed }, privacy: .public) failed, \(read.hiddenRuns, privacy: .public) hidden runs, \(read.isDone ? "done" : "pages left", privacy: .public)")
         } catch {
+            // So a database that cannot write, such as on a full disk, never makes the pass
+            // read the same file again and again.
+            leaveUntilSweep(next.row, project: id)
             Self.logRecognitionFailure(error)
         }
-        let outcomes = read.tried.values
-        let milliseconds = started.duration(to: .now) / .milliseconds(1)
-        Logger.projectsIndex.notice(
-            "Index recognized \(read.tried.count, privacy: .public) pages of a file in \(Int(milliseconds), privacy: .public) ms: \(outcomes.count { $0 == .text }, privacy: .public) with text, \(outcomes.count { $0 == .blank }, privacy: .public) blank, \(outcomes.count { $0 == .timedOut }, privacy: .public) timed out, \(outcomes.count { $0 == .failed }, privacy: .public) failed, \(read.hiddenRuns, privacy: .public) hidden runs, \(read.isDone ? "done" : "pages left", privacy: .public)")
         await refreshReport(id, generation: next.generation, isIndexing: reports[id]?.isIndexing ?? false)
     }
 

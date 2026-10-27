@@ -1452,6 +1452,24 @@ struct FolderIndexTests {
         }
     }
 
+    /// A result that cannot be written, as on a full disk, leaves its file until the next
+    /// sweep, so the pass never reads the same file again and again.
+    @Test func aResultThatCannotBeWrittenWaitsForTheNextSweep() async throws {
+        try await withFixture(recognize: { _, _ in Self.recognized([(0, "Brass lamps")]) }) { fixture in
+            try await fixture.database.run("CREATE TRIGGER refuse BEFORE INSERT ON index_recognition_pages BEGIN SELECT RAISE(ABORT, 'refused'); END")
+            try fixture.write("sign.png", "x")
+            await fixture.start()
+            #expect(fixture.jobs.count == 1)
+            #expect(try await fixture.rows()["sign.png"]?.skip == "waitsForRecognition")
+            #expect(try await fixture.search("brass").isEmpty)
+            #expect(fixture.index.reports[fixture.alpha]?.recognitionLeft == 0)
+            try await fixture.database.run("DROP TRIGGER refuse")
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(fixture.jobs.count == 2)
+            #expect(try await fixture.search("brass").count == 1)
+        }
+    }
+
     /// Forgetting a project while a page of it is read stops that page, waits for it, and
     /// removes everything, the pages tried included.
     @Test func forgetStopsThePageUnderWayAndRemovesAll() async throws {
