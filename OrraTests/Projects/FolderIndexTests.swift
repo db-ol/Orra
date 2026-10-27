@@ -1153,11 +1153,13 @@ struct FolderIndexTests {
         return .success(result)
     }
 
-    /// The pages recognition tried for a file, with how each went.
+    /// The pages recognition tried for a file, with how each went, without the mark of a job
+    /// under way.
     private func triedPages(_ name: String, _ fixture: Fixture) async throws -> [Int: String] {
         var pages: [Int: String] = [:]
         for row in try await fixture.database.run(
-            "SELECT p.page, p.outcome FROM index_recognition_pages p JOIN index_files f ON f.id = p.file WHERE f.path LIKE ?", [.text("%/" + name)]) {
+            "SELECT p.page, p.outcome FROM index_recognition_pages p JOIN index_files f ON f.id = p.file WHERE f.path LIKE ? AND p.page >= 0",
+            [.text("%/" + name)]) {
             pages[Int(row[0].integer ?? -1)] = row[1].text
         }
         return pages
@@ -1347,6 +1349,8 @@ struct FolderIndexTests {
             let rows = try await fixture.rows()
             #expect(rows["scan.pdf"].map { $0.skip == nil && $0.recognize == 0 } == true)
             #expect(try await fixture.search("page").map(\.page).sorted { ($0 ?? 0) < ($1 ?? 0) } == [1, 3, 5])
+            // The job the stop ended, and the one after the restart, took their marks away.
+            #expect(try await fixture.count("SELECT count(*) FROM index_recognition_pages WHERE page < 0") == 0)
             try await fixture.expectTablesAgree()
         }
     }
@@ -1496,20 +1500,79 @@ struct FolderIndexTests {
     }
 
     /// A result that cannot be written, as on a full disk, leaves its file until the next
-    /// sweep, so the pass never reads the same file again and again.
+    /// sweep, so the pass never reads the same file again and again. So does a mark of a job
+    /// that cannot be written, and then the job does not run.
     @Test func aResultThatCannotBeWrittenWaitsForTheNextSweep() async throws {
         try await withFixture(recognize: { _, _ in Self.recognized([(0, "Brass lamps")]) }) { fixture in
-            try await fixture.database.run("CREATE TRIGGER refuse BEFORE INSERT ON index_recognition_pages BEGIN SELECT RAISE(ABORT, 'refused'); END")
+            let pages = "CREATE TRIGGER refuse BEFORE INSERT ON index_recognition_pages WHEN NEW.page >= 0 BEGIN SELECT RAISE(ABORT, 'refused'); END"
+            try await fixture.database.run(pages)
             try fixture.write("sign.png", "x")
             await fixture.start()
             #expect(fixture.jobs.count == 1)
             #expect(try await fixture.rows()["sign.png"]?.skip == "waitsForRecognition")
             #expect(try await fixture.search("brass").isEmpty)
             #expect(fixture.index.reports[fixture.alpha]?.recognitionLeft == 0)
+            #expect(try await fixture.count("SELECT count(*) FROM index_recognition_pages") == 0)
+
+            try await fixture.database.run("DROP TRIGGER refuse")
+            try await fixture.database.run(pages.replacingOccurrences(of: "NEW.page >= 0", with: "NEW.page < 0"))
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(fixture.jobs.count == 1)
+            #expect(fixture.index.reports[fixture.alpha]?.recognitionLeft == 0)
+
             try await fixture.database.run("DROP TRIGGER refuse")
             await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
             #expect(fixture.jobs.count == 2)
             #expect(try await fixture.search("brass").count == 1)
+            #expect(try await triedPages("sign.png", fixture) == [0: "text"])
+        }
+    }
+
+    /// A job is marked under way from before it opens its file until it ends, so a job that
+    /// never ends, as when reading the file ends Orra, leaves its mark. A file with such a
+    /// mark is read once more, marked again, and one whose last two jobs did not end is given
+    /// up as unreadable without being read, so a file that ends Orra is not read at every
+    /// launch. The marks of the jobs that ended are gone.
+    @Test func aFileWhoseJobsDidNotEndIsReadOnceMoreAndThenGivenUp() async throws {
+        let database = Mutex<ProjectsDatabase?>(nil)
+        let marks = Mutex<[String: [String]]>([:])
+        let pause = Pause(.lowPower)
+        try await withFixture(read: Self.readingScans(["scan.pdf": [1]]), recognize: { job, _ in
+            if let database = database.withLock({ $0 }) {
+                let rows = (try? await database.run(
+                    "SELECT p.outcome FROM index_recognition_pages p JOIN index_files f ON f.id = p.file WHERE p.page = ? AND f.path = ?",
+                    [.integer(Int64(FolderIndex.jobMarkPage)), .text(job.file.path)])) ?? []
+                let outcomes = rows.compactMap { $0.first?.text }
+                marks.withLock { $0[job.file.lastPathComponent] = outcomes }
+            }
+            return Self.recognized([(job.kind == .pdf ? 1 : 0, "Brass lamps")])
+        }, pause: pause) { fixture in
+            database.withLock { $0 = fixture.database }
+            for name in ["scan.pdf", "sign.png", "photo.jpg"] {
+                try fixture.write(name, "x")
+            }
+            // Recognition waits, as in Low Power Mode, while the marks of jobs that did not
+            // end are written as such jobs leave them.
+            await fixture.start()
+            for (name, mark) in [("scan.pdf", FolderIndex.JobMark.underWay), ("photo.jpg", .underWayAgain)] {
+                try await fixture.database.run(
+                    "INSERT INTO index_recognition_pages (file, page, size, modified, outcome) SELECT id, ?, size, modified, ? FROM index_files WHERE path = ?",
+                    [.integer(Int64(FolderIndex.jobMarkPage)), .text(mark.rawValue), .text(fixture.folder + "/" + name)])
+            }
+            pause.now = nil
+            await fixture.tick()
+            #expect(fixture.jobs.names == ["scan.pdf", "sign.png"])
+            #expect(marks.withLock { $0 } == ["scan.pdf": [FolderIndex.JobMark.underWayAgain.rawValue], "sign.png": [FolderIndex.JobMark.underWay.rawValue]])
+            let rows = try await fixture.rows()
+            #expect(rows["scan.pdf"].map { $0.skip == nil && $0.recognize == 0 } == true)
+            #expect(rows["sign.png"].map { $0.skip == nil && $0.recognize == 0 } == true)
+            #expect(rows["photo.jpg"].map { $0.skip == "unreadable" && $0.recognize == 0 } == true)
+            #expect(try await triedPages("scan.pdf", fixture) == [1: "text"])
+            #expect(try await triedPages("sign.png", fixture) == [0: "text"])
+            // Only the mark of the file given up stays.
+            #expect(try await fixture.count("SELECT count(*) FROM index_recognition_pages WHERE page < 0") == 1)
+            #expect(try await fixture.index.skippedFiles(project: fixture.alpha).map(\.reason) == [.unreadable])
+            try await fixture.expectTablesAgree()
         }
     }
 

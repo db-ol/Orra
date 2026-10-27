@@ -39,7 +39,9 @@ extension Logger {
 ///   the page's drawing ends when it is being drawn, see TextRecognizer. Each page tried is
 ///   kept with the file's size and date and how it went, so blank, timed out and failed
 ///   pages are not tried again, a restart goes on where it stopped, and a changed file
-///   starts over. Recognized text is kept like any text, marked as recognized.
+///   starts over. Recognized text is kept like any text, marked as recognized. A job is
+///   marked under way until it ends, so a file whose reading ends Orra, as a crash of a
+///   framework of macOS would, is read once more and then given up, not at every launch.
 /// - A project lists at most 5,000 documents and 20,000 other files, which are the documents
 ///   past the 5,000, the images and the files known by name. Images take the room the
 ///   documents leave of the 5,000, those the index holds first, then new ones newest first,
@@ -1043,7 +1045,26 @@ final class FolderIndex {
         /// Whether the index holds text of the file, from its text layer or from pages
         /// recognized before.
         var hasText: Bool
+        /// The mark of the last job of this size and date of the file when it did not end,
+        /// see `JobMark`.
+        var mark: JobMark?
     }
+
+    /// How a job of recognition is marked in index_recognition_pages, at `jobMarkPage` with
+    /// the file's size and date, from before it opens its file until it ends. A mark that
+    /// stays shows a job that never ended, as when Orra quit, or when a framework of macOS
+    /// that reads the file ended Orra. Such a file is read once more, and when that job does
+    /// not end either, it is given up as unreadable, so a file that ends Orra is not read
+    /// again at every launch. Internal for tests.
+    nonisolated enum JobMark: String, Sendable {
+        /// A job of the file is under way, or the last one did not end.
+        case underWay
+        /// The job after one that did not end is under way, or did not end either.
+        case underWayAgain
+    }
+
+    /// The page of index_recognition_pages that holds the mark of a job, see `JobMark`.
+    nonisolated static let jobMarkPage = -1
 
     /// Reasons a whole file fails recognition for, which its row keeps until the file
     /// changes. Any other reason can pass, such as no access, and the row waits for the next
@@ -1145,13 +1166,22 @@ final class FolderIndex {
             }
             return nil
         }
-        let done = try await database.run(
-            "SELECT page FROM index_recognition_pages WHERE file = ? AND size = ? AND modified = ?",
+        var done: Set<Int> = []
+        var mark: JobMark?
+        for page in try await database.run(
+            "SELECT page, outcome FROM index_recognition_pages WHERE file = ? AND size = ? AND modified = ?",
             [.integer(file), .integer(size), .real(modified)]
-        ).compactMap { $0.first?.integer.map(Int.init) }
+        ) where page.count == 2 {
+            guard let number = page[0].integer.map(Int.init) else { continue }
+            if number == Self.jobMarkPage {
+                mark = page[1].text.flatMap(JobMark.init(rawValue:))
+            } else {
+                done.insert(number)
+            }
+        }
         return Waiting(
-            project: id, generation: watched.generation, row: file, path: path, size: size, modified: modified, done: Set(done),
-            hasText: row[4].integer == 1)
+            project: id, generation: watched.generation, row: file, path: path, size: size, modified: modified, done: done,
+            hasText: row[4].integer == 1, mark: mark)
     }
 
     /// Whether the job of a project may read its next page: no pause, no sweep waits, and
@@ -1162,7 +1192,8 @@ final class FolderIndex {
 
     /// Runs one job of recognition on a row in a task of its own, which a key press, a
     /// request of the user, a pause or a stop of the project cancels, and writes what it
-    /// read.
+    /// read. The job is marked under way until it ends, and a file whose last two jobs did
+    /// not end is given up without a third, see `JobMark`.
     private func run(_ next: Waiting) async {
         let id = next.project
         guard isCurrent(id, next.generation) else { return }
@@ -1175,6 +1206,23 @@ final class FolderIndex {
         let job = RecognitionJob(
             file: URL(fileURLWithPath: next.path), kind: kind, size: next.size, modified: next.modified, done: next.done,
             pages: Self.recognitionPages)
+        if next.mark == .underWayAgain {
+            Logger.projectsIndex.notice("Index gives up the text recognition of a file whose last two jobs did not end")
+            await store(.failure(.unreadable), of: next, job: job, wasInterrupted: false, started: .now)
+            return
+        }
+        let mark: JobMark = next.mark == nil ? .underWay : .underWayAgain
+        guard await self.mark(next, as: mark) else {
+            // So a database that cannot write, such as on a full disk, never makes the pass
+            // take the same file again and again.
+            leaveUntilSweep(next.row, project: id)
+            await refreshReport(id, generation: next.generation, isIndexing: reports[id]?.isIndexing ?? false)
+            return
+        }
+        guard isCurrent(id, next.generation) else {
+            await unmark(next, mark)
+            return
+        }
         let mayGoOn: @Sendable () async -> Bool = { [weak self] in
             await self?.mayRecognize(id, generation: next.generation) ?? false
         }
@@ -1193,8 +1241,37 @@ final class FolderIndex {
         watcher.cancel()
         let wasInterrupted = recognition?.wasInterrupted ?? false
         recognition = nil
+        // The job ended, so its mark goes, after any dictation, as every write waits.
+        await waitWhileDictating()
+        await unmark(next, mark)
         guard isCurrent(id, next.generation) else { return }
         await store(result, of: next, job: job, wasInterrupted: wasInterrupted, started: started)
+    }
+
+    /// Marks the job of a row under way, see `JobMark`. False when the mark cannot be
+    /// written, such as when the row is gone.
+    private func mark(_ next: Waiting, as mark: JobMark) async -> Bool {
+        do {
+            try await database.run(
+                "INSERT OR REPLACE INTO index_recognition_pages (file, page, size, modified, outcome) VALUES (?, ?, ?, ?, ?)",
+                [.integer(next.row), .integer(Int64(Self.jobMarkPage)), .integer(next.size), .real(next.modified), .text(mark.rawValue)])
+            return true
+        } catch {
+            Self.logRecognitionFailure(error)
+            return false
+        }
+    }
+
+    /// Takes away the mark of a job that ended, unless a later job of the row marked it
+    /// again, as one of an index started anew may.
+    private func unmark(_ next: Waiting, _ mark: JobMark) async {
+        do {
+            try await database.run(
+                "DELETE FROM index_recognition_pages WHERE file = ? AND page = ? AND outcome = ?",
+                [.integer(next.row), .integer(Int64(Self.jobMarkPage)), .text(mark.rawValue)])
+        } catch {
+            Self.logRecognitionFailure(error)
+        }
     }
 
     /// Cancels the job under way once a pause begins or its project stops, looking every
@@ -1334,7 +1411,7 @@ final class FolderIndex {
     /// least one failed, any others having timed out.
     private static func noPageWasRead(row: Int64, size: Int64, modified: Double, in database: isolated ProjectsDatabase) throws -> Bool {
         let counts = try database.run(
-            "SELECT sum(outcome IN (?4, ?5)), sum(outcome = ?6) FROM index_recognition_pages WHERE file = ?1 AND size = ?2 AND modified = ?3",
+            "SELECT sum(outcome IN (?4, ?5)), sum(outcome = ?6) FROM index_recognition_pages WHERE file = ?1 AND size = ?2 AND modified = ?3 AND page >= 0",
             [.integer(row), .integer(size), .real(modified), .text(RecognitionOutcome.text.rawValue), .text(RecognitionOutcome.blank.rawValue),
              .text(RecognitionOutcome.failed.rawValue)]).first
         return (counts?.first?.integer ?? 0) == 0 && (counts?.last?.integer ?? 0) > 0
@@ -1742,7 +1819,8 @@ final class FolderIndex {
     /// - index_recognition_pages keeps each page recognition tried, by the file's row and
     ///   the page, 0 for an image, with the size and modification date the file had then and
     ///   the outcome: text, blank, timedOut or failed. So a file moves on past pages that
-    ///   gave nothing, and a restart goes on where it stopped. A row's pages go with it.
+    ///   gave nothing, and a restart goes on where it stopped. Page -1 holds the mark of a
+    ///   job under way, see `JobMark`. A row's pages go with it.
     /// - PDFs 0.6.0 stored, with text or as holding none, wait for recognition, which looks
     ///   at their pages for ones without a text layer. Their text is not read again.
     nonisolated static let fileTypesMigration = ProjectsDatabase.Migration(version: 6, sql: """
