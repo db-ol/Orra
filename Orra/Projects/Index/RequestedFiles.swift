@@ -48,8 +48,20 @@ nonisolated enum RequestedFiles {
     /// The chunks the text list reads.
     static let chunkLimit = 30
 
+    /// Which lists a search fuses: the names, the text, or both, as the app searches. The
+    /// opt in FileRequestEvaluationTests compares them.
+    nonisolated struct Lists: OptionSet, Sendable {
+        let rawValue: Int
+        static let names = Lists(rawValue: 1)
+        static let text = Lists(rawValue: 2)
+        static let both: Lists = [.names, .text]
+    }
+
     /// The files for a request, best first. `scope` is nil for the folders of every project,
     /// or the projects whose folders may be searched, such as the email's own alone.
+    /// `searchTerms`, such as the terms the cleanup model gave for the email, join the words
+    /// of the text list of each kind, so they rank its chunks while a chunk still counts
+    /// only by a word for the kind. The app passes none, see FileRequestEvaluationTests.
     @concurrent
     static func find(
         _ request: FileRequest,
@@ -58,6 +70,8 @@ nonisolated enum RequestedFiles {
         names: FileNameSearch,
         chunks: ChunkSearch,
         limit: Int = perKind,
+        lists: Lists = .both,
+        searchTerms: [String] = [],
         isPackage: @escaping @Sendable ([URL]) async -> Set<URL> = packages
     ) async throws -> [RequestedFile] {
         guard scope?.isEmpty != true, limit > 0 else { return [] }
@@ -72,7 +86,7 @@ nonisolated enum RequestedFiles {
             try Task.checkCancellation()
             var candidates = try await group(
                 words: asked.words, terms: terms, types: types, fileNames: asked.fileNames, emailProject: emailProject, scope: scope,
-                names: names, chunks: chunks)
+                names: names, chunks: chunks, lists: lists, searchTerms: searchTerms)
             candidates.removeAll { candidate in found.contains { $0.id == candidate.id } }
             let packages = await isPackage(candidates.map(\.url).filter { FolderWalk.documentPackages.contains($0.pathExtension.lowercased()) })
             candidates.removeAll { packages.contains($0.url) }
@@ -101,7 +115,7 @@ nonisolated enum RequestedFiles {
     /// a replaced file after the file that replaced it.
     private static func group(
         words: String, terms: [String], types: Set<String>?, fileNames: [String], emailProject: UUID?, scope: [UUID]?,
-        names: FileNameSearch, chunks: ChunkSearch
+        names: FileNameSearch, chunks: ChunkSearch, lists: Lists, searchTerms: [String]
     ) async throws -> [RequestedFile] {
         let asked = terms + fileNames
         var eligible: Set<Key> = []
@@ -115,13 +129,13 @@ nonisolated enum RequestedFiles {
             return key
         }
         var fused: [[Key]] = []
-        if !asked.isEmpty {
+        if lists.contains(.names), !asked.isEmpty {
             let named = try await names.search("", terms: asked, in: scope, limit: nameLimit).map(take)
             fused.append(named)
             eligible.formUnion(named)
             namedByTerms.formUnion(named)
         }
-        if !words.isEmpty {
+        if lists.contains(.names), !words.isEmpty {
             let named = try await names.search(words, in: scope, limit: nameLimit).map(take)
             fused.append(named)
             if asked.isEmpty {
@@ -129,9 +143,12 @@ nonisolated enum RequestedFiles {
             }
         }
         // The text: chunks a word for the kind matches, or for a request without a kind,
-        // chunks its own words match. Each file counts once, at its best chunk.
-        let query = ChunkSearch.Query(text: words, terms: terms, projects: scope, termsOnly: !terms.isEmpty, limit: chunkLimit)
-        if !terms.isEmpty || !words.isEmpty {
+        // chunks its own words match. Each file counts once, at its best chunk. Search terms
+        // join the words of a kind's search, so they rank the chunks a word for the kind
+        // matches and bring in none by themselves.
+        let text = terms.isEmpty || searchTerms.isEmpty ? words : ([words] + searchTerms).joined(separator: " ")
+        let query = ChunkSearch.Query(text: text, terms: terms, projects: scope, termsOnly: !terms.isEmpty, limit: chunkLimit)
+        if lists.contains(.text), !terms.isEmpty || !words.isEmpty {
             var seen: Set<Key> = []
             var texts: [Key] = []
             for hit in try await chunks.search(query) {

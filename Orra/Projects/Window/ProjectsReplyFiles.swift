@@ -143,12 +143,26 @@ final class ProjectsReplyFiles {
     /// Whether the sender looks spoofed, by a lookalike domain or a name that does not
     /// match its address, among the explanation's warnings or its list's.
     var senderLooksSpoofed: Bool {
-        !warnings.isDisjoint(with: [.lookalikeDomain, .senderNameMismatch])
+        Self.looksSpoofed(warnings)
     }
 
     /// Where the files of a request are looked for.
     var scope: Scope {
-        if senderLooksSpoofed { return .spoofed }
+        Self.scope(warnings: warnings, emailProject: emailProject)
+    }
+
+    /// Whether the warnings say the sender may not be who they claim to be.
+    nonisolated static func looksSpoofed(_ warnings: Set<ProjectsWarning>) -> Bool {
+        !warnings.isDisjoint(with: [.lookalikeDomain, .senderNameMismatch])
+    }
+
+    /// Where the files of a request are looked for, by the warnings of an email's
+    /// explanation and of its list: nowhere for a sender that looks spoofed, the email's
+    /// project only for a warning that keeps other projects out, see
+    /// ExplainService.otherProjectWarnings, and every project otherwise. The opt in
+    /// FileRequestEvaluationTests reads it too.
+    nonisolated static func scope(warnings: Set<ProjectsWarning>, emailProject: UUID?) -> Scope {
+        if looksSpoofed(warnings) { return .spoofed }
         guard !warnings.isDisjoint(with: ExplainService.otherProjectWarnings) else { return .everyProject }
         return emailProject.map(Scope.ownProject) ?? .nowhere
     }

@@ -438,7 +438,8 @@ struct ProjectsGateEvaluationTests {
 
 /// The attack set and the rest of the synthetic set, from the folder in
 /// TEST_RUNNER_ORRA_PROJECTS_GATE, so none of it is in the repository.
-nonisolated private struct GateAttackSet: Sendable {
+/// FileRequestEvaluationTests reads the attack items with it too.
+nonisolated struct GateAttackSet: Sendable {
     /// A message of mail.jsonl or of an attack item, as the set writes it.
     struct Message: Decodable, Sendable {
         struct Attachment: Decodable, Sendable {

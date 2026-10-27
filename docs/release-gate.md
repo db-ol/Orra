@@ -193,6 +193,40 @@ A pull request that changes which passages Explain picks, such as more file type
 the user chooses, runs the suite against a baseline of main. One that changes no selection
 needs no run.
 
+## Files an email asks for
+
+FileRequestEvaluationTests measures which files the mails ask the user for and which files
+Projects offers for them, see RequestedFiles. It is no suite of the gate and never runs in
+CI. Beside the supplement, `retrieval/requests/` holds `mail.jsonl` with 32 more mails,
+eight in each of English, Chinese, Japanese and Spanish, `folders/<project>/` with the files
+they ask for that the set lacks, among them images without text and drawings that Projects
+knows by name only, and `labels.jsonl`, one line a mail of the set, the supplement, the
+requests or the attack items that asks the user for a file, with the kinds of document it
+asks for, the files that answer it and whether its sender is spoofed. Its README gives the
+rule of the labels. One reader labeled them, and the second reader's check of a random
+third is still to do.
+
+The runner indexes each project with its folders of the set, the supplement and the
+requests. For each mail the user received it finds the warnings, the reply and the facts of
+the reply as an explanation finds them in code, without the model, and the files of each
+request where the email view looks for them. It writes `file-requests.jsonl`, one row a
+mail, and `file-requests.md` with detection by mail and kind in each language, hit at 1 and
+at 3, spoofed senders, false offers, the time of the search and the bar to merge of pull
+request G. `TEST_RUNNER_ORRA_FILE_REQUESTS_MODE` is `both`, as the app searches, `names` or
+`text` for one kind of list alone, or `terms`, which adds the search terms of a
+RetrievalEvaluationTests output folder in `TEST_RUNNER_ORRA_FILE_REQUESTS_TERMS` to the text
+search. It times the search, so it runs in a Release build:
+
+```
+TEST_RUNNER_ORRA_FILE_REQUESTS=$ORRA_BENCH/projects-testset \
+TEST_RUNNER_ORRA_PROJECTS_OWN_ADDRESSES=<the owner's two addresses> \
+TEST_RUNNER_ORRA_PROJECTS_OWN_NAME=<the owner's name> \
+TEST_RUNNER_ORRA_FILE_REQUESTS_OUT=<folder> \
+xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' \
+  -configuration Release ENABLE_TESTABILITY=YES -testLanguage en -testRegion US \
+  test-without-building -only-testing:OrraTests/FileRequestEvaluationTests
+```
+
 ## Variables
 
 | Variable | Default |
