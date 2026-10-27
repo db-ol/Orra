@@ -24,6 +24,11 @@ import Testing
 /// pick a part of the items, by their place in adversarial.jsonl from 1, so a long run goes
 /// in parts. TEST_RUNNER_ORRA_PROJECTS_GATE_ATTACHMENTS=names reads attachments as names and
 /// types only, as Orra did before it read their text, for a baseline from the same build.
+/// TEST_RUNNER_ORRA_PROJECTS_GATE_CHOOSE is the path of a JSON file kept with the set that
+/// names, for some items, files of the set's folders the user chose for the email, as
+/// `{"items": [{"id": "a57", "files": ["projects/shanlan-website/competitor-notes.md"]}]}`,
+/// each path inside the set's folder. Those items explain with the files chosen, as Choose
+/// Files for This Email keeps them, and every other item as without the variable.
 ///
 /// Each item runs as phase 0 ran it, with today pinned to 2026-10-18, the day the labels
 /// hold for:
@@ -74,6 +79,9 @@ struct ProjectsGateEvaluationTests {
         let ownAddresses = GateAttackSet.ownAddresses
         let ownName = GateAttackSet.ownName
         let own = Set(ownAddresses)
+        let choice = try environment["ORRA_PROJECTS_GATE_CHOOSE"].flatMap { $0.isEmpty ? nil : $0 }.map { path in
+            try JSONDecoder().decode(GateChoice.self, from: Data(contentsOf: URL(fileURLWithPath: (path as NSString).expandingTildeInPath)))
+        }
 
         // The five folders, as FolderIndex keeps them, with the text Vision recognizes in their
         // images and scans: waitUntilIdle waits for recognition too. The index holds the set's
@@ -96,6 +104,7 @@ struct ProjectsGateEvaluationTests {
         }
         let files = fileNames.values.map(\.count).reduce(0, +)
         let search = ChunkSearch(database: database)
+        let chosenFiles = try await Self.chosenFiles(choice, set: set, database: database)
 
         // The model, as the app runs it for Projects, one queue for sorting and explaining.
         let engine = CleanupEngine.live(RewriteEngine(), gate: ModelGate())
@@ -146,7 +155,7 @@ struct ProjectsGateEvaluationTests {
         let terms = environment["ORRA_PROJECTS_GATE_TERMS"] == "off" ? nil : GateTerms(queue: queue)
         for language in languages {
             services[language] = ExplainService(
-                lookups: Self.lookups(context, search: search, database: database, terms: terms),
+                lookups: Self.lookups(context, search: search, database: database, terms: terms, chosenFiles: chosenFiles),
                 run: { request in
                     // The explanation's own prompt, not the longer one of a second request
                     // for the rest of an answer that repeated itself.
@@ -274,9 +283,12 @@ struct ProjectsGateEvaluationTests {
                         row["error"] = Self.errorName(error)
                     }
                     row["prompt_tokens"] = promptTokens
+                    if choice != nil {
+                        row["chosen_files"] = chosenFiles[email.messageID]?.count ?? 0
+                    }
                     rows.append(row)
                 }
-                try GateOutput.write(Self.document(rows, first: first, count: chosen.count, languages: languages, indexTime: indexTime, files: files), named: name)
+                try GateOutput.write(Self.document(rows, first: first, count: chosen.count, languages: languages, indexTime: indexTime, files: files, chooses: choice != nil), named: name)
             }
         } catch {
             failure = error
@@ -286,7 +298,7 @@ struct ProjectsGateEvaluationTests {
         if let failure { throw failure }
 
         // Counts and times only.
-        print("Projects gate: \(chosen.count) items from \(first) in \(languages.map(\.rawValue).joined(separator: ", ")), \(files) files indexed in \(Self.seconds(indexTime)), sorting \(Self.seconds(Self.median(sortTimes))) and explaining \(Self.seconds(Self.median(explainTimes))) an item at the median, \(errors) errors. Rows in \(name).json.")
+        print("Projects gate: \(chosen.count) items from \(first) in \(languages.map(\.rawValue).joined(separator: ", ")), \(files) files indexed in \(Self.seconds(indexTime)), sorting \(Self.seconds(Self.median(sortTimes))) and explaining \(Self.seconds(Self.median(explainTimes))) an item at the median, \(errors) errors, \(chosenFiles.count) items with chosen files. Rows in \(name).json.")
         #expect(files == 45, "the index holds \(files) files")
         #expect(errors == 0, "\(errors) explanations failed")
         #expect(rows.count == chosen.count * languages.count)
@@ -294,7 +306,7 @@ struct ProjectsGateEvaluationTests {
 
     // MARK: The services
 
-    private static func lookups(_ context: GateAttackSet.Context, search: ChunkSearch, database: ProjectsDatabase, terms: GateTerms?) -> ExplainService.Lookups {
+    private static func lookups(_ context: GateAttackSet.Context, search: ChunkSearch, database: ProjectsDatabase, terms: GateTerms?, chosenFiles: [String: [MailStore.ChosenFile]]) -> ExplainService.Lookups {
         ExplainService.Lookups(
             known: { email in context.known(before: email) },
             thread: { email in context.thread(of: email) },
@@ -310,8 +322,30 @@ struct ProjectsGateEvaluationTests {
                     return FileVersions.File(url: URL(fileURLWithPath: path), modified: Date(timeIntervalSince1970: modified), head: row[2].text ?? "")
                 }
             },
-            terms: { email in try await terms?.terms(for: email) }
+            terms: { email in try await terms?.terms(for: email) },
+            chosenFiles: { messageID in chosenFiles[messageID] ?? [] },
+            passages: { query, files, perFile in try await search.passages(query, in: files, perFile: perFile) }
         )
+    }
+
+    /// The files chosen for each item's email, by its Message-ID, as the index keeps their
+    /// paths and projects. A path the index does not hold stops the run, since the item would
+    /// test nothing.
+    private static func chosenFiles(_ choice: GateChoice?, set: GateAttackSet, database: ProjectsDatabase) async throws -> [String: [MailStore.ChosenFile]] {
+        guard let choice else { return [:] }
+        let indexed = try await database.run("SELECT project, path FROM index_files", []).compactMap { row -> MailStore.ChosenFile? in
+            guard row.count == 2, let project = row[0].text.flatMap(UUID.init(uuidString:)), let path = row[1].text else { return nil }
+            return MailStore.ChosenFile(project: project, path: path)
+        }
+        var chosen: [String: [MailStore.ChosenFile]] = [:]
+        for entry in choice.items {
+            let item = try #require(set.items.first { $0.id == entry.id }, "the choice names \(entry.id), which the set does not hold")
+            let message = try #require(item.messages.last)
+            chosen[GateAttackSet.bare(message.message_id)] = try entry.files.map { file in
+                try #require(indexed.first { $0.path.hasSuffix("/" + file) }, "the index does not hold a chosen file of \(entry.id)")
+            }
+        }
+        return chosen
     }
 
     /// The search terms of each email, asked once from the model, as the app saves them with
@@ -405,7 +439,7 @@ struct ProjectsGateEvaluationTests {
         return row
     }
 
-    private static func document(_ rows: [[String: Any]], first: Int, count: Int, languages: [ProjectsLanguage], indexTime: Duration, files: Int) -> [String: Any] {
+    private static func document(_ rows: [[String: Any]], first: Int, count: Int, languages: [ProjectsLanguage], indexTime: Duration, files: Int, chooses: Bool) -> [String: Any] {
         [
             "suite": "projects",
             "first": first,
@@ -414,6 +448,7 @@ struct ProjectsGateEvaluationTests {
             "today": "2026-10-18",
             "files": files,
             "index_seconds": GateOutput.seconds(indexTime),
+            "chooses_files": chooses,
             "rows": rows,
         ]
     }
@@ -434,6 +469,18 @@ struct ProjectsGateEvaluationTests {
     private static func seconds(_ duration: Duration) -> String {
         String(format: "%.1f s", duration / .seconds(1))
     }
+}
+
+/// The files chosen for some items, from the JSON file in TEST_RUNNER_ORRA_PROJECTS_GATE_CHOOSE,
+/// kept with the set: each item's id in adversarial.jsonl and the paths of its files inside
+/// the set's folder.
+nonisolated private struct GateChoice: Decodable, Sendable {
+    struct Item: Decodable, Sendable {
+        let id: String
+        let files: [String]
+    }
+
+    let items: [Item]
 }
 
 /// The attack set and the rest of the synthetic set, from the folder in
