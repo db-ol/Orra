@@ -1937,6 +1937,35 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// Closing the window while an explanation waits lets it go on, and the explanation
+    /// holds the model from start to end, so the last holder does not let go between the
+    /// request of the explanation and the draft's, which would unload the model and load it
+    /// again.
+    @Test(.timeLimit(.minutes(1))) func anExplanationHoldsTheModelBetweenItsRequestsAfterTheWindowCloses() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, kiln) = try await harborEmailWithKilnLamps()
+        // A dictation starts as the terms job ends, so the explanation's request waits.
+        model.dictatesAfter.withLock { $0 = { $0.hasSuffix(SearchTermsPrompt.prefill) } }
+        let queue = try #require(runtime.running?.queue)
+        let jobs = model.jobs.value
+        let explaining = Task { try await runtime.explain("e@harbor.example") }
+        try await waitUntil { queue.pause == .dictation }
+        #expect(model.jobs.value == jobs + 1)
+        runtime.windowClosed()
+        let emptied = model.emptied.value
+        #expect(model.holds.value > 0)
+        model.dictatesAfter.withLock { $0 = nil }
+        model.dictating.withLock { $0 = false }
+        let explanation = try await explaining.value
+        #expect(model.jobs.value == jobs + 3)
+        #expect(explanation.sourceProjects.contains(kiln.id))
+        #expect(model.emptied.value == emptied + 1)
+        #expect(model.holds.value == 0)
+        #expect(await runtime.explanation(for: "e@harbor.example") == explanation)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     // MARK: Explain Message Selected in Mail
 
     @Test func explainSelectedMessageReadsOnlyAMessageInAChosenMailbox() async throws {
@@ -3481,10 +3510,12 @@ struct ProjectsRuntimeTests {
     /// The model, missing until a test puts it there. A job answers the first candidate of
     /// a sorting prompt at once, and the terms of `terms` to a prompt for search terms, or
     /// with `blocks` waits until it is cancelled. Counts the jobs, those ended by a cancel,
-    /// those for search terms, and the holders the window and the requests of the user take.
+    /// those for search terms, the holders the window and the requests of the user take, and
+    /// the times the last of them let go.
     final class FakeModel: Sendable {
         let holds = Count()
         let releases = Count()
+        let emptied = Count()
         let jobs = Count()
         let ended = Count()
         let termsJobs = Count()
@@ -3539,9 +3570,12 @@ struct ProjectsRuntimeTests {
                 physicalMemory: 32 << 30,
                 waitUntilLoaded: { [self] in isThere.withLock { $0 } },
                 holdModel: { [holds] in holds.add() },
-                releaseModel: { [holds, releases] in
+                releaseModel: { [holds, releases, emptied] in
                     holds.add(-1)
                     releases.add()
+                    if holds.value == 0 {
+                        emptied.add()
+                    }
                 },
                 sleep: { try await Task.sleep(for: $0) }
             )

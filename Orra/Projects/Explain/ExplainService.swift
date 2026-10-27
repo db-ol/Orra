@@ -345,12 +345,13 @@ final class ExplainService {
     /// the one request. Every other email gets one request, whose prompt is as it was.
     /// Neither request has a time limit, as one had none, and both wait for a dictation, Live
     /// Captions, memory pressure and the voice rule in ProjectsModelQueue. A cancel, as by
-    /// Forget Project, closing the window or turning Projects off, ends the request under way
-    /// and saves nothing, and the draft's request is not sent after the first one was
-    /// cancelled. When the first request fails, nothing is saved and the second is not sent,
-    /// as with one request. When only the draft's request fails, or its prompt is over the
-    /// budget, the explanation is saved without a draft, as when the model writes none, as a
-    /// failed second request of
+    /// Forget Project, turning Projects off or Delete All, ends the request under way and
+    /// saves nothing, and the draft's request is not sent after the first one was cancelled.
+    /// Closing the window is no cancel: the explanation goes on and is saved, and
+    /// ProjectsRuntime holds the model until it ends. When the first request fails, nothing
+    /// is saved and the second is not sent, as with one request. When only the draft's
+    /// request fails, or its prompt is over the budget, the explanation is saved without a
+    /// draft, as when the model writes none, as a failed second request of
     /// `rest(_:written:countTokens:)` leaves the first answer.
     func explain(_ email: Email) async throws -> Explanation {
         let started = ContinuousClock.now

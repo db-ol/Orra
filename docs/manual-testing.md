@@ -3895,6 +3895,10 @@ in the test guide, in English and then in 简体中文:
   a date or a count.
 - [ ] Dictate while such an explanation runs, also between its two requests. The dictation
   pastes as fast as usual, and the explanation goes on after it, with its draft.
+- [ ] Close the window while such an explanation runs, with cleanup and translation off.
+  Open it again once the log says the email was explained: the email has its explanation
+  and its draft, and the log shows no unload and load of the cleanup model between its
+  requests.
 - [ ] Assign that email to the project and click Explain Again. The chip has no brackets
   now, and the draft may use the file.
 - [ ] Explain an email of one project about a file that only another project's folders

@@ -170,7 +170,8 @@ nonisolated enum SearchTerms {
     /// The email's search terms from the model, or nil when its answer holds none, the job
     /// failed or no answer came within `limit`. Throws only CancellationError, when the
     /// caller's task is cancelled, which also ends the job and waits for its end, as a
-    /// cancelled request of the queue does, so a closed window still ends Explain.
+    /// cancelled request of the queue does, so Forget Project and turning Projects off still
+    /// end Explain.
     /// - Parameters:
     ///   - run: runs the prompt, ProjectsModelQueue.run in the app.
     ///   - sleep: waits for a time. Tests pass one they control.

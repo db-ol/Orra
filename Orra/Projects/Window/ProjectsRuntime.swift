@@ -1674,14 +1674,20 @@ final class ProjectsRuntime {
     /// open, and only while the store keeps the email's text: the window offers no Explain
     /// without it, but Explain Message Selected in Mail may reach an email its list does not
     /// show. Throws what ExplainService throws, and CancellationError when Projects stops.
+    /// Closing the window lets it go on, and it holds the model from start to end, so the
+    /// model stays loaded between its requests for the search terms, the explanation and a
+    /// draft written apart, see ExplainService.explain(_:).
     func explain(_ messageID: String) async throws -> Explanation {
         guard let running else { throw Failure.off }
         guard let service = explainService else { throw Failure.windowClosed }
         let store = running.store
+        let model = running.model
         defer { mailChanged() }
         return try await userRequest(readsFiles: true) {
             guard let email = try await store.explainEmail(messageID) else { throw Failure.unknownEmail }
             guard try await store.hasText(messageID) else { throw Failure.noText }
+            model.holdModel()
+            defer { model.releaseModel() }
             return try await service.explain(email)
         }
     }
