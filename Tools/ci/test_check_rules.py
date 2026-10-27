@@ -412,6 +412,8 @@ class AppleEventTests(SourceCheckTestCase):
             "let bridge = MailBridge.live": "MailBridge.live",
             "let events = MailEvents.live": "MailEvents.live",
             "let front = ReplyHandoff.bringMailToFront": "ReplyHandoff.bringMailToFront",
+            "MailApp.open()": "MailApp.open",
+            "let open = MailApp.open": "MailApp.open",
         }
         for code, name in cases.items():
             with self.subTest(code=code):
@@ -419,6 +421,36 @@ class AppleEventTests(SourceCheckTestCase):
 
     def test_names_in_comments_and_strings_pass(self):
         self.assert_passes("Orra/Other.swift", '// AESendMessage\nlet a = "sendEvent(options:"\n')
+
+
+class AppOpeningTests(SourceCheckTestCase):
+    """Rule 11: in Orra only MailApp.swift opens another app, and tests open none."""
+
+    OPEN = "NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, _ in }\n"
+
+    def test_only_mail_app_opens_an_app(self):
+        self.assert_passes("Orra/MailApp.swift", self.OPEN)
+        for path in ("Orra/Other.swift", "Orra/Projects/Window/X.swift", "OrraTests/OtherTests.swift"):
+            with self.subTest(path=path):
+                self.assert_fails(path, self.OPEN, 11, "openApplication")
+
+    def test_each_way_to_open_an_app_fails(self):
+        cases = {
+            'NSWorkspace.shared.launchApplication("Mail")': "launchApplication",
+            "NSWorkspace.shared.launchApplication(withBundleIdentifier: id, additionalEventParamDescriptor: nil, launchIdentifier: nil)": "launchApplication",
+            "LSOpenCFURLRef(url as CFURL, nil)": "LSOpenCFURLRef",
+            "LSOpenFromURLSpec(&spec, nil)": "LSOpenFromURLSpec",
+        }
+        for code, name in cases.items():
+            with self.subTest(code=code):
+                self.assert_fails("Orra/Other.swift", code + "\n", 11, name)
+
+    def test_names_that_only_look_alike_pass(self):
+        self.assert_passes("OrraTests/LaunchWindowTests.swift", """\
+            private func openApplicationEvent() -> NSAppleEventDescriptor? { nil }
+            let event = openApplicationEvent()
+            """)
+        self.assert_passes("Orra/Other.swift", '// openApplication\nlet a = "launchApplication"\n')
 
 
 class MailEventsRuleTests(SourceCheckTestCase):

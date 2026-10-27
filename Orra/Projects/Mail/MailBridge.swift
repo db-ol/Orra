@@ -82,7 +82,7 @@ nonisolated enum MailPermission: Sendable {
 /// Why a call of MailBridge failed. Its description holds no mail data, so the log may
 /// show it.
 nonisolated enum MailBridgeError: Error, Equatable, Sendable {
-    /// Mail is not running. Orra never opens it.
+    /// Mail is not running. Orra opens it only when the user clicks Open Mail.
     case mailNotRunning
     /// Mail runs but did not take the event: -600 or -609 while its process is still there,
     /// which Mail on macOS 26 gives now and then.

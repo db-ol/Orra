@@ -310,7 +310,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Tells Projects when Mail starts or quits, so its window says whether Mail is open and
-    /// the scan starts once Mail runs. Orra never opens Mail.
+    /// the scan starts once Mail runs. Orra opens Mail only when the user clicks Open Mail,
+    /// see MailApp.
     private func followMail() {
         let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
