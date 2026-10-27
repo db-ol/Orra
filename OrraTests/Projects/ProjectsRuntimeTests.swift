@@ -1443,6 +1443,63 @@ struct ProjectsRuntimeTests {
         #expect(await roots.value == nil)
     }
 
+    /// The email view reads the real path of a project's folders one at a time. When the
+    /// first takes long, as on a share that hangs, and Projects turns off or the user takes
+    /// the second folder out of the project meanwhile, the second is never read.
+    @Test(.timeLimit(.minutes(1)), arguments: [false, true])
+    func theNextFolderIsNotReadOnceProjectsChangedDuringARead(_ removesFolder: Bool) async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let alpha = try Project.bookmark(of: folder("Alpha", holding: "alpha.txt"))
+        var project = Project(name: "Harbor", folders: [alpha, try Project.bookmark(of: folder("Beta", holding: "beta.txt"))])
+        try await runtime.add(project)
+        let reads = HeldReads()
+        runtime.readRealPath = { await reads.read($0) }
+
+        let roots = Task { await runtime.folderRoots(of: project.id) }
+        try await waitUntil { reads.isHolding }
+        if removesFolder {
+            project.folders = [alpha]
+            try await runtime.update(project)
+        } else {
+            await projects.turnOff(keepingData: true)
+            try await waitUntil { runtime.phase == .off }
+        }
+        reads.letGo()
+        #expect(await roots.value == nil)
+        #expect(reads.started == ["Alpha"])
+        if removesFolder {
+            await projects.turnOff(keepingData: true)
+            try await waitUntil { runtime.phase == .off }
+        }
+    }
+
+    /// A folder the user renamed, then took out of reach, is not available under the name
+    /// it had when Orra last found it too, not only under the one it had when the user added
+    /// it.
+    @Test func aRenamedFolderThatIsGoneIsNotAvailableUnderItsLastName() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let old = try folder("Old lobby", holding: "plan.txt")
+        let bookmark = try Project.bookmark(of: old)
+        let added = URL(fileURLWithPath: try #require(FolderWalk.realPath(old.path)), isDirectory: true)
+        let renamed = root.appendingPathComponent("Harbor lobby", isDirectory: true)
+        try FileManager.default.moveItem(at: old, to: renamed)
+        let project = Project(name: "Harbor", folders: [bookmark])
+        try await runtime.add(project)
+        let real = URL(fileURLWithPath: try #require(FolderWalk.realPath(renamed.path)), isDirectory: true)
+        #expect(await runtime.folderRoots(of: project.id) == ProjectsEmailFiles.Roots(folders: [real]))
+
+        try FileManager.default.removeItem(at: renamed)
+        let roots = try #require(await runtime.folderRoots(of: project.id))
+        #expect(roots.folders.isEmpty)
+        #expect(roots.unavailable.map(\.path) == [real.path, added.path])
+        #expect(ProjectsEmailFiles.place(of: real.appending(path: "Drawings/plan.pdf"), in: roots) == .unavailable(name: "Harbor lobby", path: ["Drawings"]))
+        #expect(ProjectsEmailFiles.place(of: added.appending(path: "plan.txt"), in: roots) == .unavailable(name: "Old lobby", path: []))
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     /// The user takes the folder out of the project while the email view waits for it to
     /// resolve. Once it resolves, nothing reads it, and the view gets the folders as they
     /// are now when it asks again.
@@ -3038,6 +3095,57 @@ struct ProjectsRuntimeTests {
         nonisolated func watch(_ folders: [URL], _ since: UInt64?, _ deliver: @escaping @Sendable (FolderEvents.Changes) -> Void) -> () -> Void {
             state.withLock { $0.watchedFolders.append(folders.map(\.lastPathComponent)) }
             return {}
+        }
+    }
+
+    /// Reads the real path of a folder as the email view does, but holds the first read
+    /// until the test lets it go, as a folder on a share that hangs would, and records the
+    /// names of the folders it was asked for, in order.
+    final class HeldReads: Sendable {
+        private nonisolated struct State: Sendable {
+            var started: [String] = []
+            var held: CheckedContinuation<Void, Never>?
+            var letGo = false
+        }
+
+        private let state = Mutex(State())
+
+        nonisolated var isHolding: Bool {
+            state.withLock { $0.held != nil }
+        }
+
+        nonisolated var started: [String] {
+            state.withLock { $0.started }
+        }
+
+        nonisolated func letGo() {
+            let held = state.withLock { state in
+                state.letGo = true
+                defer { state.held = nil }
+                return state.held
+            }
+            held?.resume()
+        }
+
+        nonisolated func read(_ folder: URL) async -> URL? {
+            let first = state.withLock { state in
+                state.started.append(folder.lastPathComponent)
+                return state.started.count == 1
+            }
+            if first {
+                await withCheckedContinuation { continuation in
+                    let goes = state.withLock { state in
+                        if !state.letGo {
+                            state.held = continuation
+                        }
+                        return state.letGo
+                    }
+                    if goes {
+                        continuation.resume()
+                    }
+                }
+            }
+            return await FolderWalk.realPath(of: folder)
         }
     }
 

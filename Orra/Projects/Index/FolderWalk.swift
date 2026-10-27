@@ -356,13 +356,11 @@ nonisolated struct FolderWalk: Sendable {
         return String(cString: resolved)
     }
 
-    /// The real paths of folders, as the walk lists their files, in their order and without
-    /// a folder that is not there. Off the main actor, since it reads each folder's own
-    /// metadata, which a share that hangs can hold up, never what is inside.
+    /// The real path of a folder, as the walk lists its files, or nil when it is not there.
+    /// Off the main actor, since it reads the folder's own metadata, which a share that
+    /// hangs can hold up, never what is inside.
     @concurrent
-    static func realPaths(of folders: [URL]) async -> [URL] {
-        folders.compactMap { folder in
-            realPath(folder.path).map { URL(fileURLWithPath: $0, isDirectory: true) }
-        }
+    static func realPath(of folder: URL) async -> URL? {
+        realPath(folder.path).map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
 }

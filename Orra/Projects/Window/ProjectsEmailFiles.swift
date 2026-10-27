@@ -82,8 +82,9 @@ nonisolated enum ProjectsEmailFiles {
         /// The real paths of the folders that are there, in the project's order, since the
         /// index keeps every file at its real path, see FolderWalk.
         var folders: [URL] = []
-        /// Where the folders whose bookmarks find nothing now were, by the path each
-        /// bookmark keeps, such as a folder on a disk that is not connected.
+        /// Where the folders whose bookmarks find nothing now were, such as a folder on a
+        /// disk that is not connected: where each bookmark last found its folder, and the
+        /// path it keeps from when the user added the folder.
         var unavailable: [URL] = []
     }
 

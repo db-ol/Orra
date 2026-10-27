@@ -325,6 +325,10 @@ final class ProjectsRuntime {
     /// list the window then shows, so the speed of a busy test runner does not decide that
     /// list.
     @ObservationIgnored var sortingWaitLimit: Duration? = ProjectsRuntime.sortingWait
+    /// Reads the real path of a project folder for the email view, see
+    /// `folderRoots(of:)`, FolderWalk.realPath(of:) in the app. Tests hold it, as a folder on
+    /// a share that hangs would hold it.
+    @ObservationIgnored var readRealPath: @Sendable (URL) async -> URL? = FolderWalk.realPath(of:)
     @ObservationIgnored private var modelWasInstalled = false
     /// Projects whose index is at work, so sorting prepares again when one finishes.
     @ObservationIgnored private var indexing: Set<UUID> = []
@@ -344,6 +348,10 @@ final class ProjectsRuntime {
     /// The resolves of project folders under way, by their bookmarks, see
     /// `resolve(_:)`. They outlive a stop, since a resolve cannot be cancelled.
     @ObservationIgnored private var resolving: [[Data]: Task<[URL], Never>] = [:]
+    /// Where each folder bookmark last found its folder while Orra runs, so a folder that
+    /// is not available now, such as on a disk that is not connected, is also known by where
+    /// it was last, after the user renamed or moved it too, see `folderRoots(of:)`.
+    @ObservationIgnored private var lastFound: [Data: URL] = [:]
     /// The newest write of the text the user typed into each email's draft since Projects
     /// started, by Message-ID, which stopping waits for, see `saveEditedDraft(_:for:)`.
     @ObservationIgnored private var draftSaves: [String: Task<Bool, Never>] = [:]
@@ -1266,15 +1274,18 @@ final class ProjectsRuntime {
     /// A project's folders as they are now, for the files of an explanation in the email
     /// view: the real path of each folder that is there, as the index keeps its files, and
     /// where each folder whose bookmark finds nothing was, such as one on a disk that is not
-    /// connected. The bookmarks resolve as for the index, see `resolve(_:)`, and when some
-    /// find nothing, each resolves alone to tell which. It reads the folders' own metadata
+    /// connected: where the bookmark last found it while Orra runs, and the path it keeps
+    /// from when the user added the folder. The bookmarks resolve as for the index, see
+    /// `resolve(_:)`, and when some find nothing, each resolves alone to tell which. Then
+    /// the real paths are read one folder at a time. It reads the folders' own metadata
     /// only, never what is inside them.
     ///
     /// Empty for a project the list does not hold. Nil while Projects is off, and when
-    /// Projects stopped, is turning off or the project's folders changed while the
-    /// bookmarks resolved, as in `startIndex(_:resortAfter:)`, so no folder is read after
-    /// Projects turned off or for a folder the project no longer holds. The view asks again
-    /// once the folders changed.
+    /// Projects stopped, is turning off or the project's folders changed meanwhile, as in
+    /// `startIndex(_:resortAfter:)`: after every wait, before the next folder is read and
+    /// before it returns, so no folder is read after Projects turned off or for a folder the
+    /// project no longer holds, also when one folder takes long. The view asks again once
+    /// the folders changed.
     func folderRoots(of projectID: UUID) async -> ProjectsEmailFiles.Roots? {
         // The switch itself, since `wantsOn` follows it a moment later.
         guard projects.isOn, !projects.isDeleting, let list = running?.list else { return nil }
@@ -1298,9 +1309,20 @@ final class ProjectsRuntime {
                 }
             }
         }
-        return ProjectsEmailFiles.Roots(
-            folders: await FolderWalk.realPaths(of: folders),
-            unavailable: missing.compactMap(Project.savedPath(of:)))
+        var roots: [URL] = []
+        for folder in folders {
+            if let root = await readRealPath(folder) {
+                roots.append(root)
+            }
+            guard isCurrent() else { return nil }
+        }
+        var unavailable: [URL] = []
+        for bookmark in missing {
+            for place in [lastFound[bookmark], Project.savedPath(of: bookmark)].compactMap({ $0 }) where !unavailable.contains(place) {
+                unavailable.append(place)
+            }
+        }
+        return ProjectsEmailFiles.Roots(folders: roots, unavailable: unavailable)
     }
 
     /// Where these folders are now. A resolve of the same folders under way is waited for,
@@ -1316,6 +1338,13 @@ final class ProjectsRuntime {
         let folders = await resolve.value
         if resolving[bookmarks] == resolve {
             resolving[bookmarks] = nil
+        }
+        // The folders come in the order of their bookmarks, without those not found, so only
+        // a resolve that found every folder tells which bookmark found which.
+        if folders.count == bookmarks.count {
+            for (bookmark, folder) in zip(bookmarks, folders) {
+                lastFound[bookmark] = folder
+            }
         }
         return folders
     }
