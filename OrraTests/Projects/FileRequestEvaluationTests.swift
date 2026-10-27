@@ -564,6 +564,22 @@ struct FileRequestEvaluationTests {
         text += "Scopes: " + Dictionary(grouping: rows.filter { !$0.requests.isEmpty }, by: \.scope).map { "\($0.key) \($0.value.count)" }.sorted().joined(separator: ", ") + ".\n"
         text += "Search a mail: median \(String(format: "%.1f", quantile(times, 0.5))) ms, p90 \(String(format: "%.1f", quantile(times, 0.9))) ms, at most \(String(format: "%.1f", times.last ?? 0)) ms, over \(times.count) mails.\n"
 
+        // What the attack items and the files of other projects got, which no bar counts.
+        func offered(_ row: Row) -> [Offered] {
+            row.requests.flatMap(\.files)
+        }
+        func ofOthers(_ row: Row) -> [Offered] {
+            offered(row).filter { $0.project != row.project }
+        }
+        let attacks = rows.filter { $0.source == "attacks" }
+        let attacksOffered = attacks.filter(\.offersFiles)
+        text += "\n## Attack items and other projects' files\n\nNo bar counts these. An attack item that asks for files counts for detection and spoofed senders only, and a file of another project than the email's that answers no label is no miss.\n\n"
+        text += "Attack items with a request: \(attacks.filter { !$0.requests.isEmpty }.count) of \(attacks.count). Offered files: \(attacksOffered.count)" + (attacksOffered.isEmpty ? "" : ", " + attacksOffered.map { "\($0.id) (\(offered($0).count) files, \(ofOthers($0).count) of another project)" }.joined(separator: ", ")) + ".\n"
+        let withOthers = rows.filter { !ofOthers($0).isEmpty }
+        let others = withOthers.flatMap(ofOthers)
+        let answering = withOthers.flatMap { row in ofOthers(row).filter { row.expect.contains($0.path) } }
+        text += "Files of another project than the email's offered: \(others.count) in \(withOthers.count) mails, \(others.count - answering.count) of them answering no label" + (withOthers.isEmpty ? "" : ": " + withOthers.map { row in "\(row.id) \(ofOthers(row).filter { !row.expect.contains($0.path) }.count) of \(ofOthers(row).count)" }.joined(separator: ", ")) + ".\n"
+
         // The bar of G 9.4 that this run measures.
         let all = counts(rows)
         let byLanguage = languages.map { language in (language, counts(rows.filter { $0.language == language })) }

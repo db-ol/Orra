@@ -211,8 +211,8 @@ requests. For each mail the user received it finds the warnings, the reply and t
 the reply as an explanation finds them in code, without the model, and the files of each
 request where the email view looks for them. It writes `file-requests.jsonl`, one row a
 mail, and `file-requests.md` with detection by mail and kind in each language, hit at 1 and
-at 3, spoofed senders, false offers, the time of the search and the bar to merge of pull
-request G. `TEST_RUNNER_ORRA_FILE_REQUESTS_MODE` is `both`, as the app searches, `names` or
+at 3, spoofed senders, false offers, the time of the search, the files offered to the attack
+items and the files of other projects offered, and the bar to merge of pull request G. `TEST_RUNNER_ORRA_FILE_REQUESTS_MODE` is `both`, as the app searches, `names` or
 `text` for one kind of list alone, or `terms`, which adds the search terms of a
 RetrievalEvaluationTests output folder in `TEST_RUNNER_ORRA_FILE_REQUESTS_TERMS` to the text
 search. It times the search, so it runs in a Release build:
