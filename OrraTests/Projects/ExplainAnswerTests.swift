@@ -112,6 +112,72 @@ struct ExplainAnswerTests {
         #expect(answer.points.first?.sources == ["this email"])
     }
 
+    /// The model often names the email [E1], as if it were a source like F1, though the
+    /// prompt names it 本邮件 or this email. E1 is the email in every bracket, with the
+    /// spaces, case and full width forms of the other ids, and its bracket leaves the text.
+    @Test func theModelsE1IsTheEmail() {
+        let answer = read("要点：\n- 第二版打样已寄出 [E1]\n- 甲【E1】\n- 乙 (E1)\n- 丙（Ｅ１）\n- 丁 [e 1]\n- 戊 [本邮件]")
+        #expect(answer.points == [
+            .init(text: "第二版打样已寄出", sources: ["本邮件"]),
+            .init(text: "甲", sources: ["本邮件"]),
+            .init(text: "乙", sources: ["本邮件"]),
+            .init(text: "丙", sources: ["本邮件"]),
+            .init(text: "丁", sources: ["本邮件"]),
+            .init(text: "戊", sources: ["本邮件"]),
+        ])
+        #expect(answer.unknownSources.isEmpty)
+        #expect(!answer.problems.contains(.unknownSources))
+
+        let english = read("Points:\n- The second proof is in the mail. [E1]\n- The proof is late [this email]", Self.englishSources)
+        #expect(english.points == [
+            .init(text: "The second proof is in the mail.", sources: ["this email"]),
+            .init(text: "The proof is late", sources: ["this email"]),
+        ])
+        #expect(english.unknownSources.isEmpty)
+    }
+
+    /// E1 goes with the other ids of its bracket, in their order, and the email counts once.
+    @Test func theModelsE1GoesWithOtherSources() {
+        let answer = read("要点：\n- 数量为 1,200 套。[F1, E1]\n- 方艾问能否收到（E1、T1）\n- 打样已寄出 [本邮件][E1]")
+        #expect(answer.points == [
+            .init(text: "数量为 1,200 套。", sources: ["F1", "本邮件"]),
+            .init(text: "方艾问能否收到", sources: ["本邮件", "T1"]),
+            .init(text: "打样已寄出", sources: ["本邮件"]),
+        ])
+        #expect(answer.unknownSources.isEmpty)
+    }
+
+    /// Only E1 stands for the email. Another E id is a source the prompt does not have, so
+    /// it is dropped and flagged as an unknown F id is, and a placeholder stays text.
+    @Test func anotherEIDIsUnknownAndAPlaceholderStaysText() {
+        let answer = read("要点：\n- 尾款另付 [E2]\n- 交付日期 [F1, E3]\n- 合计 [待确认：合计] [E1]\n- 总价 [to confirm: total]")
+        #expect(answer.points == [
+            .init(text: "尾款另付", sources: []),
+            .init(text: "交付日期", sources: ["F1"]),
+            .init(text: "合计 [待确认：合计]", sources: ["本邮件"]),
+            .init(text: "总价 [to confirm: total]", sources: []),
+        ])
+        #expect(answer.unknownSources == ["E2", "E3"])
+        #expect(answer.problems.contains(.unknownSources))
+    }
+
+    /// E1 is the email only while the prompt names no E source of its own, and only when the
+    /// prompt's table names the email, as 本邮件 or this email is.
+    @Test func e1IsTheEmailOnlyWhileThePromptNamesNoESource() {
+        let named = ExplainAnswer("要点：\n- 甲 [E1]\n- 乙 [E2]", sources: ["本邮件", "E1", "E2"])
+        #expect(named.points.map(\.sources) == [["E1"], ["E2"]])
+        #expect(named.unknownSources.isEmpty)
+
+        let other = ExplainAnswer("要点：\n- 甲 [E1]\n- 乙 [E2]", sources: ["本邮件", "E2"])
+        #expect(other.points.map(\.sources) == [[], ["E2"]])
+        #expect(other.unknownSources == ["E1"])
+
+        let noEmail = ExplainAnswer("Points:\n- The proof is late [E1]\n- The paper is matte [this email]", sources: ["F1"])
+        #expect(noEmail.points.map(\.sources) == [[], []])
+        #expect(noEmail.points.map(\.text) == ["The proof is late", "The paper is matte"])
+        #expect(noEmail.unknownSources == ["E1", "this email"])
+    }
+
     // MARK: The draft
 
     @Test(arguments: [
