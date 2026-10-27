@@ -97,6 +97,32 @@ struct WelcomeLanguageTests {
         #expect(image(Text("Done").environment(\.locale, spanish)) == image(Text(verbatim: "Listo")))
     }
 
+    /// The words VoiceOver reads after a step's title, Done, In progress or Not done yet,
+    /// come from a key, so they follow the language picked in the window, as the text above
+    /// shows Done. The welcome window and the Projects page of Settings share the step rows.
+    /// A view hosted in a test gives none of SwiftUI's accessibility elements, so whether
+    /// VoiceOver reads the title as a heading with these words is checked by hand, see
+    /// docs/manual-testing.md.
+    @Test func eachStepStateIsAKeyWithWordsInEveryLanguage() {
+        #expect(SetupChecklist.Status.done.spokenKey == "Done")
+        #expect(SetupChecklist.Status.inProgress.spokenKey == "In progress")
+        #expect(SetupChecklist.Status.todo.spokenKey == "Not done yet")
+        let words: [(key: String.LocalizationValue, locale: Locale, text: String)] = [
+            ("Done", chinese, "完成"),
+            ("In progress", chinese, "进行中"),
+            ("Not done yet", chinese, "尚未完成"),
+            ("Done", japanese, "完了"),
+            ("In progress", japanese, "進行中"),
+            ("Not done yet", japanese, "未完了"),
+            ("Done", spanish, "Listo"),
+            ("In progress", spanish, "En curso"),
+            ("Not done yet", spanish, "Pendiente"),
+        ]
+        for word in words {
+            #expect(String(localized: LocalizedStringResource(word.key, locale: word.locale)) == word.text)
+        }
+    }
+
     @Test func closingRestartsOnlyWhenSetupIsCompleteAndTheLanguageWasPickedInTheWindow() {
         #expect(WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, downloading: false, pickedHere: true, otherWindowOpen: false, picked: "zh-Hans", launched: "en"))
         #expect(WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, downloading: false, pickedHere: true, otherWindowOpen: false, picked: "en", launched: "zh-Hans"))

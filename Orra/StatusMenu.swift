@@ -10,7 +10,8 @@ struct StatusMenu: View {
     let clipboard: ClipboardWord
     let updater: AppUpdater
     let speech: TranslationSpeech
-    /// Projects, whose item shows only while it is on.
+    /// Projects: Open Projects Window while it is on, and Set Up Projects… while it is off on
+    /// a Mac where it can be turned on.
     let projects: ProjectsRuntime
     let showWelcome: () -> Void
     let reportProblem: () -> Void
@@ -151,6 +152,17 @@ struct StatusMenu: View {
                 Label(ProjectsWindowText.menuTitle(replyDue: projects.replyDueCount), systemImage: "briefcase")
             }
             Divider()
+        } else if Self.offersProjectsSetup(projects.projects) {
+            // Where Open Projects Window stands while Projects is on. It opens Settings on
+            // Projects, as Change Talk Key… opens it on the keys.
+            Button {
+                NSApplication.shared.activate()
+                SettingsWindow.show(.projects)
+                openWindow(id: SettingsWindow.id)
+            } label: {
+                Label("Set Up Projects…", systemImage: "briefcase")
+            }
+            Divider()
         }
 
         Menu("Talk Key") {
@@ -229,6 +241,13 @@ struct StatusMenu: View {
 }
 
 extension StatusMenu {
+    /// Whether the menu offers Set Up Projects…: while Projects is off, in a build that shows
+    /// it, on a Mac with the memory it needs. ProjectsSwitch is observable, so the menu
+    /// follows the switch.
+    static func offersProjectsSetup(_ projects: ProjectsSwitch) -> Bool {
+        projects.canTurnOn && !projects.isOn
+    }
+
     /// The Dock icon's menu while Projects is on: Open Projects Window, as in the menu bar
     /// menu, so a user who looks in the Dock finds the window too. Nil while Projects is
     /// off, which leaves macOS's own items alone.

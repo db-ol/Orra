@@ -479,13 +479,13 @@ def check_dependency_doc(doc, pins):
 # The source rules for Projects code (AGENTS.md, Runtime rules and Continuous integration).
 #
 # check_sources reads every file under Orra/, OrraTests/ and Tools/. It reads Swift files
-# through swift_views, so a name in a comment never counts. Rules 1 to 4 and 6 to 8 look at
-# code only, outside string literals, so English words in a prompt never trip them. Rule 5
-# also looks inside string literals, and reads every other file whole. Names match on word
-# boundaries. Rules 1 to 9 name paths only, never the syntax of a file they allow, so a file
-# that does not exist yet passes. Rule 10 reads the syntax of the one file it is about,
-# Orra/Projects/Mail/MailEvents.swift, once it exists. A failure names the file, the line,
-# the rule and the name it matched, never the rest of the line.
+# through swift_views, so a name in a comment never counts. Rules 1 to 4, 6 to 8 and 11 look
+# at code only, outside string literals, so English words in a prompt never trip them. Rule
+# 5 also looks inside string literals, and reads every other file whole. Names match on word
+# boundaries. Rules 1 to 9 and 11 name paths only, never the syntax of a file they allow, so
+# a file that does not exist yet passes. Rule 10 reads the syntax of the one file it is
+# about, Orra/Projects/Mail/MailEvents.swift, once it exists. A failure names the file, the
+# line, the rule and the name it matched, never the rest of the line.
 
 PROJECTS_FOLDER = "Orra/Projects/"
 PROJECTS_TESTS_FOLDER = "OrraTests/Projects/"
@@ -495,6 +495,8 @@ MAIL_EVENTS_FILE = "Orra/Projects/Mail/MailEvents.swift"
 # The only Swift files under Orra/ that may build or send an Apple Event (rule 3).
 APPLE_EVENT_FILES = frozenset({MAIL_EVENTS_FILE})
 
+# The only file in Orra that may open another app, Mail on the user's click (rule 11).
+MAIL_APP_FILE = "Orra/MailApp.swift"
 # The only file in Orra/Projects that may make an NSAttributedString (rule 2).
 FILE_TEXT_FILE = "Orra/Projects/Index/FileText.swift"
 # The only file in Orra/Projects that may remove, move, replace or trash files (rule 7).
@@ -525,8 +527,8 @@ SOURCE_RULES = {
     2: "In Orra/Projects only Index/FileText.swift makes an NSAttributedString, from data with the "
        "documentType named in the same call, never from a URL, a path or HTML.",
     3: "In Orra only the files in APPLE_EVENT_FILES build or send an Apple Event. Reading the launch event is fine.",
-    4: "Tests never send an Apple Event, use the live Mail bridge or bring Mail to the front. "
-       "Building a descriptor is fine.",
+    4: "Tests never send an Apple Event, use the live Mail bridge, bring Mail to the front or "
+       "open Mail. Building a descriptor is fine.",
     5: "No file in Orra, OrraTests or Tools runs or holds script text.",
     6: "Only Orra/Projects and OrraTests/Projects use SQLite.",
     7: "In Orra/Projects only ProjectsStorage.swift removes, moves, replaces or trashes files.",
@@ -535,6 +537,7 @@ SOURCE_RULES = {
     10: "MailEvents.swift builds only the get, count and reply events of its MailEvent enum, opens "
         "a window with every reply, and holds no code of a Mail command that changes mail, sends "
         "it, or opens, prints or quits something, nor the code of content.",
+    11: "In Orra only MailApp.swift opens another app, and tests open none.",
 }
 
 # Rule 10. The three events the Mail bridge may build, by their names in the MailEvent enum,
@@ -762,6 +765,8 @@ APPLE_EVENT_SENDING = _rule(
     r"\bMailEvents\s*\.\s*live\b",
     # The real activation of Mail, which tests replace with a fake.
     r"\bReplyHandoff\s*\.\s*bringMailToFront\b",
+    # The real Open Mail, which tests replace with a fake too.
+    r"\bMailApp\s*\.\s*open\b",
 )
 
 # Rule 5, in code and string literals, and in every other file. AppleScript ignores case.
@@ -784,6 +789,11 @@ FILE_REMOVAL = _rule(r"\bremoveItem\b", r"\bmoveItem\b", r"\breplaceItem\w*", r"
 # Rule 8, in the code of Orra/Projects. @AppStorage, CFPreferences and
 # NSUserDefaultsController reach the same values.
 DEFAULTS = _rule(r"\bUserDefaults\b", r"\bAppStorage\b", r"\bCFPreferences\w*", r"\bNSUserDefaults\w*")
+
+# Rule 11, in the code of Orra/ outside MailApp.swift and of OrraTests/. The ways to open or
+# launch an app. NSWorkspace's open with an app's URL would pass, which review covers, and
+# rule 1 bans NSWorkspace in Orra/Projects.
+APP_OPENING = _rule(r"\bopenApplication\b", r"\blaunchApplication\w*", r"\bLSOpen\w*")
 
 # Rule 10, in MailEvents.swift. Other ways to build an event, whose codes the rule cannot
 # read, and ways to change the class or the ID of an event after it is built.
@@ -1387,6 +1397,8 @@ def check_sources(root, apple_event_files=APPLE_EVENT_FILES):
             problems += check_mail_events(text, path)
         if in_tests:
             problems += _find(code, path, 4, APPLE_EVENT_SENDING)
+        if (in_app and path != MAIL_APP_FILE) or in_tests:
+            problems += _find(code, path, 11, APP_OPENING)
         if (in_app or in_tests) and not in_projects and not path.startswith(PROJECTS_TESTS_FOLDER):
             problems += _find(code, path, 6, SQLITE)
     problems.sort(key=lambda problem: (problem.path, problem.line or 0, problem.rule or 0, problem.name))

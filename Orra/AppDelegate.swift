@@ -132,6 +132,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     } openSettings: { [dockIcon] in
         SettingsWindow.show(.projects)
         LaunchWindow.openSettings(dockIcon: dockIcon)
+    } openMail: {
+        MailApp.open()
     }
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()
@@ -146,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     /// The welcome window's one download of the speech model and the cleanup model.
     lazy var setup = SetupDownload(speech: models, cleanup: cleanup)
-    lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, setup: setup) { [dockIcon] in
+    lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, setup: setup, projects: projects) { [dockIcon] in
         dockIcon.willShowWindow()
     }
     lazy var clipboard = ClipboardWord(
@@ -226,6 +228,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             modelIsInstalled: { [cleanup] in
                 if case .installed = cleanup.models.state { true } else { false }
+            },
+            modelDownloadStatus: { [cleanup] in
+                Self.modelDownloadStatus(cleanup.models.state, total: cleanup.models.manifest.totalBytes)
             },
             retryLoadingModel: { [cleanup] in await cleanup.retryLoading() },
             loadTokenCounter: { try await ProjectsTokenCounter.installed(in: folders)?.count },
@@ -310,7 +315,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Tells Projects when Mail starts or quits, so its window says whether Mail is open and
-    /// the scan starts once Mail runs. Orra never opens Mail.
+    /// the scan starts once Mail runs. Orra opens Mail only when the user clicks Open Mail,
+    /// see MailApp.
     private func followMail() {
         let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
@@ -534,6 +540,19 @@ extension AppDelegate {
                 return .pasted
             }
             return await paste(text)
+        }
+    }
+
+    /// Where the cleanup model's download stands for the line under the Projects window's
+    /// list, from the state of its installer and the model's size: nothing while the model
+    /// is on this Mac or Orra looks at its files, the bytes of a download, the check of the
+    /// downloaded files, and missing while no download runs, also after one failed.
+    static func modelDownloadStatus(_ state: ModelInstaller.State, total: Int64) -> ProjectsRuntime.ModelDownloadStatus {
+        switch state {
+        case .installed, .checking: .none
+        case .downloading(let bytes, _): .downloading(bytes: bytes, total: total)
+        case .verifying: .verifying
+        case .missing, .failed: .missing
         }
     }
 
