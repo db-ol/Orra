@@ -220,8 +220,9 @@ INFO_PLIST = {
     "SUAllowsAutomaticUpdates": False,
     # The system audio recording prompt for meeting captions, approved on 2026-10-15.
     "NSAudioCaptureUsageDescription": "Orra listens to the sound your Mac plays, such as a call, to show live captions and translations. The audio stays on this Mac.",
-    # The Automation prompt for Mail, which Projects needs, approved on 2026-10-18.
-    "NSAppleEventsUsageDescription": "Orra reads mail in the Mail app only for Projects, and only from the mailboxes you choose. The mail it reads stays on this Mac.",
+    # The Automation prompt for Mail, which Projects needs, approved on 2026-10-18, and with
+    # the reply and the files the user ticks for it on 2026-10-26.
+    "NSAppleEventsUsageDescription": "Orra reads mail in the Mail app only for Projects, and only from the mailboxes you choose. It opens a reply, with the files you tick, only when you click. The mail it reads stays on this Mac.",
 }
 RESOLVED_FILE = "Orra.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
 DEPENDENCIES_DOC = "docs/dependencies.md"
