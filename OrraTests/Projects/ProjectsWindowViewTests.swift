@@ -1078,6 +1078,80 @@ struct ProjectsWindowViewTests {
         await fixture.stop()
     }
 
+    /// A file the user chose for the email shows in Project Files for This Explanation with
+    /// Attach to Reply, as every other row of the list does: one whose excerpt the explanation
+    /// holds, one the model got by its name only, and one that gave the model nothing. Each
+    /// ticks through the same check as any other file, which refuses the one that is gone.
+    @Test func everyRowOfTheProjectFilesTakesAttachToReplyAChosenFileToo() async throws {
+        let fixture = try await Fixture(files: [("lobby-elevation.dwg", Data("AC1032".utf8))])
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let store = try #require(runtime.running?.store)
+        let explained = try await Self.explainedEmail(in: runtime)
+        let harbor = try #require(explained.project)
+        let lobby = try #require(await runtime.folderRoots(of: harbor)?.folders.first)
+        let model = ProjectsWindowModel(runtime: runtime)
+        await model.show(explained.messageID)
+        let email = model.emailModel(for: explained.messageID)
+        await email.load()
+        email.showsProjectFiles = true
+        await email.loadFolderRoots(for: [harbor])
+        #expect(email.replyFiles.offersFiles)
+        let plain = try #require(email.explanation)
+        let rows = ProjectsEmailFiles.files(in: plain).count
+        #expect(rows == 2)
+        #expect(try await checkboxes(in: ProjectsEmailArea.FilesSection(model: model, emailModel: email, email: explained, explanation: plain)) == rows)
+
+        // The same explanation, made with three files the user chose.
+        let chosen = ExplainPrompt.FileOrigin(reason: .chosen, project: harbor)
+        let schedule = lobby.appending(path: "schedule.txt")
+        let elevation = lobby.appending(path: "lobby-elevation.dwg")
+        let gone = lobby.appending(path: "gone.md")
+        var explanation = plain
+        explanation.sources["F4"] = .file(TextChunker.Chunk(file: schedule, page: nil, modified: Self.today, heading: nil, text: "The lobby lamps arrive on 22 November."), origin: chosen)
+        explanation.sources["F5"] = .file(TextChunker.Chunk(file: elevation, page: nil, modified: Self.today, heading: nil, text: ""), origin: chosen)
+        explanation.chosenFiles = [
+            Explanation.ChosenFile(path: schedule.path, project: harbor, sources: ["F4"]),
+            Explanation.ChosenFile(path: elevation.path, project: harbor, sources: ["F5"]),
+            Explanation.ChosenFile(path: gone.path, project: harbor, sources: [], missing: .notInIndex),
+        ]
+        #expect(try await store.save(explanation, at: Self.today))
+        await email.load()
+        let saved = try #require(email.explanation)
+        let files = ProjectsEmailFiles.files(in: saved)
+        let missing = ProjectsEmailFiles.chosenWithoutExcerpts(in: saved)
+        #expect(files.filter { $0.reason == .chosen }.map(\.url) == [schedule, elevation])
+        #expect(missing.map(\.url) == [gone])
+        #expect(try await checkboxes(in: ProjectsEmailArea.FilesSection(model: model, emailModel: email, email: explained, explanation: saved)) == rows + 3)
+
+        await email.replyFiles.setTicked(schedule, true)
+        await email.replyFiles.setTicked(elevation, true)
+        await email.replyFiles.setTicked(gone, true)
+        #expect(email.replyFiles.ticked.map(\.url) == [schedule, elevation])
+        #expect(email.replyFiles.problem(at: gone) != nil)
+        #expect(!email.replyFiles.isTicked(gone))
+        await fixture.stop()
+    }
+
+    /// The checkboxes a view shows, laid out in a window that is never ordered front. SwiftUI
+    /// draws each with an AppKit button in a view of its own, whose type names it.
+    private func checkboxes(in view: some View, size: NSSize = NSSize(width: 480, height: 1_600)) async throws -> Int {
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height, alignment: .topLeading))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        let offscreen = NSWindow(contentRect: hosting.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        offscreen.isReleasedWhenClosed = false
+        offscreen.contentView = hosting
+        defer { offscreen.close() }
+        for _ in 0..<20 {
+            hosting.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        func count(_ view: NSView) -> Int {
+            view.subviews.reduce(String(describing: type(of: view)).contains("Checkbox") ? 1 : 0) { $0 + count($1) }
+        }
+        return count(hosting)
+    }
+
     // MARK: Render
 
     /// Renders the window's parts into PNG files, for reading the layout and the strings

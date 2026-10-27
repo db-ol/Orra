@@ -4203,6 +4203,11 @@ PY
   files are added, and the footer says that Mail may save the reply with them to the
   account's Drafts. Untick lighting-spec.pdf in Files This Email Asks For: it leaves the
   area.
+- [ ] Choose lighting-spec.pdf for the English request with Choose Files for This Email… and
+  click Explain Again. In Project Files for This Explanation, its row, Chosen by you, has
+  Attach to Reply. Tick it: it shows under Attachments for the Reply with the orange line,
+  and its box in Files This Email Asks For is ticked too. Untick it and return to automatic
+  selection.
 - [ ] With floor-plan-v3.pdf ticked alone, click Open Reply in Mail. Attaching files in Mail…
   shows, Mail opens the reply with the quote and your signature and the file at its end,
   and comes to the front. ⌘V pastes the draft at the top. The note says 1 file attached.
