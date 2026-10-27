@@ -26,6 +26,18 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
+    /// The line under the mail list while the cleanup model is not on this Mac: how far its
+    /// download is, with the words of Settings, that Orra checks its files, or that it is
+    /// missing. Nil once it is on this Mac.
+    static func modelLine(_ status: ProjectsRuntime.ModelDownloadStatus) -> String? {
+        switch status {
+        case .none: nil
+        case .downloading(let bytes, let total): CleanupLabels.progress(bytes: bytes, total: total)
+        case .verifying: String(localized: "Checking the downloaded files…")
+        case .missing: String(localized: "The cleanup model is not on this Mac yet. Download it in Projects Settings to explain mail.")
+        }
+    }
+
     /// What the scan does, or what ended its last pass.
     static func scan(_ state: ProjectsRuntime.ScanState) -> String {
         switch state {

@@ -545,8 +545,8 @@ extension ProjectsWindowView {
     }
 
     /// The lines under the list: the lines about mail coming in while the list shows mail,
-    /// Explain Message Selected in Mail at work, why the model work waits, and what the last
-    /// action found.
+    /// the line about the cleanup model while it is not on this Mac, Explain Message
+    /// Selected in Mail at work, why the model work waits, and what the last action found.
     struct StatusLines: View {
         let runtime: ProjectsRuntime
         let model: ProjectsWindowModel
@@ -558,7 +558,9 @@ extension ProjectsWindowView {
             // While the list shows no mail, the lines about mail show in its middle instead,
             // see EmptyList.
             let mailLines = model.rows.isEmpty && !model.listFailed ? [] : Self.mailLines(runtime: runtime)
-            if !lines.isEmpty || !mailLines.isEmpty || runtime.phase == .failed || model.isReadingSelection {
+            // Under the list also while it shows no mail, since the model is not about mail.
+            let modelLine = Self.modelLine(runtime: runtime)
+            if !lines.isEmpty || !mailLines.isEmpty || modelLine != nil || runtime.phase == .failed || model.isReadingSelection {
                 VStack(alignment: .leading, spacing: 6) {
                     Divider()
                     if runtime.phase == .failed {
@@ -571,6 +573,9 @@ extension ProjectsWindowView {
                     }
                     ForEach(mailLines, id: \.text) { line in
                         MailLineView(line: line, alignment: .leading, runtime: runtime, openSettings: openSettings, openMail: openMail)
+                    }
+                    if let modelLine {
+                        MailLineView(line: modelLine, alignment: .leading, runtime: runtime, openSettings: openSettings)
                     }
                     if model.isReadingSelection {
                         HStack(spacing: 8) {
@@ -619,6 +624,17 @@ extension ProjectsWindowView {
                 }
             }
             return lines
+        }
+
+        /// The line about the cleanup model while it is not on this Mac: its download or the
+        /// check of its files with a spinner, or Settings… while it is missing, where it
+        /// downloads. Today's line after an Explain without the model stays too.
+        static func modelLine(runtime: ProjectsRuntime) -> MailLine? {
+            guard runtime.phase == .on else { return nil }
+            let status = runtime.dependencies.modelDownloadStatus()
+            guard let text = ProjectsWindowText.modelLine(status) else { return nil }
+            let isMissing = status == .missing
+            return MailLine(text: text, isActivity: !isMissing, action: isMissing ? .settings : nil)
         }
 
         /// Whether the notice sends the user to Settings: Orra not allowed to control Mail,

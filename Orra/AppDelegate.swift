@@ -229,6 +229,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             modelIsInstalled: { [cleanup] in
                 if case .installed = cleanup.models.state { true } else { false }
             },
+            modelDownloadStatus: { [cleanup] in
+                switch cleanup.models.state {
+                case .installed, .checking: .none
+                case .downloading(let bytes, _): .downloading(bytes: bytes, total: cleanup.models.manifest.totalBytes)
+                case .verifying: .verifying
+                case .missing, .failed: .missing
+                }
+            },
             retryLoadingModel: { [cleanup] in await cleanup.retryLoading() },
             loadTokenCounter: { try await ProjectsTokenCounter.installed(in: folders)?.count },
             handoff: ReplyHandoff(

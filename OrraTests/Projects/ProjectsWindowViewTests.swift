@@ -333,26 +333,33 @@ struct ProjectsWindowViewTests {
             }
             return view.subviews.flatMap { columns(in: $0) }
         }
-        let cases: [(name: String, prepare: (ProjectsWindowModel) -> Void)] = [
-            ("nothing under the list", { _ in }),
-            ("a long notice", { $0.notice = .selection(.otherEmail) }),
-            ("the offer of a rule", { $0.ruleOffer = SortingService.RuleOffer(project: project.id, rule: .sender("mei@harbor.example")) }),
+        let cases: [(name: String, download: ProjectsRuntime.ModelDownloadStatus, prepare: (ProjectsWindowModel) -> Void)] = [
+            ("nothing under the list", .none, { _ in }),
+            ("a long notice", .none, { $0.notice = .selection(.otherEmail) }),
+            ("the offer of a rule", .none, { $0.ruleOffer = SortingService.RuleOffer(project: project.id, rule: .sender("mei@harbor.example")) }),
+            ("the cleanup model missing", .missing, { _ in }),
         ]
-        for (name, prepare) in cases {
+        for (name, download, prepare) in cases {
+            fixture.download.status = download
             let model = ProjectsWindowModel(runtime: fixture.runtime)
             prepare(model)
             let window = ProjectsWindow.window(hosting: ProjectsWindowView(runtime: fixture.runtime, model: model, openSettings: {}, openMail: {}))
-            try await layOut(window)
-            let content = try #require(window.contentView)
-            let found = columns(in: try #require(content.superview))
-            #expect(found.count == 3, "\(name)")
-            for column in found {
-                let frame = column.convert(column.bounds, to: nil)
-                #expect(content.bounds.contains(frame), "\(name): \(frame)")
+            // At the size the window opens at, then at its smallest.
+            for size in [ProjectsWindow.defaultSize, ProjectsWindow.minimumSize] {
+                window.setContentSize(size)
+                try await layOut(window)
+                let content = try #require(window.contentView)
+                let found = columns(in: try #require(content.superview))
+                #expect(found.count == 3, "\(name)")
+                for column in found {
+                    let frame = column.convert(column.bounds, to: nil)
+                    #expect(content.bounds.contains(frame), "\(name), \(size): \(frame)")
+                }
             }
             #expect(!window.isVisible)
             window.close()
         }
+        fixture.download.status = .none
         await fixture.stop()
     }
 
@@ -867,6 +874,17 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsWindowText.scan(.notAllowed) == ProjectsWindowText.selection(.notAllowed))
     }
 
+    /// The line under the mail list while the cleanup model is not on this Mac, for each
+    /// state of its download, with the words of Settings while it downloads.
+    @Test func everyStateOfTheModelHasWords() {
+        #expect(ProjectsWindowText.modelLine(.none) == nil)
+        let downloading = ProjectsWindowText.modelLine(.downloading(bytes: 1_525_000_000, total: 3_050_000_000))
+        #expect(downloading == CleanupLabels.progress(bytes: 1_525_000_000, total: 3_050_000_000))
+        #expect(downloading?.hasPrefix("Downloading the cleanup model: 50% of ") == true)
+        #expect(ProjectsWindowText.modelLine(.verifying) == "Checking the downloaded files…")
+        #expect(ProjectsWindowText.modelLine(.missing) == "The cleanup model is not on this Mac yet. Download it in Projects Settings to explain mail.")
+    }
+
     // MARK: Render
 
     /// Renders the window's parts into PNG files, for reading the layout and the strings
@@ -924,6 +942,18 @@ struct ProjectsWindowViewTests {
         }
         .padding(10)
         try await render(lines, size: NSSize(width: 340, height: 620), to: folder.appendingPathComponent("\(language)-projects-mail-lines.png"))
+
+        // The line about the cleanup model under the list, while it downloads and once the
+        // download stopped.
+        for (status, name) in [(ProjectsRuntime.ModelDownloadStatus.downloading(bytes: 1_281_000_000, total: 3_050_000_000), "downloading"), (.missing, "missing")] {
+            fixture.download.status = status
+            let modelLine = VStack(spacing: 0) {
+                Spacer()
+                ProjectsWindowView.StatusLines(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}, openMail: {})
+            }
+            try await render(modelLine, size: NSSize(width: 340, height: 240), to: folder.appendingPathComponent("\(language)-projects-model-line-\(name).png"))
+        }
+        fixture.download.status = .none
 
         let project = try #require(runtime.projectList.first)
         try await render(ProjectsProjectPage(runtime: runtime, project: project, edit: {}, forget: {}, removeRule: { _ in }), size: NSSize(width: 520, height: 900), to: folder.appendingPathComponent("\(language)-projects-page.png"))
@@ -990,6 +1020,10 @@ struct ProjectsWindowViewTests {
         // since the fixture confirmed its mailboxes. Then with that step.
         let window = ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}, openMail: {})
         try await render(window, size: ProjectsWindow.defaultSize, to: folder.appendingPathComponent("\(language)-projects-window.png"))
+        // The same while the cleanup model is not on this Mac, with its line under the list.
+        fixture.download.status = .missing
+        try await render(ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}, openMail: {}), size: ProjectsWindow.defaultSize, to: folder.appendingPathComponent("\(language)-projects-window-model-missing.png"))
+        fixture.download.status = .none
         try await render(ProjectsHowTo(showsSetup: true, canCreate: true, openSettings: {}, newProject: {}), size: NSSize(width: 480, height: 700), to: folder.appendingPathComponent("\(language)-projects-how-to.png"))
         // As wide as the third column of the window at its smallest size.
         try await render(ProjectsHowTo(showsSetup: true, canCreate: true, openSettings: {}, newProject: {}), size: NSSize(width: 200, height: 1_000), to: folder.appendingPathComponent("\(language)-projects-how-to-narrow.png"))
@@ -1151,11 +1185,17 @@ struct ProjectsWindowViewTests {
             }
         }
 
+        /// Where the cleanup model's download stands, which a test changes.
+        @Observable final class Download {
+            var status = ProjectsRuntime.ModelDownloadStatus.none
+        }
+
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ProjectsWindowViewTests-\(UUID().uuidString)", isDirectory: true)
         let suite = "io.github.db-ol.OrraTests.projects-window-\(UUID().uuidString)"
         let defaults: UserDefaults
         let projects: ProjectsSwitch
         let dictation: Dictation
+        let download: Download
         let runtime: ProjectsRuntime
 
         init() async throws {
@@ -1183,6 +1223,8 @@ struct ProjectsWindowViewTests {
             let choice = MailChoice(defaults: defaults, suggestsInboxAndSent: false)
             choice.choose([.inbox])
             choice.confirm()
+            let download = Download()
+            self.download = download
             runtime = ProjectsRuntime(projects: projects, dependencies: ProjectsRuntime.Dependencies(
                 storage: storage,
                 bridge: mail,
@@ -1208,6 +1250,7 @@ struct ProjectsWindowViewTests {
                     )
                 },
                 modelIsInstalled: { false },
+                modelDownloadStatus: { download.status },
                 loadTokenCounter: { nil },
                 handoff: ReplyHandoff(copy: { _ in true }, mail: mail, isOrraActive: { true }, bringMailToFront: {}),
                 watchesMemoryPressure: false,

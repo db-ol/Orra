@@ -15233,6 +15233,28 @@
         }
       }
     },
+    "The cleanup model is not on this Mac yet. Download it in Projects Settings to explain mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El modelo de limpieza todavía no está en esta Mac. Descárgalo en la configuración de Proyectos para explicar el correo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacにはまだ整文モデルがありません。メールを説明するには、“プロジェクト”設定でダウンロードしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上还没有整理模型。请在“项目”设置中下载，才能解释邮件。"
+          }
+        }
+      }
+    },
     "The cleanup model is not on this Mac yet. Until it is, Orra pastes the text without cleanup." : {
       "localizations" : {
         "es-419" : {
