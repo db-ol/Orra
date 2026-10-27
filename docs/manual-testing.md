@@ -113,19 +113,29 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     window, which another email of the list keeps and another list, no email shown and the
     window letting go of its email views end, that the window asks its split view for the
     list and the email view, never for the detail column alone, and for the columns from
-    before at the end, that the two panes stand side by side from 681 points and one above
-    the other in a narrower email view, that the draft keeps its editor with its text,
-    selection, focus, marked text and undo through every switch, which press moves the
-    focus, and that the This email chip shows the whole email. It renders the email view
-    while comparing at the sizes the shown window measured (projects-compare,
-    projects-compare-760, projects-compare-1440 and projects-compare-narrowest), the
-    popover (projects-this-email) and the email with the sender's words first
-    (projects-email-original-words-first). Its opt in compareWithOriginalInAShownWindow,
-    with TEST_RUNNER_ORRA_PROJECTS_WINDOW_LIVE=1, which CI never sets, shows the window
-    with made up mail through orderFrontRegardless, never activating the app, compares and
-    exits at 1,040 by 640, 760 by 420 and 1,440 by 900, checks that the sidebar hides, the
-    list keeps its width and the email view gets the room, and that the sidebar shown again
-    ends the comparison, prints the widths and closes the window.
+    before at the end, so a sidebar hidden before stays hidden, that the two panes stand
+    side by side from 681 points and one above the other in a narrower email view, with
+    Explanation and Draft given the room of a scroll bar that always shows first, so it
+    keeps 300 points of content at the window's first size, that the draft keeps its
+    editor with its text, selection, focus, marked text and undo through every switch,
+    which press moves the focus, also to Explain after Exit Comparison for an email without
+    an explanation, and that the This email chip gets and shows the whole email. It renders
+    the email view while comparing at the sizes the shown window measured
+    (projects-compare, projects-compare-760, projects-compare-1440 and
+    projects-compare-narrowest), the same with the back button of Back to Previous Email in
+    the bar (projects-compare-760-back and projects-compare-narrowest-back), the email
+    column of the smallest window less a scroll bar that always shows
+    (projects-email-200-scroll-bar), the popover (projects-this-email) and the email with
+    the sender's words first (projects-email-original-words-first). Its opt in
+    compareWithOriginalInAShownWindow, with TEST_RUNNER_ORRA_PROJECTS_WINDOW_LIVE=1, which
+    CI never sets, shows the window with made up mail through orderFrontRegardless, never
+    activating the app, compares and exits at 1,040 by 640, 760 by 420 and 1,440 by 900,
+    checks that the sidebar hides, the list keeps its width and the email view gets the
+    room, that the sidebar shown again ends the comparison, that a sidebar hidden before
+    stays hidden after it, and that the window closed while comparing keeps its size,
+    prints the widths, saves an image of the window while comparing with
+    TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS (projects-window-shown-1040-compare and the
+    other sizes, without the list's rows, which do not draw there) and closes the window.
   - ProjectsEmailFilesTests, added on 2026-10-26, checks Project Files for This Explanation
     with made up files: why each file excerpt was in the prompt, as the explanation saves
     it and Orra 0.6.0 reads it, also with a reason a later Orra adds, each file once in the
@@ -4141,11 +4151,14 @@ draft's editor through every switch, the focus after a press and the This email 
 its opt in compareWithOriginalInAShownWindow measured a shown window on macOS 26.6.2: with
 the sidebar hidden, the list keeps its 340 points and the email view grows from 481 to 699
 points at 1,040 by 640, where the panes stand side by side, and from 201 to 419 at 760 by
-420, where they stand one above the other. Exit Comparison shows the columns as before, and
-the window keeps its size. The window's toolbar holds Explain Message Selected in Mail and no
-sidebar button. Check in a Debug build with the synthetic mail imported, as in the test
-guide, in English and 简体中文 at the default size and at the smallest, 760 by 420, and the
-buttons in 日本語 and Español too.
+420, where they stand one above the other. Exit Comparison shows the columns as before, a
+sidebar hidden before stays hidden, and the window keeps its size, also when it closes
+while comparing. The window's toolbar holds Explain Message Selected in Mail and no sidebar
+button. That Mac showed scroll bars only while scrolling, and macOS 15.6 was not measured.
+Check in a Debug build with the synthetic mail imported, as in the test guide, in English
+and 简体中文 at the default size and at the smallest, 760 by 420, and the buttons in 日本語
+and Español too, once with Show scroll bars set to Always in System Settings > Appearance,
+as with a mouse, and once as it was.
 
 - [ ] Scroll a long list and select an explained email in its middle. Compare with Original,
   beside Hide Explanation, hides the sidebar, the list stays where it was, and the window
@@ -4182,23 +4195,29 @@ buttons in 日本語 and Español too.
   in Mail with a message in another list, Edit Project… beside a linked mailbox in
   Settings for a project the window does not show, and assigning the only email of the
   list to another project each end the comparison and show the sidebar as it was. The chip
-  of an earlier email in the same list keeps it, with Back to Previous Email above the bar.
-- [ ] Close the window while comparing and open it again: it shows its sidebar.
+  of an earlier email in the same list keeps it, with the back button of Back to Previous
+  Email first in the bar, which shows the email before.
+- [ ] Close the window while comparing and open it again: it shows its sidebar, at the size it
+  had, also at 760 by 420.
 - [ ] The This email chip shows the whole email: the words, the forwarded messages, Quoted
   Text folded, then Recipients and Attachments folded. A click outside closes it. Text can
   be selected, and nothing opens.
 - [ ] VoiceOver reads Compare with Original and Exit Comparison as buttons. Pressing Compare
   with Original with VoiceOver puts the cursor on Exit Comparison, and pressing that puts
   it back on Compare with Original. The two parts read as Original Email and Explanation
-  and Draft, and both are in the headings rotor. Recipients and Attachments read as buttons
-  with Collapsed or Expanded. A click on either button with the mouse while typing in the
-  draft leaves the cursor in the draft.
+  and Draft, and both are in the headings rotor. The text and the buttons inside each part
+  read their own words, not the part's name. The back button reads as Back to Previous
+  Email. Recipients and Attachments read as buttons with Collapsed or Expanded. A click on
+  either button with the mouse while typing in the draft leaves the cursor in the draft.
 - [ ] With keyboard navigation on, Tab reaches Compare with Original, Space switches with the
   focus on Exit Comparison, and Space there switches back with the focus on Compare with
-  Original.
+  Original. Choose an email without an explanation while comparing: Space on Exit
+  Comparison puts the focus on Explain.
 - [ ] At 760 by 420, with the list dragged to its widest, the bar shows Exit Comparison whole,
   and every button shows its whole name in all four languages, with nothing cut at the
-  right edge.
+  right edge. With scroll bars always shown, Compare with Original keeps its whole name in
+  the email view at 760 by 420, and at the default size Change Draft stays beside its field
+  while comparing.
 
 ## Not implemented
 
