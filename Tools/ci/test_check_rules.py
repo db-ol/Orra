@@ -234,10 +234,40 @@ class ProjectsCodeTests(SourceCheckTestCase):
             "renameat(a, old, b, new)": "renameat",
             "renamex_np(old, new, 0)": "renamex_np",
             "removefile(path, nil, 0)": "removefile",
+            "let document = PDFDocument(url: file)": "PDFDocument(url",
+            "let document = CGPDFDocumentCreateWithURL(file as CFURL)": "CGPDFDocumentCreateWithURL",
+            "let source = CGImageSourceCreateWithURL(file as CFURL, nil)": "CGImageSourceCreateWithURL",
+            "let provider = CGDataProviderCreateWithURL(file as CFURL)": "CGDataProviderCreateWithURL",
+            "let handler = VNImageRequestHandler(url: file, options: [:])": "VNImageRequestHandler(url",
+            "let parser = XMLParser(contentsOf: file)": "XMLParser(contentsOf",
+            "let document = try XMLDocument(contentsOf: file)": "XMLDocument(contentsOf",
+            "let image = NSImage(contentsOf: file)": "NSImage(contentsOf",
+            "let image = NSImage(byReferencing: file)": "NSImage(byReferencing",
+            "parser.externalEntityResolvingPolicy = .always": "externalEntityResolvingPolicy",
+            "parser.shouldResolveExternalEntities = true": "shouldResolveExternalEntities",
+            "parser.allowedExternalEntityURLs = [file]": "allowedExternalEntityURLs",
         }
         for code, name in cases.items():
             with self.subTest(code=code):
                 self.assert_fails(self.PATH, code + "\n", 1, name)
+
+    def test_readers_of_bytes_pass(self):
+        # The readers of bytes, and Vision's handler, which takes an array of requests.
+        self.assert_passes("Orra/Projects/Index/Example.swift", """\
+            let document = PDFDocument(data: data)
+            let source = CGImageSourceCreateWithData(data as CFData, nil)
+            let parser = XMLParser(data: data)
+            let handler = VNImageRequestHandler(cgImage: image, options: [:])
+            try handler.perform([request])
+            try handler.perform( [request, other])
+            """)
+        self.assert_fails("Orra/Projects/Index/Example.swift", "object.perform(action)\n", 1, ".perform(")
+
+    def test_readers_by_url_pass_outside_the_projects_folder(self):
+        self.assert_passes(
+            "OrraTests/Projects/ExampleTests.swift",
+            "let document = PDFDocument(url: file)\nlet parser = XMLParser(contentsOf: file)\nparser.shouldResolveExternalEntities = false\n",
+        )
 
     def test_a_member_named_html_fails(self):
         # Only a name can tell the HTML document type, so no member in Orra/Projects is

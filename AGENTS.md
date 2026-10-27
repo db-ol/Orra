@@ -3,7 +3,7 @@
 Orra is an open source voice input app for macOS. Transcription runs on the user's Mac.
 Projects, an optional module for mail and project folders, ships as a preview.
 Projects code must keep it off by default, read mail only through the Mail app and files
-only in the folders the user adds, and work on them only with the local cleanup model.
+only in the folders the user adds, and use no language model on them but the local cleanup model.
 This file is the guide for anyone, human or agent, who changes this repository.
 
 ## Platform
@@ -103,6 +103,11 @@ trusted once in Xcode. docs/dependencies.md has the details.
   added to a project, and nothing at all while Projects is off. It must never launch Mail,
   read ~/Library/Mail or ask for Full Disk Access. It must never log mail or file text,
   subjects, addresses, names or file names, only counts, timings and error codes.
+- Projects code recognizes text in images and scanned pages only with Vision on this Mac,
+  which is no language model, sends nothing, downloads nothing and runs only between
+  dictations. It reads the bytes of a file in a project folder only through the checked read
+  of Index/FileText.swift, never by a URL or a path, so no link is followed and no file that
+  is not on this Mac is downloaded, and it never resolves an XML entity.
 - The Projects model must have no tools. Projects code must treat the model's output as data
   and show it in the Projects window as plain text only. Code in Orra/Projects must never call
   TextInserter, post keyboard events, perform Accessibility actions, open URLs or run
@@ -111,11 +116,12 @@ trusted once in Xcode. docs/dependencies.md has the details.
   text. Tools/ci/check_rules.py checks these rules.
 - Dictation goes first. Projects code must have the model read a long prompt in slices, and
   must start no model call from the press of the talk key or the translation key until the
-  dictation is pasted or cancelled, as captions do, see EngineTurns. Every Projects model call
-  must go through ModelGate. No model whose trace calls another compiled function, such as a
-  mixture of experts model, may join the shared group of ModelGate, see docs/dependencies.md.
-  Projects code must load the cleanup model only while the Projects window is open or a
-  Projects request runs.
+  dictation is pasted or cancelled, as captions do, see EngineTurns. Every call of a language
+  model in Projects must go through ModelGate. Text recognition is no language model and keeps
+  out of dictation's way by its own pauses. No model whose trace calls another compiled
+  function, such as a mixture of experts model, may join the shared group of ModelGate, see
+  docs/dependencies.md. Projects code must load the cleanup model only while the Projects
+  window is open or a Projects request runs.
 - Orra never writes audio to disk or to the log. The one exception, approved by the maintainer
   on 2026-10-15, is Remember my voice in Settings, off until the user turns it on. It keeps
   the voice sample's audio, never what is said in it, in
@@ -153,7 +159,8 @@ docs/privacy.md, as docs/website.md describes.
   .xcconfig file and when docs/dependencies.md does not name a pinned package. It covers the
   settings it lists, not every way to change signing, so review signing changes by hand too.
   It also checks the Projects source rules of Runtime rules: the names code in Orra/Projects
-  must not use, where NSAttributedString may appear, that Orra/Projects holds Swift files
+  must not use, readers there that open a file by a URL or a path or resolve XML entities
+  among them, where NSAttributedString may appear, that Orra/Projects holds Swift files
   only, Apple Events built or sent in Orra outside the files it allows or sent from tests,
   the three events the Mail bridge may build and the window each reply opens,
   script text in any file under Orra, OrraTests or Tools, and where SQLite, removing files

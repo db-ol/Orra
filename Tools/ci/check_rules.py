@@ -514,8 +514,9 @@ SKIPPED_FILES = frozenset({".DS_Store"})
 SOURCE_RULES = {
     1: "Code in Orra/Projects never types, uses Accessibility or the pasteboard, runs a process, "
        "loads code by name, shows web content, Markdown or remote images, opens a URL, connects "
-       "to the network, quits an app or removes a file with a C call. No member there may be "
-       "named html or webArchive, the document types that read through WebKit.",
+       "to the network, quits an app or removes a file with a C call, or reads a file by a URL "
+       "or a path, or resolves XML entities. No member there may be named html or webArchive, "
+       "the document types that read through WebKit.",
     2: "In Orra/Projects only Index/FileText.swift makes an NSAttributedString, from data with the "
        "documentType named in the same call, never from a URL, a path or HTML.",
     3: "In Orra only the files in APPLE_EVENT_FILES build or send an Apple Event. Reading the launch event is fine.",
@@ -639,8 +640,10 @@ PROJECTS_BANNED = _rule(
     r"\bNSClassFromString\b",
     r"\bNSSelectorFromString\b",
     # Every Selector initializer takes a string. #selector( is checked by the compiler.
+    # NSObject's perform(_:) takes a selector, never an array, and Vision's request handler
+    # takes an array of requests.
     r"\bSelector\s*\(",
-    r"\.\s*perform\s*\(",
+    r"\.\s*perform\s*\((?!\s*\[)",
     r"\bperformSelector\w*",
     # The Objective-C runtime and Bundle find a class by its name, and these attributes bind
     # a C function by its name.
@@ -673,6 +676,21 @@ PROJECTS_BANNED = _rule(
     (r"\b(?:remove|rename)\s*\(", _c_call),
     r"\brename(?:at|x_np|atx_np)\b",
     r"\bremovefile\b",
+    # Readers that open a file by a URL or a path follow links and download a file that is
+    # not on this Mac. A file in a project folder is read only through the checked read of
+    # Index/FileText.swift, and its bytes are handed to the reader.
+    r"\bPDFDocument\s*\(\s*url",
+    r"\bCGPDFDocumentCreateWithURL\b",
+    r"\bCGImageSourceCreateWithURL\b",
+    r"\bCGDataProviderCreateWithURL\b",
+    r"\bVNImageRequestHandler\s*\(\s*url",
+    r"\bXMLParser\s*\(\s*contentsOf",
+    r"\bXMLDocument\s*\(\s*contentsOf",
+    r"\bNSImage\s*\(\s*(?:contentsOf|byReferencing)",
+    # XMLParser resolves no external entity unless told to.
+    r"\bexternalEntityResolvingPolicy\b",
+    r"\bshouldResolveExternalEntities\b",
+    r"\ballowedExternalEntityURLs\b",
 )
 
 # Rule 2, in the code of Orra/Projects.
