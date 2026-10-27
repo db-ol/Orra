@@ -423,7 +423,7 @@ struct ProjectsEmailArea: View {
                 model.compare(email.messageID)
                 focusAfterSwitch = model.isComparing ? move : nil
             }
-            .help("Shows the email itself next to its explanation and draft, each scrolling on its own, and hides the sidebar until you click Exit Comparison.")
+            .help("Shows the email itself with its explanation and draft, each scrolling on its own, and hides the sidebar until you click Exit Comparison.")
             .accessibilityFocused($voiceOverFocus, equals: .compare)
             .focused($keyboardFocus, equals: .compare)
         }

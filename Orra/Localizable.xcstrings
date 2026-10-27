@@ -15924,24 +15924,24 @@
         }
       }
     },
-    "Shows the email itself next to its explanation and draft, each scrolling on its own, and hides the sidebar until you click Exit Comparison." : {
+    "Shows the email itself with its explanation and draft, each scrolling on its own, and hides the sidebar until you click Exit Comparison." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Muestra el correo original junto a su explicación y su borrador, cada uno con su propio desplazamiento, y oculta la barra lateral hasta que hagas clic en Salir de la comparación."
+            "value" : "Muestra el correo original con su explicación y su borrador, cada uno con su propio desplazamiento, y oculta la barra lateral hasta que hagas clic en Salir de la comparación."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "メールそのものを説明と下書きの横に表示し、それぞれ別々にスクロールできるようにします。“比較を終了”をクリックするまで、サイドバーは隠れます。"
+            "value" : "メールそのものを説明と下書きと並べて表示し、それぞれ別々にスクロールできるようにします。“比較を終了”をクリックするまで、サイドバーは隠れます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将邮件本身与它的解释和草稿对照显示，两边各自滚动，并隐藏边栏，直到你点按“退出对照”。"
+            "value" : "将邮件本身与它的解释和草稿对照显示，各自滚动，并隐藏边栏，直到你点按“退出对照”。"
           }
         }
       }
