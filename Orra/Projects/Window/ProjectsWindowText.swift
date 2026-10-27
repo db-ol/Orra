@@ -130,6 +130,17 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
+    /// Why text recognition waits, for the project page, nil for the pauses that pass soon,
+    /// a dictation, Live Captions and a request of the user, which the page does not show.
+    static func recognitionPause(_ pause: FolderIndex.RecognitionPause) -> String? {
+        switch pause {
+        case .dictation, .captions, .request: nil
+        case .memory: String(localized: "Text recognition waits while this Mac is low on memory.")
+        case .lowPower: String(localized: "Text recognition waits while Low Power Mode is on.")
+        case .heat: String(localized: "Text recognition waits until this Mac cools down.")
+        }
+    }
+
     /// A linked mailbox's name: the account's name and the mailbox's path, or On My Mac and
     /// the path, see ProjectsRuntime.mailboxName(_:).
     static func mailbox(_ name: String) -> String {

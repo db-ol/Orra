@@ -151,9 +151,10 @@ struct ProjectsProjectPage: View {
         }
     }
 
-    /// The rows of the Index section: whether the index works, its counts, the limits it
-    /// reached, and the files skipped with why. Each line wraps rather than being cut, also
-    /// in the narrow column of the smallest window.
+    /// The rows of the Index section: whether the index works, how many files wait for text
+    /// recognition or why it waits, its counts, the limits it reached, and the files skipped
+    /// with why. Each line wraps rather than being cut, also in the narrow column of the
+    /// smallest window.
     struct IndexState: View {
         let report: FolderIndex.Report?
         let skipped: [FolderIndex.SkippedFile]
@@ -172,6 +173,22 @@ struct ProjectsProjectPage: View {
                         ProgressView()
                             .controlSize(.small)
                         Text("Indexing…")
+                    }
+                }
+                if report.recognitionLeft > 0 {
+                    if let pause = report.recognitionPause.flatMap(ProjectsWindowText.recognitionPause) {
+                        Text(verbatim: pause)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        // One element for VoiceOver, which reads the line once.
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Recognizing text in images and scans… \(report.recognitionLeft) left")
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .accessibilityElement(children: .combine)
                     }
                 }
                 LabeledContent("Files with text") {
@@ -230,6 +247,8 @@ struct ProjectsProjectPage: View {
         hasher.combine(report.hiddenText)
         hasher.combine(report.isIndexing)
         hasher.combine(report.skipped.values.reduce(0, +))
+        hasher.combine(report.recognitionLeft)
+        hasher.combine(report.recognitionPause)
         return hasher.finalize()
     }
 }

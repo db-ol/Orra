@@ -838,6 +838,17 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsWindowText.recognized(chunk("schedule.pdf", page: 2)) == nil)
     }
 
+    /// The project page says why text recognition waits only for the pauses that may last.
+    /// A dictation, Live Captions and a request of the user pass soon and have no line.
+    @Test func theLastingPausesOfRecognitionHaveWords() {
+        #expect(ProjectsWindowText.recognitionPause(.lowPower) == "Text recognition waits while Low Power Mode is on.")
+        #expect(ProjectsWindowText.recognitionPause(.heat) == "Text recognition waits until this Mac cools down.")
+        #expect(ProjectsWindowText.recognitionPause(.memory) == "Text recognition waits while this Mac is low on memory.")
+        for pause in FolderIndex.RecognitionPause.allCases where !pause.isLasting {
+            #expect(ProjectsWindowText.recognitionPause(pause) == nil)
+        }
+    }
+
     /// The lines about mail: a pass that reads, with what it saved so far, and what stopped
     /// the last one, each in its own words.
     @Test func everyStateOfTheScanHasWords() {
@@ -860,12 +871,13 @@ struct ProjectsWindowViewTests {
         let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["ORRA_PROJECTS_WINDOW_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let language = Bundle.main.preferredLocalizations.first ?? "en"
-        // A workbook with text, a drawing and an image known by name, and an old Word file
-        // that cannot be read, for the project page.
+        // A workbook with text, a drawing known by name, an image whose text the stand in
+        // for recognition reads, and an old Word file that cannot be read, for the project
+        // page.
         let fixture = try await Fixture(files: [
             ("budget.xlsx", try OfficeTestFiles.xlsx(lines: ["Lobby lamps", "12"])), ("plan.dwg", Data("drawing".utf8)),
             ("lobby.jpg", Data("photo".utf8)), ("old.doc", Data("x".utf8)),
-        ], indexed: 2)
+        ], indexed: 3)
         defer { fixture.cleanUp() }
         let runtime = fixture.runtime
         let listModel = ProjectsWindowModel(runtime: runtime)
@@ -939,6 +951,22 @@ struct ProjectsWindowViewTests {
         .formStyle(.grouped)
         try await render(index, size: NSSize(width: 520, height: 520), to: folder.appendingPathComponent("\(language)-projects-index-limits.png"))
         try await render(index, size: NSSize(width: 200, height: 1_100), to: folder.appendingPathComponent("\(language)-projects-index-limits-200.png"))
+        // The Index section while text recognition runs, and while it waits for Low Power
+        // Mode, at both widths.
+        var recognizing = FolderIndex.Report(indexed: 312, chunks: 4_000, textBytes: 9_000_000, skipped: [.hidden: 4], nameOnly: 57)
+        recognizing.recognitionLeft = 340
+        var waiting = recognizing
+        waiting.recognitionPause = .lowPower
+        for (name, report) in [("recognizing", recognizing), ("low-power", waiting)] {
+            let section = Form {
+                Section("Index") {
+                    ProjectsProjectPage.IndexState(report: report, skipped: [])
+                }
+            }
+            .formStyle(.grouped)
+            try await render(section, size: NSSize(width: 520, height: 300), to: folder.appendingPathComponent("\(language)-projects-index-\(name).png"))
+            try await render(section, size: NSSize(width: 200, height: 520), to: folder.appendingPathComponent("\(language)-projects-index-\(name)-200.png"))
+        }
         // The excerpts of a slide with recognized text and of a sheet, as their chips show them.
         let excerpts = VStack(alignment: .leading, spacing: 0) {
             ProjectsEmailArea.Excerpt(source: .file(TextChunker.Chunk(
@@ -1232,6 +1260,14 @@ struct ProjectsWindowViewTests {
                 handoff: ReplyHandoff(copy: { _ in true }, mail: mail, isOrraActive: { true }, bringMailToFront: {}),
                 watchesMemoryPressure: false,
                 watchFolders: { _, _, _ in {} },
+                // A stand in that reads the text of an image, so no test here runs Vision.
+                recognizeText: { job, _ in
+                    guard job.kind == .image else { return .success(RecognitionResult(isDone: true)) }
+                    var result = RecognitionResult(isDone: true)
+                    result.tried = [0: .text]
+                    result.pages = [FileTextResult.Page(number: nil, text: "Twelve brass lamps for the lobby.", isRecognized: true)]
+                    return .success(result)
+                },
                 sleep: { _ in try await Task.sleep(for: .seconds(3_600)) }
             ))
             runtime.follow()
@@ -1252,7 +1288,7 @@ struct ProjectsWindowViewTests {
                 domains: ["harbor.example"],
                 rules: [Project.Rule(kind: .sender, value: "lu@kiln.example")],
                 mailboxes: ["Work/Clients/Harbor"]))
-            for _ in 0..<2_000 where runtime.indexReport(runtime.projectList[0].id).map({ $0.indexed != indexed || $0.isIndexing }) ?? true {
+            for _ in 0..<2_000 where runtime.indexReport(runtime.projectList[0].id).map({ $0.indexed != indexed || $0.isIndexing || $0.recognitionLeft > 0 }) ?? true {
                 try await Task.sleep(for: .milliseconds(5))
             }
         }
