@@ -762,15 +762,23 @@ extension ProjectsEmailArea {
 
         private var chips: some View {
             ForEach(ids, id: \.self) { id in
-                if let source = emailModel.sources[id] {
-                    SourceChip(
-                        source: source, emailText: emailModel.emailText, original: emailModel.original,
-                        attachments: model.listed(emailModel.messageID)?.attachments ?? [],
-                        takenOut: emailModel.explanation?.removed[.file(id)] != nil
-                    ) { messageID in
-                        Task { await model.show(messageID) }
-                    }
+                if let chip = Self.chip(id, model: model, emailModel: emailModel) {
+                    chip
                 }
+            }
+        }
+
+        /// The chip of a source id, nil when the explanation does not hold it. This email's
+        /// chip gets the whole email as Original Email shows it, with the attachments as the
+        /// list has them, for its popover, see Excerpt.
+        static func chip(_ id: String, model: ProjectsWindowModel, emailModel: ProjectsEmailModel) -> SourceChip? {
+            guard let source = emailModel.sources[id] else { return nil }
+            return SourceChip(
+                source: source, emailText: emailModel.emailText, original: emailModel.original,
+                attachments: model.listed(emailModel.messageID)?.attachments ?? [],
+                takenOut: emailModel.explanation?.removed[.file(id)] != nil
+            ) { messageID in
+                Task { await model.show(messageID) }
             }
         }
     }
@@ -821,8 +829,13 @@ extension ProjectsEmailArea {
             .accessibilityLabel(Text(verbatim: ProjectsWindowText.sourceLabel(source)))
             .disabled(Self.isGone(source))
             .popover(isPresented: $showsExcerpt, arrowEdge: .bottom) {
-                Excerpt(source: source, emailText: emailText, original: original, attachments: attachments, takenOut: takenOut)
+                excerpt
             }
+        }
+
+        /// What the popover shows.
+        var excerpt: Excerpt {
+            Excerpt(source: source, emailText: emailText, original: original, attachments: attachments, takenOut: takenOut)
         }
 
         private var icon: String {
@@ -843,10 +856,11 @@ extension ProjectsEmailArea {
 
     /// The text behind a chip: a file's excerpt as the explanation saved it, with its page,
     /// slide or sheet and heading, whether its text was recognized, and the project of
-    /// another project's file, the excerpt of an attachment the model read, or the whole
-    /// email in the order of Original Email while comparing, its own text when the store
-    /// keeps none of it. A file's saved excerpt keeps the lines the hygiene took out before
-    /// the model read it, so it says so when it holds any.
+    /// another project's file, the excerpt of an attachment the model read, or for this
+    /// email the whole email, with the sender's words first and its recipients and
+    /// attachments folded after them, in every layout, or its own text when the store keeps
+    /// none of it. A file's saved excerpt keeps the lines the hygiene took out before the
+    /// model read it, so it says so when it holds any.
     struct Excerpt: View {
         let source: ProjectsEmailModel.Source
         let emailText: String

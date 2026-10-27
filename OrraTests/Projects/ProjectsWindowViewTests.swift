@@ -1043,15 +1043,16 @@ struct ProjectsWindowViewTests {
         await fixture.stop()
     }
 
-    /// The This email chip shows the whole email in the order of Original Email while
-    /// comparing: the sender's words, then the forwarded message, with To and Cc and the
-    /// attachments folded under them, so their rows hold nothing to read until opened.
-    /// Without the email's text in the store, it shows the email's own text, as before. The
-    /// email view in its usual order keeps To and Cc, then the attachments, above the words.
-    /// The folded rows' names, Recipients and Attachments with their counts, are drawn
-    /// rather than held in a view, so the renders show them. A macOS that draws selectable
-    /// text without a view of its own, as macOS 27 on CI does, cannot be read this way, and
-    /// the test records that as a known issue there.
+    /// The This email chip shows the whole email with the sender's words first, as Original
+    /// Email shows it while comparing, in every layout: the sender's words, then the
+    /// forwarded message, with To and Cc and the attachments folded under them, so their rows
+    /// hold nothing to read until opened. Without the email's text in the store, it shows the
+    /// email's own text, as before. The email view in its usual order keeps To and Cc, then
+    /// the attachments, above the words. The folded rows' names, Recipients and Attachments
+    /// with their counts, are drawn rather than held in a view, so the renders show them. A
+    /// macOS that draws selectable text without a view of its own, as macOS 27 on CI does,
+    /// cannot be read this way, and the test records that as a known issue there.
+    /// `theThisEmailChipGetsTheWholeEmail()` checks what the email view gives the chip.
     @Test func theThisEmailChipShowsTheWholeEmail() async throws {
         func top(_ part: String, in texts: [(text: String, top: CGFloat)]) -> CGFloat? {
             texts.first { $0.text.contains(part) }?.top
@@ -1092,6 +1093,41 @@ struct ProjectsWindowViewTests {
         let pdf = try #require(top("lamps.pdf", in: usualTexts))
         let usualNote = try #require(top("see the note from the lamp maker", in: usualTexts))
         #expect(to > pdf && pdf > usualNote)
+    }
+
+    /// The email view gives the This email chip the whole email as Original Email shows it,
+    /// with the email's attachments as the list has them, and the chip gives its popover
+    /// both, in the normal view and while comparing. It reads no drawn text, so it runs on
+    /// every macOS, also where `theThisEmailChipShowsTheWholeEmail()` cannot read the
+    /// popover.
+    @Test func theThisEmailChipGetsTheWholeEmail() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let id = explained.messageID
+        let model = ProjectsWindowModel(runtime: runtime)
+        await model.show(id)
+        let emailModel = model.emailModel(for: id)
+        await emailModel.load()
+        let original = try #require(emailModel.original)
+        #expect(original.note.contains("Could you confirm the lamp order"))
+        for comparing in [false, true] {
+            if comparing {
+                model.compare(id)
+                #expect(model.isComparing)
+            }
+            let chip = try #require(ProjectsEmailArea.SourceChips.chip("this email", model: model, emailModel: emailModel))
+            let excerpt = chip.excerpt
+            #expect(excerpt.source == .thisEmail)
+            #expect(excerpt.original == original)
+            #expect(excerpt.attachments == explained.attachments)
+            #expect(excerpt.attachments.map(\.name) == ["lamps.pdf", "logo.png", "plan.docx"])
+            #expect(excerpt.emailText == emailModel.emailText)
+        }
+        // A source the explanation does not hold has no chip.
+        #expect(ProjectsEmailArea.SourceChips.chip("F9", model: model, emailModel: emailModel) == nil)
+        await fixture.stop()
     }
 
     /// Opt in, with TEST_RUNNER_ORRA_PROJECTS_WINDOW_LIVE=1, which CI never sets. Shows the
