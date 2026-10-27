@@ -3905,6 +3905,8 @@ this Mac, until you use Delete All Projects Data… in its Settings.
 - [ ] Tick a seventh file. It stays unticked, and the sheet says you can choose up to 6.
 - [ ] Drag a file of a project folder from Finder onto the list. It is ticked and scrolls
   into view, also an old file of a project with more than 200 files.
+- [ ] Drag a folder from Finder onto the list. The top of the list says that it is a
+  folder and to drag the files you want from it.
 - [ ] Drag a file from a folder no project holds. The top of the list names it and says
   Projects reads only the folders you add. Add Its Folder to the project… opens the open
   panel in that file's folder, with the message about all mail of the project and the
@@ -3913,6 +3915,8 @@ this Mac, until you use Delete All Projects Data… in its Settings.
   counts only, no name or path.
 - [ ] In that panel, pick your home folder. The sheet says Projects never reads your home
   folder, and nothing is added.
+- [ ] Tick 6 files and drag a file from a folder no project holds. The sheet says you can
+  choose up to 6 and offers no folder.
 - [ ] Drag an iCloud Drive file that is not downloaded. Finder shows it still not
   downloaded afterwards.
 - [ ] Return to Automatic Selection in Project Files for This Explanation. The line under

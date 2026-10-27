@@ -209,6 +209,85 @@ struct ProjectsChooseFilesTests {
         await projects.fixture.stop()
     }
 
+    /// A dropped folder is no file to choose and says so, in a project folder or outside
+    /// them. A Pages document saved as a package is a file.
+    @Test func aDroppedFolderSaysItIsNoFile() async throws {
+        let projects = try await Self.projects()
+        defer { projects.fixture.cleanUp() }
+        let runtime = projects.fixture.runtime
+        let model = ProjectsWindowModel(runtime: runtime)
+        let email = try await Self.email(in: projects.harbor.id, runtime: runtime)
+        let choice = await Self.choice(for: email, runtime: runtime, model: model)
+        choice.drop([projects.kilnFolder.appending(path: "Drawings", directoryHint: .isDirectory)])
+        #expect(choice.notice == .folder("Drawings"))
+        choice.drop([URL(filePath: "/Users/Shared/Gallery/Drawings", directoryHint: .isDirectory)])
+        #expect(choice.notice == .folder("Drawings"))
+        choice.drop([projects.harborFolder.appending(path: "brochure.pages", directoryHint: .isDirectory)])
+        #expect(choice.notice == .notRead("brochure.pages"))
+        #expect(choice.ticks.isEmpty)
+        #expect(ProjectsWindowText.choiceNotice(.folder("Drawings")) == "“Drawings” is a folder. Drag the files you want from it, not the folder.")
+        await projects.fixture.stop()
+    }
+
+    /// With six files chosen, a dropped file outside every folder says that no more can be
+    /// chosen and offers no folder, and Add Its Folder adds none, so the user can untick one
+    /// first.
+    @Test func aFullChoiceOffersNoFolderForADroppedFile() async throws {
+        let projects = try await Self.projects(files: (1...5).map { ("sheet-\($0).dwg", Data("drawing".utf8)) })
+        defer { projects.fixture.cleanUp() }
+        let runtime = projects.fixture.runtime
+        let made = projects.fixture.root.appendingPathComponent("Elsewhere", isDirectory: true)
+        try FileManager.default.createDirectory(at: made, withIntermediateDirectories: true)
+        let folder = try #require(await FolderWalk.realPath(of: made))
+        let dropped = folder.appending(path: "brief.md")
+        let model = ProjectsWindowModel(runtime: runtime)
+        let email = try await Self.email(in: projects.harbor.id, runtime: runtime)
+        let choice = await Self.choice(for: email, runtime: runtime, model: model)
+        let rows = choice.sections.flatMap(\.rows)
+        for row in rows.prefix(ExplainPrompt.chosenFileLimit) {
+            choice.toggle(row)
+        }
+        choice.drop([dropped])
+        #expect(choice.notice == .limit)
+        await choice.addFolder(folder, to: projects.harbor.id, for: dropped)
+        #expect(choice.notice == .limit)
+        #expect(runtime.projectList.first { $0.id == projects.harbor.id }?.folders.count == 1)
+        #expect(choice.ticks.count == ExplainPrompt.chosenFileLimit && !choice.ticks.contains { $0.path == dropped.path })
+        // With a place free, the folder is offered.
+        choice.toggle(rows[0])
+        choice.drop([dropped])
+        #expect(choice.notice == .outside(dropped))
+        await projects.fixture.stop()
+    }
+
+    /// A dropped file the user unticks while its folder is read stays unticked once the index
+    /// lists it, and the sheet says nothing of it.
+    @Test func aDroppedFileUntickedWhileItsFolderIsReadStaysUnticked() async throws {
+        let projects = try await Self.projects()
+        defer { projects.fixture.cleanUp() }
+        let runtime = projects.fixture.runtime
+        let made = projects.fixture.root.appendingPathComponent("Elsewhere", isDirectory: true)
+        try FileManager.default.createDirectory(at: made, withIntermediateDirectories: true)
+        try "Brief of the lobby lamps.".write(to: made.appendingPathComponent("brief.md"), atomically: true, encoding: .utf8)
+        let folder = try #require(await FolderWalk.realPath(of: made))
+        let dropped = folder.appending(path: "brief.md")
+        let model = ProjectsWindowModel(runtime: runtime)
+        let email = try await Self.email(in: projects.harbor.id, runtime: runtime)
+        let choice = await Self.choice(for: email, runtime: runtime, model: model)
+        choice.drop([dropped])
+        await choice.addFolder(folder, to: projects.harbor.id, for: dropped)
+        #expect(choice.notice == .reading("brief.md"))
+        choice.toggle(try #require(choice.sections.last?.rows.first))
+        #expect(choice.ticks.isEmpty && choice.notice == nil)
+        for _ in 0..<2_000 where runtime.indexReport(projects.harbor.id).map({ $0.indexed != 2 || $0.isIndexing }) ?? true {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        await choice.load()
+        #expect(choice.ticks.isEmpty && choice.notice == nil && choice.scrollTarget == nil)
+        #expect(!choice.isTicked(try Self.row("brief.md", in: choice)))
+        await projects.fixture.stop()
+    }
+
     /// Add Its Folder adds the folder the user picked to the project, for all its mail, and
     /// the dropped file is chosen once the index lists it. A folder that does not hold the file
     /// is not added, and neither is a refused one.
@@ -405,7 +484,7 @@ struct ProjectsChooseFilesTests {
         let lines = [
             ProjectsWindowText.choiceNotice(.chosen("plan.pdf")), ProjectsWindowText.choiceNotice(.notRead("plan.pdf")),
             ProjectsWindowText.choiceNotice(.reading("plan.pdf")), ProjectsWindowText.choiceNotice(.notInFolder("plan.pdf")),
-            ProjectsWindowText.choiceNotice(.refused(.home)), ProjectsWindowText.choiceNotice(.projectNotSaved),
+            ProjectsWindowText.choiceNotice(.refused(.home)), ProjectsWindowText.choiceNotice(.projectNotSaved), ProjectsWindowText.choiceNotice(.folder("Plans")),
             ProjectsWindowText.reading(.text), ProjectsWindowText.reading(.recognizedText), ProjectsWindowText.reading(.waitsForRecognition),
             ProjectsWindowText.reading(.nameOnly), ProjectsWindowText.moreFiles(shown: 200, total: 340, searching: false),
             ProjectsWindowText.moreFiles(shown: 200, total: 210, searching: true), ProjectsWindowText.emailsProject("Harbor lobby"),
@@ -499,7 +578,8 @@ struct ProjectsChooseFilesTests {
         emailModel.instruction = "Use /Users/lin/Plans/plan-v3.pdf for the sizes"
 
         // The sheet at its ideal size and at its smallest, every section of it with three
-        // files a section, a search, and a dropped file outside every folder with six chosen.
+        // files a section, a search, and a dropped file outside every folder with five chosen,
+        // so its folder is offered.
         let choice = await Self.choice(for: email, runtime: runtime, model: model)
         let sheet = ProjectsChooseFiles(runtime: runtime, model: model, choice: choice)
         try await render(sheet, size: NSSize(width: 600, height: 560), to: folder.appendingPathComponent("\(language)-projects-choose-files.png"))
@@ -510,7 +590,7 @@ struct ProjectsChooseFilesTests {
         choice.query = "plan"
         try await render(sheet, size: NSSize(width: 600, height: 560), to: folder.appendingPathComponent("\(language)-projects-choose-files-search.png"))
         choice.query = ""
-        for row in choice.sections.flatMap(\.rows) where !choice.isTicked(row) && choice.ticks.count < ExplainPrompt.chosenFileLimit {
+        for row in choice.sections.flatMap(\.rows) where !choice.isTicked(row) && choice.ticks.count < ExplainPrompt.chosenFileLimit - 1 {
             choice.toggle(row)
         }
         choice.drop([URL(fileURLWithPath: "/Users/Shared/Gallery/Drawings/gallery-floor-plan.pdf")])

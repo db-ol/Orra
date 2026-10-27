@@ -63,12 +63,15 @@ final class ProjectsFileChoice {
 
     /// The line of the last action, which VoiceOver reads as it shows.
     nonisolated enum Notice: Equatable, Sendable {
-        /// A seventh tick, which stays off.
+        /// A seventh tick, which stays off, or a dropped file that could not be ticked, for
+        /// which no folder is offered.
         case limit
         /// A dropped file the index lists, now ticked, by its name.
         case chosen(String)
         /// A dropped file inside a project folder that the index does not list.
         case notRead(String)
+        /// A dropped folder, by its name, which is no file to choose.
+        case folder(String)
         /// A dropped file outside every project folder, whose folder the user may add.
         case outside(URL)
         /// The folder added for a dropped file, which the index reads now.
@@ -274,6 +277,7 @@ final class ProjectsFileChoice {
     func toggle(_ row: Row) {
         if let index = ticks.firstIndex(where: { $0.path == row.url.path }) {
             ticks.remove(at: index)
+            stopWaiting(for: row.url.path)
             if notice == .limit {
                 notice = nil
             }
@@ -290,15 +294,33 @@ final class ProjectsFileChoice {
     /// that.
     func untickAll() {
         ticks = []
+        waiting = nil
         notice = nil
+    }
+
+    /// Whether the file at `path` can be ticked: it is ticked already, or fewer than the most
+    /// files are.
+    private func canTick(_ path: String) -> Bool {
+        ticks.count < ExplainPrompt.chosenFileLimit || ticks.contains { $0.path.lowercased() == path.lowercased() }
+    }
+
+    /// A dropped file the user unticked before the index listed it: the sheet waits for it no
+    /// longer, and the line that it is chosen once read goes.
+    private func stopWaiting(for path: String) {
+        guard waiting == path.lowercased() else { return }
+        waiting = nil
+        if case .reading = notice {
+            notice = nil
+        }
     }
 
     // MARK: Dropped files
 
     /// Files dragged onto the list from Finder, each placed by its path alone, never opened
     /// or looked up: a file the index lists is ticked and shown, in any project and also past
-    /// the files a section shows, one inside a project folder that the index does not list
-    /// says so, and one outside every folder offers to add its folder to a project.
+    /// the files a section shows, a folder says that it is none, one inside a project folder
+    /// that the index does not list says so, and one outside every folder offers to add its
+    /// folder to a project, unless the choice is full.
     func drop(_ urls: [URL]) {
         for url in urls where url.isFileURL {
             let key = url.path.lowercased()
@@ -313,25 +335,44 @@ final class ProjectsFileChoice {
                 }
                 notice = .chosen(row.url.lastPathComponent)
                 scrollTarget = row.id
+            } else if url.hasDirectoryPath, !Self.isDocumentPackage(url) {
+                notice = .folder(url.lastPathComponent)
             } else if roots.values.contains(where: { roots in
                 if case .outside = ProjectsEmailFiles.place(of: url, in: roots) { return false }
                 return true
             }) {
                 notice = .notRead(url.lastPathComponent)
+            } else if !canTick(url.path) {
+                // No folder is offered for a file that could not be chosen.
+                notice = .limit
             } else {
                 notice = .outside(url)
             }
         }
     }
 
+    /// Whether a dropped folder is one Finder shows as a file, by its extension alone: a
+    /// Keynote, Numbers or Pages document, which the index lists by name, see
+    /// FolderWalk.documentPackages, or another package. Finder ends the address of a folder
+    /// with a slash, so nothing looks at the disk.
+    private nonisolated static func isDocumentPackage(_ url: URL) -> Bool {
+        let fileExtension = url.pathExtension.lowercased()
+        guard !fileExtension.isEmpty else { return false }
+        return FolderWalk.documentPackages.contains(fileExtension) || UTType(filenameExtension: fileExtension, conformingTo: .package).map { !$0.isDynamic } == true
+    }
+
     /// Adds the folder the user picked in the open panel to a project, for all its mail, for
     /// a dropped file or with nil for Add a Folder: a folder that does not hold the dropped file
-    /// is not added, and a refused one says why. The dropped file is ticked at once, and the
-    /// sheet says so once the index lists it.
+    /// is not added, nor one for a file that could not be ticked, and a refused one says why.
+    /// The dropped file is ticked at once, and the sheet says so once the index lists it.
     func addFolder(_ folder: URL, to project: UUID, for dropped: URL?) async {
         if let dropped {
             guard case .inFolder = ProjectsEmailFiles.place(of: dropped, in: ProjectsEmailFiles.Roots(folders: [folder])) else {
                 notice = .notInFolder(dropped.lastPathComponent)
+                return
+            }
+            guard canTick(dropped.path) else {
+                notice = .limit
                 return
             }
         }
@@ -359,13 +400,13 @@ final class ProjectsFileChoice {
     }
 
     /// Once the index lists the dropped file that waits, its tick takes the path and the
-    /// project of its row, and the sheet says that it is chosen.
+    /// project of its row, and the sheet says that it is chosen. A file the user unticked
+    /// meanwhile stays unticked.
     private func takeWaitingFile() {
         guard let waiting, let row = listing.byPath[waiting] else { return }
         self.waiting = nil
-        if let index = ticks.firstIndex(where: { $0.path.lowercased() == waiting }) {
-            ticks[index] = MailStore.ChosenFile(project: row.project, path: row.url.path)
-        }
+        guard let index = ticks.firstIndex(where: { $0.path.lowercased() == waiting }) else { return }
+        ticks[index] = MailStore.ChosenFile(project: row.project, path: row.url.path)
         notice = .chosen(row.url.lastPathComponent)
         scrollTarget = row.id
     }

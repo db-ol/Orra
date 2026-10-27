@@ -811,6 +811,7 @@ nonisolated enum ProjectsWindowText {
         case .limit: String(localized: "You can choose up to \(ExplainPrompt.chosenFileLimit) files for an email.")
         case .chosen(let name): String(localized: "“\(name)” is chosen.")
         case .notRead(let name): String(localized: "Projects has not read “\(name)”. It may be new, too large or not on this Mac. The project's page lists the files it skipped.")
+        case .folder(let name): String(localized: "“\(name)” is a folder. Drag the files you want from it, not the folder.")
         case .outside(let file): String(localized: "“\(file.lastPathComponent)” is not in a folder of your projects. Projects reads only the folders you add.")
         case .reading(let name): String(localized: "Projects is reading the folder. “\(name)” is chosen once it is read.")
         case .notInFolder(let name): String(localized: "The folder you added does not hold “\(name)”.")

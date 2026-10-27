@@ -1,6 +1,28 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "“%@” is a folder. Drag the files you want from it, not the folder." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” es una carpeta. Arrastra los archivos que quieras de ella, no la carpeta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”はフォルダです。フォルダではなく、その中の必要なファイルをドラッグしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”是文件夹。请把其中你要的文件拖到这里，而不是整个文件夹。"
+          }
+        }
+      }
+    },
     "“%@” is chosen." : {
       "localizations" : {
         "es-419" : {
