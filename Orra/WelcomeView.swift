@@ -25,6 +25,9 @@ struct WelcomeView: View {
     let guideSettings: (PermissionDemo.Kind) -> Void
     /// Opens Orra's Settings on a tab, for the suggestions once Orra is ready.
     let openSettings: @MainActor (SettingsTab) -> Void
+    /// The Projects switch, for its row in Try next, nil where the window is shown without
+    /// it, which leaves the row out.
+    let projects: ProjectsSwitch?
     @State private var language: AppLanguage
     /// The localization the window shows, such as "zh-Hans". Kept, so a redraw for the
     /// download's progress does not read the Mac's languages again.
@@ -35,7 +38,8 @@ struct WelcomeView: View {
     /// Whether the steps scroll on a short screen. Off only to draw the whole window.
     let limitsHeight: Bool
 
-    init(pushToTalk: PushToTalkController, setup: SetupDownload, language: AppLanguage, limitsHeight: Bool = true, close: @escaping () -> Void, localizationChanged: @escaping (String) -> Void, languagePicked: @escaping (AppLanguage) -> Void, guideSettings: @escaping (PermissionDemo.Kind) -> Void = { _ in }, openSettings: @escaping @MainActor (SettingsTab) -> Void = WelcomeView.openSettingsWindow) {
+    init(pushToTalk: PushToTalkController, setup: SetupDownload, language: AppLanguage, projects: ProjectsSwitch? = nil, limitsHeight: Bool = true, close: @escaping () -> Void, localizationChanged: @escaping (String) -> Void, languagePicked: @escaping (AppLanguage) -> Void, guideSettings: @escaping (PermissionDemo.Kind) -> Void = { _ in }, openSettings: @escaping @MainActor (SettingsTab) -> Void = WelcomeView.openSettingsWindow) {
+        self.projects = projects
         self.limitsHeight = limitsHeight
         _stepsHeight = State(initialValue: Self.tallestSteps)
         self.pushToTalk = pushToTalk
@@ -196,7 +200,7 @@ struct WelcomeView: View {
             }
             if WelcomeSuggestion.shows(checklist: checklist) {
                 SuggestionsBlock(
-                    suggestions: WelcomeSuggestion.all(cleanupOn: setup.cleanup.isOn, cleanupModelInstalled: setup.cleanup.models.state.isInstalled, translationOn: setup.cleanup.translationIsOn, language: pushToTalk.dictationLanguage, translationKey: pushToTalk.translationKey, translationMode: pushToTalk.translationMode, locale: Locale(identifier: localization)),
+                    suggestions: WelcomeSuggestion.all(cleanupOn: setup.cleanup.isOn, cleanupModelInstalled: setup.cleanup.models.state.isInstalled, translationOn: setup.cleanup.translationIsOn, language: pushToTalk.dictationLanguage, translationKey: pushToTalk.translationKey, translationMode: pushToTalk.translationMode, projectsAvailable: projects?.canTurnOn ?? false, projectsOn: projects?.isOn ?? false, locale: Locale(identifier: localization)),
                     locale: Locale(identifier: localization),
                     open: { openSettings($0.settingsTab) }
                 )
@@ -210,7 +214,7 @@ struct WelcomeView: View {
 
 /// What to try next, under "Orra is ready": one compact row for each feature, with its symbol,
 /// its name and one line, and a button that opens Settings on the feature's page, or On when
-/// it is on already.
+/// it is on already. Projects comes last, on a Mac where it can be turned on.
 private struct SuggestionsBlock: View {
     let suggestions: [WelcomeSuggestion]
     let locale: Locale
@@ -270,6 +274,7 @@ extension WelcomeSuggestion.Kind {
         case .cleanup: .dictation
         case .translation: .translation
         case .meeting: .meeting
+        case .projects: .projects
         }
     }
 }

@@ -148,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     /// The welcome window's one download of the speech model and the cleanup model.
     lazy var setup = SetupDownload(speech: models, cleanup: cleanup)
-    lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, setup: setup) { [dockIcon] in
+    lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, setup: setup, projects: projects) { [dockIcon] in
         dockIcon.willShowWindow()
     }
     lazy var clipboard = ClipboardWord(

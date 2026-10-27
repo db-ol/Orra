@@ -936,6 +936,28 @@
         }
       }
     },
+    "A preview. It works with the Mail app on this Mac." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vista previa. Funciona con la app Mail de esta Mac."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プレビュー版です。このMacの“メール”アプリと一緒に使います。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预览版，适用于这台 Mac 上的“邮件” App。"
+          }
+        }
+      }
+    },
     "A reply reaches someone who is not one of the project's people." : {
       "localizations" : {
         "es-419" : {
@@ -13943,6 +13965,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "开始使用“项目”"
+          }
+        }
+      }
+    },
+    "Set Up Projects…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configurar Proyectos…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”を設定…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置“项目”…"
           }
         }
       }
