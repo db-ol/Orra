@@ -466,6 +466,22 @@ struct FileRequestsTests {
         #expect(DocumentKind.allCases.filter(\.isGeneric) == [.document])
     }
 
+    /// A kind that is a kind of file names its types, lowercased and without a dot, and a
+    /// kind any document may be names none.
+    @Test func kindsOfFilesNameTheirTypes() {
+        #expect(DocumentKind.photo.fileTypes?.isSuperset(of: ["jpg", "png", "heic"]) == true)
+        #expect(DocumentKind.drawing.fileTypes?.isSuperset(of: ["dwg", "pdf"]) == true)
+        #expect(DocumentKind.spreadsheet.fileTypes?.contains("xlsx") == true)
+        for kind in [DocumentKind.quote, .contract, .invoice, .document] {
+            #expect(kind.fileTypes == nil, "\(kind)")
+        }
+        for kind in DocumentKind.allCases {
+            for type in kind.fileTypes ?? [] {
+                #expect(type == type.lowercased() && !type.contains(".") && !type.isEmpty, "\(kind) \(type)")
+            }
+        }
+    }
+
     @Test func searchTermsHoldEveryLanguageOfTheKind() throws {
         let request = try #require(Self.found("Please send the latest floor plan for the lobby.").first)
         let terms = FileRequests.searchTerms(for: request)

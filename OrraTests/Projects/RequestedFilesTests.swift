@@ -124,6 +124,25 @@ struct RequestedFilesTests {
         }
     }
 
+    /// For a kind that is a kind of file, the files of its types come first among a
+    /// project's files, and a file of another type counts only when its name holds a word
+    /// for the kind, so a brief that talks of photos follows the photo, and notes that only
+    /// mention photos are left out.
+    @Test func theFilesOfAKindsTypesComeFirst() async throws {
+        let files: [(path: String, text: String, day: Int)] = [
+            ("Harbor lobby/photo-brief.txt", "Photo brief: photos of the shop front, in daylight, three photos.", 3),
+            ("Harbor lobby/visit-notes.txt", "Visit notes: we took photos of the shop front.", 4),
+            ("Harbor lobby/shop-front-photo.jpg", "not an image", 5),
+        ]
+        try await withFixture(files) { fixture in
+            let found = try await fixture.find("Could you send me the photos of the shop?", emailProject: fixture.harbor)
+            #expect(names(found) == ["shop-front-photo.jpg", "photo-brief.txt"])
+            // A kind any document may be keeps every file its text names.
+            let notes = try await fixture.find("Could you send me the visit notes file?", emailProject: fixture.harbor)
+            #expect(names(notes).contains("visit-notes.txt"))
+        }
+    }
+
     @Test func theEmailsProjectComesFirstAndOthersFollow() async throws {
         try await withFixture { fixture in
             let fromHarbor = try await fixture.find("Please send the floor plan.", emailProject: fixture.harbor)

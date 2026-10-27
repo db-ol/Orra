@@ -25,13 +25,16 @@ nonisolated struct RequestedFile: Sendable, Equatable, Identifiable {
 ///   Q3-numbers.xlsx is found by its text
 ///
 /// A file counts for a kind only when its name or its text holds a word for that kind or a
-/// file name the request gives. A request that names no kind but has words of its own, such
-/// as "the lighting file", counts the files whose name or text holds them. The email's
-/// project comes first, and files of other projects fill only the places its own files
-/// leave. A Keynote, Numbers or Pages document saved as a package is left out, since a reply
-/// takes single files. A file a newer file of the same document replaced, by their names,
-/// is marked older and follows the newer one. At most `perKind` files a kind and
-/// `perRequest` a request, each file once.
+/// file name the request gives. For a kind that is a kind of file, such as a photo or a
+/// drawing, see DocumentKind.fileTypes, a file of another type counts only by its name, and
+/// the files of the kind's types come first among a project's files, so the photos of the
+/// shop come before a brief whose text talks of photos. A request that names no kind but
+/// has words of its own, such as "the lighting file", counts the files whose name or text
+/// holds them. The email's project comes first, and files of other projects fill only the
+/// places its own files leave. A Keynote, Numbers or Pages document saved as a package is
+/// left out, since a reply takes single files. A file a newer file of the same document
+/// replaced, by their names, is marked older and follows the newer one. At most `perKind`
+/// files a kind and `perRequest` a request, each file once.
 ///
 /// It never reads a file's content. It reads the index, and the metadata of a file that may
 /// be a package, on a thread of its own, as ReplyFiles does.
@@ -62,12 +65,14 @@ nonisolated enum RequestedFiles {
         let kinds = request.documentKinds.filter { !$0.isGeneric }
         // One group for each kind the request names, or one without a kind for a request
         // by its own words or a file name.
-        let groups: [[String]] = kinds.isEmpty ? [[]] : kinds.map(Self.terms(of:))
+        let groups: [(terms: [String], types: Set<String>?)] = kinds.isEmpty ? [([], nil)] : kinds.map { (Self.terms(of: $0), $0.fileTypes) }
         guard !asked.words.isEmpty || !kinds.isEmpty || !asked.fileNames.isEmpty else { return [] }
         var found: [RequestedFile] = []
-        for terms in groups {
+        for (terms, types) in groups {
             try Task.checkCancellation()
-            var candidates = try await group(words: asked.words, terms: terms, fileNames: asked.fileNames, emailProject: emailProject, scope: scope, names: names, chunks: chunks)
+            var candidates = try await group(
+                words: asked.words, terms: terms, types: types, fileNames: asked.fileNames, emailProject: emailProject, scope: scope,
+                names: names, chunks: chunks)
             candidates.removeAll { candidate in found.contains { $0.id == candidate.id } }
             let packages = await isPackage(candidates.map(\.url).filter { FolderWalk.documentPackages.contains($0.pathExtension.lowercased()) })
             candidates.removeAll { packages.contains($0.url) }
@@ -92,14 +97,15 @@ nonisolated enum RequestedFiles {
     }
 
     /// The files of one kind, or of a request without a kind, best first, the email's
-    /// project's before the others, a replaced file after the file that replaced it.
+    /// project's before the others, and within each the files of the kind's `types` first,
+    /// a replaced file after the file that replaced it.
     private static func group(
-        words: String, terms: [String], fileNames: [String], emailProject: UUID?, scope: [UUID]?,
+        words: String, terms: [String], types: Set<String>?, fileNames: [String], emailProject: UUID?, scope: [UUID]?,
         names: FileNameSearch, chunks: ChunkSearch
     ) async throws -> [RequestedFile] {
         let asked = terms + fileNames
-        var lists: [[Key]] = []
         var eligible: Set<Key> = []
+        var namedByTerms: Set<Key> = []
         var files: [Key: RequestedFile] = [:]
         func take(_ hit: FileNameSearch.Hit) -> Key {
             let key = Key(path: hit.url.path, project: hit.project)
@@ -108,14 +114,16 @@ nonisolated enum RequestedFiles {
             }
             return key
         }
+        var fused: [[Key]] = []
         if !asked.isEmpty {
             let named = try await names.search("", terms: asked, in: scope, limit: nameLimit).map(take)
-            lists.append(named)
+            fused.append(named)
             eligible.formUnion(named)
+            namedByTerms.formUnion(named)
         }
         if !words.isEmpty {
             let named = try await names.search(words, in: scope, limit: nameLimit).map(take)
-            lists.append(named)
+            fused.append(named)
             if asked.isEmpty {
                 eligible.formUnion(named)
             }
@@ -134,11 +142,16 @@ nonisolated enum RequestedFiles {
                 }
                 texts.append(key)
             }
-            lists.append(texts)
+            fused.append(texts)
             eligible.formUnion(texts)
         }
+        // A file of another type than the kind's counts only by its name.
+        func fits(_ key: Key) -> Bool {
+            types?.contains(URL(fileURLWithPath: key.path).pathExtension.lowercased()) ?? true
+        }
+        eligible = eligible.filter { fits($0) || namedByTerms.contains($0) }
         var scores: [Key: Double] = [:]
-        for list in lists {
+        for list in fused {
             for (rank, key) in list.enumerated() where eligible.contains(key) {
                 scores[key, default: 0] += 1 / (ChunkSearch.fusionOffset + Double(rank))
             }
@@ -155,6 +168,8 @@ nonisolated enum RequestedFiles {
         let ranked = best.values.sorted { first, second in
             let firstOwn = first.key.project == emailProject, secondOwn = second.key.project == emailProject
             if firstOwn != secondOwn { return firstOwn }
+            let firstFits = fits(first.key), secondFits = fits(second.key)
+            if firstFits != secondFits { return firstFits }
             if first.score != second.score { return first.score > second.score }
             return first.key.path < second.key.path
         }

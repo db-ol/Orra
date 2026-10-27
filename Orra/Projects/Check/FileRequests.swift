@@ -71,6 +71,25 @@ nonisolated enum DocumentKind: String, CaseIterable, Sendable {
         self == .document
     }
 
+    /// The extensions of the files a kind of document is, lowercased, for a kind that is a
+    /// kind of file, such as a photo, a drawing, a scan, slides or a spreadsheet, and nil for
+    /// a kind any document may be, such as a quote or a contract. A file of another type that
+    /// a word for such a kind names, such as photo-shoot-brief.md, is about the kind and is
+    /// rarely what was asked for, see RequestedFiles.
+    var fileTypes: Set<String>? {
+        switch self {
+        case .photo: Self.images.union(["dng"])
+        case .rendering: Self.images.union(["pdf", "psd", "ai", "fig", "sketch", "svg"])
+        case .floorPlan, .drawing: Self.images.union(["pdf", "dwg", "dxf", "svg", "skp", "rvt", "ai"])
+        case .scan: Self.images.union(["pdf"])
+        case .slides: ["ppt", "pptx", "key", "pdf", "odp"]
+        case .spreadsheet: ["xls", "xlsx", "numbers", "csv", "ods", "tsv"]
+        case .designFile: Self.images.union(["ai", "psd", "indd", "fig", "sketch", "svg", "eps", "xd", "pdf"])
+        default: nil
+        }
+    }
+
+    private static let images: Set<String> = ["jpg", "jpeg", "png", "heic", "heif", "gif", "webp", "tif", "tiff", "bmp"]
 
     var terms: Terms {
         switch self {
