@@ -131,6 +131,14 @@ nonisolated struct Project: Sendable, Equatable, Identifiable, Codable {
         }
     }
 
+    /// Where a bookmark's folder was when the user added it, read from the bookmark alone
+    /// without the disk, such as for a folder on a disk that is not connected now. Nil for
+    /// data that is not a bookmark.
+    static func savedPath(of bookmark: Data) -> URL? {
+        guard let path = URL.resourceValues(forKeys: [.pathKey], fromBookmarkData: bookmark)?.path else { return nil }
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }
+
     private static func resolveNow(_ bookmarks: [Data]) -> [URL] {
         bookmarks.compactMap { bookmark in
             var isStale = false
