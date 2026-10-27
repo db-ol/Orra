@@ -806,11 +806,18 @@ struct ProjectsWindowViewTests {
     }
 
     /// The text a view shows that the user can select, such as mail text, each with its top
-    /// in the window, whose y grows upward. SwiftUI puts such text in a text field of its
-    /// own, and draws the rest.
+    /// in the window, whose y grows upward. SwiftUI on macOS 26 puts such text in a text field
+    /// of its own, and draws the rest.
     private static func selectableTexts(in view: NSView) -> [(text: String, top: CGFloat)] {
-        descendants(of: view).compactMap { $0 as? NSTextField }.map { field in
-            (field.stringValue, field.convert(field.bounds, to: nil).maxY)
+        descendants(of: view).compactMap { subview -> (String, CGFloat)? in
+            let top = subview.convert(subview.bounds, to: nil).maxY
+            if let field = subview as? NSTextField {
+                return (field.stringValue, top)
+            }
+            if let text = subview as? NSTextView, !text.isFieldEditor {
+                return (text.string, top)
+            }
+            return nil
         }
     }
 
@@ -998,10 +1005,21 @@ struct ProjectsWindowViewTests {
     /// Without the email's text in the store, it shows the email's own text, as before. The
     /// email view in its usual order keeps To and Cc, then the attachments, above the words.
     /// The folded rows' names, Recipients and Attachments with their counts, are drawn
-    /// rather than held in a view, so the renders show them.
+    /// rather than held in a view, so the renders show them. A macOS that draws selectable
+    /// text without a view of its own, as macOS 27 on CI does, cannot be read this way, and
+    /// the test records that as a known issue there.
     @Test func theThisEmailChipShowsTheWholeEmail() async throws {
         func top(_ part: String, in texts: [(text: String, top: CGFloat)]) -> CGFloat? {
             texts.first { $0.text.contains(part) }?.top
+        }
+        let (probeWindow, probe) = try await host(Text(verbatim: "Selectable").textSelection(.enabled), size: NSSize(width: 200, height: 40))
+        let readable = top("Selectable", in: Self.selectableTexts(in: probe)) != nil
+        probeWindow.close()
+        guard readable else {
+            withKnownIssue("This macOS draws selectable text without a view of its own, so the renders show the popover") {
+                Issue.record("No view holds the text of a selectable Text")
+            }
+            return
         }
         let whole = ProjectsEmailArea.Excerpt(source: .thisEmail, emailText: "Only the text", original: Self.forward, attachments: Self.attachments)
         let (window, view) = try await host(whole, size: NSSize(width: 420, height: 420))
