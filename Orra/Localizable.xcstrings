@@ -2534,6 +2534,28 @@
         }
       }
     },
+    "Attachments (%lld)" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adjuntos (%lld)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添付ファイル（%lld）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附件（%lld）"
+          }
+        }
+      }
+    },
     "Automatic" : {
       "localizations" : {
         "es-419" : {
@@ -3892,6 +3914,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已折叠"
+          }
+        }
+      }
+    },
+    "Compare with Original" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comparar con original"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元のメールと比較"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对照邮件原文"
           }
         }
       }
@@ -5311,6 +5355,28 @@
         }
       }
     },
+    "Ends the comparison and puts the sidebar and the email view back as they were." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Termina la comparación y deja la barra lateral y la vista del correo como estaban."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "比較を終了し、サイドバーとメールの表示を元に戻します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "结束对照，边栏和邮件视图恢复原样。"
+          }
+        }
+      }
+    },
     "English" : {
       "localizations" : {
         "es-419" : {
@@ -5440,6 +5506,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你说的内容都会以西班牙文粘贴。PR、iPhone 这类常用英文词可能保留英文。"
+          }
+        }
+      }
+    },
+    "Exit Comparison" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salir de la comparación"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "比較を終了"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出对照"
           }
         }
       }
@@ -5682,6 +5770,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在解释…"
+          }
+        }
+      }
+    },
+    "Explanation and Draft" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Explicación y borrador"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "説明と下書き"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解释和草稿"
           }
         }
       }
@@ -13932,6 +14042,28 @@
         }
       }
     },
+    "Recipients (%lld)" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destinatarios (%lld)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "宛先とCc（%lld）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收件人和抄送（%lld）"
+          }
+        }
+      }
+    },
     "Recognition" : {
       "localizations" : {
         "es-419" : {
@@ -15788,6 +15920,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示最新的 %1$lld 个文件，共 %2$lld 个。按文件名搜索可以找到其他文件。"
+          }
+        }
+      }
+    },
+    "Shows the email itself with its explanation and draft, each scrolling on its own, and hides the sidebar until you click Exit Comparison." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muestra el correo original con su explicación y su borrador, cada uno con su propio desplazamiento, y oculta la barra lateral hasta que hagas clic en Salir de la comparación."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールそのものを説明と下書きと並べて表示し、それぞれ別々にスクロールできるようにします。“比較を終了”をクリックするまで、サイドバーは隠れます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将邮件本身与它的解释和草稿对照显示，各自滚动，并隐藏边栏，直到你点按“退出对照”。"
           }
         }
       }

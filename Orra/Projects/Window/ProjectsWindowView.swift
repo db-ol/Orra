@@ -7,6 +7,14 @@ import SwiftUI
 /// links, no images (plan section 2.8). The third column holds the email view,
 /// ProjectsEmailArea, or the project's page, or, while neither shows, How to Use Projects,
 /// see ProjectsHowTo.
+///
+/// While the model compares, see ProjectsWindowModel.isComparing, the window asks its split
+/// view to hide the sidebar and keep the list, so the email view gets the sidebar's room for
+/// Compare with Original. It never asks for the detail column alone, which the split view
+/// does not honor on macOS 26 and answers with all three columns. Every end of the
+/// comparison asks for the columns that showed before, and a column the user shows ends it.
+/// A window that is never shown applies the columns it asks for only once it is resized, so
+/// the tests read what it asks for, and an opt in test and a live check show the window.
 struct ProjectsWindowView: View {
     let runtime: ProjectsRuntime
     @State var model: ProjectsWindowModel
@@ -15,9 +23,18 @@ struct ProjectsWindowView: View {
     /// Opens the Mail app on the user's click, MailApp.open in the app. Nil leaves out every
     /// Open Mail button.
     var openMail: (() -> Void)? = nil
+    /// Hears each change of the columns asked of the split view, for tests, since a window
+    /// that is never shown does not apply them and its split view cannot say.
+    var columnsChanged: (NavigationSplitViewVisibility) -> Void = { _ in }
     /// The project being set up, nil while no setup sheet shows.
     @State private var setup: ProjectsSetupView.Draft?
     @State private var forgetting: Project?
+    /// The columns the window asks its split view for, without the sidebar while the model
+    /// compares. All three at first, as the split view shows them, never `.automatic`, which
+    /// compares equal to `.doubleColumn`, so a change could not tell the two apart.
+    @State private var columns = NavigationSplitViewVisibility.all
+    /// The columns before the comparison, which every end of it asks for again.
+    @State private var columnsBeforeComparing = NavigationSplitViewVisibility.all
 
     /// Reads the list again when another list is chosen or the mail changed.
     private struct Reload: Hashable {
@@ -26,7 +43,7 @@ struct ProjectsWindowView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columns) {
             sidebar
                 .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 280)
         } content: {
@@ -34,6 +51,22 @@ struct ProjectsWindowView: View {
                 .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 480)
         } detail: {
             detail
+        }
+        .onChange(of: model.isComparing, initial: true) { _, comparing in
+            if comparing {
+                columnsBeforeComparing = columns
+            }
+            if let wanted = Self.columnsToAsk(comparing: comparing, shown: columns, before: columnsBeforeComparing) {
+                ask(wanted, animated: !comparing)
+            }
+        }
+        .onChange(of: columns) { _, shown in
+            columnsChanged(shown)
+            // A column the user showed, which the comparison hides, such as the sidebar
+            // dragged open or shown by the split view's own toggle.
+            if model.isComparing, Self.columnCount(shown) > Self.columnCount(Self.columnsWhileComparing(columnsBeforeComparing)) {
+                model.endComparing()
+            }
         }
         // The window keeps its name for the Window menu and VoiceOver, and the list chosen
         // shows under it.
@@ -238,6 +271,14 @@ struct ProjectsWindowView: View {
                         scroller.scrollTo(id, anchor: .center)
                     }
                 }
+                .onChange(of: model.isComparing) { _, comparing in
+                    // The end of the comparison: the selected row in view, with the least
+                    // scrolling. An email read alone has no row, and the list stays where it
+                    // was.
+                    if !comparing, let id = model.selectedRow {
+                        scroller.scrollTo(id)
+                    }
+                }
             }
             if model.hasOlderEmails {
                 OlderEmailsBar(shown: model.rows.count, total: model.total) {
@@ -245,6 +286,50 @@ struct ProjectsWindowView: View {
                 }
             }
             StatusLines(runtime: runtime, model: model, openSettings: openSettings, openMail: openMail)
+        }
+    }
+
+    /// How many columns the split view shows for a visibility the window asks for.
+    static func columnCount(_ columns: NavigationSplitViewVisibility) -> Int {
+        if columns == .detailOnly {
+            1
+        } else if columns == .doubleColumn {
+            2
+        } else {
+            3
+        }
+    }
+
+    /// The columns Compare with Original asks for: the list and the email view, with the
+    /// sidebar hidden. Columns that hide the sidebar already stay as they are.
+    static func columnsWhileComparing(_ shown: NavigationSplitViewVisibility) -> NavigationSplitViewVisibility {
+        columnCount(shown) < 3 ? shown : .doubleColumn
+    }
+
+    /// What the window asks its split view for as the comparison starts or ends, from the
+    /// columns shown and those before the comparison, nil for nothing: the columns of the
+    /// comparison at its start, and at every end the columns from before, so a sidebar the
+    /// user hid before stays hidden. Not after a column the user showed while comparing,
+    /// which ended it and stays as the user left it.
+    static func columnsToAsk(comparing: Bool, shown: NavigationSplitViewVisibility, before: NavigationSplitViewVisibility) -> NavigationSplitViewVisibility? {
+        if comparing {
+            return columnsWhileComparing(shown)
+        }
+        return columnCount(shown) <= columnCount(columnsWhileComparing(before)) ? before : nil
+    }
+
+    /// Asks the split view for columns, when they differ from those asked before. The
+    /// comparison's columns come at once, so the email view takes its new width rather than
+    /// growing into it. The columns before come back animated, as the split view's own
+    /// toggle shows the sidebar, which at the window's smallest size takes the sidebar's room
+    /// from the email view again. Shown at once, the sidebar kept the email view's width and
+    /// widened the window, as the shown window test found.
+    private func ask(_ wanted: NavigationSplitViewVisibility, animated: Bool = false) {
+        guard columns != wanted else { return }
+        var transaction = Transaction(animation: animated ? .default : nil)
+        transaction.disablesAnimations = !animated
+        withTransaction(transaction) {
+            columns = wanted
         }
     }
 
