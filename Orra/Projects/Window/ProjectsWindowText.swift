@@ -431,7 +431,7 @@ nonisolated enum ProjectsWindowText {
     /// Where an excerpt lies in its file: a page of a PDF, a slide of a deck or a sheet of a
     /// workbook. Every label of an excerpt names its place through `place(of:)`, so a slide
     /// or a sheet never reads as a page.
-    nonisolated enum Place: Equatable {
+    nonisolated enum Place: Hashable {
         case page(Int)
         case slide(Int)
         case sheet(String)
@@ -475,6 +475,110 @@ nonisolated enum ProjectsWindowText {
     static func sourceLabel(_ source: ProjectsEmailModel.Source) -> String {
         guard case .attachment(let name, _) = source else { return Self.source(source) }
         return String(localized: "Attachment \(name)")
+    }
+
+    /// The line under a file's name in the popover of its excerpt, with its page, slide or
+    /// sheet. The explanation keeps the excerpt as the index had it, with any lines that the
+    /// hygiene took out before the model read it, so the popover calls it saved.
+    static func savedExcerpt(_ chunk: TextChunker.Chunk) -> String {
+        switch place(of: chunk) {
+        case nil: String(localized: "Saved excerpt")
+        case .page(let page)?: String(localized: "Saved excerpt, page \(page)")
+        case .slide(let slide)?: String(localized: "Saved excerpt, slide \(slide)")
+        case .sheet(let sheet)?: String(localized: "Saved excerpt, sheet “\(sheet)”")
+        }
+    }
+
+    // MARK: The project files of an explanation
+
+    /// The heading of the folded list of the project files an explanation gave the model,
+    /// with their count.
+    static func projectFiles(_ count: Int) -> String {
+        String(localized: "Project Files for This Explanation (\(count))")
+    }
+
+    /// What the list says when the explanation gave the model no excerpt of a project file,
+    /// for an email in a project or in none. Assigning an email in no project takes its
+    /// explanation away, see MailStore.move(_:to:), and the window then shows the next email
+    /// of its list, see ProjectsWindowModel.move(_:to:), so the line says to explain the
+    /// email in its project's list.
+    static func noProjectFiles(inProject: Bool) -> String {
+        inProject
+            ? String(localized: "No project file excerpts were included in this explanation. The project's folders may hold no file Projects reads yet, or a long email or thread left no room for them.")
+            : String(localized: "No project file excerpts were included in this explanation. Assign the email to a project, then click Explain in that project's list to include the project's files.")
+    }
+
+    /// Whether a point under What it says names one of a file's excerpts as its source. The
+    /// words say cited, never used, since a citation does not prove what the model relied on.
+    static func citation(_ isCited: Bool) -> String {
+        isCited ? String(localized: "Cited in explanation") : String(localized: "Not cited in explanation")
+    }
+
+    /// Why a file was in the prompt. Nil for an explanation saved before Orra 0.6.1, and for
+    /// a reason this Orra does not know.
+    static func fileReason(_ reason: ExplainPrompt.FileOrigin.Reason?) -> String? {
+        switch reason {
+        case .match: return String(localized: "Found by search")
+        case .newest: return String(localized: "One of the project's newest files, added because search found few matches")
+        case .chosen: return String(localized: "Chosen by you")
+        case nil: return nil
+        }
+    }
+
+    /// The line of a file from the folders of another project than the email's: that
+    /// project's name, or that it is another project once the project is gone.
+    static func otherProject(_ name: String?) -> String {
+        guard let name else { return String(localized: "From the folders of another project") }
+        return String(localized: "From the folders of \(name)")
+    }
+
+    /// A file's folder: the project folder that holds it and the folders inside it down to
+    /// the file, joined with "/", or for a file in none of them, the folder it is in with ~
+    /// for the home folder.
+    static func folder(_ place: ProjectsEmailFiles.Place) -> String {
+        switch place {
+        case .inFolder(let name, let path), .unavailable(let name, let path):
+            ([name] + path).joined(separator: "/")
+        case .outside(let folder):
+            (folder.path as NSString).abbreviatingWithTildeInPath
+        }
+    }
+
+    /// The line under a file's folder when the file is not in an available folder of its
+    /// project now. A folder that is not available, such as one on a disk that is not
+    /// connected, is still the project's.
+    static func placeNote(_ place: ProjectsEmailFiles.Place) -> String? {
+        switch place {
+        case .inFolder: nil
+        case .unavailable: String(localized: "Its project folder is not available now")
+        case .outside: String(localized: "Not in the project's folders now")
+        }
+    }
+
+    /// The chip of a saved excerpt in the list of an explanation's files: its page, slide or
+    /// sheet, as `place(_:)` names it, or Saved Excerpt for a file without them. With its
+    /// number when the file has several excerpts of that place, or several without one, see
+    /// ProjectsEmailFiles.File.chipNumbers, such as Page 4, Saved Excerpt 2.
+    static func excerptChip(_ chunk: TextChunker.Chunk, number: Int?) -> String {
+        guard let place = Self.place(of: chunk) else { return savedExcerptChip(number) }
+        let name = Self.place(place)
+        guard number != nil else { return name }
+        return String(localized: "\(name), \(savedExcerptChip(number))")
+    }
+
+    /// What VoiceOver reads for the chip of a saved excerpt: the file with its page, slide or
+    /// sheet, as for the file's chip under a point, and the excerpt when the chip names it.
+    static func excerptChipLabel(_ chunk: TextChunker.Chunk, number: Int?) -> String {
+        let file = sourceLabel(.file(chunk))
+        guard place(of: chunk) == nil || number != nil else { return file }
+        return String(localized: "\(file), \(savedExcerptChip(number))")
+    }
+
+    /// Saved Excerpt, with its number among the excerpts whose chips would read the same
+    /// without it.
+    private static func savedExcerptChip(_ number: Int?) -> String {
+        guard let number else { return String(localized: "Saved Excerpt") }
+        return String(localized: "Saved Excerpt \(number)")
     }
 
     /// An attachment's kind as Finder names it, such as PDF document, and its size, in the

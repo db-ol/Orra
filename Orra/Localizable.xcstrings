@@ -3085,6 +3085,50 @@
         }
       }
     },
+    "Chosen by you" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elegido por ti"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自分で選んだ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由你选择"
+          }
+        }
+      }
+    },
+    "Cited in explanation" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Citado en la explicación"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "説明で引用されている"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解释中已引用"
+          }
+        }
+      }
+    },
     "Clean Up Text" : {
       "localizations" : {
         "es-419" : {
@@ -5115,6 +5159,28 @@
         }
       }
     },
+    "Folder changes count from the next Explain Again, once indexing finishes." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los cambios de las carpetas cuentan desde la próxima vez que uses Explicar de nuevo, cuando termine la indexación."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フォルダの変更は、インデックスの作成が終わったあと、次に“もう一度説明する”をクリックしたときから反映されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹的更改会在索引完成后，从下一次“重新解释”起生效。"
+          }
+        }
+      }
+    },
     "Folder not found" : {
       "localizations" : {
         "es-419" : {
@@ -5380,6 +5446,28 @@
         }
       }
     },
+    "Found by search" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encontrado por la búsqueda"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "検索で見つかった"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过搜索找到"
+          }
+        }
+      }
+    },
     "From %@" : {
       "localizations" : {
         "es-419" : {
@@ -5398,6 +5486,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "来源：%@"
+          }
+        }
+      }
+    },
+    "From the folders of %@" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De las carpetas de %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”のフォルダから"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来自“%@”的文件夹"
+          }
+        }
+      }
+    },
+    "From the folders of another project" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De las carpetas de otro proyecto"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別のプロジェクトのフォルダから"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来自另一个项目的文件夹"
           }
         }
       }
@@ -6414,6 +6546,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "内容包含与此项目相关的词语"
+          }
+        }
+      }
+    },
+    "Its project folder is not available now" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Su carpeta del proyecto no está disponible ahora"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このファイルがあるプロジェクトのフォルダは現在利用できない"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它所在的项目文件夹现在无法访问"
           }
         }
       }
@@ -8294,6 +8448,50 @@
         }
       }
     },
+    "No project file excerpts were included in this explanation. Assign the email to a project, then click Explain in that project's list to include the project's files." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta explicación no incluyó fragmentos de archivos del proyecto. Asigna el correo a un proyecto y luego, en la lista de ese proyecto, haz clic en Explicar para incluir los archivos del proyecto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この説明には、プロジェクトのファイルの抜粋が含まれていません。メールをプロジェクトに割り当ててから、そのプロジェクトのリストで“説明する”をクリックすると、そのプロジェクトのファイルも使われます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本次解释没有用到项目文件的摘录。将这封邮件归入项目后，在该项目的列表中点按“解释”，即可结合该项目的文件。"
+          }
+        }
+      }
+    },
+    "No project file excerpts were included in this explanation. The project's folders may hold no file Projects reads yet, or a long email or thread left no room for them." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta explicación no incluyó fragmentos de archivos del proyecto. Puede que las carpetas del proyecto todavía no tengan archivos que Proyectos lea, o que un correo o un hilo largo no les dejara espacio."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この説明には、プロジェクトのファイルの抜粋が含まれていません。プロジェクトのフォルダに“プロジェクト”が読み取れるファイルがまだないか、メールやスレッドが長く、抜粋を入れる余地がなかった可能性があります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本次解释没有用到项目文件的摘录。可能是项目的文件夹里还没有“项目”能读取的文件，也可能是邮件或往来邮件太长，容纳不下。"
+          }
+        }
+      }
+    },
     "No reply needed. It went to a list or came from a machine." : {
       "localizations" : {
         "es-419" : {
@@ -8624,6 +8822,28 @@
         }
       }
     },
+    "Not cited in explanation" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No citado en la explicación"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "説明で引用されていない"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解释中未引用"
+          }
+        }
+      }
+    },
     "Not done yet" : {
       "localizations" : {
         "es-419" : {
@@ -8686,6 +8906,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未下载到这台 Mac"
+          }
+        }
+      }
+    },
+    "Not in the project's folders now" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ya no está en las carpetas del proyecto"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在はプロジェクトのフォルダにない"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "现已不在项目的文件夹中"
           }
         }
       }
@@ -9083,6 +9325,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下载后完全在这台 Mac 上运行，你说的话不会发送到任何地方。"
+          }
+        }
+      }
+    },
+    "One of the project's newest files, added because search found few matches" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uno de los archivos más recientes del proyecto, agregado porque la búsqueda encontró pocas coincidencias"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "検索で見つかったものが少なかったため追加した、プロジェクトの最新のファイルの1つ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目里最新的文件之一，因搜索结果较少而加入"
           }
         }
       }
@@ -11292,6 +11556,28 @@
         }
       }
     },
+    "Project Files for This Explanation (%lld)" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archivos del proyecto para esta explicación (%lld)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この説明のプロジェクトのファイル（%lld）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本次解释的项目文件（%lld）"
+          }
+        }
+      }
+    },
     "Projects" : {
       "localizations" : {
         "es-419" : {
@@ -13361,6 +13647,138 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "存储"
+          }
+        }
+      }
+    },
+    "Saved excerpt" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fragmento guardado"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存された抜粋"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存的摘录"
+          }
+        }
+      }
+    },
+    "Saved Excerpt" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fragmento guardado"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存された抜粋"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存的摘录"
+          }
+        }
+      }
+    },
+    "Saved Excerpt %lld" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fragmento guardado %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存された抜粋%lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存的摘录 %lld"
+          }
+        }
+      }
+    },
+    "Saved excerpt, page %lld" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fragmento guardado, página %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存された抜粋、%lldページ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存的摘录，第 %lld 页"
+          }
+        }
+      }
+    },
+    "Saved excerpt, sheet “%@”" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fragmento guardado, hoja “%@”"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存された抜粋、シート“%@”"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存的摘录，工作表“%@”"
+          }
+        }
+      }
+    },
+    "Saved excerpt, slide %lld" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fragmento guardado, diapositiva %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存された抜粋、スライド%lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存的摘录，第 %lld 张幻灯片"
           }
         }
       }
@@ -15819,6 +16237,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "模型没有列出要点。"
+          }
+        }
+      }
+    },
+    "The model read it without the lines listed under Taken out before the model read it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El modelo lo leyó sin las líneas que aparecen en Quitado antes de que el modelo lo leyera."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "モデルは、“モデルが読む前に取り除いた内容”に挙げた行を除いて読みました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型读取时不含“在模型读取前删去的内容”中列出的部分。"
           }
         }
       }
@@ -18539,6 +18979,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你做了什么，预期的结果是什么，实际发生了什么。"
+          }
+        }
+      }
+    },
+    "When it explained this email, Projects gave the model excerpts of these files. Cited in explanation means a point under What it says names one of them as its source." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cuando explicó este correo, Proyectos le dio al modelo fragmentos de estos archivos. “Citado en la explicación” significa que un punto de Qué dice nombra uno de ellos como su fuente."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このメールを説明するとき、“プロジェクト”はこれらのファイルの抜粋をモデルに渡しました。“説明で引用されている”は、“メールの要点”のいずれかの要点が、そのファイルを出典として挙げていることを示します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解释这封邮件时，“项目”把这些文件中的摘录交给了模型。“解释中已引用”表示“邮件要点”里有要点把其中的摘录列为来源。"
           }
         }
       }
