@@ -76,6 +76,13 @@ struct ProjectsWindowView: View {
                 { ProjectsSuggestedSection.dismiss(suggestion, from: model.suggestions, runtime: runtime) }
             })
         }
+        // Choose Files for This Email…, whose Explain runs once the sheet closed, so Replace
+        // your draft? shows as a dialog of the window.
+        .sheet(item: $model.choosingFiles, onDismiss: {
+            Task { await model.explainAfterTheSheet() }
+        }) { choosing in
+            ProjectsChooseFiles(runtime: runtime, model: model, email: choosing.email)
+        }
         // Edit Project… beside a linked mailbox in Settings. A sheet, an alert or a dialog of
         // the window that shows already stays as it is, with the list behind it. The Remove
         // Rule dialog is the project page's own, and a sheet that follows it saves the rules
@@ -212,6 +219,11 @@ struct ProjectsWindowView: View {
                     MailRow(email: email, deadline: model.deadlines[email.messageID].flatMap { ProjectsWindowText.deadline($0, now: runtime.dependencies.now()) })
                         .contextMenu {
                             moveMenu(email)
+                            // So a choice can come before the first Explain.
+                            Button("Choose Files for This Email…") {
+                                model.chooseFiles(for: email)
+                            }
+                            .disabled(runtime.phase != .on || ProjectsWindowText.noText(email) != nil)
                         }
                 }
                 .overlay {

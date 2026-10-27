@@ -495,6 +495,40 @@ struct FolderIndexTests {
         }
     }
 
+    /// The sheet that chooses files lists every file of the projects asked for, newest first,
+    /// with what the index holds of it and never its text: text, text recognized alone, pages
+    /// that wait for recognition, or a name only.
+    @Test func listFilesGivesEveryProjectsFilesWithWhatTheIndexHoldsOfThem() async throws {
+        try await withFixture(recognize: { job, _ in
+            job.file.lastPathComponent == "sign.jpg" ? Self.recognized([(0, "Brass lamps for the lobby")]) : .failure(.unreadable)
+        }) { fixture in
+            let old = Date(timeIntervalSince1970: 1_760_000_000)
+            try fixture.write("notes.txt", "The print run is 500 calendars.", modified: old)
+            try fixture.write("sign.jpg", "x", modified: old.addingTimeInterval(60))
+            try fixture.write("Drawings/plan.dwg", "x", modified: old.addingTimeInterval(120))
+            await fixture.start()
+            let beta = fixture.folderURL.deletingLastPathComponent().appendingPathComponent("Beta", isDirectory: true)
+            try FileManager.default.createDirectory(at: beta, withIntermediateDirectories: true)
+            try "Call notes.".write(to: beta.appendingPathComponent("call.md"), atomically: true, encoding: .utf8)
+            await fixture.start(fixture.beta, folders: [beta])
+
+            let listed = try await fixture.index.listFiles(projects: [fixture.alpha, fixture.beta])
+            #expect(listed.map(\.url.lastPathComponent) == ["call.md", "plan.dwg", "sign.jpg", "notes.txt"])
+            #expect(listed.map(\.reading) == [.text, .nameOnly, .recognizedText, .text])
+            #expect(listed.map(\.project) == [fixture.beta, fixture.alpha, fixture.alpha, fixture.alpha])
+            #expect(listed[1].url.path == fixture.folder + "/Drawings/plan.dwg")
+            #expect(listed[3].modified == old && listed[3].size == Int64("The print run is 500 calendars.".utf8.count))
+            #expect(try await fixture.index.listFiles(projects: [fixture.beta]).map(\.url.lastPathComponent) == ["call.md"])
+            #expect(try await fixture.index.listFiles(projects: []).isEmpty)
+        }
+        // Without recognition, an image waits for it.
+        try await withFixture { fixture in
+            try fixture.write("sign.jpg", "x")
+            await fixture.start()
+            #expect(try await fixture.index.listFiles(projects: [fixture.alpha]).map(\.reading) == [.waitsForRecognition])
+        }
+    }
+
     /// The files the user chose for an email follow a rename of the file or of a folder above
     /// it, in the project whose folders moved only. An email that chose both the old and the
     /// new place keeps one of them.

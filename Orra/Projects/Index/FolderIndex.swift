@@ -420,6 +420,53 @@ final class FolderIndex {
         }
     }
 
+    /// A file the index lists, for the sheet that chooses files for an email.
+    nonisolated struct ListedFile: Sendable, Equatable {
+        /// What the index holds of the file.
+        nonisolated enum Reading: Sendable, Equatable {
+            /// Text read from the file, at least part of it from its text layer or its words.
+            case text
+            /// Text recognized in an image or on scanned pages only.
+            case recognizedText
+            /// Nothing yet, since its pages wait for text recognition.
+            case waitsForRecognition
+            /// Its name only, such as a drawing, an archive or a file whose text it could not
+            /// read.
+            case nameOnly
+        }
+
+        var project: UUID
+        /// Its real path, as the index keeps it.
+        var url: URL
+        var size: Int64
+        /// Its modification date when the index listed it.
+        var modified: Date
+        var reading: Reading
+    }
+
+    /// Every file the index lists in these projects, newest first, by path, size, date and
+    /// what the index holds of it, never its text. A file in the folders of two projects is
+    /// listed for each.
+    func listFiles(projects: [UUID]) async throws -> [ListedFile] {
+        guard !projects.isEmpty else { return [] }
+        let rows = try await database.run("""
+            SELECT f.project, f.path, f.size, f.modified, f.skip,
+                EXISTS (SELECT 1 FROM index_chunks c WHERE c.file = f.id)
+                    AND NOT EXISTS (SELECT 1 FROM index_chunks c WHERE c.file = f.id AND c.recognized = 0)
+            FROM index_files f WHERE f.project IN (SELECT value FROM json_each(?)) ORDER BY f.modified DESC, f.path
+            """, [.text("[" + projects.map { "\"\($0.uuidString)\"" }.joined(separator: ",") + "]")])
+        return rows.compactMap { row in
+            guard row.count == 6, let project = row[0].text.flatMap(UUID.init(uuidString:)), let path = row[1].text,
+                  let size = row[2].integer, let modified = row[3].real else { return nil }
+            let reading: ListedFile.Reading = switch row[4].text {
+            case nil: row[5].integer == 1 ? .recognizedText : .text
+            case FileSkipReason.waitsForRecognition.rawValue?: .waitsForRecognition
+            default: .nameOnly
+            }
+            return ListedFile(project: project, url: URL(fileURLWithPath: path), size: size, modified: Date(timeIntervalSince1970: modified), reading: reading)
+        }
+    }
+
     /// A project's files with text in the index, each with its modification date and the
     /// start of its text, for FileVersions, see ExplainService.Lookups.files.
     func versionFiles(project id: UUID) async throws -> [FileVersions.File] {
