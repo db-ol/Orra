@@ -1081,7 +1081,9 @@ struct ProjectsWindowViewTests {
     /// A file the user chose for the email shows in Project Files for This Explanation with
     /// Attach to Reply, as every other row of the list does: one whose excerpt the explanation
     /// holds, one the model got by its name only, and one that gave the model nothing. Each
-    /// ticks through the same check as any other file, which refuses the one that is gone.
+    /// row gets the email view, whose files can be ticked, and each file ticks through the
+    /// same check as any other, which refuses the one that is gone. The rows are read from
+    /// the section, not from the views AppKit draws, which differ between macOS versions.
     @Test func everyRowOfTheProjectFilesTakesAttachToReplyAChosenFileToo() async throws {
         let fixture = try await Fixture(files: [("lobby-elevation.dwg", Data("AC1032".utf8))])
         defer { fixture.cleanUp() }
@@ -1094,13 +1096,13 @@ struct ProjectsWindowViewTests {
         await model.show(explained.messageID)
         let email = model.emailModel(for: explained.messageID)
         await email.load()
-        email.showsProjectFiles = true
         await email.loadFolderRoots(for: [harbor])
         #expect(email.replyFiles.offersFiles)
         let plain = try #require(email.explanation)
-        let rows = ProjectsEmailFiles.files(in: plain).count
-        #expect(rows == 2)
-        #expect(try await checkboxes(in: ProjectsEmailArea.FilesSection(model: model, emailModel: email, email: explained, explanation: plain)) == rows)
+        let rows = ProjectsEmailFiles.files(in: plain)
+        #expect(rows.count == 2)
+        let plainSection = ProjectsEmailArea.FilesSection(model: model, emailModel: email, email: explained, explanation: plain)
+        #expect(rows.allSatisfy { plainSection.row($0).emailModel === email })
 
         // The same explanation, made with three files the user chose.
         let chosen = ExplainPrompt.FileOrigin(reason: .chosen, project: harbor)
@@ -1118,11 +1120,13 @@ struct ProjectsWindowViewTests {
         #expect(try await store.save(explanation, at: Self.today))
         await email.load()
         let saved = try #require(email.explanation)
-        let files = ProjectsEmailFiles.files(in: saved)
-        let missing = ProjectsEmailFiles.chosenWithoutExcerpts(in: saved)
-        #expect(files.filter { $0.reason == .chosen }.map(\.url) == [schedule, elevation])
-        #expect(missing.map(\.url) == [gone])
-        #expect(try await checkboxes(in: ProjectsEmailArea.FilesSection(model: model, emailModel: email, email: explained, explanation: saved)) == rows + 3)
+        let listed = ProjectsEmailFiles.files(in: saved) + ProjectsEmailFiles.chosenWithoutExcerpts(in: saved)
+        #expect(listed.count == rows.count + 3)
+        #expect(listed.filter { $0.reason == .chosen }.map(\.url) == [schedule, elevation, gone])
+        #expect(listed.last?.missing == .notInIndex)
+        let section = ProjectsEmailArea.FilesSection(model: model, emailModel: email, email: explained, explanation: saved)
+        #expect(listed.allSatisfy { section.row($0).emailModel === email })
+        #expect(email.replyFiles.offersFiles)
 
         await email.replyFiles.setTicked(schedule, true)
         await email.replyFiles.setTicked(elevation, true)
@@ -1131,25 +1135,6 @@ struct ProjectsWindowViewTests {
         #expect(email.replyFiles.problem(at: gone) != nil)
         #expect(!email.replyFiles.isTicked(gone))
         await fixture.stop()
-    }
-
-    /// The checkboxes a view shows, laid out in a window that is never ordered front. SwiftUI
-    /// draws each with an AppKit button in a view of its own, whose type names it.
-    private func checkboxes(in view: some View, size: NSSize = NSSize(width: 480, height: 1_600)) async throws -> Int {
-        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height, alignment: .topLeading))
-        hosting.frame = NSRect(origin: .zero, size: size)
-        let offscreen = NSWindow(contentRect: hosting.frame, styleMask: [.titled], backing: .buffered, defer: false)
-        offscreen.isReleasedWhenClosed = false
-        offscreen.contentView = hosting
-        defer { offscreen.close() }
-        for _ in 0..<20 {
-            hosting.layoutSubtreeIfNeeded()
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        func count(_ view: NSView) -> Int {
-            view.subviews.reduce(String(describing: type(of: view)).contains("Checkbox") ? 1 : 0) { $0 + count($1) }
-        }
-        return count(hosting)
     }
 
     // MARK: Render

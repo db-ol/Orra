@@ -254,13 +254,12 @@ extension ProjectsEmailArea {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     ForEach(files) { file in
-                        FileRow(file: file, place: place(of: file), project: projectLine(file), emailModel: emailModel)
+                        row(file)
                     }
                 }
-                // The files the user chose that gave the model nothing, after those it read,
-                // with Attach to Reply as every other row has it.
+                // The files the user chose that gave the model nothing, after those it read.
                 ForEach(missing) { file in
-                    FileRow(file: file, place: place(of: file), project: projectLine(file), emailModel: emailModel)
+                    row(file)
                 }
                 controls
                 if let note = emailModel.choiceNote {
@@ -385,6 +384,12 @@ extension ProjectsEmailArea {
         private func place(of file: ProjectsEmailFiles.File) -> ProjectsEmailFiles.Place? {
             guard let project = file.project, let roots = emailModel.folderRoots[project] else { return nil }
             return ProjectsEmailFiles.place(of: file.url, in: roots)
+        }
+
+        /// The row of a file of the list, with the email view for Attach to Reply, which every
+        /// row has, those of the files the user chose too.
+        func row(_ file: ProjectsEmailFiles.File) -> FileRow {
+            FileRow(file: file, place: place(of: file), project: projectLine(file), emailModel: emailModel)
         }
 
         /// The project of a file of another project than the email's, nil for the email's own.
