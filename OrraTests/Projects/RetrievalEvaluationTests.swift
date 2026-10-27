@@ -32,13 +32,15 @@ import Testing
 /// TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_TERMS names a retrieval-terms.jsonl of an earlier
 /// run, whose terms it takes without the model. TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_SWEEP=1
 /// picks the passages again with each rule of `variants` for other projects' passages,
-/// without the model, and gives each rule's line of the bar.
+/// without the model, and gives each rule's line of the bar and the mails of a project that
+/// get another project's passage, which no bar counts.
 /// TEST_RUNNER_ORRA_PROJECTS_RETRIEVAL_EXPLAIN, such as zh,en, also explains the mails of the
 /// kinds other-project, needs-project and negative with the real model in those languages,
 /// as the app does, with the draft written apart from other projects' passages, and once
-/// more with one request that writes the draft from them too, as before, to time both. It
-/// counts the drafts that hold a value, a name or an address that only another project's
-/// passage holds, or a run of 6 words or 10 Chinese characters of one.
+/// more with one request that writes the draft from them too, as before, to time both, also
+/// each explanation against itself. It counts the drafts that hold a value, a name or an
+/// address that only another project's passage holds, or a run of 6 words or 10 Chinese
+/// characters of one.
 ///
 /// The set and its supplement stay outside the repository, and so do the results.
 @Suite(.serialized, .enabled(if: RetrievalSet.folder != nil && !RetrievalSet.ownAddresses.isEmpty))
@@ -750,20 +752,24 @@ struct RetrievalEvaluationTests {
     /// The rules of round 2, which searched other projects when fewer than a number of the
     /// project's own passages matched a term, and the ranking of all projects, with other
     /// projects' passages in place of the project's weakest or after its 6, and one, two or
-    /// three terms a passage must match for Needs a Project. The app's rule is the last but
-    /// one.
+    /// three terms a passage must match for Needs a Project and for an email in a project.
+    /// The report marks the app's rule.
     private static let variants: [Variant] = [
         Variant(name: "own term matches 1", rule: .init(inProject: .ownTermMatches(1), needsProjectTerms: 1), replacing: true),
         Variant(name: "own term matches 2", rule: .init(inProject: .ownTermMatches(2), needsProjectTerms: 1), replacing: true),
         Variant(name: "own term matches 3", rule: .init(inProject: .ownTermMatches(3), needsProjectTerms: 1), replacing: true),
         Variant(name: "own term matches 7", rule: .init(inProject: .ownTermMatches(7), needsProjectTerms: 1), replacing: true),
-        Variant(name: "ranked above, in place of the weakest", rule: .init(needsProjectTerms: 1), replacing: true),
-        Variant(name: "ranked above, after the own 6", rule: .init(needsProjectTerms: 1)),
-        Variant(name: "ranked above, in place of the weakest, Needs a Project 2 terms", rule: .init(needsProjectTerms: 2), replacing: true),
-        Variant(name: "ranked above, after the own 6, Needs a Project 2 terms", rule: .init(needsProjectTerms: 2)),
-        Variant(name: "ranked above, in place of the weakest, Needs a Project 3 terms", rule: .init(needsProjectTerms: 3), replacing: true),
-        Variant(name: "ranked above, after the own 6, Needs a Project 3 terms", rule: .init(needsProjectTerms: 3)),
-        Variant(name: "ranked above, after the own 6, Needs a Project 3 terms, no name or date in any search", rule: .init(needsProjectTerms: 3, namesSearchTheProject: false)),
+        Variant(name: "ranked above, in place of the weakest, 1 term in a project, Needs a Project 1 term", rule: .init(inProjectTerms: 1, needsProjectTerms: 1), replacing: true),
+        Variant(name: "ranked above, after the own 6, 1 term in a project, Needs a Project 1 term", rule: .init(inProjectTerms: 1, needsProjectTerms: 1)),
+        Variant(name: "ranked above, in place of the weakest, 1 term in a project, Needs a Project 2 terms", rule: .init(inProjectTerms: 1, needsProjectTerms: 2), replacing: true),
+        Variant(name: "ranked above, after the own 6, 1 term in a project, Needs a Project 2 terms", rule: .init(inProjectTerms: 1, needsProjectTerms: 2)),
+        Variant(name: "ranked above, in place of the weakest, 1 term in a project, Needs a Project 3 terms", rule: .init(inProjectTerms: 1, needsProjectTerms: 3), replacing: true),
+        Variant(name: "ranked above, after the own 6, 1 term in a project, Needs a Project 3 terms", rule: .init(inProjectTerms: 1, needsProjectTerms: 3)),
+        Variant(name: "ranked above, after the own 6, 1 term in a project, Needs a Project 3 terms, no name or date in any search", rule: .init(inProjectTerms: 1, needsProjectTerms: 3, namesSearchTheProject: false)),
+        Variant(name: "ranked above, in place of the weakest, 2 terms in a project, Needs a Project 3 terms", rule: .init(inProjectTerms: 2, needsProjectTerms: 3), replacing: true),
+        Variant(name: "ranked above, after the own 6, 2 terms in a project, Needs a Project 2 terms", rule: .init(inProjectTerms: 2, needsProjectTerms: 2)),
+        Variant(name: "ranked above, after the own 6, 2 terms in a project, Needs a Project 3 terms", rule: .init(inProjectTerms: 2, needsProjectTerms: 3)),
+        Variant(name: "ranked above, after the own 6, 3 terms in a project, Needs a Project 3 terms", rule: .init(inProjectTerms: 3, needsProjectTerms: 3)),
     ]
 
     // MARK: The report
@@ -811,6 +817,16 @@ struct RetrievalEvaluationTests {
         }
         text += "Search: p90 \(String(format: "%.3f", quantile(searches, 0.9))) s over \(searches.count) searches.\n"
         text += "Other projects after: " + reasons.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", ") + ".\n"
+        // The passages of other projects that the mails of a project get, which no bar counts:
+        // the mails, those of the set among them, and the passages, relevant or not.
+        let inProject = rows.filter { $0.project != "none" }
+        func othersIn(_ rows: [Row]) -> (mails: Int, set: Int, passages: Int, relevant: Int) {
+            let with = rows.filter { $0.after.contains { $0.project != nil } }
+            let passages = with.flatMap { row in row.after.filter { $0.project != nil }.map { row.relevant.contains($0.path) } }
+            return (with.count, with.filter { $0.kinds.contains("plain") }.count, passages.count, passages.filter { $0 }.count)
+        }
+        let others = othersIn(inProject)
+        text += "Other projects' passages in the mails of a project: \(others.mails) of \(inProject.count) mails get one, \(others.set) of them mails of the set, with \(others.passages) passages, \(others.relevant) of them relevant.\n"
 
         // The bar of E 9.6 that this run measures.
         let plain = subset("plain")
@@ -833,7 +849,7 @@ struct RetrievalEvaluationTests {
         text += "\n## The bar\n\n" + checks.map { "- \($0.1 ? "passed" : "FAILED"): \($0.0)" }.joined(separator: "\n") + "\n"
 
         if !sweeps.isEmpty {
-            text += "\n## Sweep\n\nEach rule for other projects' passages, with the terms of this run. Negatives count those in a project and those without one. A rule after the own 6 lets the prompt hold up to 8 passages.\n\n| Rule | Recall, set | Set mails that lost a file | Recall, zh-en and en-zh | Recall, synonym | Hit, other-project | Hit, needs-project | Negatives with another project's passage | Bars met of 7 |\n|---|---|---|---|---|---|---|---|---|\n"
+            text += "\n## Sweep\n\nEach rule for other projects' passages, with the terms of this run. Negatives count those in a project and those without one. A rule after the own 6 lets the prompt hold up to 8 passages. The last two columns count what no bar counts: the set's mails that get another project's passage, and all mails of a project that get one, with how many of their passages of other projects are relevant.\n\n| Rule | Recall, set | Set mails that lost a file | Recall, zh-en and en-zh | Recall, synonym | Hit, other-project | Hit, needs-project | Negatives with another project's passage | Bars met of 7 | Set mails with another project's passage | Mails of a project with one, relevant passages |\n|---|---|---|---|---|---|---|---|---|---|---|\n"
             for variant in variants {
                 guard let picked = sweeps[variant.name] else { continue }
                 func swept(_ rows: [Row]) -> [Row] {
@@ -848,7 +864,7 @@ struct RetrievalEvaluationTests {
                     !Set(row.before.map(\.path)).intersection(row.relevant).isSubset(of: Set(row.after.map(\.path)))
                 }.count
                 let sweptNegatives = swept(negatives).filter { $0.after.contains { $0.project != nil } }
-                let inProject = sweptNegatives.filter { $0.project != "none" }.count
+                let negativesInProject = sweptNegatives.filter { $0.project != "none" }.count
                 let bars = [
                     recall(sweptPlain, true) >= recall(plain, false) - 0.01,
                     sweptLost <= 2,
@@ -858,7 +874,9 @@ struct RetrievalEvaluationTests {
                     hit(swept(subset("needs-project"))) >= 0.6,
                     sweptNegatives.count <= 3,
                 ].filter { $0 }.count
-                text += "| \(variant.name) | \(percent(recall(sweptPlain, true))) | \(sweptLost) | \(percent(recall(swept(crossing), true))) | \(percent(recall(swept(synonym), true))) | \(percent(hit(swept(subset("other-project"))))) | \(percent(hit(swept(subset("needs-project"))))) | \(sweptNegatives.count) (\(inProject) + \(sweptNegatives.count - inProject)) | \(bars) |\n"
+                let sweptOthers = othersIn(swept(inProject))
+                let name = variant.name + (variant.rule == ExplainService.OtherProjectsRule() && !variant.replacing ? " (the app's rule)" : "")
+                text += "| \(name) | \(percent(recall(sweptPlain, true))) | \(sweptLost) | \(percent(recall(swept(crossing), true))) | \(percent(recall(swept(synonym), true))) | \(percent(hit(swept(subset("other-project"))))) | \(percent(hit(swept(subset("needs-project"))))) | \(sweptNegatives.count) (\(negativesInProject) + \(sweptNegatives.count - negativesInProject)) | \(bars) | \(sweptOthers.set) of \(plain.count) | \(sweptOthers.mails) of \(inProject.count), \(sweptOthers.relevant) of \(sweptOthers.passages) |\n"
             }
         }
         if !leaks.isEmpty {
@@ -874,6 +892,14 @@ struct RetrievalEvaluationTests {
                 let one = together.filter { leak in chosen(leak) && apart.contains { $0.id == leak.id && $0.language == leak.language && chosen($0) } }
                 func times(_ leaks: [Leak]) -> [Double] { leaks.map(\.seconds).sorted() }
                 text += "| \(name == "with other projects' passages" ? "\(two.count) \(name)" : name) | \(String(format: "%.1f s", quantile(times(two), 0.5))) | \(String(format: "%.1f s", quantile(times(two), 0.9))) | \(two.map(\.requests).reduce(0, +)) | \(String(format: "%.1f s", quantile(times(one), 0.5))) | \(String(format: "%.1f s", quantile(times(one), 0.9))) | \(one.map(\.requests).reduce(0, +)) |\n"
+            }
+            // Each explanation against itself with one request, since the quantiles of the two
+            // ways apart hide what the second request adds to one explanation.
+            let added = apart.filter { $0.otherPassages > 0 }.compactMap { leak in
+                together.first { $0.id == leak.id && $0.language == leak.language }.map { leak.seconds - $0.seconds }
+            }.sorted()
+            if !added.isEmpty {
+                text += "\nPair by pair, the draft apart adds \(String(format: "%.1f s", quantile(added, 0.5))) at the median, \(String(format: "%.1f s", quantile(added, 0.9))) at p90 and \(String(format: "%.1f s", added.last ?? 0)) at most to each of the \(added.count) explanations with other projects' passages.\n"
             }
         }
         return text
