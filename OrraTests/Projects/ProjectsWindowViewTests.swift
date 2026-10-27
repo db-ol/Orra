@@ -1012,8 +1012,8 @@ struct ProjectsWindowViewTests {
 
         // A file in a folder that left the project, from an explanation saved before Orra
         // 0.6.1, a file chosen from a project that is gone, and a file in a folder that is not
-        // available now. Then the lists without files, of an email in no project and of an
-        // email in a project without folders.
+        // available now, with two excerpts of one page. Then the lists without files, of an
+        // email in no project and of an email in a project without folders.
         let gallery = Project(name: "Gallery fit out")
         try await runtime.add(gallery)
         let lobby = try #require(email.folderRoots[harbor]?.folders.first)
@@ -1043,6 +1043,7 @@ struct ProjectsWindowViewTests {
                 "F1": .file(chunk(home.appending(path: "Projects/Old lobby/plan-v1.pdf"), page: 3)),
                 "F2": .file(chunk(URL(fileURLWithPath: "/Users/Shared/Gallery/brief.md")), origin: ExplainPrompt.FileOrigin(reason: .chosen, project: UUID())),
                 "F3": .file(chunk(disk.appending(path: "2025/budget.pdf"), page: 1), origin: ExplainPrompt.FileOrigin(reason: .match, project: harbor)),
+                "F4": .file(chunk(disk.appending(path: "2025/budget.pdf"), page: 1), origin: ExplainPrompt.FileOrigin(reason: .match, project: harbor)),
             ])),
             (listed(nil), saved(nil, sources: [:])),
             (listed(gallery.id), saved(gallery.id, sources: [:])),

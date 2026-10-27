@@ -98,13 +98,14 @@ got worse than the baseline or has no result, see docs/release-gate.md.
   - ProjectsEmailFilesTests, added on 2026-10-26, checks Project Files for This Explanation
     with made up files: why each file excerpt was in the prompt, as the explanation saves
     it and Orra 0.6.0 reads it, also with a reason a later Orra adds, each file once in the
-    order of the prompt with its citation and warnings, the words of the list, that the
-    email view reads the folders only when the list asks, and where a file is in the
-    folders of its project, a folder that is not available included, also inside one that
-    is, and that the list reads the folders again for another email. ProjectsRuntimeTests
-    checks the folders' real paths, a bookmark that finds nothing, a renamed folder that
-    is gone, and that no folder is read once Projects turned off or the project let go of
-    the folder while its bookmark resolved or while another folder was read.
+    order of the prompt with its citation and warnings, the words of the list, chips that
+    tell two excerpts of one page apart, that the email view reads the folders only when
+    the list asks, and where a file is in the folders of its project, a folder that is not
+    available included, also inside one that is, and that the list reads the folders again
+    for another email. ProjectsRuntimeTests checks the folders' real paths, a bookmark that
+    finds nothing, a renamed folder that is gone, and that no folder is read once Projects
+    turned off or the project let go of the folder while its bookmark resolved or while
+    another folder was read.
     ExplainPromptTests and ExplainServiceTests check that why a file is in the prompt
     changes nothing in it.
   - ProjectSuggestionsTests, ProjectSuggestionPromptTests, ProjectSuggestionServiceTests and

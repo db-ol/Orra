@@ -33,6 +33,24 @@ nonisolated enum ProjectsEmailFiles {
         var warnings: [ProjectsWarning]
 
         var id: URL { url }
+
+        /// The number on the chip of each of its excerpts, in their order: the excerpt's
+        /// place among the excerpts of its page, or among those of a file without pages,
+        /// when there are several, so no two chips of the file read the same. Nil for an
+        /// excerpt alone on its page, or the one excerpt of a file without pages.
+        var chipNumbers: [Int?] {
+            var counts: [Int?: Int] = [:]
+            for excerpt in excerpts {
+                counts[excerpt.chunk.page, default: 0] += 1
+            }
+            var numbers: [Int?: Int] = [:]
+            return excerpts.map { excerpt in
+                let page = excerpt.chunk.page
+                guard counts[page, default: 0] > 1 else { return nil }
+                numbers[page, default: 0] += 1
+                return numbers[page]
+            }
+        }
     }
 
     /// The files of the explanation's file sources, each once, in the order of their first
@@ -372,8 +390,9 @@ extension ProjectsEmailArea {
         }
 
         private var chips: some View {
-            ForEach(Array(file.excerpts.enumerated()), id: \.element.id) { index, excerpt in
-                ExcerptChip(excerpt: excerpt, number: file.excerpts.count > 1 ? index + 1 : nil)
+            let numbers = file.chipNumbers
+            return ForEach(Array(file.excerpts.enumerated()), id: \.element.id) { index, excerpt in
+                ExcerptChip(excerpt: excerpt, number: numbers[index])
             }
         }
     }
@@ -382,7 +401,8 @@ extension ProjectsEmailArea {
     /// popover of a file's source chip.
     struct ExcerptChip: View {
         let excerpt: ProjectsEmailFiles.SavedExcerpt
-        /// Its number among the file's excerpts, nil for a file's one excerpt.
+        /// Its number among the file's excerpts of its page, or of a file without pages,
+        /// nil when it is the only one there, see ProjectsEmailFiles.File.chipNumbers.
         let number: Int?
         @State private var showsExcerpt = false
 
@@ -390,9 +410,12 @@ extension ProjectsEmailArea {
             Button {
                 showsExcerpt = true
             } label: {
+                // Cut in the middle, as the source chips are, so a number at the end stays
+                // in a column too narrow for the chip.
                 Text(verbatim: ProjectsWindowText.excerptChip(excerpt.chunk, number: number))
                     .font(.caption)
                     .lineLimit(1)
+                    .truncationMode(.middle)
             }
             .buttonStyle(.bordered)
             .controlSize(.mini)

@@ -509,23 +509,29 @@ nonisolated enum ProjectsWindowText {
     }
 
     /// The chip of a saved excerpt in the list of an explanation's files: its page, or Saved
-    /// Excerpt for the one excerpt of a file without pages, with its number when such a file
-    /// has several.
+    /// Excerpt for a file without pages. With its number when the file has several excerpts
+    /// of that page, or several without pages, see ProjectsEmailFiles.File.chipNumbers, such
+    /// as Page 4, Saved Excerpt 2.
     static func excerptChip(_ chunk: TextChunker.Chunk, number: Int?) -> String {
-        if let page = chunk.page {
-            return String(localized: "Page \(page)")
-        }
-        guard let number else { return String(localized: "Saved Excerpt") }
-        return String(localized: "Saved Excerpt \(number)")
+        guard let page = chunk.page else { return savedExcerptChip(number) }
+        let place = String(localized: "Page \(page)")
+        guard number != nil else { return place }
+        return String(localized: "\(place), \(savedExcerptChip(number))")
     }
 
-    /// What VoiceOver reads for the chip of a saved excerpt: the file and the excerpt, as
-    /// for the file's chip under a point.
+    /// What VoiceOver reads for the chip of a saved excerpt: the file with its page, as for
+    /// the file's chip under a point, and the excerpt when the chip names it.
     static func excerptChipLabel(_ chunk: TextChunker.Chunk, number: Int?) -> String {
-        guard chunk.page == nil else { return sourceLabel(.file(chunk)) }
-        let name = chunk.file.lastPathComponent
-        let chip = excerptChip(chunk, number: number)
-        return String(localized: "\(name), \(chip)")
+        let file = sourceLabel(.file(chunk))
+        guard chunk.page == nil || number != nil else { return file }
+        return String(localized: "\(file), \(savedExcerptChip(number))")
+    }
+
+    /// Saved Excerpt, with its number among the excerpts whose chips would read the same
+    /// without it.
+    private static func savedExcerptChip(_ number: Int?) -> String {
+        guard let number else { return String(localized: "Saved Excerpt") }
+        return String(localized: "Saved Excerpt \(number)")
     }
 
     /// An attachment's kind as Finder names it, such as PDF document, and its size, in the

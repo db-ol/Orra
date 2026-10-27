@@ -197,10 +197,49 @@ struct ProjectsEmailFilesTests {
         #expect(ProjectsWindowText.excerptChip(notes, number: nil) == "Saved Excerpt")
         #expect(ProjectsWindowText.excerptChip(notes, number: 2) == "Saved Excerpt 2")
         #expect(ProjectsWindowText.excerptChipLabel(notes, number: 2) == "notes.md, Saved Excerpt 2")
+        #expect(ProjectsWindowText.excerptChipLabel(notes, number: nil) == "notes.md, Saved Excerpt")
         notes.page = 4
-        #expect(ProjectsWindowText.excerptChip(notes, number: 2) == "Page 4")
-        #expect(ProjectsWindowText.excerptChipLabel(notes, number: 2) == "notes.md, page 4")
+        #expect(ProjectsWindowText.excerptChip(notes, number: nil) == "Page 4")
+        #expect(ProjectsWindowText.excerptChipLabel(notes, number: nil) == "notes.md, page 4")
         #expect(ProjectsWindowText.excerptChipLabel(notes, number: nil) == ProjectsWindowText.sourceLabel(.file(notes)))
+        #expect(ProjectsWindowText.excerptChip(notes, number: 2) == "Page 4, Saved Excerpt 2")
+        #expect(ProjectsWindowText.excerptChipLabel(notes, number: 2) == "notes.md, page 4, Saved Excerpt 2")
+    }
+
+    /// No two chips of a file read the same: the excerpts of one page, or of a file without
+    /// pages, have numbers when there are several, in the order of the prompt, and an
+    /// excerpt alone on its page has none. VoiceOver hears them apart too.
+    @Test func noTwoChipsOfAFileReadTheSame() {
+        let found = ExplainPrompt.FileOrigin(reason: .match, project: Self.project)
+        let files = ProjectsEmailFiles.files(in: Self.explanation(sources: [
+            "F1": .file(Self.chunk("schedule.pdf", page: 4, text: "The lobby lamps arrive on 22 November."), origin: found),
+            "F2": .file(Self.chunk("schedule.pdf", page: 2, text: "The doors open at nine."), origin: found),
+            "F3": .file(Self.chunk("schedule.pdf", page: 4, text: "Twelve brass lamps hang in the lobby."), origin: found),
+            "F4": .file(Self.chunk("notes.md", text: "Mei takes over the lamp order."), origin: found),
+            "F5": .file(Self.chunk("notes.md", text: "Kai sends the floor plan."), origin: found),
+            "F6": .file(Self.chunk("brief.md"), origin: found),
+            "F7": .file(Self.chunk("plan.pdf", page: 1), origin: found),
+        ]))
+        #expect(files.map(\.url.lastPathComponent) == ["schedule.pdf", "notes.md", "brief.md", "plan.pdf"])
+        #expect(files.map(\.chipNumbers) == [[1, nil, 2], [1, 2], [nil], [nil]])
+        let chips = files.map { file in
+            zip(file.excerpts, file.chipNumbers).map { ProjectsWindowText.excerptChip($0.chunk, number: $1) }
+        }
+        #expect(chips == [
+            ["Page 4, Saved Excerpt 1", "Page 2", "Page 4, Saved Excerpt 2"],
+            ["Saved Excerpt 1", "Saved Excerpt 2"],
+            ["Saved Excerpt"],
+            ["Page 1"],
+        ])
+        let labels = files.map { file in
+            zip(file.excerpts, file.chipNumbers).map { ProjectsWindowText.excerptChipLabel($0.chunk, number: $1) }
+        }
+        #expect(labels == [
+            ["schedule.pdf, page 4, Saved Excerpt 1", "schedule.pdf, page 2", "schedule.pdf, page 4, Saved Excerpt 2"],
+            ["notes.md, Saved Excerpt 1", "notes.md, Saved Excerpt 2"],
+            ["brief.md, Saved Excerpt"],
+            ["plan.pdf, page 1"],
+        ])
     }
 
     // MARK: The folders
