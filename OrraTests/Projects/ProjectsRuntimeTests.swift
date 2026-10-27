@@ -77,7 +77,7 @@ struct ProjectsRuntimeTests {
             watchesMemoryPressure: false,
             watchFolders: watchFolders,
             readText: readText,
-            recognizeText: recognize ?? { _, _ in .success(RecognitionResult(isDone: true)) },
+            recognizeText: recognize ?? RecognitionTestFiles.findsNothing,
             power: { [machine] in machine.power },
             resolveFolders: resolveFolders,
             openDatabase: { storage in

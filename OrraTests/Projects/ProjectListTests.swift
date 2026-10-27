@@ -113,7 +113,7 @@ struct ProjectListTests {
             try await list.add(Self.harbor, mail: store)
         }
         await #expect(throws: ProjectList.Failure.notLoaded) {
-            try await list.reconcile(mail: store, index: FolderIndex(database: store.database, isDictating: { false }, watch: { _, _, _ in {} }))
+            try await list.reconcile(mail: store, index: FolderIndex(database: store.database, isDictating: { false }, recognize: RecognitionTestFiles.findsNothing, watch: { _, _, _ in {} }))
         }
         #expect(try Data(contentsOf: file) == broken)
         await store.close()
@@ -124,7 +124,7 @@ struct ProjectListTests {
     @Test func aChangeThatCannotBeSavedIsUndone() async throws {
         defer { cleanUp() }
         let store = try await openStore()
-        let index = FolderIndex(database: store.database, isDictating: { false }, watch: { _, _, _ in {} })
+        let index = FolderIndex(database: store.database, isDictating: { false }, recognize: RecognitionTestFiles.findsNothing, watch: { _, _, _ in {} })
         let list = ProjectList(storage: storage)
         try await list.load()
         try await list.add(Self.harbor, mail: store)
@@ -175,7 +175,7 @@ struct ProjectListTests {
     @Test func forgetProjectRemovesItsMailItsIndexAndThenTheProject() async throws {
         defer { cleanUp() }
         let store = try await openStore()
-        let index = FolderIndex(database: store.database, isDictating: { false }, watch: { _, _, _ in {} })
+        let index = FolderIndex(database: store.database, isDictating: { false }, recognize: RecognitionTestFiles.findsNothing, watch: { _, _, _ in {} })
         let list = ProjectList(storage: storage)
         try await list.load()
         try await list.add(Self.harbor, mail: store)
@@ -208,7 +208,7 @@ struct ProjectListTests {
     @Test func reconcileRegistersTheListAndRemovesTheDataOfOtherProjects() async throws {
         defer { cleanUp() }
         let store = try await openStore()
-        let index = FolderIndex(database: store.database, isDictating: { false }, watch: { _, _, _ in {} })
+        let index = FolderIndex(database: store.database, isDictating: { false }, recognize: RecognitionTestFiles.findsNothing, watch: { _, _, _ in {} })
         let gone = UUID()
         try await store.add(project: gone)
         try await store.database.run("INSERT INTO index_files (project, path, size, modified) VALUES (?, '/tmp/a.txt', 1, 0)", [.text(gone.uuidString)])
