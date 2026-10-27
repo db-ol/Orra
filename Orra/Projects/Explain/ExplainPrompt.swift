@@ -9,7 +9,8 @@ import Foundation
 /// - excerpts of the project's files, best first. When search found fewer than 3, the
 ///   newest files of the project fill up to 3 (code step 7). A file a newer one replaced
 ///   says so, and so does a file that is only earlier than a newer one of its kind (code
-///   step 3).
+///   step 3). The source of each excerpt keeps why it is in the prompt and the project
+///   whose folder holds its file, which the prompt never shows.
 /// - excerpts of files of the user's other projects that the search terms matched, each
 ///   with its project, in <other_files> with the ids O1 and up. They take the places of
 ///   the project's weakest excerpts, so the prompt holds at most `chunkLimit` excerpts in
@@ -118,6 +119,9 @@ nonisolated struct ExplainPrompt: Sendable {
         var versions = FileVersions([])
         /// Files whose text held hidden runs, which FileTextExtractor dropped.
         var filesWithHiddenText: Set<URL> = []
+        /// Why each file is in the prompt, by file, for the source of each of its excerpts.
+        /// The prompt's text never reads it.
+        var fileOrigins: [URL: FileOrigin] = [:]
         /// Excerpts of files of the user's other projects that the search terms matched,
         /// best first, for <other_files>. They explain the email to the user, and the draft
         /// takes nothing from them.
@@ -650,7 +654,7 @@ nonisolated struct ExplainPrompt: Sendable {
             for (number, index) in chunkIndices.enumerated() {
                 let id = "F\(number + 1)"
                 chunkIDs[index] = id
-                sources[id] = .file(chunks[index].chunk)
+                sources[id] = .file(chunks[index].chunk, origin: input.fileOrigins[chunks[index].chunk.file])
                 if firstID[chunks[index].chunk.file] == nil {
                     firstID[chunks[index].chunk.file] = id
                 }

@@ -56,7 +56,8 @@ nonisolated struct Explanation: Sendable, Equatable, Codable {
     /// checked one.
     var draftCheck: DraftCheckInput?
     /// What the source ids of the points stand for: 本邮件 or this email, F1, O1, M1, T1 and
-    /// A1. An O id is an excerpt of a file of another project, whose origin names it.
+    /// A1. A file's excerpt says why it was in the prompt, see ExplainPrompt.FileOrigin, and
+    /// an O id is an excerpt of a file of another project, whose origin names it.
     var sources: [String: ExplainPrompt.Source]
     /// What PromptHygiene took out of each place of the prompt, for the user to see. Never
     /// for the model or a log.
@@ -617,6 +618,14 @@ final class ExplainService {
         }
         input.chunks = gathered.hits.map(chunk)
         input.newestChunks = gathered.newest.map(chunk)
+        // Why each file is in the prompt. The fill leaves out every file search found, so a
+        // file has one reason, and a hit counts over the fill all the same.
+        for hit in gathered.newest {
+            input.fileOrigins[hit.file] = ExplainPrompt.FileOrigin(reason: .newest, project: hit.project)
+        }
+        for hit in gathered.hits {
+            input.fileOrigins[hit.file] = ExplainPrompt.FileOrigin(reason: .match, project: hit.project)
+        }
         input.versions = FileVersions(gathered.files)
         input.otherChunks = gathered.others.map { hit in
             ExplainPrompt.OtherChunk(chunk: chunk(hit), project: hit.project, projectName: known.projects.first { $0.id == hit.project }?.name ?? "")
@@ -1027,6 +1036,13 @@ final class ExplainService {
     private nonisolated static func summary(_ prompt: ExplainPrompt, _ explanation: Explanation, _ gathered: Gathered) -> String {
         let files = prompt.sources.keys.filter { $0.hasPrefix("F") }.count
         let otherFiles = prompt.sources.keys.filter(ExplainPrompt.isOtherFileSource).count
+        // The reasons of the project's own excerpts, the F ids.
+        let reasons = prompt.sources.compactMap { id, source -> ExplainPrompt.FileOrigin.Reason? in
+            guard id.hasPrefix("F"), case .file(_, let origin) = source else { return nil }
+            return origin?.reason
+        }
+        let found = reasons.filter { $0 == .match }.count
+        let newest = reasons.filter { $0 == .newest }.count
         let terms = gathered.terms.map { "\($0.count) search terms" } ?? "no search terms"
         let otherProjects = gathered.otherProjects.map { "other projects \($0.rawValue)" } ?? "other projects not searched"
         let thread = prompt.sources.keys.filter { $0.hasPrefix("T") }.count
@@ -1042,7 +1058,7 @@ final class ExplainService {
         case .expired: draft = "expired"
         }
         let flagged = explanation.points.filter { !$0.flags.isEmpty }.count
-        return "\(terms), \(otherProjects), \(prompt.tokens) prompt tokens with \(files) excerpts, \(otherFiles) excerpts of other projects, \(thread) thread messages, \(projectMail) project mails and \(attachments) attachments, \(explanation.points.count) points of which \(flagged) flagged, \(explanation.questions.count) questions, \(explanation.warnings.count) warnings in code and \(explanation.modelWarnings.count) from the model, draft \(draft), \(explanation.problems.count) problems of form"
+        return "\(terms), \(otherProjects), \(prompt.tokens) prompt tokens with \(files) excerpts (\(found) found by search, \(newest) of the newest files), \(otherFiles) excerpts of other projects, \(thread) thread messages, \(projectMail) project mails and \(attachments) attachments, \(explanation.points.count) points of which \(flagged) flagged, \(explanation.questions.count) questions, \(explanation.warnings.count) warnings in code and \(explanation.modelWarnings.count) from the model, draft \(draft), \(explanation.problems.count) problems of form"
     }
 
     private nonisolated static func seconds(_ duration: Duration) -> String {

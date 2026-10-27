@@ -48,7 +48,9 @@ struct ExplainServiceTests {
         #expect(points[4].sources.isEmpty)
         #expect(explanation.unknownSources == ["F9"])
         #expect(explanation.problems.contains(.unknownSources))
-        #expect(explanation.sources["F1"] == .file(TextChunker.Chunk(file: Fixture.quote.file, page: nil, modified: Fixture.quote.modified, heading: nil, text: Fixture.quote.text)))
+        #expect(explanation.sources["F1"] == .file(
+            TextChunker.Chunk(file: Fixture.quote.file, page: nil, modified: Fixture.quote.modified, heading: nil, text: Fixture.quote.text),
+            origin: ExplainPrompt.FileOrigin(reason: .match, project: Fixture.projectID)))
         #expect(explanation.sources["this email"] == .message("proof-2@printworks.example"))
 
         guard case .checked(let result) = explanation.draft else {
@@ -160,6 +162,22 @@ struct ExplainServiceTests {
         let enough = Fakes(hits: hits, answer: .success(Fixture.englishAnswer))
         _ = try await enough.service().explain(Fixture.email())
         #expect(!enough.callList.contains { $0.hasPrefix("newest") })
+    }
+
+    /// Each file excerpt's source says whether search found it or the newest files filled up
+    /// the prompt, and the project whose folder holds the file. The prompt says neither.
+    @Test func eachFileExcerptSaysWhyItIsInThePromptAndWhichProjectHoldsIt() async throws {
+        let notes = Fixture.hit("notes.md", "Meeting notes of 2026-10-02.")
+        let fakes = Fakes(hits: [Fixture.quote], newest: [notes, Fixture.quote], answer: .success(Fixture.englishAnswer))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        let quote = TextChunker.Chunk(file: Fixture.quote.file, page: nil, modified: Fixture.quote.modified, heading: nil, text: Fixture.quote.text)
+        let newest = TextChunker.Chunk(file: notes.file, page: nil, modified: notes.modified, heading: nil, text: notes.text)
+        #expect(explanation.sources["F1"] == .file(quote, origin: ExplainPrompt.FileOrigin(reason: .match, project: Fixture.projectID)))
+        #expect(explanation.sources["F2"] == .file(newest, origin: ExplainPrompt.FileOrigin(reason: .newest, project: Fixture.projectID)))
+        #expect(explanation.sources["F3"] == nil)
+        let prompt = try #require(fakes.requestList.first?.prompt)
+        #expect(prompt.contains("Meeting notes of 2026-10-02."))
+        #expect(!prompt.contains(Fixture.projectID.uuidString))
     }
 
     @Test func asksForTheProjectsOtherMailWithoutTheEmailAndItsThread() async throws {

@@ -11,11 +11,14 @@ import SwiftUI
 /// - the warnings, always with those the code found, and what was taken out of the text
 ///   before the model read it
 /// - What it says: the points, each with chips for its sources, or a line that it has
-///   none. A file's chip shows the excerpt with its page inside Orra, an attachment's chip
-///   the excerpt the model read, and an earlier email's chip shows that email in the window
-///   (decision 20). The chip of another project's file names that project in brackets, and
-///   a line under the points says that such files are for the user only. Nothing opens
-///   outside Orra. A line says when Projects could not read an attachment.
+///   none. A file's chip shows the excerpt the explanation saved, with its page, inside
+///   Orra, an attachment's chip the excerpt the model read, and an earlier email's chip
+///   shows that email in the window (decision 20). The chip of another project's file names
+///   that project in brackets, and a line under the points says that such files are for the
+///   user only. Nothing opens outside Orra. A line says when Projects could not read an
+///   attachment.
+/// - Project Files for This Explanation, folded: each project file the explanation gave the
+///   model, with Edit Project…, see FilesSection
 /// - Before you reply: the questions only the user can answer
 /// - the draft with its tools, see DraftSection
 /// - the email itself under Original Email, see ProjectsEmailOriginal, which also lists the
@@ -319,7 +322,7 @@ extension ProjectsEmailArea {
 // MARK: What the explanation says
 
 extension ProjectsEmailArea {
-    /// The warnings, What it says and Before you reply.
+    /// The warnings, What it says, Project Files for This Explanation and Before you reply.
     struct ExplanationSections: View {
         let model: ProjectsWindowModel
         let emailModel: ProjectsEmailModel
@@ -374,6 +377,7 @@ extension ProjectsEmailArea {
                         .foregroundStyle(.secondary)
                 }
             }
+            FilesSection(model: model, emailModel: emailModel, email: email, explanation: explanation)
             if explanation.reply.draftLanguage != nil || !explanation.questions.isEmpty {
                 section("Before you reply") {
                     if explanation.questions.isEmpty {
@@ -584,7 +588,7 @@ extension ProjectsEmailArea {
         private var chips: some View {
             ForEach(ids, id: \.self) { id in
                 if let source = emailModel.sources[id] {
-                    SourceChip(source: source, emailText: emailModel.emailText) { messageID in
+                    SourceChip(source: source, emailText: emailModel.emailText, takenOut: emailModel.explanation?.removed[.file(id)] != nil) { messageID in
                         Task { await model.show(messageID) }
                     }
                 }
@@ -595,6 +599,8 @@ extension ProjectsEmailArea {
     struct SourceChip: View {
         let source: ProjectsEmailModel.Source
         let emailText: String
+        /// Whether the hygiene took lines out of a file's excerpt before the model read it.
+        var takenOut = false
         let show: (String) -> Void
         @State private var showsExcerpt = false
 
@@ -632,7 +638,7 @@ extension ProjectsEmailArea {
             .accessibilityLabel(Text(verbatim: ProjectsWindowText.sourceLabel(source)))
             .disabled(Self.isGone(source))
             .popover(isPresented: $showsExcerpt, arrowEdge: .bottom) {
-                Excerpt(source: source, emailText: emailText)
+                Excerpt(source: source, emailText: emailText, takenOut: takenOut)
             }
         }
 
@@ -652,12 +658,15 @@ extension ProjectsEmailArea {
         }
     }
 
-    /// The text behind a chip: a file's excerpt with its page and heading, and the project
-    /// of another project's file, the excerpt of an attachment the model read, or the email's
-    /// own text.
+    /// The text behind a chip: a file's excerpt as the explanation saved it, with its page
+    /// and heading, and the project of another project's file, the excerpt of an attachment
+    /// the model read, or the email's own text. A file's saved excerpt keeps the lines the
+    /// hygiene took out before the model read it, so it says so when it holds any.
     struct Excerpt: View {
         let source: ProjectsEmailModel.Source
         let emailText: String
+        /// Whether the hygiene took lines out of a file's excerpt before the model read it.
+        var takenOut = false
 
         var body: some View {
             ScrollView {
@@ -670,10 +679,9 @@ extension ProjectsEmailArea {
                             Text(verbatim: ProjectsWindowText.otherProject(project))
                                 .foregroundStyle(.secondary)
                         }
-                        if let page = chunk.page {
-                            Text("Page \(page)")
-                                .foregroundStyle(.secondary)
-                        }
+                        Text(verbatim: ProjectsWindowText.savedExcerpt(chunk))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         if let heading = chunk.heading, !heading.isEmpty {
                             Text(verbatim: heading)
                                 .font(.subheadline.weight(.semibold))
@@ -685,6 +693,12 @@ extension ProjectsEmailArea {
                         Text(verbatim: chunk.text)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
+                        if takenOut {
+                            Text("The model read it without the lines listed under Taken out before the model read it.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     case .attachment(let name, let excerpt):
                         Text(verbatim: name)
                             .font(.headline)

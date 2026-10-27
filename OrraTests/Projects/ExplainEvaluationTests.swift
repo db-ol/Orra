@@ -408,11 +408,28 @@ struct ExplainEvaluationTests {
         case .expired:
             draft = "expired"
         }
+        // Each file excerpt the model got, with why it was in the prompt and whether a point
+        // cites it.
+        let files = explanation.sources
+            .compactMap { id, source -> (id: String, chunk: TextChunker.Chunk, origin: ExplainPrompt.FileOrigin?)? in
+                guard case .file(let chunk, let origin) = source else { return nil }
+                return (id, chunk, origin)
+            }
+            .sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending }
+            .map { file -> [String: Any] in
+                [
+                    "id": file.id,
+                    "name": file.chunk.file.lastPathComponent,
+                    "page": file.chunk.page.map { $0 as Any } ?? NSNull(),
+                    "reason": file.origin?.reason.map { $0.rawValue as Any } ?? NSNull(),
+                    "cited": explanation.points.contains { $0.sources.contains(file.id) },
+                ]
+            }
         let object: [String: Any] = [
             "id": mail.id,
             "attachments_read": explanation.sources.keys.filter { $0.hasPrefix("A") }.count,
             "search_terms": explanation.searchTerms?.count ?? 0,
-            "files": explanation.sources.keys.filter { $0.hasPrefix("F") }.sorted(),
+            "files": files,
             "other_project_files": explanation.sources.keys.filter(ExplainPrompt.isOtherFileSource).sorted(),
             "seconds": time / .seconds(1),
             "prompt_tokens": promptTokens,
