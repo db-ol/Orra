@@ -14,10 +14,11 @@ import Foundation
 /// - excerpts of files of the user's other projects that the search terms matched, each
 ///   with its project, in <other_files> with the ids O1 and up. They come after the
 ///   project's own excerpts, which are those of the same prompt without them, so the prompt
-///   holds at most `chunkLimit` of each. The rules then say that they may explain the email
-///   to the user and that the draft takes nothing from them, and the closing line asks for
-///   no draft, which ExplainService writes with a second prompt without them, see
-///   `Input.draftApart`. A prompt without them reads as it did before.
+///   holds at most `chunkLimit` of each, and the budget trims them before anything else. The
+///   rules then say that they may explain the email to the user and that the draft takes
+///   nothing from them, and the closing line asks for no draft, which ExplainService writes
+///   with a second prompt without them, see `Input.draftApart`. A prompt without them reads
+///   as it did before.
 /// - the project's other mail, each marked as earlier or later than the email
 /// - the other messages of the thread, with their own text, trimmed. No summaries.
 /// - the email
@@ -52,13 +53,13 @@ import Foundation
 ///
 /// The prompt has a Chinese and an English variant, for the language of the explanation.
 /// Its instructions stay in English in both, as in phase 0. It counts its tokens with the
-/// closure it gets and stays within the budget, trimming in this order: files a newer one
-/// replaced, the project's other mail, files beyond the third, the excerpts of other
-/// projects from the last, the thread down to the two messages nearest the email, the other
-/// files but the first, the rest of the thread, the first file, the attachments from the
-/// last, the email's text down to 400 characters, the project's people and description,
-/// and last the email's text. A prompt without the text of an attachment reads as it did
-/// before attachments were read.
+/// closure it gets and stays within the budget, trimming in this order: the excerpts of
+/// other projects from the last, files a newer one replaced, the project's other mail, files
+/// beyond the third, the thread down to the two messages nearest the email, the other files
+/// but the first, the rest of the thread, the first file, the attachments from the last,
+/// the email's text down to 400 characters, the project's people and description, and last
+/// the email's text. A prompt without the text of an attachment reads as it did before
+/// attachments were read.
 ///
 /// Thinking is off, and the answer starts from the prefill. The caller puts the prefill in
 /// front of what the model wrote before ExplainAnswer reads it.
@@ -1062,6 +1063,11 @@ nonisolated struct ExplainPrompt: Sendable {
                     order.append(trim)
                 }
             }
+            // Other projects' excerpts come after the project's own and go first, so a prompt
+            // that keeps one holds every part of the prompt without them.
+            for index in otherChunks.indices.reversed() {
+                add(.otherChunk(index))
+            }
             for index in chunks.indices.reversed() {
                 if case .replaced = chunks[index].status {
                     add(.chunk(index))
@@ -1072,9 +1078,6 @@ nonisolated struct ExplainPrompt: Sendable {
             }
             for index in chunks.indices.reversed() where index >= ExplainPrompt.fillUpTo {
                 add(.chunk(index))
-            }
-            for index in otherChunks.indices.reversed() {
-                add(.otherChunk(index))
             }
             let date = input.email.date
             let farthestFirst = thread.indices.sorted {

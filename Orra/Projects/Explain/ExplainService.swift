@@ -144,9 +144,10 @@ nonisolated extension ExplainPrompt.Source {
 ///   tokenizer, see ProjectsTokenCounter, and runs it through ProjectsModelQueue as a
 ///   request of the user with at most `ExplainPrompt.maximumTokens` tokens. A prompt with
 ///   passages of other projects asks for no draft, and a second request with the prompt the
-///   email would get without them writes the draft, see `explain(_:)`. The draft check
-///   still takes out of that draft the data, the copied sentences and the names of those
-///   projects, see `otherProjectNames(_:)`, as a second guard.
+///   email would get without them writes the draft, see `explain(_:)`. A prompt whose budget
+///   left none of them is built again without them. The draft check still takes out of the
+///   draft the data, the copied sentences and the names of those projects, see
+///   `otherProjectNames(_:)`, as a second guard.
 /// - asks the model once more when its answer repeated an item of a list and wrote no
 ///   draft, since a small model that repeats a few lines goes on until its limit. The
 ///   second prompt goes on from the answer up to the repeat, see
@@ -337,15 +338,18 @@ final class ExplainService {
     /// for the warnings, points and questions, which asks for no draft, and the prompt the
     /// email would get had no other project been searched, the project's own passages with
     /// the newest files that fill them up, for the draft alone. So no draft is written from
-    /// another project's passages, whatever the model does with them. Every other email gets
-    /// one request, whose prompt is as it was. Neither request has a time limit, as one had
-    /// none, and both wait for a dictation, Live Captions, memory pressure and the voice
-    /// rule in ProjectsModelQueue. A cancel, as by Forget Project, closing the window or
-    /// turning Projects off, ends the request under way and saves nothing, and the draft's
-    /// request is not sent after the first one was cancelled. When the first request fails,
-    /// nothing is saved and the second is not sent, as with one request. When only the
-    /// draft's request fails, or its prompt is over the budget, the explanation is saved
-    /// without a draft, as when the model writes none, as a failed second request of
+    /// another project's passages, whatever the model does with them. The budget trims those
+    /// passages before anything else, so the first prompt holds every part the second one
+    /// holds, and a prompt that lost all of them is built again without them, which is then
+    /// the one request. Every other email gets one request, whose prompt is as it was.
+    /// Neither request has a time limit, as one had none, and both wait for a dictation, Live
+    /// Captions, memory pressure and the voice rule in ProjectsModelQueue. A cancel, as by
+    /// Forget Project, closing the window or turning Projects off, ends the request under way
+    /// and saves nothing, and the draft's request is not sent after the first one was
+    /// cancelled. When the first request fails, nothing is saved and the second is not sent,
+    /// as with one request. When only the draft's request fails, or its prompt is over the
+    /// budget, the explanation is saved without a draft, as when the model writes none, as a
+    /// failed second request of
     /// `rest(_:written:countTokens:)` leaves the first answer.
     func explain(_ email: Email) async throws -> Explanation {
         let started = ContinuousClock.now
@@ -369,7 +373,12 @@ final class ExplainService {
             }
             try Task.checkCancellation()
 
-            let prepared = await Self.prepare(gathered, language: language, timeZone: timeZone, countTokens: countTokens, draftApart: draftApart)
+            var prepared = await Self.prepare(gathered, language: language, timeZone: timeZone, countTokens: countTokens, draftApart: draftApart)
+            if !gathered.others.isEmpty, !prepared.prompt.sources.keys.contains(where: ExplainPrompt.isOtherFileSource) {
+                // The budget left no passage of another project, and may have trimmed more for
+                // them, so the prompt is the one without them, as for the draft.
+                prepared = await Self.prepare(gathered.withoutOtherProjects, language: language, timeZone: timeZone, countTokens: countTokens)
+            }
             guard prepared.prompt.tokens <= ExplainPrompt.tokenBudget else { throw RewriteError.promptTooLong }
             let modelStarted = ContinuousClock.now
             let written = try await answer(prepared, countTokens: countTokens)
@@ -421,10 +430,7 @@ final class ExplainService {
     /// searched: the gathered passages without those of other projects, so the project's own
     /// passages take every place and the newest files fill them up as for any email.
     private func draft(_ gathered: Gathered, countTokens: @escaping @Sendable (String) -> Int) async throws -> DraftApart {
-        var own = gathered
-        own.others = []
-        own.otherFiles = [:]
-        let prepared = await Self.prepare(own, language: language, timeZone: timeZone, countTokens: countTokens)
+        let prepared = await Self.prepare(gathered.withoutOtherProjects, language: language, timeZone: timeZone, countTokens: countTokens)
         guard prepared.prompt.tokens <= ExplainPrompt.tokenBudget else {
             Logger.projects.notice("The prompt for the draft without other projects' passages is over the budget, so the explanation has no draft")
             return DraftApart(prepared: prepared, written: nil)
@@ -486,6 +492,15 @@ final class ExplainService {
             others = files.others
             otherFiles = files.otherFiles
             otherProjects = files.otherProjects
+        }
+
+        /// The same without the passages of other projects, so the project's own passages
+        /// take every place and the newest files fill them up as for any email.
+        var withoutOtherProjects: Gathered {
+            var own = self
+            own.others = []
+            own.otherFiles = [:]
+            return own
         }
     }
 

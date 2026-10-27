@@ -1193,16 +1193,17 @@ struct ExplainPromptTests {
     }
 
     /// A project, six files with the second replaced by the third, three other mails, four
-    /// thread messages and a long email, with two excerpts of other projects' files.
-    @Test func theBudgetTrimsOtherProjectsFilesAfterTheFilesBeyondTheThird() {
+    /// thread messages and a long email, with two excerpts of other projects' files. Those
+    /// go first, so a prompt that keeps one holds every part of the prompt without them.
+    @Test func theBudgetTrimsOtherProjectsFilesFirst() {
         let body = String(repeating: "x", count: 280)
         var given = fullInput()
         given.otherChunks = [other("kiln-a.md", text: "Kiln a. " + body), other("kiln-b.md", text: "Kiln b. " + body)]
         let order = [
+            "kiln-b.md", "kiln-a.md",
             "plan-v1.md",
             "m3@printworks.example", "m2@printworks.example", "m1@printworks.example",
             "contacts.md", "budget.md", "notes.md",
-            "kiln-b.md", "kiln-a.md",
             "t-5@printworks.example", "t-3@printworks.example",
             "plan-v2.md",
             "t+2@printworks.example", "t-1@printworks.example",

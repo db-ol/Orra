@@ -1432,6 +1432,25 @@ struct ExplainServiceTests {
         #expect(explanation.problems == [.missing(.draft)])
         #expect(explanation.points.map(\.sources) == [["this email"], ["O1"]])
     }
+
+    /// A prompt whose budget trimmed every passage of other projects is built again without
+    /// them, so its one request is the prompt the email gets with no other project searched,
+    /// and nothing of the email's own went for those passages.
+    @Test func aPromptThatLostEveryOtherProjectsPassageIsBuiltAgainWithoutThem() async throws {
+        // A count that puts a prompt with <other_files> far over the budget, so its trims take
+        // the project's files and more besides those passages.
+        let tokens: @Sendable (String) -> Int = { $0.contains("<other_files>") ? 100_000 : $0.count / 3 }
+        let fakes = Fakes(terms: ["floor plan", "lobby"], otherHits: [Fixture.plan], answer: .success(Fixture.englishAnswer), tokens: tokens)
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.requestList.count == 1)
+        let prompt = try #require(fakes.requestList.first?.prompt)
+        #expect(!prompt.contains("other_files") && prompt.contains("Quote v2: 500 calendars"))
+        let alone = Fakes(terms: ["floor plan", "lobby"], answer: .success(Fixture.englishAnswer))
+        _ = try await alone.service().explain(Fixture.email())
+        #expect(alone.requestList.map(\.prompt) == [prompt])
+        #expect(!explanation.sources.keys.contains(where: ExplainPrompt.isOtherFileSource))
+        #expect(explanation.draftCheck?.otherProjectTexts == nil)
+    }
 }
 
 nonisolated private enum ExplainServiceFixture {
