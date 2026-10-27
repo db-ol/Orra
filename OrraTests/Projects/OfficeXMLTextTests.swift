@@ -109,6 +109,44 @@ struct OfficeXMLTextTests {
         #expect(result.hiddenRuns == 7)
     }
 
+    /// The runs of a rich text cell whose own font is tiny, or white where the cell has no
+    /// fill, are dropped and counted, in shared and in inline strings. A cell whose every run
+    /// is dropped is a hidden cell, and a white run on a dark fill stays.
+    @Test func hiddenRunsOfRichTextCellsAreDroppedAndCounted() async throws {
+        let strings = #"<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#
+            + #"<si><r><t>Visible</t></r><r><rPr><color rgb="FFFFFFFF"/></rPr><t xml:space="preserve"> white words</t></r><r><t xml:space="preserve"> end.</t></r></si>"#
+            + #"<si><r><rPr><sz val="1"/></rPr><t>tiny words</t></r><r><t>Shown</t></r></si>"#
+            + #"<si><r><rPr><color theme="0"/></rPr><t>All white</t></r></si></sst>"#
+        let inline = #"<c r="A4" t="inlineStr"><is><r><rPr><color rgb="FFFFFFFF"/></rPr><t>Inline white</t></r><r><t>Inline shown</t></r></is></c>"#
+        let rows = Files.row(1, #"<c r="A1" t="s"><v>0</v></c>"#) + Files.row(2, #"<c r="A2" t="s"><v>1</v></c>"#)
+            + Files.row(3, #"<c r="A3" t="s"><v>2</v></c>"#) + Files.row(4, inline) + Files.row(5, #"<c r="A5" s="1" t="s"><v>0</v></c>"#)
+        let styles = Files.styles(
+            fills: [#"<fill><patternFill patternType="solid"><fgColor rgb="FF1F3864"/></patternFill></fill>"#],
+            cellFormats: [#"<xf numFmtId="0" fontId="0" fillId="2"/>"#])
+        let data = try Files.xlsx([Files.Sheet("Runs", "<sheetData>\(rows)</sheetData>")], sharedStringsXML: strings, styles: styles)
+        let result = try await read(data, .xlsx).get()
+        #expect(result.pages.map(\.text) == ["# Runs\n| Visible end. |\n| Shown |\n| Inline shown |\n| Visible white words end. |"])
+        #expect(result.hiddenRuns == 4)
+    }
+
+    /// A header row too long to head the sheet's chunks stays a row, so none of its text is
+    /// lost.
+    @Test func aHeaderTooLongForAHeadingStaysARow() async throws {
+        let titles = (1...3).map { "Column title number \($0), which goes on for a long while" }
+        let data = try Files.xlsx([Files.Sheet("Long", rows: [titles, ["1", "2", "3"]])])
+        let text = try #require(try await pages(data, .xlsx).first?.text)
+        #expect(text == "# Long\n| " + titles.joined(separator: " | ") + " |\n| 1 | 2 | 3 |")
+    }
+
+    /// Styles whose elements stand where Excel never puts them are read without a crash.
+    @Test func stylesInTheWrongPlaceNeverCrash() async throws {
+        let styles = #"<fonts count="1"><x><font><sz val="2"/></font></x></fonts>"#
+            + #"<fills count="1"><x><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/></patternFill></x></fills>"#
+            + #"<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0"/></cellXfs>"#
+        let data = try Files.xlsx([Files.Sheet("Data", rows: [["Lamps"]])], styles: styles)
+        #expect(try await pages(data, .xlsx).map(\.text) == ["# Data\n| Lamps |"])
+    }
+
     /// Past its characters, a workbook's later cells and sheets are left out, and the result
     /// says it was cut.
     @Test func aWorkbookIsCutAtItsCharacters() async throws {
@@ -240,6 +278,34 @@ struct OfficeXMLTextTests {
         // next paragraph, so two. Then the hidden shape, the shape off the slide, and the
         // hidden slide.
         #expect(result.hiddenRuns == 5)
+    }
+
+    /// A run that says nothing of its size or color takes them from its paragraph, then from
+    /// its text body's list style for its level, and is dropped when they hide it.
+    @Test func runsTakeHiddenStylesFromTheirParagraphAndListStyle() async throws {
+        let shape = #"<p:sp><p:nvSpPr><p:cNvPr id="2" name="Text"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>"#
+            + #"<p:spPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></p:spPr><p:txBody><a:bodyPr/>"#
+            + #"<a:lstStyle><a:lvl1pPr><a:defRPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:defRPr></a:lvl1pPr>"#
+            + #"<a:lvl2pPr><a:defRPr><a:solidFill><a:srgbClr val="000000"><a:alpha val="5000"/></a:srgbClr></a:solidFill></a:defRPr></a:lvl2pPr></a:lstStyle>"#
+            + "<a:p>" + Files.run("Like the fill by its list style.") + "</a:p>"
+            + #"<a:p><a:pPr lvl="1"/>"# + Files.run("Clear by its list style.") + "</a:p>"
+            + #"<a:p><a:pPr><a:defRPr sz="200"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:defRPr></a:pPr>"# + Files.run("Tiny by its paragraph.") + "</a:p>"
+            + "<a:p>" + Files.run("Shown in its own color.", color: "000000") + "</a:p>"
+            + "</p:txBody></p:sp>"
+        let result = try await read(try Files.pptx([Files.Slide(shape)]), .pptx).get()
+        #expect(result.pages.map(\.text) == ["Shown in its own color."])
+        #expect(result.hiddenRuns == 1)
+    }
+
+    /// A placement at the edge of 64 bit numbers is read without a crash, as a shape off the
+    /// slide.
+    @Test func placementsAtTheEdgeOfNumbersNeverCrash() async throws {
+        let shapes = Files.shape(["Far right."], placement: (x: Int.max, y: 0, width: Int.max, height: 100), id: 2)
+            + Files.shape(["Far left."], placement: (x: Int.min, y: 0, width: Int.max, height: 100), id: 3)
+            + Files.shape(["On the slide."], placement: (x: 100, y: 100, width: 100, height: 100), id: 4)
+        let result = try await read(try Files.pptx([Files.Slide(shapes)]), .pptx).get()
+        #expect(result.pages.map(\.text) == ["On the slide."])
+        #expect(result.hiddenRuns == 2)
     }
 
     /// The text of a choice that PowerPoint writes twice, in mc:Choice and mc:Fallback, is

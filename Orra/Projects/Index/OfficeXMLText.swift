@@ -37,7 +37,8 @@ nonisolated enum OfficeXMLText {
     /// - Hidden sheets, hidden rows and columns, columns narrower than half a character,
     ///   cells whose format shows nothing (;;;), fonts under 3 points and white fonts on no
     ///   fill or a white fill are dropped, each sheet, row, column or run of cells counted
-    ///   once. Text in drawings, charts and comments is not read.
+    ///   once, and so are the runs of a rich text cell whose own font is that small or white.
+    ///   Text in drawings, charts and comments is not read.
     static func workbook(
         _ archive: ZipArchive, limits: FileTextExtractor.Limits, now: @escaping @Sendable () -> ContinuousClock.Instant
     ) -> Result<Read, FileSkipReason> {
@@ -53,7 +54,7 @@ nonisolated enum OfficeXMLText {
                 try package.parse(part, with: reader)
                 styles.read(reader)
             }
-            var strings: [String] = []
+            var strings: [[TextRun]] = []
             if let part = relationships.values.first(where: { $0.type.hasSuffix("/sharedStrings") })?.target {
                 let reader = SharedStringsReader()
                 try package.parse(part, with: reader)
@@ -102,8 +103,10 @@ nonisolated enum OfficeXMLText {
     ///   slide's chunks. The speaker notes follow under a line "Notes:", which heads theirs.
     /// - Hidden slides, hidden shapes, shapes wholly outside the slide, text under 3 points,
     ///   text nearly transparent (under 10% opaque) and text colored like its own shape's
-    ///   fill are dropped and counted. Text colored like the slide's background is not
-    ///   caught, since the background may come from the layout, the master or a picture.
+    ///   fill are dropped and counted, whether the run says so itself or takes it from its
+    ///   paragraph or from its text body's list style. Text colored like the slide's
+    ///   background is not caught, since the background may come from the layout, the
+    ///   master or a picture, and neither is a size or color the layout or master gives.
     static func presentation(
         _ archive: ZipArchive, limits: FileTextExtractor.Limits, now: @escaping @Sendable () -> ContinuousClock.Instant
     ) -> Result<Read, FileSkipReason> {
@@ -435,37 +438,93 @@ private nonisolated final class WorkbookReader: PartReader {
     }
 }
 
-/// The shared strings of a workbook, without their phonetic runs.
-private nonisolated final class SharedStringsReader: PartReader {
-    private(set) var strings: [String] = []
-    private var current: String?
+/// A run of a shared or inline string, with what its own font says of it.
+private nonisolated struct TextRun {
+    var text = ""
+    /// Its own font size in points, nil when it takes the cell's.
+    var size: Double?
+    /// Whether its own font is white.
+    var isWhite = false
+}
+
+/// Collects the runs of a shared or inline string: its text in <t>, or in <r> runs with
+/// their <rPr>, without the phonetic runs in <rPh>.
+private nonisolated struct RunCollector {
+    private(set) var runs: [TextRun] = []
+    private var run: TextRun?
     private var phonetic = 0
     private var inText = false
 
-    override func start(_ name: String, _ attributes: [String: String]) {
+    mutating func start(_ name: String, _ attributes: [String: String], parent: String) {
         switch name {
-        case "si": current = ""
-        case "rPh": phonetic += 1
-        case "t": inText = current != nil && phonetic == 0
-        default: break
+        case "r":
+            run = TextRun()
+        case "rPh":
+            phonetic += 1
+        case "sz" where parent == "rPr":
+            run?.size = Double(attributes["val"] ?? "")
+        case "color" where parent == "rPr":
+            run?.isWhite = OfficeColor.isWhite(attributes)
+        case "t" where phonetic == 0:
+            inText = true
+            if run == nil {
+                runs.append(TextRun())
+            }
+        default:
+            break
+        }
+    }
+
+    mutating func end(_ name: String) {
+        switch name {
+        case "r":
+            if let run {
+                runs.append(run)
+            }
+            run = nil
+        case "rPh":
+            phonetic -= 1
+        case "t":
+            inText = false
+        default:
+            break
+        }
+    }
+
+    mutating func characters(_ text: String) {
+        guard inText else { return }
+        if run != nil {
+            run?.text += text
+        } else if !runs.isEmpty {
+            runs[runs.count - 1].text += text
+        }
+    }
+}
+
+/// The shared strings of a workbook, as runs.
+private nonisolated final class SharedStringsReader: PartReader {
+    private(set) var strings: [[TextRun]] = []
+    private var collector: RunCollector?
+
+    override func start(_ name: String, _ attributes: [String: String]) {
+        if name == "si" {
+            collector = RunCollector()
+        } else {
+            collector?.start(name, attributes, parent: parent())
         }
     }
 
     override func end(_ name: String) {
-        switch name {
-        case "si":
-            strings.append(current ?? "")
-            current = nil
-        case "rPh": phonetic -= 1
-        case "t": inText = false
-        default: break
+        if name == "si" {
+            strings.append(collector?.runs ?? [])
+            collector = nil
+        } else {
+            collector?.end(name)
         }
     }
 
     override func characters(_ text: String) {
-        if inText {
-            current? += text
-        }
+        collector?.characters(text)
     }
 }
 
@@ -500,18 +559,18 @@ private nonisolated final class StylesReader: PartReader {
             }
         case ("font", "fonts"):
             fonts.append(Font())
-        case ("sz", "font") where parent(2) == "fonts":
+        case ("sz", "font") where parent(2) == "fonts" && !fonts.isEmpty:
             fonts[fonts.count - 1].size = Double(attributes["val"] ?? "")
-        case ("color", "font") where parent(2) == "fonts":
+        case ("color", "font") where parent(2) == "fonts" && !fonts.isEmpty:
             fonts[fonts.count - 1].isWhite = OfficeColor.isWhite(attributes)
         case ("fill", "fills"):
             fills.append(Fill())
-        case ("patternFill", "fill") where parent(2) == "fills":
+        case ("patternFill", "fill") where parent(2) == "fills" && !fills.isEmpty:
             let pattern = attributes["patternType"] ?? "none"
             fills[fills.count - 1].isClear = pattern == "none" || pattern == "solid"
-        case ("gradientFill", "fill") where parent(2) == "fills":
+        case ("gradientFill", "fill") where parent(2) == "fills" && !fills.isEmpty:
             fills[fills.count - 1].isClear = false
-        case ("fgColor", "patternFill") where parent(3) == "fills":
+        case ("fgColor", "patternFill") where parent(2) == "fill" && parent(3) == "fills" && !fills.isEmpty:
             // A solid fill is clear only when it is white.
             if fills[fills.count - 1].isClear {
                 fills[fills.count - 1].isClear = OfficeColor.isWhite(attributes)
@@ -563,8 +622,14 @@ private nonisolated struct CellStyles {
         guard fonts.indices.contains(format.font) else { return false }
         let font = fonts[format.font]
         if let size = font.size, size < 3 { return true }
-        let isClear = fills.indices.contains(format.fill) ? fills[format.fill].isClear : true
-        return font.isWhite && isClear
+        return font.isWhite && isClearFill(style: style)
+    }
+
+    /// Whether white text cannot be seen in a cell of that style: no fill, or a white one.
+    func isClearFill(style: Int) -> Bool {
+        guard formats.indices.contains(style) else { return true }
+        let fill = formats[style].fill
+        return fills.indices.contains(fill) ? fills[fill].isClear : true
     }
 
     /// How a number of a cell of that style shows.
@@ -666,10 +731,23 @@ private nonisolated struct CellStyles {
 private nonisolated final class SheetReader: PartReader {
     struct Cell {
         var column: Int
+        /// The text it shows.
         var text: String
         /// A string, rather than a number, a date or a truth value.
         var isText: Bool
+        /// Whether the whole cell is hidden.
         var isHidden: Bool
+        /// The runs of hidden text dropped from a cell that shows the rest.
+        var hiddenParts = 0
+    }
+
+    /// A cell while it is read.
+    private struct Reading {
+        var column: Int
+        var style: Int
+        var type: String?
+        var value = ""
+        var inline: RunCollector?
     }
 
     struct Row {
@@ -677,7 +755,7 @@ private nonisolated final class SheetReader: PartReader {
         var isHidden: Bool
     }
 
-    let strings: [String]
+    let strings: [[TextRun]]
     let styles: CellStyles
     /// The characters it may still read, see Limits.officeCharacters.
     private let allowed: Int
@@ -687,15 +765,10 @@ private nonisolated final class SheetReader: PartReader {
     private var rows: [Row] = []
     private var hiddenColumns: [ClosedRange<Int>] = []
     private var row: Row?
-    private var cell: (column: Int, style: Int, type: String?, value: String, inline: String)?
-    private var reading: Reading?
-    private var phonetic = 0
+    private var cell: Reading?
+    private var readsValue = false
 
-    private enum Reading {
-        case value, inline
-    }
-
-    init(strings: [String], styles: CellStyles, characters: Int) {
+    init(strings: [[TextRun]], styles: CellStyles, characters: Int) {
         self.strings = strings
         self.styles = styles
         allowed = characters
@@ -712,26 +785,20 @@ private nonisolated final class SheetReader: PartReader {
             row = Row(cells: [], isHidden: OfficeXMLText.isOn(attributes["hidden"]))
         case "c":
             let column = attributes["r"].flatMap(Self.column(of:)) ?? ((row?.cells.last?.column ?? 0) + 1)
-            cell = (column, Int(attributes["s"] ?? "") ?? 0, attributes["t"], "", "")
+            cell = Reading(column: column, style: Int(attributes["s"] ?? "") ?? 0, type: attributes["t"])
         case "v":
-            reading = cell == nil ? nil : .value
-        case "rPh":
-            phonetic += 1
-        case "t" where cell != nil && phonetic == 0 && path.contains("is"):
-            reading = .inline
-        case "f":
-            reading = nil
+            readsValue = cell != nil
+        case "is":
+            cell?.inline = RunCollector()
         default:
-            break
+            cell?.inline?.start(name, attributes, parent: parent())
         }
     }
 
     override func end(_ name: String) {
         switch name {
-        case "v", "t":
-            reading = nil
-        case "rPh":
-            phonetic -= 1
+        case "v":
+            readsValue = false
         case "c":
             if let cell, let made = made(cell) {
                 characters += made.text.count
@@ -754,28 +821,28 @@ private nonisolated final class SheetReader: PartReader {
         case "sheetData":
             finish()
         default:
-            break
+            cell?.inline?.end(name)
         }
     }
 
     override func characters(_ text: String) {
-        switch reading {
-        case .value?: cell?.value += text
-        case .inline?: cell?.inline += text
-        case nil: break
+        if readsValue {
+            cell?.value += text
+        } else {
+            cell?.inline?.characters(text)
         }
     }
 
-    /// A cell's text as it shows, nil for a cell that shows none.
-    private func made(_ cell: (column: Int, style: Int, type: String?, value: String, inline: String)) -> Cell? {
+    /// A cell's text as it shows, nil for a cell that holds none.
+    private func made(_ cell: Reading) -> Cell? {
         let text: String
         var isText = true
         switch cell.type {
         case "s":
             guard let index = Int(cell.value.trimmingCharacters(in: .whitespaces)), strings.indices.contains(index) else { return nil }
-            text = strings[index]
+            return made(strings[index], in: cell)
         case "inlineStr":
-            text = cell.inline
+            return made(cell.inline?.runs ?? [], in: cell)
         case "str":
             text = cell.value
         case "b":
@@ -792,6 +859,34 @@ private nonisolated final class SheetReader: PartReader {
         let line = OfficeXMLText.oneLine(text)
         guard !line.isEmpty else { return nil }
         return Cell(column: cell.column, text: line, isText: isText, isHidden: styles.isHidden(style: cell.style))
+    }
+
+    /// A string cell from its runs: a run whose own font is under 3 points, or white where
+    /// the cell has no fill or a white one, is dropped and counted, runs next to each other
+    /// once. A cell whose every run is dropped is hidden.
+    private func made(_ runs: [TextRun], in cell: Reading) -> Cell? {
+        let isClear = styles.isClearFill(style: cell.style)
+        var text = ""
+        var hiddenParts = 0
+        var inHiddenRun = false
+        for run in runs {
+            if run.text.allSatisfy(\.isWhitespace) {
+                text += run.text
+            } else if (run.size ?? 11) < 3 || (run.isWhite && isClear) {
+                if !inHiddenRun {
+                    hiddenParts += 1
+                }
+                inHiddenRun = true
+            } else {
+                text += run.text
+                inHiddenRun = false
+            }
+        }
+        let line = OfficeXMLText.oneLine(text)
+        guard !line.isEmpty else {
+            return hiddenParts > 0 ? Cell(column: cell.column, text: "", isText: true, isHidden: true) : nil
+        }
+        return Cell(column: cell.column, text: line, isText: true, isHidden: styles.isHidden(style: cell.style), hiddenParts: hiddenParts)
     }
 
     /// The column of a cell reference such as AB12, from 1.
@@ -832,6 +927,7 @@ private nonisolated final class SheetReader: PartReader {
                     inHiddenRun = true
                 } else {
                     cells.append(cell)
+                    hiddenRuns += cell.hiddenParts
                     inHiddenRun = false
                 }
             }
@@ -842,19 +938,26 @@ private nonisolated final class SheetReader: PartReader {
         hiddenRuns += columnsWithText.count
         guard !shown.isEmpty else { return (nil, hiddenRuns) }
         let first = shown.compactMap(\.first?.column).min() ?? 1
+        let sheet = OfficeXMLText.oneLine(name)
+        var heading = "# " + sheet
         // The first row with two or more cells among the first 10 is the header when it
-        // holds only text.
-        let header = shown.prefix(10).firstIndex { $0.count >= 2 }.flatMap { $0 < shown.count && shown[$0].allSatisfy(\.isText) ? $0 : nil }
-        var heading = "# " + OfficeXMLText.oneLine(name)
-        if let header {
-            heading += ": " + Self.aligned(shown[header], from: first).joined(separator: " | ")
+        // holds only text, and when the heading line with it is still one TextChunker reads
+        // as a heading. Else it stays a row, so none of its text is lost.
+        var header = shown.prefix(10).firstIndex { $0.count >= 2 }.flatMap { shown[$0].allSatisfy(\.isText) ? $0 : nil }
+        if let found = header, let start = shown[found].first?.column {
+            let withHeader = heading + ": " + Self.aligned(shown[found], from: start).joined(separator: " | ")
+            if withHeader.count <= TextChunker.maximumHeadingCharacters && withHeader.utf8.count <= TextChunker.maximumHeadingBytes {
+                heading = withHeader
+            } else {
+                header = nil
+            }
         }
-        var lines = [Self.cut(heading)]
+        var lines = [heading]
         for (index, cells) in shown.enumerated() where index != header {
             lines.append(OfficeXMLText.row(Self.aligned(cells, from: first)))
         }
-        let sheet = OfficeXMLText.oneLine(name)
-        return (FileTextResult.Page(number: nil, text: lines.joined(separator: "\n"), sheet: sheet.isEmpty ? nil : sheet, isStandAlone: true), hiddenRuns)
+        let page = FileTextResult.Page(number: nil, text: lines.joined(separator: "\n"), sheet: sheet.isEmpty ? nil : sheet, isStandAlone: true)
+        return (page, hiddenRuns)
     }
 
     /// A row's texts in their columns from `first`, an empty cell for each column between.
@@ -869,15 +972,6 @@ private nonisolated final class SheetReader: PartReader {
             column = cell.column + 1
         }
         return texts
-    }
-
-    /// A heading line cut to what TextChunker reads as a heading.
-    private static func cut(_ line: String) -> String {
-        var cut = String(line.prefix(TextChunker.maximumHeadingCharacters))
-        while cut.utf8.count > TextChunker.maximumHeadingBytes {
-            cut.removeLast()
-        }
-        return cut
     }
 }
 
@@ -921,6 +1015,27 @@ private nonisolated final class SlideReader: PartReader {
         var hiddenRuns = 0
     }
 
+    /// The size, color and opacity a run has, or that a paragraph or a list style gives the
+    /// runs that say nothing of their own.
+    private struct RunStyle {
+        /// In hundredths of a point.
+        var size: Int?
+        var color: OfficeColor?
+        /// In thousandths of a percent.
+        var alpha: Int?
+
+        /// This style, with what it leaves open taken from `other`.
+        func over(_ other: RunStyle) -> RunStyle {
+            RunStyle(size: size ?? other.size, color: color ?? other.color, alpha: alpha ?? other.alpha)
+        }
+    }
+
+    /// Where a <defRPr> being read gives its style.
+    private enum DefaultsTarget {
+        case paragraph
+        case list(level: Int)
+    }
+
     /// The size of a slide, nil for a notes page.
     let size: (width: Int64, height: Int64)?
     /// Whether the slide shows in the slide show: false for a hidden slide.
@@ -935,7 +1050,13 @@ private nonisolated final class SlideReader: PartReader {
     private var otherNotes: [String] = []
     private var shapes: [Shape] = []
     private var paragraph = ""
-    private var run: (text: String, size: Int?, alpha: Int?, color: OfficeColor?)?
+    private var run: (text: String, style: RunStyle)?
+    /// The style a paragraph gives its runs, and its list level from 1.
+    private var paragraphStyle = RunStyle()
+    private var paragraphLevel = 1
+    /// The styles the list style of the text body being read gives each level.
+    private var listStyles: [Int: RunStyle] = [:]
+    private var defaultsTarget: DefaultsTarget?
     private var inText = false
     private var inHiddenRun = false
     /// The cells of the table row and the paragraphs of the cell being read.
@@ -981,15 +1102,32 @@ private nonisolated final class SlideReader: PartReader {
         case "srgbClr" where parent() == "solidFill" && parent(2) == "spPr" && !shapes.isEmpty:
             shapes[shapes.count - 1].fill = OfficeColor(hex: attributes["val"])
         case "srgbClr" where parent() == "solidFill" && parent(2) == "rPr":
-            run?.color = OfficeColor(hex: attributes["val"])
+            run?.style.color = OfficeColor(hex: attributes["val"])
         case "alpha" where parent(2) == "solidFill" && parent(3) == "rPr":
-            run?.alpha = Int(attributes["val"] ?? "")
+            run?.style.alpha = Int(attributes["val"] ?? "")
+        case "srgbClr" where parent() == "solidFill" && parent(2) == "defRPr":
+            setDefaults { $0.color = OfficeColor(hex: attributes["val"]) }
+        case "alpha" where parent(2) == "solidFill" && parent(3) == "defRPr":
+            setDefaults { $0.alpha = Int(attributes["val"] ?? "") }
+        case "txBody":
+            listStyles = [:]
         case "p" where parent() == "txBody":
             paragraph = ""
+            paragraphStyle = RunStyle()
+            paragraphLevel = 1
+        case "pPr" where parent() == "p":
+            paragraphLevel = min(9, max(1, (Int(attributes["lvl"] ?? "") ?? 0) + 1))
+        case "defRPr" where parent() == "pPr":
+            defaultsTarget = .paragraph
+            paragraphStyle.size = Int(attributes["sz"] ?? "")
+        case "defRPr" where parent(2) == "lstStyle" && parent().hasPrefix("lvl") && parent().hasSuffix("pPr"):
+            let level = Int(parent().dropFirst(3).dropLast(3)) ?? 1
+            defaultsTarget = .list(level: level)
+            listStyles[level, default: RunStyle()].size = Int(attributes["sz"] ?? "")
         case "r", "fld":
-            run = ("", nil, nil, nil)
+            run = ("", RunStyle())
         case "rPr" where run != nil:
-            run?.size = Int(attributes["sz"] ?? "")
+            run?.style.size = Int(attributes["sz"] ?? "")
         case "t" where run != nil:
             inText = true
         case "br" where parent() == "p":
@@ -1007,6 +1145,8 @@ private nonisolated final class SlideReader: PartReader {
         switch name {
         case "t":
             inText = false
+        case "defRPr":
+            defaultsTarget = nil
         case "r", "fld":
             endRun()
         case "p" where parent() == "txBody":
@@ -1048,8 +1188,19 @@ private nonisolated final class SlideReader: PartReader {
     private func hideIfOutside() {
         guard let size, shapes.count == 1, let shape = shapes.last,
               let x = shape.x, let y = shape.y, let width = shape.width, let height = shape.height else { return }
-        if x >= size.width || y >= size.height || x + width <= 0 || y + height <= 0 {
+        // In Double, since a file may give any 64 bit value, whose sum would overflow.
+        let (left, top) = (Double(x), Double(y))
+        if left >= Double(size.width) || top >= Double(size.height) || left + Double(width) <= 0 || top + Double(height) <= 0 {
             shapes[shapes.count - 1].isHidden = true
+        }
+    }
+
+    /// Changes the style the <defRPr> being read gives.
+    private func setDefaults(_ change: (inout RunStyle) -> Void) {
+        switch defaultsTarget {
+        case .paragraph?: change(&paragraphStyle)
+        case .list(let level)?: change(&listStyles[level, default: RunStyle()])
+        case nil: break
         }
     }
 
@@ -1060,9 +1211,11 @@ private nonisolated final class SlideReader: PartReader {
             paragraph += run.text
             return
         }
-        let isTiny = (run.size ?? 1_800) < 300
-        let isClear = (run.alpha ?? 100_000) < 10_000
-        let isLikeFill = run.color.flatMap { color in shapes.last?.fill.map { color.distance(to: $0) < 0.1 } } ?? false
+        // What the run leaves open comes from its paragraph, then from the list style.
+        let style = run.style.over(paragraphStyle).over(listStyles[paragraphLevel] ?? RunStyle())
+        let isTiny = (style.size ?? 1_800) < 300
+        let isClear = (style.alpha ?? 100_000) < 10_000
+        let isLikeFill = style.color.flatMap { color in shapes.last?.fill.map { color.distance(to: $0) < 0.1 } } ?? false
         if isTiny || isClear || isLikeFill {
             if !inHiddenRun, !shapes.isEmpty {
                 shapes[shapes.count - 1].hiddenRuns += 1
