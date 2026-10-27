@@ -1471,20 +1471,27 @@ struct FolderIndexTests {
     }
 
     /// A file recognition cannot read now, such as one without access, waits for the next
-    /// sweep and is listed with why, and the counts leave it out until then.
+    /// sweep, and the counts of what waits leave it out until then. An image is listed with
+    /// why. A PDF whose text the index holds counts among the files with text, as before, and
+    /// not as skipped too.
     @Test func aFileThatCannotBeReadNowWaitsForTheNextSweep() async throws {
-        try await withFixture(recognize: { _, _ in .failure(.noAccess) }) { fixture in
+        try await withFixture(read: Self.readingScans([:], withText: ["mixed.pdf": [2]]), recognize: { _, _ in .failure(.noAccess) }) { fixture in
             try fixture.write("sign.png", "x")
+            try fixture.write("mixed.pdf", "x")
             await fixture.start()
-            #expect(fixture.jobs.count == 1)
-            #expect(try await fixture.rows()["sign.png"]?.skip == "waitsForRecognition")
+            #expect(fixture.jobs.names == ["mixed.pdf", "sign.png"])
+            let rows = try await fixture.rows()
+            #expect(rows["sign.png"]?.skip == "waitsForRecognition")
+            #expect(rows["mixed.pdf"].map { $0.skip == nil && $0.recognize == 1 } == true)
             let report = try #require(fixture.index.reports[fixture.alpha])
             #expect(report.skipped == [.noAccess: 1] && report.recognitionLeft == 0)
-            #expect(try await fixture.index.skippedFiles(project: fixture.alpha).map(\.reason) == [.noAccess])
+            #expect(report.indexed == 1 && report.nameOnly == 0)
+            let skipped = try await fixture.index.skippedFiles(project: fixture.alpha)
+            #expect(skipped.map(\.url.lastPathComponent) == ["sign.png"] && skipped.map(\.reason) == [.noAccess])
             await fixture.tick()
-            #expect(fixture.jobs.count == 1)
-            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
             #expect(fixture.jobs.count == 2)
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(fixture.jobs.count == 4)
         }
     }
 

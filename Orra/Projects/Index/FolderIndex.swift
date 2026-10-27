@@ -1040,6 +1040,9 @@ final class FolderIndex {
         var modified: Double
         /// The pages tried before for this size and date of the file.
         var done: Set<Int>
+        /// Whether the index holds text of the file, from its text layer or from pages
+        /// recognized before.
+        var hasText: Bool
     }
 
     /// Reasons a whole file fails recognition for, which its row keeps until the file
@@ -1128,11 +1131,11 @@ final class FolderIndex {
     private func nextRecognition(in id: UUID, watched: Watched) async throws -> Waiting? {
         let project = Value.text(id.uuidString)
         guard let row = try await database.run("""
-            SELECT id, path, size, modified FROM index_files
+            SELECT id, path, size, modified, skip IS NULL FROM index_files
             WHERE project = ?1 AND recognize = 1 AND id NOT IN (SELECT value FROM json_each(?2))
             ORDER BY path LIKE '%.pdf' DESC, modified DESC, id LIMIT 1
             """, [project, .text(Self.jsonArray(watched.recognitionSkips))]).first,
-              row.count == 4, let file = row[0].integer, let path = row[1].text, let size = row[2].integer, let modified = row[3].real
+              row.count == 5, let file = row[0].integer, let path = row[1].text, let size = row[2].integer, let modified = row[3].real
         else { return nil }
         let textBytes = try await database.run("SELECT coalesce(sum(text_bytes), 0) FROM index_files WHERE project = ?", [project]).first?.first?.integer ?? 0
         guard textBytes < limits.textBytes else {
@@ -1146,7 +1149,9 @@ final class FolderIndex {
             "SELECT page FROM index_recognition_pages WHERE file = ? AND size = ? AND modified = ?",
             [.integer(file), .integer(size), .real(modified)]
         ).compactMap { $0.first?.integer.map(Int.init) }
-        return Waiting(project: id, generation: watched.generation, row: file, path: path, size: size, modified: modified, done: Set(done))
+        return Waiting(
+            project: id, generation: watched.generation, row: file, path: path, size: size, modified: modified, done: Set(done),
+            hasText: row[4].integer == 1)
     }
 
     /// Whether the job of a project may read its next page: no pause, no sweep waits, and
@@ -1255,9 +1260,14 @@ final class FolderIndex {
             return
         case .failure(let reason):
             leaveUntilSweep(next.row, project: id)
-            projects[id]?.facts.skipped[reason, default: 0] += 1
-            if let facts = projects[id]?.facts, facts.skippedFiles.count < FolderWalk.maximumListedSkips {
-                projects[id]?.facts.skippedFiles.append(SkippedFile(url: job.file, reason: reason, modified: Date(timeIntervalSince1970: next.modified)))
+            // Listed with why, as a sweep lists a file it cannot read now, unless the index
+            // holds text of the file, which then counts among the files with text until the
+            // next sweep reads it again.
+            if !next.hasText {
+                projects[id]?.facts.skipped[reason, default: 0] += 1
+                if let facts = projects[id]?.facts, facts.skippedFiles.count < FolderWalk.maximumListedSkips {
+                    projects[id]?.facts.skippedFiles.append(SkippedFile(url: job.file, reason: reason, modified: Date(timeIntervalSince1970: next.modified)))
+                }
             }
             await refreshReport(id, generation: next.generation, isIndexing: reports[id]?.isIndexing ?? false)
             return
