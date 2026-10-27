@@ -242,6 +242,18 @@ struct FileRequestsTests {
             ("Have you got the minutes from Tuesday's meeting?", "the minutes", [.minutes]),
             ("Have you got a scan of the permit?", "a scan of the permit", [.scan, .certificate]),
         ])
+        Self.expectConstruction("mind sending X?, the short form of would you mind", [
+            ("Mind sending over the seating plan?", "the seating plan", [.document]),
+            ("Hi Ana, mind resending the invoice?", "the invoice", [.invoice]),
+        ])
+        Self.expectConstruction("drop X into a thread or a chat, which must name a document", [
+            ("Can you drop the quote in our shared chat?", "the quote", [.quote]),
+            ("Could you drop the signed lease into this email thread?", "the signed lease", [.contract]),
+        ])
+        Self.expectConstruction("a pronoun that points to a file named before what the reader did to it", [
+            ("The quote you sent last week has the wrong date. Could you resend it?", "The quote", [.quote]),
+            ("Thanks for the itinerary you drafted. Could you forward it to Kai as well?", "the itinerary", [.document]),
+        ])
     }
 
     @Test func chineseAsksForADocumentInEachConstruction() {
@@ -287,9 +299,21 @@ struct FileRequestsTests {
             ("上次的会议安排，麻烦发我一下。", "上次的会议安排", [.document]),
             ("上周你提到过一份施工须知，麻烦发我一份。", "施工须知", [.document]),
         ])
+        Self.expectConstruction("方便的时候 and 有时间的话 before what asks", [
+            ("方便的时候把施工合同传给我就行。", "施工合同", [.contract]),
+            ("有时间的话发一下平面图给我。", "平面图", [.floorPlan]),
+        ])
+        Self.expectConstruction("把 X 给我看看, which must name a document", [
+            ("能不能把效果图先给我看看？", "效果图", [.rendering]),
+            ("你把合同给我们过目一下。", "合同", [.contract]),
+        ])
         Self.expectConstruction("给我一份 X, 能给我 X 吗", [
             ("能给我一份最新的价目表吗？", "价目表", [.quote]),
             ("给我们一张现场的照片吧。", "照片", [.photo]),
+        ])
+        Self.expectConstruction("一版 after the verb, which points to the document named before", [
+            ("合同定稿后，麻烦传一版给我们。", "合同", [.contract]),
+            ("报价改好以后，发一版给我看看。", "报价", [.quote]),
         ])
     }
 
@@ -325,6 +349,26 @@ struct FileRequestsTests {
             ("パンフレットを見せていただけますか", "パンフレット", [.catalog]),
             ("前回の議事録を拝見できますでしょうか。", "議事録", [.minutes]),
         ])
+        Self.expectConstruction("ぜひ拝見したいです after a phrase that names a document before the comma", [
+            ("先週お話しした企画書、ぜひ拝見したいです。", "企画書", [.proposal]),
+            ("例の契約書、一度拝見させていただけますか。", "契約書", [.contract]),
+        ])
+        Self.expectConstruction("X は or X も before a verb of giving", [
+            ("請求書は紙でもいただけますか。", "請求書", [.invoice]),
+            ("議事録もメールでいただけますでしょうか。", "議事録", [.minutes]),
+        ])
+        Self.expectConstruction("もう一度 or もしよろしければ before a verb with nothing named", [
+            ("先月の請求書ですが、もう一度お送りいただけますか。", "請求書", [.invoice]),
+            ("工程表の件ですが、もしよろしければ共有していただけますか。", "工程表", [.schedule]),
+        ])
+        Self.expectConstruction("再送 and X のもの, which points to the document named before", [
+            ("先週の見積書を再送していただけますか。", "見積書", [.quote]),
+            ("前回の図面、最新のものを再送していただけますか。", "図面", [.drawing]),
+        ])
+        Self.expectConstruction("X のデータ, the file of a kind", [
+            ("パンフレットのデータを送っていただけますか。", "パンフレット", [.catalog]),
+            ("図面のデータを共有してください。", "図面", [.drawing]),
+        ])
     }
 
     @Test func spanishAsksForADocumentInEachConstruction() {
@@ -354,6 +398,15 @@ struct FileRequestsTests {
         Self.expectConstruction("what is missing, and whether the reader has one", [
             ("Nos faltan las fotos del almacén.", "las fotos del almacén", [.photo]),
             ("¿Tienes el catálogo en PDF?", "el catálogo", [.catalog]),
+            ("¿Tienes todavía a mano el acta de la reunión?", "el acta", [.minutes]),
+        ])
+        Self.expectConstruction("an imperative that carries lo or la, with conmigo, which points to the document named before", [
+            ("Las facturas de marzo ya están listas, compártelas conmigo cuando puedas.", "Las facturas", [.invoice]),
+            ("Si encuentras el contrato de arrendamiento, mándalo el lunes.", "el contrato", [.contract]),
+        ])
+        Self.expectConstruction("the words after de name the kind when what is asked for names none", [
+            ("¿Me pasas la versión final del presupuesto?", "la versión final del presupuesto", [.quote, .budget]),
+            ("¿Podrías enviarme el resumen del informe anual?", "el resumen del informe anual", [.report]),
         ])
     }
 
@@ -452,6 +505,37 @@ struct FileRequestsTests {
             ("Feel free to send me the floor plan whenever it's ready.", "the floor plan", [.floorPlan]),
             ("¿Puedes compartir el plano con Marta?", "el plano", [.floorPlan, .drawing]),
         ])
+    }
+
+    /// The constructions that also take what is no file ask for nothing with it: a line or a
+    /// price to drop, a hand or a home to show, time or an answer to give, a check or a reading
+    /// to do, a place to see.
+    @Test func constructionsThatAlsoTakeWhatIsNoFile() {
+        Self.expectNone([
+            "Could you drop me a line when you land?",
+            "Could you drop the price a little?",
+            "把手给我看看。",
+            "能不能把新家给我们看看？",
+            "お時間はいただけますか。",
+            "ご返事はいただけますか。",
+            "契約書はご確認いただけますか。",
+            "企画書は読んでいただけますか。",
+            "新しいオフィス、ぜひ拝見したいです。",
+            "¡Pásala bien en tus vacaciones!",
+        ])
+    }
+
+    /// A pronoun that points to a file named only as a file asks for a file but does not say
+    /// which, and the words after what the reader did to it, as "this morning", are none of it.
+    @Test func aFileNamedOnlyAsAFileSaysNotWhichOne() throws {
+        let english = try #require(Self.found("The document you shared this morning is blank. Can you share it again?").first)
+        #expect(english.object == "The document")
+        #expect(english.documentKinds == [.document])
+        #expect(!english.saysWhichFile)
+        let japanese = try #require(Self.found("送っていただいたファイルが開けません。もう一度送っていただけますか。").first)
+        #expect(japanese.object == "ファイル")
+        #expect(japanese.documentKinds == [.document])
+        #expect(!japanese.saysWhichFile)
     }
 
     @Test func availabilityIsNoFile() {
@@ -839,6 +923,10 @@ struct FileRequestsTests {
             sentences("If you have the plan, could you send it", length: 400, count: 20, end: ". "),
             sentences("¿me lo mandas? me la podrías ", length: 400, count: 20, end: ". "),
             sentences("資料をください資料をください", length: 400, count: 20, end: "、"),
+            sentences("資料はいただけますか資料は", length: 400, count: 20, end: "。"),
+            sentences("请把合同把方案给我看看", length: 400, count: 20, end: "。"),
+            sentences("ファイルが開けませんファイルが", length: 400, count: 20, end: "。"),
+            sentences("feel free to share it with Kai ", length: 400, count: 20, end: ". "),
         ]
         for text in texts {
             let started = ContinuousClock.now

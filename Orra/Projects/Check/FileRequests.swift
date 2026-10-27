@@ -227,7 +227,7 @@ nonisolated enum DocumentKind: String, CaseIterable, Sendable {
         case .designFile:
             Terms(english: ["design file", "design files", "source file", "source files", "artwork", "psd", "indd", "figma", "logo"],
                   chinese: ["设计稿", "源文件", "设计文件", "原稿"],
-                  japanese: ["デザインデータ", "デザインファイル", "入稿データ", "ロゴデータ"],
+                  japanese: ["デザインデータ", "デザインファイル", "入稿データ", "ロゴデータ", "ロゴ"],
                   spanish: ["archivo de diseño", "archivos de diseño", "archivos fuente", "logotipo", "logo"])
         case .data:
             Terms(english: ["data", "dataset", "datasets", "raw data", "csv"],
@@ -273,9 +273,9 @@ nonisolated enum DocumentKind: String, CaseIterable, Sendable {
 /// It reads the subject, unless it is that of a reply or a forward, and the first
 /// `readLength` characters of the sender's own words, cut into sentences as DraftCheck cuts
 /// them, at most `mostSentences` of `sentenceLength` characters each. Every pattern is
-/// bounded, runs only when the words it needs stand in the sentence, and a sentence reads at
-/// most `mostFrames` matches of each, so a hostile text cannot make it slow. Its limit is
-/// wording it does not know.
+/// bounded, a construction of Chinese or Japanese runs only when the words it needs stand in
+/// the sentence, and a sentence reads at most `mostFrames` matches of each pattern, so a
+/// hostile text cannot make it slow. Its limit is wording it does not know.
 ///
 /// Pure: it reads only the text it is given, and logs nothing.
 nonisolated enum FileRequests {
@@ -466,7 +466,11 @@ nonisolated enum FileRequests {
         guard !object.isEmpty, !isNoFile(object, language), !isToPrepare(object) else { return nil }
         if kinds.isEmpty, names.isEmpty {
             guard !item.mustNameADocument || namesAWrittenThing(object, language), !ownWords(phrase).isEmpty, !isNoFile(phrase, language) else { return nil }
-            return (phrase, [.document], [])
+            // In Spanish the words after de may name the kind, as in "el borrador del
+            // contrato", which English keeps in what is asked for, as "the draft of the
+            // contract" does.
+            let phraseKinds = language == .spanish ? self.kinds(in: phrase) : []
+            return (phrase, phraseKinds.isEmpty ? [.document] : phraseKinds, [])
         }
         return (object, kinds, names)
     }
@@ -647,6 +651,14 @@ nonisolated enum FileRequests {
             latin(#"\b(?<frame>"# + englishAsks + #")\b(?<gap>[^.!?;]{0,40}?)\b(?<verb>"# + englishGives + #")\b"#),
             mustNameADocument: true),
         Construction(
+            "could you drop X into the thread, a verb that also drops a line or a price",
+            latin(#"\b(?<frame>"# + englishAsks + #")\b(?<gap>[^.!?;]{0,40}?)\b(?<verb>drop|dropping)\b"#),
+            mustNameADocument: true),
+        Construction(
+            "mind sending X?, the short form of would you mind, at the start of a clause",
+            latin(#"(?:^|[,;:]\s*)(?<frame>mind)\s+(?<verb>sending|resending|forwarding|sharing|emailing|e-mailing|attaching|passing along|passing on)\b"#),
+            question: true),
+        Construction(
             "send me X, forward X, share X, at the start of a clause, not upload or submit X, which calls for a portal",
             latin(#"(?:^|[,;:]\s*)(?:(?:hi|hello|hey|dear|good (?:morning|afternoon|evening))\b[^,!]{0,40}[,!]\s*)?(?:(?:and|also|just|so|ok|okay|then|oh|ps|p\.s\.)[,:]?\s+){0,2}(?<verb>send|resend|forward|email|e-mail|share|attach|pass along|pass on)\s+(?=(?:me|us|over|along|across|back|through|again|the|your|that|this|these|those|it|them|a|an|any|all|both|copies|one|some)\b)"#),
             imperative: true),
@@ -702,7 +714,7 @@ nonisolated enum FileRequests {
     private static let englishLead = latin(#"^(?:\s*\b(?:me|us|over|along|across|back|through|again|also|please|kindly|to me|to us|over to (?:me|us)|across to (?:me|us)|(?:him|her|them)(?=\s+(?:the|a|an|your|our|that|this|these|those|any|all|both|copies|one)\b))\b)*\s*(?:the following(?: files?| documents?| items?)?\s*:|these\s*:|following\s*:)?"#)
     /// Where what is asked for ends, also before a clause that says more about it, as in
     /// "the plan that we discussed" or "the plan you sent".
-    private static let englishCut = latin(#"\s+(?:on|about|regarding|re|for|by|to|with|from|in|within|before|after|when|whenever|if|as soon as|asap|so that|so|because|since|once|until|till|today|tomorrow|tonight|this week|next week|at|via|through|back|over|along|across|again|too|as well|either|please|as|is|are|was|were|has|have|had|will|handy|ready|available|on hand|at hand|first(?=\s*[.!?]?\s*$)|that|which|who|whom|whose|where|you|we|i|they|he|she|and (?:let|tell|confirm|please|could|can|also|then|i|we|send|forward|share|sign|return|email|attach|upload|submit)|but|thanks|thank you)\b|[,;:()\[\]]|\s[-–—]\s"#)
+    private static let englishCut = latin(#"\s+(?:on|onto|about|regarding|re|for|by|to|with|from|in|into|within|before|after|when|whenever|if|as soon as|asap|so that|so|because|since|once|until|till|today|tomorrow|tonight|this week|next week|(?:yesterday|earlier|last (?:week|month|time|night)|this morning)(?!['’])|at|via|through|back|over|along|across|again|too|as well|either|please|as|is|are|was|were|has|have|had|will|won['’]?t|doesn['’]?t|does not|didn['’]?t|did not|can['’]?t|cannot|isn['’]?t|aren['’]?t|wasn['’]?t|handy|ready|available|on hand|at hand|first(?=\s*[.!?]?\s*$)|that|which|who|whom|whose|where|you|we|i|they|he|she|and (?:let|tell|confirm|please|could|can|also|then|i|we|send|forward|share|sign|return|email|attach|upload|submit)|but|thanks|thank you)\b|[,;:()\[\]]|\s[-–—]\s"#)
     /// The cut words after which "a copy of the contract" and "una copia de la factura" go on.
     private static let prepositions: Set<String> = ["on", "about", "for", "by", "to", "with", "from", "in", "sobre", "para", "por", "con", "de", "del", "en", "a", "al"]
     private static let englishKeepGoing: Set<String> = ["copy", "copies", "version", "versions", "scan", "scans", "pdf", "pdfs", "photo", "photos", "picture", "pictures", "image", "images"]
@@ -800,6 +812,9 @@ nonisolated enum FileRequests {
             "adjunta X, envía X, at the start of a clause, not the participle of the sender's own file, as in adjunta encontrarás la factura",
             latin(#"(?:^|[,;:¿¡]\s*)(?<verb>adj[uú]nta|env[ií]a|m[aá]nda|comp[aá]rte)\b(?!\s+(?:encontrar[aáeé]?\w*|hallar[aáeé]?\w*|ver[aá]s|va|van|est[aá]n?|tienes?|te|le|les|os|se|me|nos|env[ií]o|remito|mando|adjunto)\b)"#)),
         Construction(
+            "envíalo, compártelas conmigo, at the start of a clause, which point to the document named before",
+            latin(#"(?:^|[,;:¿¡]\s*)(?<verb>(?:env[ií]a|m[aá]nda|comp[aá]rte|p[aá]sa|reenv[ií]a|adj[uú]nta|rem[ií]te)(?:lo|la|los|las))\b"#)),
+        Construction(
             "¿me envías X?, ¿me lo mandas?, ¿me enviarías X?",
             latin(#"(?:^|[¿,;:]\s*)(?:(?:y|tambi[eé]n|oye|oiga|entonces)\s+)?(?<frame>me|nos)\s+(?:(?:lo|la|los|las)\s+)?(?<verb>env[ií]as|mandas|pasas|compartes|reenv[ií]as|adjuntas|remites|haces llegar|env[ií]ar[ií]as|mandar[ií]as|pasar[ií]as|compartir[ií]as|reenviar[ií]as)\b"#)),
         Construction(
@@ -830,11 +845,13 @@ nonisolated enum FileRequests {
     /// The sender as the one who sends, right before the verb, as in "si necesitas que te
     /// envíe el plano".
     private static let spanishSender = latin(#"\bque\s+(?:yo\s+)?(?:te|le|les|os)\s+$|\bque\s+yo\s+$"#)
-    private static let spanishLead = latin(#"^(?:\s*\b(?:me|nos|te|le|les|tambi[eé]n|por favor|porfa|de nuevo|otra vez|nuevamente|ahora|ya)\b)*\s*(?:(?:lo|los|las) siguientes?(?: archivos| documentos)?\s*:)?"#)
-    private static let spanishCut = latin(#"\s+(?:sobre|para|por|con|de|del|a|al|antes|despu[eé]s|cuando|si|hoy|ma[nñ]ana|lo antes posible|en|porque|ya que|que|tambi[eé]n|por favor|es|est[aá]|est[aá]n|son|fue|ya|y (?:me|nos|te|le|av[ií]same|conf[ií]rmame|env[ií]\w*|m[aá]nd\w*|f[ií]rm\w*|devu[eé]lv\w*|reenv[ií]\w*|comp[aá]rt\w*)|pero|gracias)\b|[,;:()\[\]]|\s[-–—]\s"#)
+    /// Words before what is asked for that are none of it, as in "¿tienes a mano las fotos?"
+    /// or "compártelas conmigo".
+    private static let spanishLead = latin(#"^(?:\s*\b(?:me|nos|te|le|les|tambi[eé]n|por favor|porfa|de nuevo|otra vez|nuevamente|ahora|ya|todav[ií]a|a[uú]n|a mano|a la mano|por ah[ií]|conmigo|con nosotros|con nosotras|a m[ií]|a nosotros|a nosotras)(?![\p{L}]))*\s*(?:(?:lo|los|las) siguientes?(?: archivos| documentos)?\s*:)?"#)
+    private static let spanishCut = latin(#"\s+(?:sobre|para|por|con|de|del|a|al|antes|despu[eé]s|cuando|si|hoy|ma[nñ]ana|(?:el|este|el pr[oó]ximo) (?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)|esta semana|la (?:pr[oó]xima )?semana(?: que viene)?|este mes|lo antes posible|en|porque|ya que|que|tambi[eé]n|por favor|es|est[aá]|est[aá]n|son|fue|ya|y (?:me|nos|te|le|av[ií]same|conf[ií]rmame|env[ií]\w*|m[aá]nd\w*|f[ií]rm\w*|devu[eé]lv\w*|reenv[ií]\w*|comp[aá]rt\w*)|pero|gracias)\b|[,;:()\[\]]|\s[-–—]\s"#)
     /// Where what is asked for ends when its head names no kind, so the words after de stay,
     /// as in "la lista de invitados".
-    private static let spanishCutAfterDe = latin(#"\s+(?:sobre|para|por|con|a|al|antes|despu[eé]s|cuando|si|hoy|ma[nñ]ana|lo antes posible|en|porque|ya que|que|tambi[eé]n|por favor|es|est[aá]|est[aá]n|son|fue|ya|y (?:me|nos|te|le|av[ií]same|conf[ií]rmame|env[ií]\w*|m[aá]nd\w*|f[ií]rm\w*|devu[eé]lv\w*|reenv[ií]\w*|comp[aá]rt\w*)|pero|gracias)\b|[,;:()\[\]]|\s[-–—]\s"#)
+    private static let spanishCutAfterDe = latin(#"\s+(?:sobre|para|por|con|a|al|antes|despu[eé]s|cuando|si|hoy|ma[nñ]ana|(?:el|este|el pr[oó]ximo) (?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)|esta semana|la (?:pr[oó]xima )?semana(?: que viene)?|este mes|lo antes posible|en|porque|ya que|que|tambi[eé]n|por favor|es|est[aá]|est[aá]n|son|fue|ya|y (?:me|nos|te|le|av[ií]same|conf[ií]rmame|env[ií]\w*|m[aá]nd\w*|f[ií]rm\w*|devu[eé]lv\w*|reenv[ií]\w*|comp[aá]rt\w*)|pero|gracias)\b|[,;:()\[\]]|\s[-–—]\s"#)
 
     /// What a Spanish construction asks for after its verb, and the phrase a search reads:
     /// the same, or with the words after de when the head names no kind or file name, as
@@ -885,7 +902,13 @@ nonisolated enum FileRequests {
                       !ContentChecks.matches([portal], clause(of: whole, verb: verb, in: sentence)) else { continue }
                 let (object, phrase) = spanishObject(after: verb.upperBound, in: sentence)
                 // Lo or la on the verb, before the words that ask or between them and the verb.
-                let clitic = ContentChecks.matches([spanishCliticOnVerb], String(sentence[verb]))
+                let cliticOnVerb = ContentChecks.matches([spanishCliticOnVerb], String(sentence[verb]))
+                // A verb that carries lo or la takes no other thing after it, so what follows is
+                // none, as bien in "pásala bien".
+                if cliticOnVerb, !object.isEmpty, !ContentChecks.matches([spanishPointer], object) {
+                    continue
+                }
+                let clitic = cliticOnVerb
                     || ContentChecks.matches([spanishCliticBefore], String(sentence[..<(frame?.lowerBound ?? verb.lowerBound)].suffix(12)))
                     || ContentChecks.matches([spanishCliticBefore], String(sentence[(frame?.lowerBound ?? verb.lowerBound)..<verb.lowerBound]))
                 let pointsBack = ContentChecks.matches([spanishPointer], object)
@@ -903,7 +926,7 @@ nonisolated enum FileRequests {
     /// The words that make a request, before the verb: 请, 麻烦, 能否, 方便的话, 也 and their
     /// like, 你能 or 您可以, the steps before sending back a signed paper, as in 盖章后回传, and
     /// 并 that starts a clause after one that asks, as in 请回复同意，并把合同发过来.
-    private static let chineseFrames = #"(?:签字|签名|签章|盖章|签署|签好|盖好|签完|盖完)(?:字|章)?(?:并|后|之后|以后)|(?<=[,;，；]\s{0,1})并且?|请|麻烦|劳烦|烦请|能否|可否|能不能|可不可以|可以|是否可以|是否能|方便时|方便的话|有空(?:的话|时|的时候)?|如果可以(?:的话)?|如果方便(?:的话)?|要是方便(?:的话)?|记得|顺便|顺手|顺带|也|再|帮忙|帮我们|帮我|务必|还请|劳驾|辛苦(?:你|您)了?|拜托(?:你|您)?|抽空|得空|尽快|赶紧|需要(?:你|您)们?|希望(?:你|您)们?(?:能)?|想请(?:你|您)?|(?:你|您)们?(?:这边|那边)?(?:能不能|能|可以|可不可以|方便)|别忘了?|别忘记了?|不要忘了?|不要忘记了?|千万别忘了?|千万不要忘了?|可别忘了?"#
+    private static let chineseFrames = #"(?:签字|签名|签章|盖章|签署|签好|盖好|签完|盖完)(?:字|章)?(?:并|后|之后|以后)|(?<=[,;，；]\s{0,1})并且?|请|麻烦|劳烦|烦请|能否|可否|能不能|可不可以|可以|是否可以|是否能|方便(?:的)?时(?:候)?|方便的话|(?<!没)有(?:空|时间)(?:的话|时|的时候)?|如果可以(?:的话)?|如果方便(?:的话)?|要是方便(?:的话)?|记得|顺便|顺手|顺带|也|再|帮忙|帮我们|帮我|务必|还请|劳驾|辛苦(?:你|您)了?|拜托(?:你|您)?|抽空|得空|尽快|赶紧|需要(?:你|您)们?|希望(?:你|您)们?(?:能)?|想请(?:你|您)?|(?:你|您)们?(?:这边|那边)?(?:能不能|能|可以|可不可以|方便)|别忘了?|别忘记了?|不要忘了?|不要忘记了?|千万别忘了?|千万不要忘了?|可别忘了?"#
     /// The verbs of sending. A verb of one character stands only before 给, 我, 一下 and the
     /// like, or right before a word of the glossary, as in 请发平面图给我, so 发票 or 发现 is
     /// no verb.
@@ -937,7 +960,7 @@ nonisolated enum FileRequests {
     /// 尽快, 明天 and their like.
     private static let chineseAdverbs = "(?:也|再|就|先|都|还|能不能|能|可不可以|可以|方便|有空|帮忙|帮我|尽快|赶紧|直接|顺便|" + chineseWhen + "){0,4}"
     /// When the reader is asked to send it: 今晚, 明天, 下周 and their like.
-    private static let chineseWhen = #"今天|今晚|明天|明早|后天|这周|本周|下周|周末|回头|到时候|稍后|晚点|早点|尽早|待会|一会儿|有空时|方便时"#
+    private static let chineseWhen = #"今天|今晚|明天|明早|后天|这周|本周|下周|周末|回头|到时候|稍后|晚点|早点|尽早|待会|一会儿|有(?:空|时间)(?:的话|时|的时候)|方便(?:的)?时(?:候)?|方便的话"#
 
     /// The ways Chinese asks the reader for a document.
     private static let chineseConstructions: [Construction] = [
@@ -1009,7 +1032,19 @@ nonisolated enum FileRequests {
             "给我看看 X, 能让我看一下 X 吗",
             regex("(?<frame>(?:能不能|能否|可否|可以|能|麻烦|请)?(?:你|您)?(?:让|给)(?:我|我们))(?<verb>看看|看一下|看一看|过目|瞧瞧|参考一下)(?<object>" + chineseClause + "{1,30})"),
             mustNameADocument: true, gates: [regex("看|过目|瞧|参考")]),
+        Construction(
+            "能不能先把 X 给我看看, 麻烦把 X 给我们过目",
+            regex("(?<frame>" + chineseFrames + ")(?<gap>" + chineseClause + "{0,10}?)(?:把|将)(?<object>" + chineseClause + "{1,60}?)(?<verb>" + chineseShowMe + ")"),
+            mustNameADocument: true, gates: [regex("给")]),
+        Construction(
+            "你把 X 给我看看, 把 X 给我们过目, at the start of a clause",
+            regex(chineseClauseStart + "(?<frame>(?:(?:你|您)们?(?:这边|那边)?)?" + chineseAdverbs + ")(?:把|将)(?<object>" + chineseClause + "{1,60}?)(?<verb>" + chineseShowMe + ")"),
+            mustNameADocument: true, gates: [regex("给")]),
     ]
+
+    /// Showing the writer a document after 把, as in 把方案给我看看, which also takes a hand or
+    /// a room, so what is shown must name a document.
+    private static let chineseShowMe = "给(?:我|我们)(?:看看|看一下|看一看|看下|过目|瞧瞧|参考一下|参考)"
 
     /// Not a verb after 有没有 or 你有, as in 你有没有看过平面图, which asks whether the reader did
     /// something to a document, not for it.
@@ -1158,7 +1193,7 @@ nonisolated enum FileRequests {
     /// 至急.
     private static let japaneseQuantity = #"(?:(?:\d+|[一二三四五六七八九十数]+|何)(?:点|部|枚|通|件|つ|冊|式)か?|いくつか|至急|早めに|改めて|再度|もう一度|今一度|一度|すぐに|先に|ぜひ|是非)?"#
     /// The verbs of sending.
-    private static let japaneseSends = #"送って|送付して|お送り|ご送付|送信して|ご送信|転送して|ご転送|共有して|ご共有|添付して|ご添付|返送して|ご返送|メールして|お届け|届けて|お回し|回して|アップロードして|アップして"#
+    private static let japaneseSends = #"送って|送付して|お送り|ご送付|再送して|ご再送|再送付して|再送信して|送信して|ご送信|転送して|ご転送|共有して|ご共有|添付して|ご添付|返送して|ご返送|メールして|お届け|届けて|お回し|回して|アップロードして|アップして"#
     /// The endings that ask politely, from ください to いただけないでしょうか.
     private static let japanesePolite = #"いただけますと|頂けますと|いただけましたら|頂けましたら|くださいますと|くださいませんか|くださいますか|くださいますでしょうか|くださいませ|くださいね|ください|下さい|いただけますでしょうか|いただけないでしょうか|いただけないですか|いただけないか|いただけますか|いただけませんか|いただけると|いただければ|いただけたら|いただきたい|いただきたく|頂けますでしょうか|頂けないでしょうか|頂けますか|頂けませんか|頂けると|頂ければ|頂けたら|頂きたい|頂きたく|頂戴できますか|頂戴できれば|頂戴したく|頂戴したい|もらえないでしょうか|もらえますか|もらえませんか|もらえると|もらえたら|もらいたい|くれますか|くれませんか|くれない|ほしいです|欲しいです|ほしい|欲しい|お願いします|お願いいたします|お願い致します|お願いできますでしょうか|お願いできますか|お願いできれば|お願い申し上げます|願います"#
     /// A verb of sending anywhere, and a polite ending anywhere, which the constructions of
@@ -1181,8 +1216,8 @@ nonisolated enum FileRequests {
             regex("(?<object>" + japaneseObject + "{1,30}?)(?:については|につきましては|は)(?<gap>" + japaneseGap + "{0,15}?)(?<verb>" + japaneseSends + ")(?:して|を)?(?:" + japanesePolite + ")"),
             mustNameADocument: true, gates: [regex("は"), japaneseSend, japaneseEnding]),
         Construction(
-            "お送りいただけますか with nothing named before it in its clause, after Xがあれば or a sentence that names X",
-            regex("(?:^|(?<=[、。,，！!？?]))\\s*(?<gap>[^をもは、。,.!?！？\\n]{0,20}?)(?<verb>" + japaneseSends + ")(?:して|を)?(?:" + japanesePolite + ")"),
+            "お送りいただけますか with nothing named before it in its clause, after Xがあれば or a sentence that names X, also after もう一度 or もしよろしければ",
+            regex("(?:^|(?<=[、。,，！!？?]))\\s*(?<gap>(?:もう|もし|[^をもは、。,.!?！？\\n]){0,20}?)(?<verb>" + japaneseSends + ")(?:して|を)?(?:" + japanesePolite + ")"),
             gates: [japaneseSend, japaneseEnding]),
         Construction(
             "X のご送付をお願いいたします",
@@ -1192,6 +1227,10 @@ nonisolated enum FileRequests {
             "X 送付のお願い, X ご共有のお願い",
             regex("(?<object>" + japaneseObject + "{1,30}?)の?(?<verb>(?:ご)?(?:送付|共有|提供|送信|転送|返送))の?(?:お願い|ご依頼|依頼)"),
             gates: [regex("お願い|依頼")]),
+        Construction(
+            "X は PDF でいただけますか, X もいただけますか, a topic before a verb of giving, which also gives time, with only a means such as 紙で or a count between, so ご確認いただけますか asks for no file",
+            regex("(?<object>" + japaneseObject + "{1,30}?)(?<!見積もり)(?<!見積り)(?<!見積)(?:については|につきましては|は|も)(?<gap>(?:[\\p{Han}\\p{Katakana}A-Za-z0-9ー]{1,8}で(?:も)?)?" + japaneseQuantity + ")(?<verb>いただけますでしょうか|いただけないでしょうか|いただけますか|いただけませんか|頂けますでしょうか|頂けないでしょうか|頂けますか|頂けませんか|頂戴できますか|頂戴できれば|もらえますか|もらえませんか|いただけると|いただければ|いただけたら|頂けると|頂ければ)"),
+            mustNameADocument: true, gates: [regex("は|も"), regex("いただけ|頂け|頂戴|もらえ")]),
         Construction(
             "X をいただけますか, X をください, X を頂戴できますか, not a quote still to prepare",
             regex("(?<object>" + japaneseObject + "{1,30}?)(?<!見積もり)(?<!見積り)(?<!見積)を(?<gap>" + japaneseQuantity + ")(?<verb>いただけますでしょうか|いただけないでしょうか|いただけますか|いただけませんか|頂けますでしょうか|頂けないでしょうか|頂けますか|頂けませんか|ください|下さい|もらえますか|もらえませんか|いただきたい|頂きたい|頂戴できますか|頂戴できれば|頂戴したい|いただけると|いただければ|いただけたら|頂けると|頂ければ)"),
@@ -1209,6 +1248,10 @@ nonisolated enum FileRequests {
             regex("(?<object>" + japaneseObject + "{1,30}?)(?:を|が)(?<gap>" + japaneseQuantity + ")(?<verb>(?:拝見|拝読)(?:でき(?:れば|ますか|ますでしょうか|ると|たら)|したい|したく|させて(?:いただけ|頂け|いただきたい|頂きたい|ください|下さい|もらえ))|(?:見せて|お見せ)(?:して)?(?:" + japanesePolite + ")|見たい|目を通したい)"),
             mustNameADocument: true, gates: [regex("を|が"), regex("拝見|拝読|見せ|見たい|目を通")]),
         Construction(
+            "ぜひ拝見したいです with nothing named before it in its clause, after a phrase that names X before the comma",
+            regex("(?:^|(?<=[、。,，！!？?]))\\s*(?<gap>(?:ぜひ|是非|一度|早めに|先に|事前に|改めて|また|もう一度)?)(?<verb>(?:拝見|拝読)(?:でき(?:れば|ますか|ますでしょうか|ると|たら)|したい|したく|させて(?:いただけ|頂け|いただきたい|頂きたい|ください|下さい|もらえ))|(?:見せて|お見せ)(?:して)?(?:" + japanesePolite + "))"),
+            mustNameADocument: true, gates: [regex("拝見|拝読|見せ")]),
+        Construction(
             "X を送るのを忘れないでください",
             regex("(?<object>" + japaneseObject + "{1,30}?)を(?<verb>送る|送付する|共有する|添付する|お送りする|転送する)の(?:を)?忘れないで(?:ください|下さい|くださいね|ね)?"),
             gates: [regex("を"), regex("忘れないで")]),
@@ -1220,7 +1263,7 @@ nonisolated enum FileRequests {
     /// character of a noun.
     private static let japaneseClauseBefore = regex(#"^.*(?:たら|れば|ので|のに|けど|けれど|から|まで|ため|には|では|とは|が|は|に|で|て|へ|た)(?=[\p{Han}\p{Katakana}A-Za-z0-9ー])"#)
     /// What asks for the document named before it.
-    private static let japanesePointer = regex(#"^(?:それ|それら|そちら|これ|これら|こちら|あれ|あちら|その件|例の件|例のもの|同じもの)$"#)
+    private static let japanesePointer = regex(#"^(?:それ|それら|そちら|これ|これら|こちら|あれ|あちら|その件|例の件|例のもの|同じもの|もの)$"#)
 
     private static func japanese(_ sentence: String) -> [Asked] {
         // Every pattern needs kana, which Chinese has none of.
@@ -1234,7 +1277,10 @@ nonisolated enum FileRequests {
                 let text = objectRange.map { japaneseHead(String(sentence[$0])) } ?? ""
                 let object = hanObject(text)
                 let pointsBack = object.isEmpty || ContentChecks.matches([japanesePointer], object)
-                if pointsBack, construction.mustNameADocument { continue }
+                // A construction that must name a document and reads what is asked for before
+                // its verb takes no pronoun, as in それが必要です. One that reads nothing there, as
+                // ぜひ拝見したいです, takes the document named before it by a kind or a file name.
+                if pointsBack, construction.mustNameADocument, construction.hasObject { continue }
                 asked.append(Asked(
                     position: match.range.location, object: object, phrase: hanCleaned(text), before: String(sentence[..<(objectRange?.lowerBound ?? verb.lowerBound)]),
                     language: .japanese, mustNameADocument: construction.mustNameADocument, pointsBack: pointsBack))
@@ -1508,6 +1554,14 @@ nonisolated enum FileRequests {
                 guard let whole = Range(match.range, in: text), !isOwnClause(whole.lowerBound) else { continue }
                 switch language {
                 case .english, .spanish:
+                    // What stands before the verb, as "the file" in "the file you sent".
+                    if pattern.pattern.contains("(?<object>") {
+                        let objectFound = match.range(withName: "object")
+                        guard objectFound.location != NSNotFound, let range = Range(objectFound, in: text) else { continue }
+                        let object = trimmed(String(text[range]))
+                        consider(Antecedent(object: object, phrase: object, language: language), end: range.upperBound)
+                        continue
+                    }
                     let (object, phrase) = language == .spanish
                         ? spanishObject(after: whole.upperBound, in: text)
                         : (latinObject(after: whole.upperBound, in: text, lead: englishLead, cut: englishCut, keepGoing: englishKeepGoing), "")
@@ -1625,8 +1679,12 @@ nonisolated enum FileRequests {
 
     /// The constructions that name a document a pronoun may point to: what the reader has or
     /// sent, and what the writer needs or misses, with what follows them in English, Spanish
-    /// and Chinese and what precedes them in Japanese.
+    /// and Chinese and what precedes them in Japanese, and in English and Japanese a file named
+    /// before what the reader did to it or what went wrong with it, as in "the file you sent"
+    /// or 添付ファイルが開けませんでした.
     private static let antecedentPatterns: [(gate: NSRegularExpression, pattern: NSRegularExpression, language: Language)] = [
+        (latin(#"\b(?:sent|shared|mentioned|showed|prepared|drafted|updated|revised|made|wrote|drew|attached|forwarded|uploaded|gave)\b"#), latin(#"(?<object>\b(?:the|that|this|those|these|your)\s+(?:(?!\b(?:is|are|was|were|has|have|had|will)\b)[^,.;:!?]){1,40}?)\s+(?:(?:that|which)\s+)?(?:you|u)\s+(?:just\s+|already\s+|kindly\s+)?(?:sent|shared|mentioned|showed|prepared|drafted|updated|revised|made|wrote|drew|attached|forwarded|uploaded|gave)\b"#), .english),
+        (regex(#"開け|開か|開き|見られ|見れ|表示され|破損|壊れ|届い|届き"#), regex("(?<object>" + japaneseObject + "{1,30}?)(?:が|は|も)(?:まだ|うまく|正しく|なぜか)?(?:開けません|開けない|開けず|開きません|開かない|開かず|見られません|見られない|見れません|見れない|表示されません|表示されない|破損して|壊れて|届いていません|届いていない|届きません|届かない)"), .japanese),
         (latin(#"\b(?:have|has|had|keep|kept|got|find|mentioned|showed|sent|shared|prepared|drafted|updated|revised|made|wrote|drew|missing|lacking|lack|need|needed|lost|misplaced|there|received|asked|asks|requested|requests)\b"#), latin(#"\b(?:if (?:you|u) (?:still |also |happen to |by any chance |already )?(?:have|has|kept|keep|got|find|can find|could find)|do (?:you|u)(?: still| also| happen to| by any chance){0,2} have|(?:you|u) (?:still |also |just )?(?:have|had|kept|mentioned|showed|sent|shared|prepared|drafted|updated|revised|made|wrote|drew)|(?:i|we)(?:['’]re|['’]m| are| am)?(?: still| also)? (?:missing|lacking|lack|need|needed|lost|misplaced)|(?:i|we) (?:can['’]t|cannot|couldn['’]t) find|(?:i|we) (?:still |also )?(?:don['’]t|do not|didn['’]t|did not) have|(?:i|we) (?:still |also )?(?:haven['’]t|have not) (?:got|received)|(?:asked|asks|requested|requests) for|(?:is|are) there(?: still)?)\b"#), .english),
         (latin(#"\b(?:tien\w*|tendr\w*|conserv\w*|guard\w*|cuent\w*|encuentr\w*|falt\w*|necesit\w*|perd\w*|mencion\w*|mostr\w*|envi\w*|mand\w*|compart\w*|prepar\w*|hici\w*|actualiz\w*)"#), latin(#"\b(?:si (?:todav[ií]a |a[uú]n |ya )?(?:tienes|tiene|tienen|conservas|conserva|guardas|guarda|cuentas con|cuenta con|encuentras|encuentra)|(?:tienes|tiene|tienen|tendr[aá]s|tendr[ií]as|cuentas con|cuenta con)|(?:me|nos) (?:falta|faltan|hace falta|hacen falta)|necesito|necesitamos|perd[ií]|perdimos|no encuentro|no encontramos|(?:me |nos )?(?:mencionaste|mostraste|enviaste|mandaste|compartiste|preparaste|hiciste|actualizaste))\b"#), .spanish),
         (regex(#"有|缺|少|差|需要|找不到|丢|给过|发过|提过|提到|说过|做过|准备过|做好|改好|画过|写过"#), regex("(?:(?:如果|要是|若|假如|如)(?:你|您)?们?(?:那边|这边|手上|手里|手边|还|也|已经)*有|有没有|(?:你|您)们?(?:那边|这边|之前|上次|还|也|已经)*(?:有|给过|发过|提过|提到过|提到|说过|说的|讲的|做过|准备过|做好了|改好了|画过|写过)|(?:我们|我)(?:这边|还|也|现在|目前)*(?:缺少|缺|少了|还差|需要|找不到|丢了|弄丢了))(?<object>" + chineseClause + "{1,30})"), .chinese),
@@ -1749,6 +1807,11 @@ nonisolated enum FileRequests {
     private static func hanHead(_ object: String) -> String {
         guard let last = object.lastIndex(where: { $0 == "的" || $0 == "の" }) else { return object }
         let head = unquoted(String(object[object.index(after: last)...]))
+        // データ after a kind is the file of that kind, as カタログのデータ is the catalog.
+        let before = trimmed(String(object[..<last]))
+        if head == "データ", kinds(in: before).contains(where: { !$0.isGeneric && $0 != .data }) {
+            return hanHead(before)
+        }
         let headKinds = kinds(in: head)
         let namesOnlyAFile = !headKinds.isEmpty && headKinds.allSatisfy(\.isGeneric)
         let namesOnlyAVersion = headKinds.isEmpty && ContentChecks.matches([hanVersion], head)
@@ -1759,7 +1822,7 @@ nonisolated enum FileRequests {
     /// 最終版, データ and their like.
     private static let hanVersion = latin(#"^(?:(?:最新|最终|最終|最后|最後|新|旧|修改|修订|修正|改訂|更新|正式|完整|当前|現行|初|定|终|終|草|原)(?:版本|版|稿|バージョン)?|版本|バージョン|(?:pdf|cad|dwg|word|excel|jpe?g|png|tiff?|zip|ppt|pptx|xlsx?|docx?)(?:版|格式|形式|ファイル|档|文件)?)$"#)
 
-    private static let hanLead = regex(#"^(?:一下|一份|一个|一张|(?:几|两|三|若干|多)(?:张|份|个|些|页|套)|一些|个|(?:以下|下面|下列|如下|下記)(?:的|の)?(?:内容|事项|事項|几项|几点|项目|項目)?|上述的?|以上的?|下|给我们|给我|过来|我的邮箱|我邮箱|这个邮箱|邮箱|我们|我|你们的|您的|你的|贵司的|贵方的|另外|还有|对了|顺便|此外|然后|把|将|的)"#)
+    private static let hanLead = regex(#"^(?:一下|一份|一个|一张|一版|一稿|(?:几|两|三|若干|多)(?:张|份|个|些|页|套|版)|一些|个|(?:以下|下面|下列|如下|下記)(?:的|の)?(?:内容|事项|事項|几项|几点|项目|項目)?|上述的?|以上的?|下|给我们|给我|过来|我的邮箱|我邮箱|这个邮箱|邮箱|我们|我|你们的|您的|你的|贵司的|贵方的|另外|还有|对了|顺便|此外|然后|把|将|的)"#)
     private static let hanTrail = regex(#"(?:吧|吗|呢|啊|哦|哈|呗|一下|也|再|都|先|过来|给我们|给我|好吗|可以吗|谢谢|嗎|即可|就行|就好|就可以|(?:如果|要是)?有的话|的话|看看|参考)$"#)
 
     /// The kinds a text names, each once, in the order the text names them.
