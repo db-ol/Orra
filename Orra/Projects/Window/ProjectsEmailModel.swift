@@ -455,7 +455,7 @@ final class ProjectsEmailModel {
                 let email = await actions.email(messageID)
                 let sender = email.map { $0.sender.name.isEmpty ? $0.sender.address : $0.sender.name }
                 sources[id] = .mail(messageID: messageID, sender: sender, date: email?.date)
-            case .file(let chunk):
+            case .file(let chunk, _):
                 sources[id] = .file(chunk)
             case .attachment(let name, let excerpt):
                 sources[id] = .attachment(name: name, excerpt: excerpt)
