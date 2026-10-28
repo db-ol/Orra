@@ -412,7 +412,8 @@ struct FileRequestsTests {
 
     /// Colloquial Spanish names the document again after a verb that carries lo or la, as in
     /// "mándamelo el archivo", which asks for it. What names no document after such a verb,
-    /// as bien in "pásala bien", asks for nothing, also when a word for a kind comes later.
+    /// as bien in "pásala bien", asks for nothing, also when a word for a kind comes later
+    /// with no word that ends the phrase before it, as after durante, mientras or entre.
     @Test func aVerbThatCarriesLoOrLaTakesTheDocumentNamedAgain() throws {
         Self.expectConstruction("a verb that carries lo or la, and the document named again by its kind or its file name", [
             ("Oye, pásamelo el presupuesto cuando lo tengas.", "el presupuesto", [.quote, .budget]),
@@ -430,6 +431,31 @@ struct FileRequestsTests {
             "Pásala súper con tu gente.",
             "Pásala bien en la presentación de mañana.",
             "Pásalo bien durante la feria del catálogo.",
+            "¡Pásala bien mientras yo reviso los planos!",
+            "Pásalo genial durante las fotos de grupo.",
+            "¡Pásalo bomba entre tanta factura!",
+            "Pásala súper durante tu presentación en Lima.",
+        ])
+    }
+
+    /// Lo or la with a word after the verb that says how or when to send it, a participle, a
+    /// quantifier or an adverb, points to the document named before, as a verb with nothing
+    /// after it does, and asks for nothing when none is named. A wish of a good time, and a
+    /// phrase after lo or la that names no document, ask for nothing.
+    @Test func loOrLaWithAWordForHowOrWhenPointsBack() {
+        Self.expectConstruction("lo or la and a participle, a quantifier or an adverb, with the document named before", [
+            ("El contrato de alquiler ya está corregido. Envíamelo firmado, por favor.", "El contrato", [.contract]),
+            ("Las fotos de la boda ya están editadas. Pásamelas todas.", "Las fotos de la boda", [.photo]),
+            ("Revisé el presupuesto de pintura. Mándamelo cuanto antes.", "el presupuesto", [.quote, .budget]),
+            ("La factura del hotel tenía un error. ¿Me la reenvías corregida?", "La factura", [.invoice]),
+            ("Ya está listo el informe de auditoría. Envíamelo lo más pronto posible.", "el informe", [.report]),
+        ])
+        Self.expectNone([
+            "Envíamelo firmado, por favor.",
+            "¿Me lo mandas cuanto antes?",
+            "Gracias por el cronograma. ¡Pásala bien!",
+            "Ya firmé el contrato. ¡Pásalo de maravilla en Cancún!",
+            "Ya tengo el plano. Mándamela la dirección del local.",
         ])
     }
 

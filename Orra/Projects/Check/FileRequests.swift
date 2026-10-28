@@ -258,7 +258,8 @@ nonisolated enum DocumentKind: String, CaseIterable, Sendable {
 /// see, give, provide) count only what names a document or a written thing such as a list.
 /// "It", "them", lo, それ, 这个 or no object at all, as in 麻烦再发我一份, point to the
 /// document named last before them, in the same sentence or in the sentence before, and ask
-/// for nothing when none is named.
+/// for nothing when none is named. So does lo or la with a word after it that says how or
+/// when, as in "envíamelo firmado" or "¿me la mandas cuanto antes?".
 ///
 /// Never a request: what is no file (comments, feedback, availability, an address, bank or
 /// tax details, information, money, goods, a link, the email itself, a question such as "how
@@ -267,8 +268,8 @@ nonisolated enum DocumentKind: String, CaseIterable, Sendable {
 /// to prepare ("send us a quote for 500 units"), a negation before the verb, leave to pass a
 /// file on to others ("feel free to share it with your team"), the sender's own attachments,
 /// offers and promises (I'll send you, attached, 我发给你, 添付します, te envío), a question
-/// about what arrived or what the reader did to a document, and a file that came, as in
-/// 你发给我的平面图.
+/// about what arrived or what the reader did to a document, a file that came, as in
+/// 你发给我的平面图, and a wish of a good time, as in "¡pásalo bien!".
 ///
 /// It reads the subject, unless it is that of a reply or a forward, and the first
 /// `readLength` characters of the sender's own words, cut into sentences as DraftCheck cuts
@@ -863,18 +864,40 @@ nonisolated enum FileRequests {
     }
 
     /// Whether what follows a verb that carries lo or la names the document that lo or la
-    /// stands for, by a word for its kind or a file name, as "la factura" does in "¿podrías
-    /// enviármela la factura?". The words after de count only after an article or another
-    /// determiner, as in "el borrador del contrato", so "pásalo bien durante la feria del
-    /// catálogo" names nothing.
+    /// stands for: a file name at its start, as in "pásamelo rev-0412.pdf", or a phrase that
+    /// starts with an article, a possessive or a demonstrative and names a kind or a file
+    /// name, also in the words after de, as "la factura" in "¿podrías enviármela la factura?"
+    /// or "el borrador del contrato". A word for a kind further on names nothing, as in
+    /// "pásalo bien durante la presentación".
     private static func namesTheDocumentAgain(_ object: String, phrase: String) -> Bool {
-        if !kinds(in: object).isEmpty || !fileNames(in: object).isEmpty {
+        if let name = fileNames(in: object).first, object.hasPrefix(name) {
             return true
         }
-        guard let first = matchingText(object).split(whereSeparator: { !$0.isLetter && !$0.isNumber }).first,
-              spanishDeterminers.contains(String(first)) else { return false }
-        return !kinds(in: phrase).isEmpty || !fileNames(in: phrase).isEmpty
+        guard isSpanishNounPhrase(object) else { return false }
+        return !kinds(in: object).isEmpty || !fileNames(in: object).isEmpty || !kinds(in: phrase).isEmpty || !fileNames(in: phrase).isEmpty
     }
+
+    /// Whether a Spanish phrase starts with an article, a possessive or a demonstrative, or
+    /// with todo or ambos before one, as "la dirección", "tus notas" or "todas las fotos" do,
+    /// and so names a thing, unlike firmado, todas or cuanto antes, which say how or when.
+    private static func isSpanishNounPhrase(_ text: String) -> Bool {
+        let words = matchingText(text).split(whereSeparator: { !$0.isLetter && !$0.isNumber }).prefix(2).map(String.init)
+        guard let first = words.first else { return false }
+        if spanishArticles.contains(first) {
+            return true
+        }
+        return ["todo", "toda", "todos", "todas", "ambos", "ambas"].contains(first) && words.count == 2 && spanishArticles.contains(words[1])
+    }
+
+    private static let spanishArticles: Set<String> = [
+        "el", "la", "los", "las", "un", "una", "unos", "unas", "tu", "tus", "su", "sus", "mi", "mis", "nuestro", "nuestra", "nuestros",
+        "nuestras", "este", "esta", "estos", "estas", "ese", "esa", "esos", "esas", "aquel", "aquella", "aquellos", "aquellas",
+    ]
+    /// Pasar with lo or la and a word for a good time after it, "to have a good time", as in
+    /// "¡pásalo bien!", "pásala de maravilla" or "que lo pases genial", which asks for
+    /// nothing. Pásamelo, with me or nos, is no such phrase.
+    private static let spanishGoodTimeVerb = latin(#"^p[aá]s(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:te|se)?(?:lo|la|los|las)?$"#)
+    private static let spanishGoodTime = latin(#"^\s*(?:(?:muy|tan|re|s[uú]per|bien)\s+)?(?:bien|mal|genial|s[uú]per|bomba|incre[ií]ble|fenomenal|estupend\w*|maravillos\w*|de maravilla|de lujo|en grande|a lo grande|fatal|de miedo|de pel[ií]cula|ch[eé]vere|padr[ií]simo|padre|bac[aá]n|chido|regio|lindo|rico|bonito|excelente|tranquil[oa]|como nunca|a tope)(?![\p{L}\p{N}])"#)
 
     private static let spanishKeepGoing: Set<String> = ["copia", "copias", "versión", "version", "versiones", "foto", "fotos", "escaneo", "escaneos", "pdf", "imagen", "imágenes", "imagenes"]
     /// Lo, la, los or las on the verb or right before it, which point back, as in
@@ -914,19 +937,31 @@ nonisolated enum FileRequests {
                 }
                 guard !negated(sentence, from: frame?.lowerBound, before: verb.lowerBound, negation: spanishNegation),
                       !ContentChecks.matches([portal], clause(of: whole, verb: verb, in: sentence)) else { continue }
-                let (object, phrase) = spanishObject(after: verb.upperBound, in: sentence)
+                var (object, phrase) = spanishObject(after: verb.upperBound, in: sentence)
                 // Lo or la on the verb, before the words that ask or between them and the verb.
                 let cliticOnVerb = ContentChecks.matches([spanishCliticOnVerb], String(sentence[verb]))
-                // A verb that carries lo or la takes what follows it only when that names the
-                // document again, as colloquial Spanish does in "mándamelo el archivo".
-                // Otherwise what follows is none of it, as bien in "pásala bien".
-                if cliticOnVerb, !object.isEmpty, !ContentChecks.matches([spanishPointer], object),
-                   !namesTheDocumentAgain(object, phrase: phrase) {
-                    continue
-                }
                 let clitic = cliticOnVerb
                     || ContentChecks.matches([spanishCliticBefore], String(sentence[..<(frame?.lowerBound ?? verb.lowerBound)].suffix(12)))
                     || ContentChecks.matches([spanishCliticBefore], String(sentence[(frame?.lowerBound ?? verb.lowerBound)..<verb.lowerBound]))
+                // "¡Pásalo bien!" wishes a good time and asks for nothing.
+                if clitic, ContentChecks.matches([spanishGoodTimeVerb], String(sentence[verb])),
+                   ContentChecks.matches([spanishGoodTime], String(sentence[verb.upperBound...])) {
+                    continue
+                }
+                if clitic, !object.isEmpty, !ContentChecks.matches([spanishPointer], object), !namesTheDocumentAgain(object, phrase: phrase) {
+                    if !isSpanishNounPhrase(object) {
+                        // What says how or when to send it, as firmado, todas, pronto or cuanto
+                        // antes, leaves lo or la to point to the document named before.
+                        object = ""
+                        phrase = ""
+                    } else if cliticOnVerb {
+                        // A phrase after a verb that carries lo or la says what lo or la
+                        // stands for, so one that names no document asks for none, as "la
+                        // dirección" in "mándamela la dirección". It names the document again
+                        // in colloquial Spanish, as in "mándamelo el archivo".
+                        continue
+                    }
+                }
                 let pointsBack = ContentChecks.matches([spanishPointer], object)
                     || (object.isEmpty && (clitic || !construction.mustNameADocument))
                 asked.append(Asked(
