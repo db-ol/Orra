@@ -4371,6 +4371,12 @@ PY
   Reply in Mail again: the row says Not downloaded to this Mac.
 - [ ] Add a test folder in ~/Desktop to a project and attach a file of it. Note whether macOS
   asks whether Mail may open files on the Desktop.
+- [ ] On the English request, with floor-plan-v3.pdf ticked, click Compare with Original.
+  Explanation and Draft shows Files This Email Asks For, Attachments for the Reply with the
+  ticked file, the line above the buttons and Open Reply in Mail, beside Original Email at
+  the default size and under it at 760 by 420, wrapped with nothing cut, in all four
+  languages. Tick lighting-spec.pdf there: it shows under Attachments for the Reply. Click
+  Exit Comparison: both files stay ticked.
 - [ ] At the window's smallest size, 760 by 420, the section and the area wrap, Remove goes
   under the name and the buttons stack, in all four languages. VoiceOver reads both
   headings as headings, each file as one element and its checkbox with the file's name and

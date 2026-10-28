@@ -2551,11 +2551,12 @@ struct ProjectsWindowViewTests {
     /// plan: two versions of it in the project's folder, a sketch of it in the folder of Kiln
     /// studio and a drawing found by its folder, the newest plan ticked with the line about
     /// Kai Moss, who is outside the project. Then the window at its first and its smallest
-    /// size, at the top and scrolled to each section, a sender that looks spoofed, an email
-    /// in Japanese without a draft, and the note after a handoff where Mail did not take one
-    /// of three files and Orra kept back another that changed after it was ticked, with the
-    /// draft's claim that a file is attached once none is ticked, and a blank draft with a
-    /// ticked file.
+    /// size, at the top and scrolled to each section, the same email view while comparing,
+    /// side by side and one above the other, at the top and scrolled to each section, a
+    /// sender that looks spoofed, an email in Japanese without a draft, and the note after a
+    /// handoff where Mail did not take one of three files and Orra kept back another that
+    /// changed after it was ticked, with the draft's claim that a file is attached once none
+    /// is ticked, and a blank draft with a ticked file.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_PROJECTS_WINDOW_SNAPSHOTS"] != nil))
     func renderTheReplyFiles() async throws {
         let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["ORRA_PROJECTS_WINDOW_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true)
@@ -2625,6 +2626,25 @@ struct ProjectsWindowViewTests {
             }
         }
         #expect(scrolled.count == 4, "scrolled to \(scrolled)")
+        // Compare with Original, with both sections in Explanation and Draft: the email view
+        // alone, as the window that is never shown draws it empty, at the sizes the shown
+        // window measured, side by side at the window's first size and one above the other
+        // at its smallest, at the top and with Explanation and Draft scrolled to each section.
+        model.compare(explained.messageID)
+        #expect(model.isComparing)
+        var compared: [String] = []
+        for (name, size) in Self.comparedSizes where name == "compare" || name == "compare-760" {
+            let comparison = ProjectsEmailArea(runtime: runtime, model: model, email: explained, openMail: {})
+            try await render(comparison, size: size, to: folder.appendingPathComponent("\(language)-projects-reply-files-\(name).png"))
+            for (part, anchor, top) in anchors {
+                let file = folder.appendingPathComponent("\(language)-projects-reply-files-\(name)-\(part).png")
+                if try await render(comparison, size: size, scrolledTo: anchor, top: top, to: file) {
+                    compared.append("\(name)-\(part)")
+                }
+            }
+        }
+        #expect(compared.count == 4, "scrolled to \(compared)")
+        model.endComparing()
 
         // A sender whose domain imitates the project's.
         let spoofedID = "lamps-3@harbor.example"
