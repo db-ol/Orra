@@ -61,9 +61,7 @@ https://db-ol.github.io/Orra/.
   the search in Chinese and English with other words for the same things, choosing files
   for an email and Compare with Original. It also says, as Settings, Projects does, that
   assigning, editing and deleting in Projects change only what it keeps on the Mac, never
-  the mail in Mail, and, as the privacy pages do, that Mail may save a reply with the files
-  the user ticked to the account's Drafts on the mail server before it is sent. The Privacy
-  section says so too. It links the Projects part of the user guide in the page's language.
+  the mail in Mail. It links the Projects part of the user guide in the page's language.
   Its heading carries the Preview label that Settings shows beside the name, the
   preview-label class in style.css, in the word Orra uses in that language. Remove the
   label from all four pages when Projects leaves the preview. The sections after it keep
