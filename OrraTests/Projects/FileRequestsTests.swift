@@ -474,6 +474,50 @@ struct FileRequestsTests {
         ])
     }
 
+    /// The imperative of usted and of ustedes asks with no word that asks before it, as that
+    /// of tú does: envíeme, mándeme, páseme, compártame, reenvíeme, adjúnteme, remítame, hágame
+    /// llegar, envíennos and their like, also with lo or la. It takes the same objects and the
+    /// same refusals: what is no file, a pointer with nothing named, the sender's own file, also
+    /// after le comparto, le mando or aquí tiene, and a wish of a good time.
+    @Test func anImperativeOfUstedOrUstedesAsksAsOneOfTuDoes() {
+        Self.expectConstruction("an imperative of usted at the start of a sentence, one for each verb of sending", [
+            ("Envíeme el plano del galpón, por favor.", "el plano", [.floorPlan, .drawing]),
+            ("Mándeme la factura de septiembre cuando pueda.", "la factura", [.invoice]),
+            ("Páseme la planilla de horas del personal.", "la planilla", [.spreadsheet]),
+            ("Compártame la presentación del lunes, por favor.", "la presentación", [.slides]),
+            ("Reenvíeme el informe que le mandó el auditor.", "el informe", [.report]),
+            ("Adjúnteme las fotos del montaje en su respuesta.", "las fotos del montaje", [.photo]),
+            ("Remítame el catálogo de repuestos a la brevedad.", "el catálogo", [.catalog]),
+            ("Hágame llegar la constancia de inscripción esta semana.", "la constancia", [.certificate]),
+        ])
+        Self.expectConstruction("an imperative of ustedes, and one of usted with nos", [
+            ("Envíennos los planos de la fachada antes del viernes.", "los planos", [.floorPlan, .drawing]),
+            ("Mándennos la cotización revisada, por favor.", "la cotización revisada", [.quote]),
+            ("Hágannos llegar el contrato firmado.", "el contrato firmado", [.contract]),
+            ("Háganos llegar las facturas originales.", "las facturas originales", [.invoice]),
+        ])
+        Self.expectConstruction("lo or la on the verb, with the document named before or named again", [
+            ("La factura de octubre ya está corregida. Envíemela, por favor.", "La factura", [.invoice]),
+            ("El contrato de servicio ya está firmado. Hágamelo llegar cuanto antes.", "El contrato", [.contract]),
+            ("Revise el presupuesto y envíemelo firmado.", "el presupuesto", [.quote, .budget]),
+            ("Envíemela la propuesta comercial, por favor.", "la propuesta comercial", [.proposal]),
+        ])
+        Self.expectNone([
+            "Envíeme sus comentarios.",
+            "Mándeme un saludo a su equipo.",
+            "Envíeme su disponibilidad para el martes.",
+            "Páseme su número de celular.",
+            "Envíenos una cotización para 50 sillas.",
+            "Compártanoslo cuando lo tenga listo.",
+            "Le adjunto el contrato. Reenvíemelo si necesita cambios.",
+            "Le comparto el borrador de la propuesta. Envíemelo con sus comentarios.",
+            "Le mando el plano del depósito. Por favor, reenvíemelo con sus notas.",
+            "Aquí tiene el presupuesto. Por favor, reenvíeselo a su contador.",
+            "¡Pásela bien en la feria del catálogo!",
+            "Pásenla bien durante la presentación del jueves.",
+        ])
+    }
+
     // MARK: What never counts
 
     @Test func commentsAndFeedbackAreNoFile() {
@@ -986,6 +1030,7 @@ struct FileRequestsTests {
             sentences("お送りいただけますかお送り", length: 400, count: 20, end: "、"),
             sentences("If you have the plan, could you send it", length: 400, count: 20, end: ". "),
             sentences("¿me lo mandas? me la podrías ", length: 400, count: 20, end: ". "),
+            sentences("envíemelo mándenos envíeme ", length: 400, count: 20, end: ". "),
             sentences("資料をください資料をください", length: 400, count: 20, end: "、"),
             sentences("資料はいただけますか資料は", length: 400, count: 20, end: "。"),
             sentences("请把合同把方案给我看看", length: 400, count: 20, end: "。"),

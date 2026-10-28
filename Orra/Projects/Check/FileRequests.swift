@@ -811,6 +811,9 @@ nonisolated enum FileRequests {
             "envíame X, mándamelo, compártenos X, hazme llegar X, házmelo llegar",
             latin(#"\b(?<verb>(?:env[ií]a|m[aá]nda|comp[aá]rte|p[aá]sa|reenv[ií]a|adj[uú]nta|rem[ií]te)(?:me|nos)(?:lo|la|los|las)?|h[aá]z(?:me|nos)(?:lo|la|los|las)?\s+llegar)\b"#)),
         Construction(
+            "envíeme X, mándemelo, compártannos X, hágame llegar X, the same verbs as usted and ustedes say them",
+            latin(#"\b(?<verb>(?:env[ií]e|m[aá]nde|comp[aá]rta|p[aá]se|reenv[ií]e|adj[uú]nte|rem[ií]ta)n?(?:me|nos)(?:lo|la|los|las)?|h[aá]gan?(?:me|nos)(?:lo|la|los|las)?\s+llegar)\b"#)),
+        Construction(
             "adjunta X, envía X, at the start of a clause, not the participle of the sender's own file, as in adjunta encontrarás la factura",
             latin(#"(?:^|[,;:¿¡]\s*)(?<verb>adj[uú]nta|env[ií]a|m[aá]nda|comp[aá]rte)\b(?!\s+(?:encontrar[aáeé]?\w*|hallar[aáeé]?\w*|ver[aá]s|va|van|est[aá]n?|tienes?|te|le|les|os|se|me|nos|env[ií]o|remito|mando|adjunto)\b)"#)),
         Construction(
@@ -1720,10 +1723,11 @@ nonisolated enum FileRequests {
         ContentChecks.matches([spanishMarkers], text) ? .spanish : .english
     }
 
-    /// The clauses where the sender attaches, sends or promises a file, in four languages.
+    /// The clauses where the sender attaches, sends or promises a file, in four languages, in
+    /// Spanish to tú, usted or ustedes alike, as in te mando, le comparto or aquí tiene.
     private static let ownClause: [NSRegularExpression] = [
         latin(#"\b(?:(?:attached|enclosed) (?:is|are|please find|you will find|you'll find)|(?:please )?find (?:attached|enclosed)|here (?:is|are)|here['’]s|(?:i|we)(?:['’]ve| have)? (?:just |already )?(?:sent|attached|shared|forwarded|uploaded|included)|(?:i|we)(?:['’]ll| will| shall) (?:send|forward|share|attach))\b"#),
-        latin(#"\b(?:adjunto|adjunta|adjuntos|adjuntas|te env[ií]o|le env[ií]o|les env[ií]o|te mando|te paso|te comparto|te reenv[ií]o|aqu[ií] (?:tienes|est[aá]n?|va|van))\b"#),
+        latin(#"\b(?:adjunto|adjunta|adjuntos|adjuntas|(?:te|le|les) (?:env[ií]o|mando|paso|comparto|reenv[ií]o)|aqu[ií] (?:tienes?|tienen|est[aá]n?|va|van))\b"#),
         chineseOwn,
         regex(#"(?:我|我们)(?:已|已经|刚|刚刚|会|稍后|明天|马上)?(?:发|传|寄|转发|附上)(?:给)?(?:你|您)"#),
         regex(#"添付(?:いた)?します|添付しました|添付いたしました|お送りします|お送りいたします|お送りしました|送付いたします|送付します|送付しました|送ります|送りました|共有します|共有しました|添付の"#),
