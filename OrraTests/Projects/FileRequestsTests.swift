@@ -459,6 +459,21 @@ struct FileRequestsTests {
         ])
     }
 
+    /// The verbs that take an accent with lo, la or me are read as they are written:
+    /// dármela, mostrármelo, enseñármelo, enséñame, házmelos llegar, hágame llegar and
+    /// hacérmelo llegar.
+    @Test func accentedVerbsWithLoLaOrMeAreRead() {
+        Self.expectConstruction("a verb of giving, showing or hacer llegar that takes an accent with lo, la or me", [
+            ("Si tienes la ficha técnica del motor, ¿podrías dármela?", "la ficha técnica", [.specification]),
+            ("Si ya tienes el catálogo de otoño, ¿podrías mostrármelo?", "el catálogo", [.catalog]),
+            ("El plano de evacuación ya está aprobado. ¿Podrías enseñármelo?", "El plano", [.floorPlan, .drawing]),
+            ("Por favor, enséñame el croquis del local.", "el croquis del local", [.document]),
+            ("Los recibos de octubre ya están escaneados. Házmelos llegar, porfa.", "Los recibos", [.invoice]),
+            ("Por favor, hágame llegar el certificado de residencia.", "el certificado", [.certificate]),
+            ("El certificado de calidad ya está firmado. ¿Podrías hacérmelo llegar?", "El certificado", [.certificate]),
+        ])
+    }
+
     // MARK: What never counts
 
     @Test func commentsAndFeedbackAreNoFile() {

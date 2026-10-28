@@ -793,9 +793,10 @@ nonisolated enum FileRequests {
     /// The verbs of sending, in the infinitive, the imperative and the subjunctive, with me
     /// or nos and lo or la, accented or not. Never the first person, as in te envío, adjunto
     /// or envié, which the sender says of their own attachment or of what they sent.
-    private static let spanishSends = #"(?:re)?env[ií](?:[aá]r|[aá]|e|es|en|[aá]ras?|[aá]ran|[aá]ses?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|m[aá]nd(?:[aá]r|[aá]|e|es|en|[aá]ras?|[aá]ran)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|comp[aá]rt(?:[ií]r|[aá]|e|as|an|en|[ií]eras?|[ií]eran)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|adj[uú]nt(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|p[aá]s(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|rem[ií]t(?:[ií]r|[aá]|e|as|[ií]eras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|hac(?:er|e|es)(?:me|nos|le|les|se)?(?:lo|la|los|las)?\s+llegar|hag(?:as|a|an)\s+llegar|hicier(?:as|a|an)\s+llegar|haz(?:me|nos)(?:lo|la|los|las)?\s+llegar"#
-    /// The verbs that give or show, which also take help or a visit.
-    private static let spanishGives = #"fac[ií]l[ií]t(?:[aá]r|[aá]|e|es|[aá]ras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|proporci[oó]n(?:[aá]r|[aá]|e|es|[aá]ras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|d(?:ar|[eé]s?|a)(?:me|nos)(?:lo|la|los|las)?|mostr(?:ar|[eé]s?)(?:me|nos)(?:lo|la|los|las)?|mu[eé]str(?:a|e|as)(?:me|nos)(?:lo|la|los|las)?|ense[nñ](?:ar|a|e|es)(?:me|nos)(?:lo|la|los|las)?"#
+    private static let spanishSends = #"(?:re)?env[ií](?:[aá]r|[aá]|e|es|en|[aá]ras?|[aá]ran|[aá]ses?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|m[aá]nd(?:[aá]r|[aá]|e|es|en|[aá]ras?|[aá]ran)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|comp[aá]rt(?:[ií]r|[aá]|e|as|an|en|[ií]eras?|[ií]eran)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|adj[uú]nt(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|p[aá]s(?:[aá]r|[aá]|e|es|en|[aá]ras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|rem[ií]t(?:[ií]r|[aá]|e|as|[ií]eras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|hac(?:[eé]r|e|es)(?:me|nos|le|les|se)?(?:lo|la|los|las)?\s+llegar|h[aá]g(?:as|a|an)(?:me|nos|le|les|se)?(?:lo|la|los|las)?\s+llegar|hicier(?:as|a|an)\s+llegar|h[aá]z(?:me|nos)(?:lo|la|los|las)?\s+llegar"#
+    /// The verbs that give or show, which also take help or a visit, accented or not, as in
+    /// dámelo, mostrármelo or enséñame.
+    private static let spanishGives = #"fac[ií]l[ií]t(?:[aá]r|[aá]|e|es|[aá]ras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|proporci[oó]n(?:[aá]r|[aá]|e|es|[aá]ras?)(?:me|nos|te|le|les|se)?(?:lo|la|los|las)?|d(?:[aá]r|[eé]s?|[aá])(?:me|nos)(?:lo|la|los|las)?|mostr(?:[aá]r|[eé]s?)(?:me|nos)(?:lo|la|los|las)?|mu[eé]str(?:a|e|as)(?:me|nos)(?:lo|la|los|las)?|ens[eé][nñ](?:[aá]r|a|e|es)(?:me|nos)(?:lo|la|los|las)?"#
 
     /// The ways Spanish asks the reader for a document.
     private static let spanishConstructions: [Construction] = [
@@ -807,8 +808,8 @@ nonisolated enum FileRequests {
             latin(#"\b(?<frame>"# + spanishAsks + #")\b(?<gap>[^.!?;]{0,40}?)\b(?<verb>"# + spanishGives + #")\b"#),
             mustNameADocument: true),
         Construction(
-            "envíame X, mándamelo, compártenos X, hazme llegar X",
-            latin(#"\b(?<verb>(?:env[ií]a|m[aá]nda|comp[aá]rte|p[aá]sa|reenv[ií]a|adj[uú]nta|rem[ií]te)(?:me|nos)(?:lo|la|los|las)?|haz(?:me|nos)(?:lo|la|los|las)?\s+llegar)\b"#)),
+            "envíame X, mándamelo, compártenos X, hazme llegar X, házmelo llegar",
+            latin(#"\b(?<verb>(?:env[ií]a|m[aá]nda|comp[aá]rte|p[aá]sa|reenv[ií]a|adj[uú]nta|rem[ií]te)(?:me|nos)(?:lo|la|los|las)?|h[aá]z(?:me|nos)(?:lo|la|los|las)?\s+llegar)\b"#)),
         Construction(
             "adjunta X, envía X, at the start of a clause, not the participle of the sender's own file, as in adjunta encontrarás la factura",
             latin(#"(?:^|[,;:¿¡]\s*)(?<verb>adj[uú]nta|env[ií]a|m[aá]nda|comp[aá]rte)\b(?!\s+(?:encontrar[aáeé]?\w*|hallar[aáeé]?\w*|ver[aá]s|va|van|est[aá]n?|tienes?|te|le|les|os|se|me|nos|env[ií]o|remito|mando|adjunto)\b)"#)),
