@@ -2545,8 +2545,6 @@ struct ProjectsWindowViewTests {
         MailAttachment(name: "plan.docx", type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", size: 2_400_000, state: .notDownloaded),
     ]
 
-    /// The runtime's actions for the email view, with a reader of Chinese and a fake model
-    /// that gives a translation of the draft.
     /// Renders Files This Email Asks For and Attachments for the Reply into
     /// `<language>-projects-reply-files*.png`, as `renderTheWindowsParts` renders the rest,
     /// when ORRA_PROJECTS_WINDOW_SNAPSHOTS names a folder. The lamp email asks for the floor
@@ -2588,6 +2586,9 @@ struct ProjectsWindowViewTests {
         #expect(try await store.save(explanation, at: Self.today))
         let harbor = try #require(explained.project)
         let lobby = try #require(await runtime.folderRoots(of: harbor)?.folders.first)
+        // The folder as the project holds it, under /private/var, since a file reached through
+        // the link /var is refused as outside the folders.
+        let kilnRoot = try #require(await runtime.folderRoots(of: kiln.id)?.folders.first)
 
         let model = ProjectsWindowModel(runtime: runtime)
         await model.show(explained.messageID)
@@ -2672,7 +2673,7 @@ struct ProjectsWindowViewTests {
         await handed.load()
         try await waitUntil { !handed.replyFiles.isLooking }
         await handed.replyFiles.setTicked(lobby.appending(path: "floor-plan-v3.pdf"), true)
-        await handed.replyFiles.setTicked(kilnFolder.appending(path: "Sketches/平面图草图.png"), true)
+        await handed.replyFiles.setTicked(kilnRoot.appending(path: "Sketches/平面图草图.png"), true)
         await handed.replyFiles.setTicked(lobby.appending(path: "lobby-elevation.dwg"), true)
         #expect(handed.replyFiles.ticked.count == 3)
         try Data("AC1032 saved again".utf8).write(to: lobby.appending(path: "lobby-elevation.dwg"))
@@ -2739,6 +2740,8 @@ struct ProjectsWindowViewTests {
         }
     }
 
+    /// The runtime's actions for the email view, with a reader of Chinese and a fake model
+    /// that gives a translation of the draft.
     private static func translatingActions(_ runtime: ProjectsRuntime) -> ProjectsEmailModel.Actions {
         var actions = ProjectsEmailModel.Actions.live(runtime)
         actions.userLanguage = .zh
