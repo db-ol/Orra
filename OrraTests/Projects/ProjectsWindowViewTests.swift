@@ -1498,10 +1498,12 @@ struct ProjectsWindowViewTests {
         #expect(Set(failures.map(ProjectsWindowText.explainFailure)).count == failures.count)
         #expect(ProjectsWindowText.save(.saved) != ProjectsWindowText.save(.notSaved))
         let outcomes: [ReplyHandoff.Outcome] = [
-            .replyOpened, .copied, .copiedMailNotRunning, .copiedReplyFailed(.timedOut), .copiedReplyFailed(.denied),
+            .replyOpened(files: []), .copied, .copiedMailNotRunning, .copiedReplyFailed(.timedOut), .copiedReplyFailed(.denied),
             .copiedReplyFailed(.notFound), .copiedReplyFailed(.failed(code: -1)), .emptyDraft, .notCopied,
+            .mailNotRunning, .replyFailed(.timedOut), .replyFailed(.denied), .replyFailed(.notFound), .replyFailed(.failed(code: -1)), .stopped,
         ]
-        #expect(Set((outcomes.map(ProjectsEmailModel.HandoffNote.outcome) + [.messageNotFound]).map(ProjectsWindowText.handoff)).count == 10)
+        #expect(Set((outcomes.map(ProjectsEmailModel.HandoffNote.outcome) + [.messageNotFound]).map(ProjectsWindowText.handoff)).count == 16)
+        #expect(ProjectsWindowText.handoff(.outcome(.replyFailed(.notAsked))) == ProjectsWindowText.handoff(.outcome(.replyFailed(.denied))))
         let drafts: [Explanation.Draft] = [.noReply(.sentByUser), .noReply(.answeredLater), .noReply(.listMail), .noDraft, .missing, .expired, .checked(DraftCheck.Result(draft: nil, language: .zh))]
         #expect(Set(drafts.compactMap(ProjectsWindowText.noDraft)).count == drafts.count)
         #expect(ProjectsWindowText.noDraft(.checked(DraftCheck.Result(draft: "Hi", language: .en))) == nil)
@@ -2072,6 +2074,70 @@ struct ProjectsWindowViewTests {
         await fixture.stop()
     }
 
+    /// A file the user chose for the email shows in Project Files for This Explanation with
+    /// Attach to Reply, as every other row of the list does: one whose excerpt the explanation
+    /// holds, one the model got by its name only, and one that gave the model nothing. Each
+    /// row gets the email view, whose files can be ticked, and each file ticks through the
+    /// same check as any other, which refuses the one that is gone. The rows are those the
+    /// section's body lays out, read from the section, not from the views AppKit draws, which
+    /// differ between macOS versions.
+    @Test func everyRowOfTheProjectFilesTakesAttachToReplyAChosenFileToo() async throws {
+        let fixture = try await Fixture(files: [("lobby-elevation.dwg", Data("AC1032".utf8))])
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let store = try #require(runtime.running?.store)
+        let explained = try await Self.explainedEmail(in: runtime)
+        let harbor = try #require(explained.project)
+        let lobby = try #require(await runtime.folderRoots(of: harbor)?.folders.first)
+        let model = ProjectsWindowModel(runtime: runtime)
+        await model.show(explained.messageID)
+        let email = model.emailModel(for: explained.messageID)
+        await email.load()
+        await email.loadFolderRoots(for: [harbor])
+        #expect(email.replyFiles.offersFiles)
+        let plain = try #require(email.explanation)
+        let rows = ProjectsEmailArea.FilesSection(model: model, emailModel: email, email: explained, explanation: plain).rows()
+        #expect(rows.read.map(\.file) == ProjectsEmailFiles.files(in: plain))
+        #expect(rows.read.count == 2)
+        #expect(rows.missing.isEmpty)
+        #expect(rows.read.allSatisfy { $0.emailModel === email })
+
+        // The same explanation, made with three files the user chose.
+        let chosen = ExplainPrompt.FileOrigin(reason: .chosen, project: harbor)
+        let schedule = lobby.appending(path: "schedule.txt")
+        let elevation = lobby.appending(path: "lobby-elevation.dwg")
+        let gone = lobby.appending(path: "gone.md")
+        var explanation = plain
+        explanation.sources["F4"] = .file(TextChunker.Chunk(file: schedule, page: nil, modified: Self.today, heading: nil, text: "The lobby lamps arrive on 22 November."), origin: chosen)
+        explanation.sources["F5"] = .file(TextChunker.Chunk(file: elevation, page: nil, modified: Self.today, heading: nil, text: ""), origin: chosen)
+        explanation.chosenFiles = [
+            Explanation.ChosenFile(path: schedule.path, project: harbor, sources: ["F4"]),
+            Explanation.ChosenFile(path: elevation.path, project: harbor, sources: ["F5"]),
+            Explanation.ChosenFile(path: gone.path, project: harbor, sources: [], missing: .notInIndex),
+        ]
+        #expect(try await store.save(explanation, at: Self.today))
+        await email.load()
+        let saved = try #require(email.explanation)
+        let listed = ProjectsEmailArea.FilesSection(model: model, emailModel: email, email: explained, explanation: saved).rows()
+        #expect(listed.read.map(\.file) == ProjectsEmailFiles.files(in: saved))
+        #expect(listed.missing.map(\.file) == ProjectsEmailFiles.chosenWithoutExcerpts(in: saved))
+        let all = listed.read + listed.missing
+        #expect(all.count == rows.read.count + 3)
+        #expect(all.filter { $0.file.reason == .chosen }.map(\.file.url) == [schedule, elevation, gone])
+        #expect(listed.missing.map(\.file.url) == [gone])
+        #expect(listed.missing.first?.file.missing == .notInIndex)
+        #expect(all.allSatisfy { $0.emailModel === email })
+        #expect(email.replyFiles.offersFiles)
+
+        await email.replyFiles.setTicked(schedule, true)
+        await email.replyFiles.setTicked(elevation, true)
+        await email.replyFiles.setTicked(gone, true)
+        #expect(email.replyFiles.ticked.map(\.url) == [schedule, elevation])
+        #expect(email.replyFiles.problem(at: gone) != nil)
+        #expect(!email.replyFiles.isTicked(gone))
+        await fixture.stop()
+    }
+
     // MARK: Render
 
     /// Renders the window's parts into PNG files, for reading the layout and the strings
@@ -2479,6 +2545,221 @@ struct ProjectsWindowViewTests {
         MailAttachment(name: "plan.docx", type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", size: 2_400_000, state: .notDownloaded),
     ]
 
+    /// Renders Files This Email Asks For and Attachments for the Reply into
+    /// `<language>-projects-reply-files*.png`, as `renderTheWindowsParts` renders the rest,
+    /// when ORRA_PROJECTS_WINDOW_SNAPSHOTS names a folder. The lamp email asks for the floor
+    /// plan: two versions of it in the project's folder, a sketch of it in the folder of Kiln
+    /// studio and a drawing found by its folder, the newest plan ticked with the line about
+    /// Kai Moss, who is outside the project. Then the window at its first and its smallest
+    /// size, at the top and scrolled to each section, the same email view while comparing,
+    /// side by side and one above the other, at the top and scrolled to each section, a
+    /// sender that looks spoofed, an email in Japanese without a draft, and the note after a
+    /// handoff where Mail did not take one of three files and Orra kept back another that
+    /// changed after it was ticked, with the draft's claim that a file is attached once none
+    /// is ticked, and a blank draft with a ticked file.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_PROJECTS_WINDOW_SNAPSHOTS"] != nil))
+    func renderTheReplyFiles() async throws {
+        let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["ORRA_PROJECTS_WINDOW_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let language = Bundle.main.preferredLocalizations.first ?? "en"
+        let fixture = try await Fixture(files: [
+            ("floor-plan-v2.pdf", Data("%PDF-1.4 old".utf8)), ("floor-plan-v3.pdf", Data("%PDF-1.4 new".utf8)),
+            ("lobby-elevation.dwg", Data("AC1032".utf8)),
+        ], indexed: 1)
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let kilnFolder = fixture.root.appendingPathComponent("Kiln studio", isDirectory: true)
+        try FileManager.default.createDirectory(at: kilnFolder.appendingPathComponent("Sketches"), withIntermediateDirectories: true)
+        try Data("png".utf8).write(to: kilnFolder.appendingPathComponent("Sketches/平面图草图.png"))
+        let kiln = Project(
+            name: "Kiln studio", folders: [try Project.bookmark(of: kilnFolder)],
+            people: [Project.Person(name: "Kai Moss", address: "kai@kiln.example", role: "lamp maker")])
+        try await runtime.add(kiln)
+        for _ in 0..<2_000 where runtime.indexReport(kiln.id).map({ $0.isIndexing || $0.recognitionLeft > 0 }) ?? true {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let store = try #require(runtime.running?.store)
+        let request = FileRequest(sentence: "Please also send the floor plan.", object: "the floor plan", kinds: ["floorPlan"], fileNames: [])
+        let facts = Explanation.ReplyFacts(requests: [request], senderIsKnown: true, reply: ["mei@harbor.example"], replyAll: ["mei@harbor.example", "kai@kiln.example"])
+        let explained = try await Self.explainedEmail(in: runtime)
+        var explanation = try #require(try await store.explanation(for: explained.messageID))
+        explanation.replyFacts = facts
+        #expect(try await store.save(explanation, at: Self.today))
+        let harbor = try #require(explained.project)
+        let lobby = try #require(await runtime.folderRoots(of: harbor)?.folders.first)
+        // The folder as the project holds it, under /private/var, since a file reached through
+        // the link /var is refused as outside the folders.
+        let kilnRoot = try #require(await runtime.folderRoots(of: kiln.id)?.folders.first)
+
+        let model = ProjectsWindowModel(runtime: runtime)
+        await model.show(explained.messageID)
+        let email = model.emailModel(for: explained.messageID)
+        await email.load()
+        try await waitUntil { !email.replyFiles.isLooking }
+        await email.replyFiles.setTicked(lobby.appending(path: "floor-plan-v3.pdf"), true)
+        #expect(email.replyFiles.ticked.count == 1)
+        await email.loadFolderRoots(for: [harbor, kiln.id])
+        let area = ProjectsEmailArea(runtime: runtime, model: model, email: explained, openMail: {})
+        try await render(area, size: NSSize(width: 480, height: 3_200), to: folder.appendingPathComponent("\(language)-projects-reply-files.png"))
+        try await render(area, size: NSSize(width: 200, height: 5_200), to: folder.appendingPathComponent("\(language)-projects-reply-files-200.png"))
+        // The window at its first and its smallest size with the email selected.
+        model.selectedMessageID = explained.messageID
+        try await render(ProjectsWindowView(runtime: runtime, model: model, openSettings: {}, openMail: {}), size: ProjectsWindow.defaultSize, to: folder.appendingPathComponent("\(language)-projects-reply-files-window.png"))
+        try await render(ProjectsWindowView(runtime: runtime, model: model, openSettings: {}, openMail: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-reply-files-window-760.png"))
+        // The window at both sizes scrolled to each section, as the user scrolls to it: to
+        // Files This Email Asks For, by the request's sentence, which shows in a text field of
+        // its own as it can be selected, a third of the height under the top, and to the top
+        // of Attachments for the Reply, which takes the files dropped from Finder in a view of
+        // its own.
+        var scrolled: [String] = []
+        let sentence = request.sentence
+        let anchors: [(String, (NSView) -> Bool, (NSRect, CGFloat) -> CGFloat)] = [
+            ("asks", { ($0 as? NSTextField)?.stringValue == sentence }, { frame, visible in frame.minY - visible * 0.38 }),
+            ("attachments", { String(describing: type(of: $0)).contains("DraggingDestination") }, { frame, _ in frame.minY - 12 }),
+        ]
+        for (size, name) in [(ProjectsWindow.defaultSize, "window"), (ProjectsWindow.minimumSize, "window-760")] {
+            for (part, anchor, top) in anchors {
+                let file = folder.appendingPathComponent("\(language)-projects-reply-files-\(name)-\(part).png")
+                if try await render(ProjectsWindowView(runtime: runtime, model: model, openSettings: {}, openMail: {}), size: size, scrolledTo: anchor, top: top, to: file) {
+                    scrolled.append("\(name)-\(part)")
+                }
+            }
+        }
+        #expect(scrolled.count == 4, "scrolled to \(scrolled)")
+        // Compare with Original, with both sections in Explanation and Draft: the email view
+        // alone, as the window that is never shown draws it empty, at the sizes the shown
+        // window measured, side by side at the window's first size and one above the other
+        // at its smallest, at the top and with Explanation and Draft scrolled to each section.
+        model.compare(explained.messageID)
+        #expect(model.isComparing)
+        var compared: [String] = []
+        for (name, size) in Self.comparedSizes where name == "compare" || name == "compare-760" {
+            let comparison = ProjectsEmailArea(runtime: runtime, model: model, email: explained, openMail: {})
+            try await render(comparison, size: size, to: folder.appendingPathComponent("\(language)-projects-reply-files-\(name).png"))
+            for (part, anchor, top) in anchors {
+                let file = folder.appendingPathComponent("\(language)-projects-reply-files-\(name)-\(part).png")
+                if try await render(comparison, size: size, scrolledTo: anchor, top: top, to: file) {
+                    compared.append("\(name)-\(part)")
+                }
+            }
+        }
+        #expect(compared.count == 4, "scrolled to \(compared)")
+        model.endComparing()
+
+        // A sender whose domain imitates the project's.
+        let spoofedID = "lamps-3@harbor.example"
+        try await Self.saveEmail(spoofedID, from: MailStore.Person(name: "Mei Tan", address: "mei@harb0r.example"), text: "Hi Lin,\n\nPlease also send the floor plan.\n\nMei", in: runtime)
+        var spoofed = explanation
+        spoofed.messageID = spoofedID
+        spoofed.warnings = [ExplainPrompt.Finding(warning: .lookalikeDomain, place: .email)]
+        spoofed.sources["this email"] = .message(spoofedID)
+        #expect(try await store.save(spoofed, at: Self.today))
+        let spoofedListed = try #require(try await runtime.list(.project(harbor)).first { $0.messageID == spoofedID })
+        await model.show(spoofedID)
+        let spoofedModel = model.emailModel(for: spoofedID)
+        await spoofedModel.load()
+        spoofedModel.showsProjectFiles = true
+        await spoofedModel.loadFolderRoots(for: [harbor])
+        try await render(ProjectsEmailArea(runtime: runtime, model: model, email: spoofedListed), size: NSSize(width: 480, height: 2_600), to: folder.appendingPathComponent("\(language)-projects-reply-files-spoofed.png"))
+
+        // An email in Japanese, which gets no draft, with the plan ticked.
+        let japaneseID = "lamps-4@harbor.example"
+        let japaneseText = "林様\n\n平面図を送っていただけますか。\n\nMei"
+        try await Self.saveEmail(japaneseID, from: MailStore.Person(name: "Mei Tan", address: "mei@harbor.example"), text: japaneseText, in: runtime)
+        let japanese = Explanation(
+            messageID: japaneseID, project: harbor, language: .en, today: Self.today, reply: .reply(.other), warnings: [], modelWarnings: [],
+            points: [Explanation.Point(text: "Mei asks for the floor plan.", sources: ["this email"], flags: [])], questions: [],
+            draft: .noDraft, draftCheck: nil, sources: ["this email": .message(japaneseID)], removed: [:], problems: [], unknownSources: [],
+            replyFacts: Explanation.ReplyFacts(
+                requests: [FileRequest(sentence: "平面図を送っていただけますか。", object: "平面図", kinds: ["floorPlan"], fileNames: [])],
+                senderIsKnown: true, reply: ["mei@harbor.example"], replyAll: ["mei@harbor.example"]))
+        #expect(try await store.save(japanese, at: Self.today))
+        let japaneseListed = try #require(try await runtime.list(.project(harbor)).first { $0.messageID == japaneseID })
+        await model.show(japaneseID)
+        let japaneseModel = model.emailModel(for: japaneseID)
+        await japaneseModel.load()
+        try await waitUntil { !japaneseModel.replyFiles.isLooking }
+        await japaneseModel.replyFiles.setTicked(lobby.appending(path: "floor-plan-v3.pdf"), true)
+        await japaneseModel.loadFolderRoots(for: [harbor])
+        try await render(ProjectsEmailArea(runtime: runtime, model: model, email: japaneseListed), size: NSSize(width: 480, height: 1_900), to: folder.appendingPathComponent("\(language)-projects-reply-files-no-draft.png"))
+        try await render(ProjectsEmailArea(runtime: runtime, model: model, email: japaneseListed), size: NSSize(width: 200, height: 3_000), to: folder.appendingPathComponent("\(language)-projects-reply-files-no-draft-200.png"))
+
+        // The note after a handoff where Mail did not take the sketch and Orra kept back the
+        // drawing, which changed after it was ticked, then the draft's claim that a file is
+        // attached once no file is ticked.
+        let refusing = ProjectsWindowModel(runtime: runtime, emailActions: { Self.handingOffActions(runtime, refusing: "平面图草图.png") })
+        await refusing.show(explained.messageID)
+        let handed = refusing.emailModel(for: explained.messageID)
+        await handed.load()
+        try await waitUntil { !handed.replyFiles.isLooking }
+        await handed.replyFiles.setTicked(lobby.appending(path: "floor-plan-v3.pdf"), true)
+        await handed.replyFiles.setTicked(kilnRoot.appending(path: "Sketches/平面图草图.png"), true)
+        await handed.replyFiles.setTicked(lobby.appending(path: "lobby-elevation.dwg"), true)
+        #expect(handed.replyFiles.ticked.count == 3)
+        try Data("AC1032 saved again".utf8).write(to: lobby.appending(path: "lobby-elevation.dwg"))
+        await handed.loadFolderRoots(for: [harbor, kiln.id])
+        await handed.openReply(all: true)
+        #expect(handed.handoffFiles?.attached == 1)
+        #expect(handed.handoffFiles?.notAttached.map(\.problem) == [.refused(code: -10000), .notChecked(.changed)])
+        let draft = ProjectsEmailArea.DraftSection(runtime: runtime, emailModel: handed, explanation: explanation, isExplaining: false, openMail: {})
+            .padding(20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        try await render(draft, size: NSSize(width: 480, height: 1_700), to: folder.appendingPathComponent("\(language)-projects-reply-files-note.png"))
+        for file in handed.replyFiles.ticked {
+            handed.replyFiles.remove(file)
+        }
+        handed.text = handed.text + "\n\nAttached is the floor plan."
+        try await waitUntil { handed.replyFiles.claimsAttachment }
+        try await render(draft, size: NSSize(width: 480, height: 1_300), to: folder.appendingPathComponent("\(language)-projects-reply-files-claim.png"))
+        // A blank draft with a ticked file, which opens the reply without the clipboard: the
+        // line above the buttons and the footer say so, and Copy does not show.
+        handed.text = ""
+        await handed.replyFiles.setTicked(lobby.appending(path: "floor-plan-v3.pdf"), true)
+        #expect(!handed.handsOffDraft)
+        try await render(draft, size: NSSize(width: 480, height: 1_300), to: folder.appendingPathComponent("\(language)-projects-reply-files-blank.png"))
+        await fixture.stop()
+    }
+
+    /// The actions of an email view whose Mail opens the reply as outgoing message 77 and
+    /// does not take the file named `refusing`. No Apple Event is sent.
+    private static func handingOffActions(_ runtime: ProjectsRuntime, refusing: String) -> ProjectsEmailModel.Actions {
+        var actions = ProjectsEmailModel.Actions.live(runtime)
+        let session = MailEvents.Session(processIdentifier: 811, launched: today)
+        let mail = MailBridge(events: MailEvents(
+            isRunning: { true },
+            send: { request in
+                if case .attach(let file, _, _) = request, file.lastPathComponent == refusing {
+                    throw MailEvents.Failure(code: -10000)
+                }
+                if case .reply = request {
+                    return .reference(.id(MailEvents.Code.outgoingMessage, 77, of: .application))
+                }
+                return .missing
+            },
+            permission: { _ in 0 },
+            session: { session }))
+        actions.handoff = ReplyHandoff(copy: { _ in true }, mail: mail, isOrraActive: { true }, bringMailToFront: {})
+        actions.mailReference = { _, _ in MailMessageRef(id: 4, mailbox: .inbox) }
+        return actions
+    }
+
+    /// Saves an email of Harbor lobby as the scan does, and waits until sorting filed it.
+    private static func saveEmail(_ id: String, from sender: MailStore.Person, text: String, in runtime: ProjectsRuntime) async throws {
+        let store = try #require(runtime.running?.store)
+        try await store.save([MailStore.Message(
+            messageID: id, mailbox: nil, date: today, sender: sender, to: [MailStore.Person(address: "me@studio.example")],
+            subject: "The lobby lamps", text: text, visibleText: text)], ownAddresses: ["me@studio.example"], at: today)
+        runtime.requestSort()
+        for _ in 0..<2_000 {
+            if try await store.filed(id) != nil { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let filed = try #require(try await store.filed(id))
+        if filed.project == nil, let project = runtime.projectList.first {
+            _ = await runtime.move(id, to: project.id)
+        }
+    }
+
     /// The runtime's actions for the email view, with a reader of Chinese and a fake model
     /// that gives a translation of the draft.
     private static func translatingActions(_ runtime: ProjectsRuntime) -> ProjectsEmailModel.Actions {
@@ -2643,6 +2924,70 @@ struct ProjectsWindowViewTests {
         offscreen.close()
     }
 
+    /// Renders the window as `render` does, with the email view scrolled as the user
+    /// scrolls it: the scroll view that holds the draft's editor, scrolled so that `top`, of
+    /// the frame of the first view in it that `anchor` picks and of the height that shows,
+    /// is the top of what shows, both in the scroll view's content from its top. Says whether
+    /// it found the email view and such a view in it, and writes nothing when it did not.
+    private func render(_ view: some View, size: NSSize, scrolledTo anchor: (NSView) -> Bool, top: (NSRect, CGFloat) -> CGFloat, to file: URL) async throws -> Bool {
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        let offscreen = NSWindow(contentRect: hosting.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        offscreen.isReleasedWhenClosed = false
+        offscreen.contentView = hosting
+        defer { offscreen.close() }
+        for _ in 0..<20 {
+            hosting.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        guard let editor = Self.firstView(in: hosting, where: { ($0 as? NSScrollView)?.documentView is NSTextView }),
+              let scroll = Self.outermostScrollView(of: editor), let document = scroll.documentView,
+              let found = Self.firstView(in: document, where: anchor) else { return false }
+        var frame = document.convert(found.bounds, from: found)
+        if !document.isFlipped {
+            frame.origin.y = document.bounds.height - frame.maxY
+        }
+        let visible = scroll.contentView.bounds.height
+        let wanted = min(max(0, top(frame, visible)), max(0, document.bounds.height - visible))
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: document.isFlipped ? wanted : document.bounds.height - visible - wanted))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        for _ in 0..<10 {
+            hosting.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let image = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: image)
+        let png = try #require(image.representation(using: .png, properties: [:]))
+        try png.write(to: file)
+        return true
+    }
+
+    /// The first view under `view`, depth first, that `matches` picks.
+    private static func firstView(in view: NSView, where matches: (NSView) -> Bool) -> NSView? {
+        for subview in view.subviews {
+            if matches(subview) {
+                return subview
+            }
+            if let found = firstView(in: subview, where: matches) {
+                return found
+            }
+        }
+        return nil
+    }
+
+    /// The outermost scroll view that holds a view.
+    private static func outermostScrollView(of view: NSView) -> NSScrollView? {
+        var found: NSScrollView?
+        var current = view.superview
+        while let ancestor = current {
+            if let scroll = ancestor as? NSScrollView {
+                found = scroll
+            }
+            current = ancestor.superview
+        }
+        return found
+    }
+
     /// Renders the window as the app makes it, at its smallest size, with its title bar and
     /// toolbar, as far as they draw in a window that is never ordered front.
     private func renderWindow(_ view: some View, to file: URL) async throws {
@@ -2725,7 +3070,8 @@ struct ProjectsWindowViewTests {
                 attachments: { _ in throw MailBridgeError.mailNotRunning },
                 mailbox: { _ in throw MailBridgeError.mailNotRunning },
                 selection: { throw MailBridgeError.mailNotRunning },
-                reply: { _, _ in throw MailBridgeError.mailNotRunning }
+                reply: { _, _ in throw MailBridgeError.mailNotRunning },
+                attach: { _, _ in throw MailBridgeError.mailNotRunning }
             )
             let choice = MailChoice(defaults: defaults, suggestsInboxAndSent: false)
             choice.choose([.inbox])

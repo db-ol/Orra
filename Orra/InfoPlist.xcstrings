@@ -38,25 +38,25 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Orra reads mail in the Mail app only for Projects, and only from the mailboxes you choose. The mail it reads stays on this Mac."
+            "value" : "Orra reads mail in the Mail app only for Projects, and only from the mailboxes you choose. It opens a reply, with the files you tick, only when you click. The mail it reads stays on this Mac."
           }
         },
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra lee el correo en la app Mail solo para Proyectos y solo en los buzones que elijas. El correo que lee no sale de esta Mac."
+            "value" : "Orra lee el correo en la app Mail solo para Proyectos y solo en los buzones que elijas. Abre una respuesta, con los archivos que marques, solo cuando haces clic. El correo que lee no sale de esta Mac."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orraは、“プロジェクト”機能のためだけに、選択したメールボックスのメールのみを“メール”アプリから読み取ります。読み取ったメールがこのMacから送信されることはありません。"
+            "value" : "Orraは、“プロジェクト”機能のためだけに、選択したメールボックスのメールのみを“メール”アプリから読み取ります。返信を開いてチェックを入れたファイルを添付するのは、クリックしたときだけです。読み取ったメールがこのMacから送信されることはありません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra 只为“项目”功能读取“邮件” App 中的邮件，而且只读取你选择的邮箱。它读取的邮件只留在这台 Mac 上。"
+            "value" : "Orra 只为“项目”功能读取“邮件” App 中的邮件，而且只读取你选择的邮箱。只有在你点按时，它才会打开回复并附加你勾选的文件。它读取的邮件只留在这台 Mac 上。"
           }
         }
       }

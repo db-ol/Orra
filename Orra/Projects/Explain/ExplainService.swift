@@ -69,6 +69,9 @@ nonisolated struct Explanation: Sendable, Equatable, Codable {
     /// The search terms the model gave for the email, which the search used, so Explain
     /// Again searches with them too. Nil before 0.6.1, and when the model gave none.
     var searchTerms: [String]? = nil
+    /// The files the email asks for and who a reply reaches, see ReplyFacts. Nil when no
+    /// reply is due, and before 0.6.1.
+    var replyFacts: ReplyFacts? = nil
     /// The files the user chose for the email when it was explained, each with the source
     /// ids of its excerpts or its name in the prompt, or why it gave the prompt nothing. Nil
     /// for an explanation made without a choice, and for every one saved before 0.6.1.
@@ -923,10 +926,10 @@ final class ExplainService {
         return Prepared(gathered: gathered, reply: reply, prompt: prompt, recipients: recipients)
     }
 
-    /// The warnings about the email that code finds: the sender and content checks, and
-    /// hidden text that VisibleText found, in the order of `ProjectsWarning.allCases`. The
-    /// checks of the attachments' names are among them, those of their text are not, see
-    /// `attachmentWarnings(_:known:)`.
+    /// The warnings about the email that code finds: the sender and content checks, hidden
+    /// text that VisibleText found, and a request for files from a sender Projects does not
+    /// know, in the order of `ProjectsWarning.allCases`. The checks of the attachments' names
+    /// are among them, those of their text are not, see `attachmentWarnings(_:known:)`.
     @concurrent
     nonisolated static func ruleWarnings(_ email: Email, known: Known) async -> [ProjectsWarning] {
         let own = ownPeople(known)
@@ -947,6 +950,11 @@ final class ExplainService {
         )))
         if !email.hiddenText.isEmpty {
             warnings.insert(.hiddenText)
+        }
+        // A sender Projects does not know who asks for files, see
+        // `asksAStrangerForFiles(_:known:)`.
+        if asksAStrangerForFiles(email, known: known) {
+            warnings.insert(.forwardRequest)
         }
         return ProjectsWarning.allCases.filter(warnings.contains)
     }
@@ -1015,7 +1023,7 @@ final class ExplainService {
 
     /// Whether the sender is among the people the user knows, or at a domain the user
     /// listed for a project.
-    private nonisolated static func senderIsKnown(_ sender: String, people: [SenderChecks.Person], projects: [Project]) -> Bool {
+    nonisolated static func senderIsKnown(_ sender: String, people: [SenderChecks.Person], projects: [Project]) -> Bool {
         guard let address = ProjectsAddress.normalized(sender) else { return false }
         if people.contains(where: { ProjectsAddress.normalized($0.address) == address }) {
             return true
@@ -1229,6 +1237,7 @@ final class ExplainService {
             problems: problems,
             unknownSources: answer.unknownSources,
             searchTerms: gathered.terms,
+            replyFacts: replyFacts(prepared),
             chosenFiles: chosenFiles(prepared)
         )
     }
@@ -1397,7 +1406,7 @@ final class ExplainService {
             }.count
             choice = "\(chosen.count) chosen files, which gave \(excerpts) excerpts and \(names) names, \(chosen.count { $0.missing == .notInIndex }) not in the index and \(chosen.count { $0.missing == .leftOut }) left out, "
         }
-        return "\(terms), \(otherProjects), \(choice)\(prompt.tokens) prompt tokens with \(files) excerpts (\(found) found by search, \(newest) of the newest files), \(otherFiles) excerpts of other projects, \(thread) thread messages, \(projectMail) project mails and \(attachments) attachments, \(explanation.points.count) points of which \(flagged) flagged, \(explanation.questions.count) questions, \(explanation.warnings.count) warnings in code and \(explanation.modelWarnings.count) from the model, draft \(draft), \(explanation.problems.count) problems of form"
+        return "\(terms), \(otherProjects), \(choice)\(prompt.tokens) prompt tokens with \(files) excerpts (\(found) found by search, \(newest) of the newest files), \(otherFiles) excerpts of other projects, \(thread) thread messages, \(projectMail) project mails and \(attachments) attachments, \(explanation.points.count) points of which \(flagged) flagged, \(explanation.questions.count) questions, \(explanation.warnings.count) warnings in code and \(explanation.modelWarnings.count) from the model, draft \(draft), \(explanation.problems.count) problems of form, \(explanation.replyFacts?.requests.count ?? 0) file requests"
     }
 
     private nonisolated static func seconds(_ duration: Duration) -> String {

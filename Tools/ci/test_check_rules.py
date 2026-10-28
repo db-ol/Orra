@@ -6,6 +6,7 @@ Each test writes small files into a temporary repository folder and checks it. T
 are made up here. The last test checks the real tree.
 """
 
+import re
 import tempfile
 import textwrap
 import unittest
@@ -631,7 +632,7 @@ class MailEventsRuleTests(SourceCheckTestCase):
             'let a = "aevtquit"': '"aevtquit", the code of quit',
             'let a = "setd"': '"setd", the code of set',
             'let a = "cpma"': '"cpma", the code of perform mail action with messages',
-            'let a = "ctnt"': '"ctnt", the code of content',
+            'let a = "ctnt"': '"ctnt", the code of content, outside endOfContent(ofReply:)',
             'let a = #"move"#': '"move", the code of move',
             'let a = "del\\u{6F}"': '"delo", the code of delete',
             "let a = 0x6465_6C6F": "0x6465_6C6F, the code delo of delete",
@@ -648,13 +649,15 @@ class MailEventsRuleTests(SourceCheckTestCase):
 
     def test_the_banned_codes(self):
         banned = check_rules.MAIL_BANNED_CODES
-        for code in ("delo", "send", "fwms", "chma", "emsg", "aevt", "ctnt", "setd"):
+        for code in ("delo", "send", "fwms", "chma", "emsg", "aevt", "ctnt", "setd", "crel"):
             self.assertIn(code, banned)
-        for code in ("core", "emal", "getd", "cnte", "rpms", "raso", "meid"):
+        for code in ("core", "emal", "getd", "cnte", "rpms", "raso", "meid", "atts", "atfn", "bcke"):
             self.assertNotIn(code, banned)
+        self.assertNotIn("corecrel", check_rules.MAIL_CHANGING_COMMANDS)
+        self.assertEqual(check_rules.MAIL_EVENTS["attach"], "corecrel")
 
     def test_the_list_covers_every_command_of_mail(self):
-        """Every command in Mail's scripting dictionary is either one of the three events, a
+        """Every command in Mail's scripting dictionary is either one of the four events, a
         command that only reads, or a command rule 10 bans. Skipped where Mail is not, as on
         the Linux runner."""
         dictionaries = [
@@ -674,6 +677,250 @@ class MailEventsRuleTests(SourceCheckTestCase):
                     self.assertTrue(code in allowed or code in reading or code in check_rules.MAIL_CHANGING_COMMANDS, code)
                     if code in check_rules.MAIL_CHANGING_COMMANDS:
                         self.assertEqual(check_rules.MAIL_CHANGING_COMMANDS[code].lower(), command.get("name").lower())
+
+    # The attach event: make makes an attachment and nothing else, at the end of a reply's
+    # content only, with only its file.
+
+    def test_the_real_file_holds_the_attach_event(self):
+        self.assertIn('case attach = "corecrel"', self.REAL)
+        self.assertEqual(self.rule_ten(self.REAL), [])
+
+    def test_attach_makes_only_an_attachment(self):
+        for new in ('typeCode: MailEvents.code("bcke")', "typeCode: attachmentClass"):
+            with self.subTest(new=new):
+                self.assert_rule_ten_fails(self.changed('typeCode: MailEvents.code("atts")', new), "make without the attachment class atts")
+        self.assert_rule_ten_fails(
+            self.REAL + "func other(_ event: NSAppleEventDescriptor) {\n"
+            "    event.setParam(NSAppleEventDescriptor(typeCode: MailEvents.Code.message), forKeyword: keyAEObjectClass)\n}\n",
+            "keyAEObjectClass outside the classes of make and count",
+        )
+        self.assert_rule_ten_fails(self.REAL + "let other = keyAEObjectClass\n", "keyAEObjectClass outside the classes of make and count")
+        self.assert_rule_ten_fails(self.REAL + 'let other = MailEvents.code("atts")\n', '"atts" outside the class of make')
+        self.assert_rule_ten_fails(self.REAL + 'let other = MailEvents.code("kocl")\n', '"kocl", the code of the class of a new object')
+        self.assert_rule_ten_fails(self.REAL + "let other = 0x6B6F_636C\n", "0x6B6F_636C, the code kocl of the class of a new object")
+
+    def test_content_is_only_the_place_of_the_attachment(self):
+        self.assert_rule_ten_fails(
+            self.REAL + 'let read = MailEvents.Request.get(.property(MailEvents.code("ctnt"), of: .application))\n',
+            '"ctnt", the code of content, outside endOfContent(ofReply:)',
+        )
+        self.assert_rule_ten_fails(self.REAL + "let place = try? MailEvents.Request.endOfContent(ofReply: 7)\n", "endOfContent outside the place of make")
+        place = "event.setParam(try Self.endOfContent(ofReply: reply), forKeyword: keyAEInsertHere)"
+        self.assert_rule_ten_fails(
+            self.changed(place, place + "\n                " + place),
+            "make without its place at the end of a reply's content",
+        )
+        self.assert_rule_ten_fails(
+            self.changed(place, place + "\n                event.setParam(try Self.endOfContent(ofReply: reply + 1), forKeyword: keyAEInsertHere)"),
+            "endOfContent outside the place of make",
+        )
+        self.assert_rule_ten_fails(
+            self.REAL + "func other(_ event: NSAppleEventDescriptor, _ place: NSAppleEventDescriptor) {\n"
+            "    event.setParam(place, forKeyword: keyAEInsertHere)\n}\n",
+            "keyAEInsertHere outside the place of make",
+        )
+        self.assert_rule_ten_fails(self.REAL + 'let other = MailEvents.code("insh")\n', '"insh", the code of the place of a new object')
+        self.assert_rule_ten_fails(self.REAL + 'let other = MailEvents.code("kobj")\n', '"kobj", the code of the object of an insertion location')
+        self.assert_rule_ten_fails(self.changed("func endOfContent(ofReply", "func placeOfAttachment(ofReply"), "not one endOfContent(ofReply:)")
+
+    def test_an_attachment_goes_only_into_the_reply(self):
+        reply = "of: .id(MailEvents.Code.outgoingMessage, reply, of: .application))"
+        name = "endOfContent(ofReply:) not at the content of outgoing message id reply"
+        for other in (
+            "of: .id(MailEvents.Code.message, reply, of: .application))",
+            "of: .id(MailEvents.Code.outgoingMessage, 1, of: .application))",
+            "of: .id(MailEvents.Code.outgoingMessage, reply, of: .property(MailEvents.Code.inbox, of: .application)))",
+        ):
+            with self.subTest(other=other):
+                self.assert_rule_ten_fails(self.changed(reply, other), name)
+        place = "location.setDescriptor(try content.descriptor(), forKeyword: keyAEObject)"
+        self.assert_rule_ten_fails(
+            self.changed(place, "location.setDescriptor(try MailEvents.Specifier.application.descriptor(), forKeyword: keyAEObject)"),
+            name,
+        )
+        self.assert_rule_ten_fails(
+            self.changed(place, place + "\n        location.setDescriptor(NSAppleEventDescriptor.null(), forKeyword: keyAEObject)"),
+            "keyAEObject outside the content of the reply",
+        )
+        self.assert_rule_ten_fails(self.REAL + "let other = keyAEObject\n", "keyAEObject outside the content of the reply")
+        self.assert_rule_ten_fails(self.changed("func endOfContent(ofReply reply: Int)", "func endOfContent(ofReply reply: Int32)"), name)
+
+    def test_an_attachment_goes_only_at_the_end(self):
+        for name in ("kAEAfter", "kAEBefore", "kAEBeginning", "kAEReplace"):
+            with self.subTest(name=name):
+                self.assert_rule_ten_fails(self.changed("enumCode: kAEEnd", "enumCode: " + name), name)
+        self.assert_rule_ten_fails(self.changed("enumCode: kAEEnd", 'enumCode: MailEvents.code("afte")'), '"afte", the code of the position after')
+        self.assert_rule_ten_fails(self.changed("enumCode: kAEEnd", 'enumCode: MailEvents.code("afte")'), "endOfContent(ofReply:) without the position at the end")
+        self.assert_rule_ten_fails(self.REAL + "let other = kAEEnd\n", "kAEEnd outside the end of a reply's content")
+        self.assert_rule_ten_fails(self.REAL + 'let other = MailEvents.code("kpos")\n', '"kpos", the code of the position of an insertion location')
+
+    def test_the_attachment_holds_only_its_file(self):
+        only_the_file = 'properties.setDescriptor(NSAppleEventDescriptor(fileURL: file), forKeyword: MailEvents.code("atfn"))'
+        self.assert_rule_ten_fails(
+            self.changed(only_the_file, only_the_file + '\n        properties.setDescriptor(NSAppleEventDescriptor(boolean: true), forKeyword: MailEvents.Code.name)'),
+            "fileProperties(_:) with more than its file",
+        )
+        self.assert_rule_ten_fails(
+            self.changed("NSAppleEventDescriptor(fileURL: file)", "NSAppleEventDescriptor(string: file.path)"),
+            "fileProperties(_:) with more than its file",
+        )
+        self.assert_rule_ten_fails(
+            self.REAL + "func other(_ event: NSAppleEventDescriptor, _ extra: NSAppleEventDescriptor) {\n"
+            "    event.setParam(extra, forKeyword: keyAEPropData)\n}\n",
+            "keyAEPropData outside the properties of make",
+        )
+        self.assert_rule_ten_fails(self.REAL + 'let other = MailEvents.code("atfn")\n', '"atfn" outside the file of the attachment')
+        self.assert_rule_ten_fails(self.REAL + 'let other = MailEvents.code("prdt")\n', '"prdt", the code of the properties of a new object')
+        self.assert_rule_ten_fails(self.REAL + "let other = try? MailEvents.Request.fileProperties(url)\n", "fileProperties outside the properties of make")
+
+    def test_the_attach_event_cannot_change_through_a_helper(self):
+        """The ways around the finer checks that a review found: each fails."""
+        helper = (
+            "\nnonisolated extension MailEvents.Request {\n"
+            "    static func classed(_ event: NSAppleEventDescriptor, _ elementClass: FourCharCode) {\n"
+            "        event.setParam(NSAppleEventDescriptor(typeCode: elementClass), forKeyword: keyAEObjectClass)\n"
+            "    }\n"
+            "}\n"
+        )
+        properties = "event.setParam(try Self.fileProperties(file), forKeyword: keyAEPropData)"
+        cases = {
+            "the count's class setter called from attach": (
+                self.changed(properties, properties + "\n                Self.classed(event, MailEvents.Code.outgoingMessage)") + helper,
+                ["the attach case of appleEvent(target:) differs from what rule 10 allows", "keyAEObjectClass outside the classes of make and count"],
+            ),
+            "another property added by a helper": (
+                self.changed("        return properties\n", "        Self.more(properties)\n        return properties\n"),
+                ["fileProperties differs from what rule 10 allows"],
+            ),
+            "the reply's id changed": (
+                self.changed("outgoingMessage, reply, of: .application))", "outgoingMessage, reply + 1, of: .application))"),
+                ["endOfContent differs from what rule 10 allows", "endOfContent(ofReply:) not at the content of outgoing message id reply"],
+            ),
+            "the outgoing message in place of its content": (
+                self.changed("location.setDescriptor(try content.descriptor(), forKeyword: keyAEObject)",
+                             "location.setDescriptor(try MailEvents.Specifier.id(MailEvents.Code.outgoingMessage, reply, of: .application).descriptor(), forKeyword: keyAEObject)"),
+                ["endOfContent differs from what rule 10 allows"],
+            ),
+            "a parameter set before the switch": (
+                self.changed("            )\n            switch self {\n            case .get(let specifier):", "            )\n            event.setParam(NSAppleEventDescriptor.null(), forKeyword: keyDirectObject)\n            switch self {\n            case .get(let specifier):"),
+                ["appleEvent(target:) does more than make the event, fill it in its switch and return it"],
+            ),
+            "a parameter set after the switch": (
+                self.changed("            }\n            return event\n", "            }\n            if case .attach = self { event.setParam(NSAppleEventDescriptor.null(), forKeyword: keyDirectObject) }\n            return event\n"),
+                ["appleEvent(target:) does more than make the event, fill it in its switch and return it"],
+            ),
+        }
+        for label, (text, names) in cases.items():
+            with self.subTest(label):
+                found = self.rule_ten(text)
+                for name in names:
+                    self.assertIn(name, found)
+
+    def test_the_event_cannot_change_after_it_is_built(self):
+        """The ways around the pinned attach event that a later review found: a parameter set
+        on the built event in sendNow, a key of a record set outside its builders, a second
+        event built and sent there, and the C call that sets a parameter. Each fails."""
+        built = "        let event = try request.appleEvent(target: target)\n"
+        cases = {
+            "a parameter set on the built event": (
+                built + '        if case .attach = request { event.setParam(NSAppleEventDescriptor(string: "x"), forKeyword: keyAEData) }\n',
+                ["setParam outside the switch of appleEvent(target:)"],
+            ),
+            "the direct object set on the built event": (
+                built + '        if case .attach = request { event.setParam(NSAppleEventDescriptor(string: "x"), forKeyword: keyDirectObject) }\n',
+                ["setParam outside the switch of appleEvent(target:)"],
+            ),
+            "a name added to the attachment's properties": (
+                built + "        if case .attach = request, let properties = event.atIndex(3) {\n"
+                '            properties.setDescriptor(NSAppleEventDescriptor(string: "Report.pdf"), forKeyword: MailEvents.Code.name)\n'
+                "            event.setParam(properties, forKeyword: event.keywordForDescriptor(at: 3))\n"
+                "        }\n",
+                ["setDescriptor outside the builders of the place, the properties and the specifiers", "setParam outside the switch of appleEvent(target:)"],
+            ),
+            "a second attach event for another reply": (
+                built + "        if case .attach(let file, let reply, let session) = request {\n"
+                "            _ = try? Request.attach(file, toReply: reply + 1, in: session).appleEvent(target: target).sendEvent(options: request.sendOptions, timeout: request.timeout)\n"
+                "        }\n",
+                ["an attach request outside MailBridge's attach", "sendNow without one sendEvent", "more than one call of appleEvent(target:)"],
+            ),
+            "a parameter set through the C call": (
+                built + "        AEPutParamDesc(event.aeDesc, keyAEData, nil)\n",
+                ["AEPutParamDesc"],
+            ),
+        }
+        for label, (new, names) in cases.items():
+            with self.subTest(label):
+                found = self.rule_ten(self.changed(built, new))
+                for name in names:
+                    self.assertIn(name, found)
+
+    def test_the_send_thread_checks_the_session_first(self):
+        """sendNow refuses a request bound to another Mail session before it builds the event,
+        which no test reaches, since tests never use the live Mail."""
+        refusal = re.search(r"        if let code = refusal\(of: request, by: Session\(mail\)\) \{\n.*?\n        \}\n", self.REAL, re.S).group(0)
+        built = "        let event = try request.appleEvent(target: target)\n"
+        name = "sendNow without the check of the Mail session once"
+        self.assert_rule_ten_fails(self.changed(refusal, ""), name)
+        self.assert_rule_ten_fails(self.changed("refusal(of: request, by: Session(mail))", "refusal(of: request, by: nil)"), name)
+        self.assert_rule_ten_fails(
+            self.changed(refusal, "").replace(built, built + refusal),
+            "sendNow with the check of the Mail session out of its order",
+        )
+        self.assert_rule_ten_fails(self.changed(built, "        let request = Request.get(.application)\n" + built), "sendNow binds request again")
+        self.assert_rule_ten_fails(
+            self.REAL + "func other(_ event: NSAppleEventDescriptor) throws {\n    _ = try event.sendEvent(options: [], timeout: 1)\n}\n",
+            "sendEvent outside sendNow",
+        )
+        self.assert_rule_ten_fails(
+            self.REAL + "func other(_ request: MailEvents.Request) throws {\n    _ = try request.appleEvent(target: .null())\n}\n",
+            "appleEvent(target:) outside sendNow",
+        )
+
+    def test_crel_stays_banned_elsewhere(self):
+        self.assert_rule_ten_fails(self.REAL + 'let a = "crel"\n', '"crel", the code of make')
+        self.assert_rule_ten_fails(self.REAL + "let a = 0x6372_656C\n", "0x6372_656C, the code crel of make")
+        self.assert_rule_ten_fails(
+            self.changed('case attach = "corecrel"', 'case attach = "coredelo"'),
+            "MailEvent case attach = coredelo",
+        )
+
+    def test_comments_about_the_attachment_pass(self):
+        text = self.REAL + '// "ctnt", "atts", "atfn", kAEAfter and keyAEInsertHere in a comment\n'
+        self.assertEqual(self.rule_ten(text), [])
+
+
+class AttachRequestTests(SourceCheckTestCase):
+    """Rule 10 across Orra: only MailBridge's attach makes an attach request, from the reply
+    its reply gave back. Tests may build one."""
+
+    BRIDGE = "Orra/Projects/Mail/MailBridge.swift"
+
+    def test_an_attach_request_outside_the_bridge_fails(self):
+        for code in (
+            "let request = MailEvents.Request.attach(url, toReply: 7, in: session)\n",
+            "_ = try await events.send(.attach(url, toReply: 7, in: session))\n",
+            "let make = MailEvents.Request.attach\n",
+        ):
+            with self.subTest(code=code):
+                self.assert_fails("Orra/Projects/Other.swift", code, 10, "an attach request outside MailBridge's attach")
+
+    def test_the_bridge_holds_one_request_in_its_attach(self):
+        bridge = (REPOSITORY / self.BRIDGE).read_text(encoding="utf-8")
+        self.assert_passes(self.BRIDGE, bridge)
+        line = "                _ = try await value(.attach(file, toReply: reply.id, in: reply.session))\n"
+        self.assertEqual(bridge.count(line), 1)
+        self.assert_fails(self.BRIDGE, bridge.replace(line, line + line.replace("reply.id", "reply.id + 1")), 10, "more than one attach request in MailBridge's attach")
+        reply = "            let answer = try await value(.reply(to: message.reference, all: all))\n"
+        self.assertEqual(bridge.count(reply), 1)
+        self.assert_fails(
+            self.BRIDGE,
+            bridge.replace(reply, reply + "            _ = try? await value(.attach(URL(fileURLWithPath: \"/\"), toReply: 1, in: session!))\n"),
+            10, "an attach request outside MailBridge's attach",
+        )
+
+    def test_a_call_of_the_bridge_and_tests_pass(self):
+        self.assert_passes("Orra/Projects/Handoff/Other.swift", "func send() async throws {\n    try await mail.attach(file, reply)\n}\n")
+        self.assert_passes("OrraTests/Projects/OtherTests.swift", "let request = MailEvents.Request.attach(url, toReply: 7, in: session)\n")
 
 
 class ScriptTextTests(SourceCheckTestCase):

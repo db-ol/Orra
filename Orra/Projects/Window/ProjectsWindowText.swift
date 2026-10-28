@@ -444,6 +444,12 @@ nonisolated enum ProjectsWindowText {
         case .outcome(.copiedReplyFailed): String(localized: "Mail did not open the reply. The draft is on the clipboard.")
         case .outcome(.emptyDraft): String(localized: "The draft is empty.")
         case .outcome(.notCopied): String(localized: "The draft could not be copied. Try again.")
+        case .outcome(.mailNotRunning): String(localized: "Mail is not open, so the reply did not open.")
+        case .outcome(.replyFailed(.timedOut)): String(localized: "Mail is slow to answer. The reply may still open.")
+        case .outcome(.replyFailed(.denied)), .outcome(.replyFailed(.notAsked)): String(localized: "Orra may not control Mail. Allow it in Settings.")
+        case .outcome(.replyFailed(.notFound)): String(localized: "Projects cannot find this email in Mail now.")
+        case .outcome(.replyFailed): String(localized: "Mail did not open the reply.")
+        case .outcome(.stopped): String(localized: "Mail was not asked to open the reply.")
         }
     }
 

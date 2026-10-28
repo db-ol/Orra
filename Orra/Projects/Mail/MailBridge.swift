@@ -2,11 +2,13 @@ import Foundation
 import Synchronization
 
 /// Mail, as Projects reads it: a struct of closures, so tests pass fakes and never send an
-/// Apple Event, see AGENTS.md. `live` sends MailEvents' three events to the running Mail.
+/// Apple Event, see AGENTS.md. `live` sends MailEvents' four events to the running Mail.
 ///
-/// Every call but `reply` only reads. `reply` makes a reply and always opens its window,
-/// where the user decides what to send. There is no call for a message's `content`: the
-/// model reads only text that Projects parses out of `source` itself.
+/// Every call but `reply` and `attach` only reads. `reply` makes a reply and always opens
+/// its window, where the user decides what to send. `attach` adds a file the user ticked to
+/// the reply `reply` just made, and only while the Mail that made it runs. There is no call
+/// for a message's `content`: the model reads only text that Projects parses out of
+/// `source` itself.
 ///
 /// The calls run their events on MailEvents' send thread, one at a time, so none blocks the
 /// caller's thread. They throw MailBridgeError. A call never launches Mail. While Mail does
@@ -46,8 +48,14 @@ nonisolated struct MailBridge: Sendable {
     /// The messages selected in Mail. Read only on the user's click.
     var selection: @Sendable () async throws -> [MailMessageRef]
     /// Makes a reply to a message, to its sender or to all, and opens its window in Mail.
-    /// Mail never sends it by itself.
-    var reply: @Sendable (MailMessageRef, _ all: Bool) async throws -> Void
+    /// Mail never sends it by itself. Gives the reply Mail made, or nil when Mail's answer
+    /// named no outgoing message, or a Mail that started again meanwhile made it.
+    var reply: @Sendable (MailMessageRef, _ all: Bool) async throws -> MailReplyRef?
+    /// Adds a file at the end of a reply that `reply` made, as an attachment Mail reads from
+    /// the file itself. Only for a file the user ticked, on the user's click. Throws
+    /// `mailNotRunning` without asking Mail anything once the Mail that made the reply quit,
+    /// also when another Mail runs now.
+    var attach: @Sendable (URL, MailReplyRef) async throws -> Void
 }
 
 /// Whether Orra may send Apple Events to Mail, as macOS answers it.
@@ -150,6 +158,19 @@ nonisolated struct MailMailbox: Sendable, Hashable, Codable {
     }
 }
 
+/// A reply Mail made through `reply`, by its outgoing message's id, with the Mail session
+/// that made it. The id holds in that session only. Only `reply` makes one, from Mail's
+/// answer, so `attach` adds a file only to a reply Mail named.
+nonisolated struct MailReplyRef: Sendable, Hashable {
+    let id: Int
+    let session: MailEvents.Session
+
+    fileprivate init(id: Int, session: MailEvents.Session) {
+        self.id = id
+        self.session = session
+    }
+}
+
 /// A message in a mailbox. Mail's id holds for one Mail session only, so Projects keys mail
 /// by its Message-ID and keeps this only to read the message again soon.
 nonisolated struct MailMessageRef: Sendable, Hashable {
@@ -230,7 +251,8 @@ nonisolated extension MailBridge {
             attachments: { message in try await reader.attachments(message) },
             mailbox: { message in try await reader.mailbox(of: message) },
             selection: { try await reader.selection() },
-            reply: { message, all in _ = try await reader.value(.reply(to: message.reference, all: all)) }
+            reply: { message, all in try await reader.reply(to: message, all: all) },
+            attach: { file, reply in try await reader.attach(file, to: reply) }
         )
     }
 
@@ -498,6 +520,33 @@ nonisolated extension MailBridge {
             try await items(.get(.property(Code.selection, of: .application))).compactMap { item in
                 guard case .reference(.id(Code.message, let id, of: let mailbox)) = item else { return nil }
                 return MailMessageRef(id: id, mailbox: MailMailbox(kind: .mailbox, reference: mailbox, name: "", account: nil))
+            }
+        }
+
+        /// Asks Mail for a reply window and gives the reply Mail made, as Mail names it:
+        /// outgoing message id N of the application. The same Mail session must run before
+        /// the request and after Mail answered, so the id belongs to the Mail that made the
+        /// reply: a session that ended never comes back.
+        func reply(to message: MailMessageRef, all: Bool) async throws -> MailReplyRef? {
+            let session = events.session()
+            let answer = try await value(.reply(to: message.reference, all: all))
+            guard let session, events.session() == session,
+                  case .reference(.id(Code.outgoingMessage, let id, of: .application)) = answer else { return nil }
+            return MailReplyRef(id: id, session: session)
+        }
+
+        /// Adds the file at the end of the reply, only while the Mail that made the reply
+        /// runs. Once it quit, the reply's id may name another message of the Mail that runs
+        /// now, so nothing is sent. MailEvents checks the session again when the event's turn
+        /// comes on the send thread, and fails as if Mail did not run.
+        func attach(_ file: URL, to reply: MailReplyRef) async throws {
+            guard events.session() == reply.session else {
+                throw MailBridgeError.mailNotRunning
+            }
+            do {
+                _ = try await value(.attach(file, toReply: reply.id, in: reply.session))
+            } catch MailBridgeError.notAnswered where events.session() != reply.session {
+                throw MailBridgeError.mailNotRunning
             }
         }
     }

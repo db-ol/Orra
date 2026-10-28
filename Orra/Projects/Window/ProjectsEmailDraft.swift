@@ -10,22 +10,29 @@ extension ProjectsEmailArea {
     ///   explained again, which replaces the draft.
     /// - the answer check, such as "They asked 3 things, your draft answers 2", and the
     ///   people outside the project a reply to all reaches
+    /// - Attachments for the Reply, the files ticked for the reply, see ReplyAttachments
     /// - Open Reply in Mail, Reply All and Copy, with the line above them that says to press
-    ///   Command V in Mail, and the hint again after the handoff. There is no Send button.
+    ///   Command V in Mail, and the hint again after the handoff, with the files Mail did not
+    ///   take. There is no Send button.
     /// - the change box, which makes a new version, and the newest change highlighted, with
     ///   Undo. The talk key's words go straight into it while it has the focus (decision 13),
     ///   see ProjectsWindow.takeDictation(_:). A change under way shows why it waits, if it
     ///   does, and Cancel Change. Copy takes the draft as it is meanwhile.
     ///
     /// Without a draft it says why: no reply is due, the language gets no draft, or the model
-    /// wrote none. The requests run through `ProjectsEmailModel.perform(_:)`, so closing the
-    /// window ends them.
+    /// wrote none. When a reply is due all the same, Attachments for the Reply follows, and
+    /// once a file is ticked, Open Reply in Mail and Reply All, which open the reply with the
+    /// files and put nothing on the clipboard, as a blank draft with ticked files does, which
+    /// shows no Copy either. The note after a handoff stays when the files go meanwhile. The
+    /// requests run through `ProjectsEmailModel.perform(_:)`, so closing the window ends them.
     struct DraftSection: View {
         let runtime: ProjectsRuntime
         let emailModel: ProjectsEmailModel
         let explanation: Explanation
         /// Whether the email is explained again, which replaces the draft.
         let isExplaining: Bool
+        /// Opens Mail, nil where the view is shown without it, which leaves out Open Mail.
+        var openMail: (() -> Void)? = nil
         /// Opens Choose Files for This Email, for the hint under the change box, nil where
         /// the view is shown without it.
         var chooseFiles: (() -> Void)? = nil
@@ -47,6 +54,15 @@ extension ProjectsEmailArea {
                     Text(verbatim: why)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    // A reply is due without a draft, such as for an email in Japanese: the
+                    // files go into the reply all the same.
+                    if emailModel.replyFiles.replyIsDue, explanation.replyFacts != nil {
+                        ReplyAttachments(emailModel: emailModel)
+                        if !emailModel.replyFiles.handoffFiles.isEmpty || emailModel.isAttaching {
+                            handoffControls
+                        }
+                        handoffNote
+                    }
                 }
             }
         }
@@ -120,7 +136,9 @@ extension ProjectsEmailArea {
             }
             checks
             answers
-            handoff
+            ReplyAttachments(emailModel: emailModel)
+            handoffControls
+            handoffNote
             // One box for each email, so the focus of one never passes to the next.
             ChangeBox(runtime: runtime, emailModel: emailModel, chooseFiles: chooseFiles)
                 .id(ObjectIdentifier(emailModel))
@@ -136,10 +154,14 @@ extension ProjectsEmailArea {
             let result = emailModel.draftCheck
             let flags = emailModel.flags
             let removals = result?.removals ?? []
-            if !flags.isEmpty || !removals.isEmpty || !emailModel.outsideRecipients.isEmpty || !dropped.isEmpty {
+            let claims = emailModel.replyFiles.claimsAttachment
+            if !flags.isEmpty || !removals.isEmpty || !emailModel.outsideRecipients.isEmpty || !dropped.isEmpty || claims {
                 VStack(alignment: .leading, spacing: 6) {
                     if !emailModel.outsideRecipients.isEmpty {
                         warningLine(ProjectsWindowText.outsideRecipients(emailModel.outsideRecipients))
+                    }
+                    if claims {
+                        warningLine(String(localized: "The draft says a file is attached, but no file is ticked for the reply."))
                     }
                     ForEach(Array(flags.enumerated()), id: \.offset) { _, flag in
                         warningLine(ProjectsWindowText.flag(flag))
@@ -438,11 +460,12 @@ extension ProjectsEmailArea {
 
         // MARK: The handoff
 
+        /// The line above the buttons and the buttons.
         @ViewBuilder
-        private var handoff: some View {
+        private var handoffControls: some View {
             // Said before the click, since Mail comes to the front then and the line after
-            // the handoff may go unseen.
-            Text("Open Reply in Mail puts the draft on the clipboard. Press ⌘V in the reply window, check the recipients and send it yourself.")
+            // the handoff may go unseen. A blank draft with ticked files goes as no draft does.
+            Text(verbatim: ProjectsWindowText.handoffLine(hasDraft: emailModel.handsOffDraft, hasFiles: !emailModel.replyFiles.handoffFiles.isEmpty))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -455,10 +478,24 @@ extension ProjectsEmailArea {
                     handoffButtons
                 }
             }
+        }
+
+        /// The note after the last handoff, with Open Mail beside a note that Mail is not open.
+        /// A file the user took off the reply since leaves it, see
+        /// ProjectsEmailModel.shownHandoffFiles.
+        @ViewBuilder
+        private var handoffNote: some View {
             if let note = emailModel.handoffNote {
-                Text(verbatim: ProjectsWindowText.handoff(note))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(ProjectsWindowText.handoffLines(note, files: emailModel.shownHandoffFiles).enumerated()), id: \.offset) { _, line in
+                        Text(verbatim: line)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let openMail, ProjectsWindowText.saysMailIsNotOpen(note) {
+                        Button("Open Mail", action: openMail)
+                    }
+                }
             }
         }
 
@@ -476,14 +513,24 @@ extension ProjectsEmailArea {
                 }
             }
             .disabled(!emailModel.canHandOff)
-            // A change that waits leaves the draft as it is, which Copy takes.
-            Button("Copy") {
-                emailModel.copy()
+            // A change that waits leaves the draft as it is, which Copy takes. Without a draft,
+            // and with a blank draft and ticked files, which go as no draft does, there is
+            // nothing to copy.
+            if emailModel.handsOffDraft {
+                Button("Copy") {
+                    emailModel.copy()
+                }
+                .disabled(!emailModel.canCopy)
             }
-            .disabled(!emailModel.canCopy)
             if emailModel.isHandingOff {
-                ProgressView()
-                    .controlSize(.small)
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    if emailModel.isAttaching {
+                        Text("Attaching files in Mail…")
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
     }

@@ -5,9 +5,10 @@ import Testing
 @testable import Orra
 
 /// The events of the Mail bridge, built for this test process and never sent, as the Mail
-/// spike's self check did. Each must be one of MailEvent's three, with every value a typed
-/// parameter, none that lets macOS show its prompt, get and count without interaction, and
-/// a reply that opens its window.
+/// spike's self check did. Each must be one of MailEvent's four, with every value a typed
+/// parameter, none that lets macOS show its prompt, get, count and attach without
+/// interaction, a reply that opens its window, and an attachment with only its file at the
+/// end of a reply's content.
 struct MailEventsTests {
     private typealias Code = MailEvents.Code
     private typealias Specifier = MailEvents.Specifier
@@ -19,10 +20,12 @@ struct MailEventsTests {
     private static let account = Specifier.textID(Code.account, "7A31-account", of: .application)
     private static let mailbox = Specifier.name(Code.mailbox, "Archive/2026", of: account)
     private static let message = Specifier.id(Code.message, 4217, of: mailbox)
+    private static let file = URL(fileURLWithPath: "/Users/someone/Projects/Harbor lobby/Drawings/floor-plan-v3.pdf")
+    private static let session = MailEvents.Session(processIdentifier: 811, launched: Date(timeIntervalSince1970: 1_761_400_000))
 
-    @Test func onlyGetCountAndReplyWithMailsCodes() {
-        #expect(MailEvent.allCases == [.get, .count, .reply])
-        #expect(MailEvent.allCases.map { Self.letters($0.eventClass) + Self.letters($0.eventID) } == ["coregetd", "corecnte", "emalrpms"])
+    @Test func onlyGetCountReplyAndAttachWithMailsCodes() {
+        #expect(MailEvent.allCases == [.get, .count, .reply, .attach])
+        #expect(MailEvent.allCases.map { Self.letters($0.eventClass) + Self.letters($0.eventID) } == ["coregetd", "corecnte", "emalrpms", "corecrel"])
         #expect(MailEvent.get.eventClass == 0x636F_7265)
         #expect(MailEvent.get.eventID == 0x6765_7464)
         #expect(MailEvents.code("ID  ") == 0x4944_2020)
@@ -135,6 +138,100 @@ struct MailEventsTests {
         #expect(!request.sendOptions.contains(.neverInteract))
         #expect(request.sendOptions.contains(MailEvents.Request.neverPrompt))
         #expect(request.timeout == 10)
+    }
+
+    /// The attach event of AppleScript's `make new attachment with properties {file name:f}
+    /// at end of content of outgoing message id 77`: the class of the new object is the
+    /// attachment, and its place is the end of the content of that reply, of the
+    /// application, as Mail names a reply it made.
+    @Test func anAttachmentGoesAtTheEndOfTheContentOfTheReply() throws {
+        let request = MailEvents.Request.attach(Self.file, toReply: 77, in: Self.session)
+        let event = try request.appleEvent(target: target)
+        #expect(Self.letters(event.eventClass) == "core")
+        #expect(Self.letters(event.eventID) == "crel")
+        #expect(request.event == .attach)
+        #expect(event.paramDescriptor(forKeyword: keyDirectObject) == nil)
+
+        let objectClass = try #require(event.paramDescriptor(forKeyword: keyAEObjectClass))
+        #expect(objectClass.descriptorType == typeType)
+        #expect(Self.letters(objectClass.typeCodeValue) == "atts")
+
+        let place = try #require(event.paramDescriptor(forKeyword: keyAEInsertHere))
+        #expect(Self.letters(place.descriptorType) == "insl")
+        let position = try #require(place.forKeyword(keyAEPosition))
+        #expect(position.descriptorType == typeEnumerated)
+        #expect(Self.letters(position.enumCodeValue) == "end ")
+
+        let content = try #require(place.forKeyword(keyAEObject))
+        #expect(Self.shape(content) == ["prop", "prop"])
+        #expect(Self.letters(try #require(Self.data(content)).typeCodeValue) == "ctnt")
+        let reply = try #require(Self.container(content))
+        #expect(Self.shape(reply) == ["bcke", "ID  "])
+        #expect(Self.data(reply)?.descriptorType == typeSInt32)
+        #expect(Self.data(reply)?.int32Value == 77)
+        #expect(Self.container(reply)?.descriptorType == typeNull)
+    }
+
+    /// The new attachment's properties are a record with the one key of its file, a file
+    /// URL, so Mail reads the file itself. A URL that is not a file URL builds no event.
+    @Test func theAttachmentHoldsOnlyItsFileAsAFileURL() throws {
+        let event = try MailEvents.Request.attach(Self.file, toReply: 77, in: Self.session).appleEvent(target: target)
+        let properties = try #require(event.paramDescriptor(forKeyword: keyAEPropData))
+        #expect(properties.descriptorType == typeAERecord)
+        #expect(properties.numberOfItems == 1)
+        #expect(Self.letters(properties.keywordForDescriptor(at: 1)) == "atfn")
+        let file = try #require(properties.forKeyword(MailEvents.code("atfn")))
+        #expect(Self.letters(file.descriptorType) == "furl")
+        #expect(file.fileURLValue == Self.file)
+        #expect(file.fileURLValue?.path == "/Users/someone/Projects/Harbor lobby/Drawings/floor-plan-v3.pdf")
+
+        let web = try #require(URL(string: "https://harbor.example/floor-plan-v3.pdf"))
+        #expect(throws: MailEvents.Failure.self) {
+            try MailEvents.Request.attach(web, toReply: 77, in: Self.session).appleEvent(target: target)
+        }
+    }
+
+    @Test func attachNeverInteractsOrPromptsAndWaits30Seconds() {
+        let request = MailEvents.Request.attach(Self.file, toReply: 77, in: Self.session)
+        #expect(request.sendOptions.contains(.waitForReply))
+        #expect(request.sendOptions.contains(.neverInteract))
+        #expect(request.sendOptions.contains(MailEvents.Request.neverPrompt))
+        #expect(!request.sendOptions.contains(.canInteract))
+        #expect(request.timeout == 30)
+    }
+
+    /// Only an attachment is bound to the Mail session that made its reply. The others go
+    /// to whichever Mail runs.
+    @Test func onlyAnAttachmentNamesItsSession() {
+        #expect(MailEvents.Request.attach(Self.file, toReply: 77, in: Self.session).session == Self.session)
+        #expect(MailEvents.Request.reply(to: Self.message, all: false).session == nil)
+        #expect(MailEvents.Request.get(.property(Code.source, of: Self.message)).session == nil)
+        #expect(MailEvents.Request.count(Code.message, in: Self.mailbox).session == nil)
+        #expect(Self.session != MailEvents.Session(processIdentifier: 812, launched: Date(timeIntervalSince1970: 1_761_400_000)))
+        #expect(Self.session != MailEvents.Session(processIdentifier: 811, launched: Date(timeIntervalSince1970: 1_761_500_000)))
+    }
+
+    /// The send thread sends an attachment only to the Mail session of its reply: another
+    /// Mail, the same process id launched again, and a Mail without a session refuse it as
+    /// a Mail that is gone. The other requests go to whichever Mail runs.
+    @Test func theSendThreadRefusesAnAttachmentForAnotherMail() {
+        let attach = MailEvents.Request.attach(Self.file, toReply: 77, in: Self.session)
+        #expect(MailEvents.refusal(of: attach, by: Self.session) == nil)
+        #expect(MailEvents.refusal(of: attach, by: MailEvents.Session(processIdentifier: 942, launched: Date(timeIntervalSince1970: 1_761_403_600))) == -600)
+        #expect(MailEvents.refusal(of: attach, by: MailEvents.Session(processIdentifier: 811, launched: Date(timeIntervalSince1970: 1_761_403_600))) == -600)
+        #expect(MailEvents.refusal(of: attach, by: nil) == -600)
+        for request in [MailEvents.Request.reply(to: Self.message, all: true), .get(.property(Code.source, of: Self.message)), .count(Code.message, in: Self.mailbox)] {
+            #expect(MailEvents.refusal(of: request, by: nil) == nil)
+        }
+    }
+
+    /// Mail names the reply it made as outgoing message id N of the application, which a
+    /// specifier reads back as it came.
+    @Test func theReplyComesBackAsAnOutgoingMessage() throws {
+        let reply = Specifier.id(Code.outgoingMessage, 77, of: .application)
+        let descriptor = try reply.descriptor()
+        #expect(Self.shape(descriptor) == ["bcke", "ID  "])
+        #expect(Value(descriptor) == .reference(reply))
     }
 
     /// Mail names accounts, mailboxes and messages in its replies the way Projects builds them,

@@ -20,7 +20,10 @@ import SwiftUI
 /// - Project Files for This Explanation, folded: each project file the explanation gave the
 ///   model, with Edit Project…, see FilesSection
 /// - Before you reply: the questions only the user can answer
-/// - the draft with its tools, see DraftSection
+/// - Files This Email Asks For, when the email asks for files and a reply is due: the files
+///   of the project folders that each request may mean, each with Attach to Reply, see
+///   FilesAskedFor
+/// - the draft with its tools, see DraftSection, with Attachments for the Reply
 /// - the email itself under Original Email, see ProjectsEmailOriginal, which also lists the
 ///   attachments with whether Projects read their text
 ///
@@ -53,6 +56,9 @@ struct ProjectsEmailArea: View {
     /// Opens Settings at the Projects page, nil where the view is shown without it, which
     /// leaves out its button.
     var openSettings: (() -> Void)? = nil
+    /// Opens Mail, see MailApp.open(), nil where the view is shown without it, which leaves
+    /// out Open Mail beside the note that Mail is not open.
+    var openMail: (() -> Void)? = nil
 
     /// Reads the explanation again when the email changes project, is explained, Retention
     /// removed its explanation or its draft, or the window let go of its email view, such
@@ -130,7 +136,7 @@ struct ProjectsEmailArea: View {
                         }
                         DraftSection(
                             runtime: runtime, emailModel: emailModel, explanation: explanation,
-                            isExplaining: model.explaining[email.messageID] == .explaining,
+                            isExplaining: model.explaining[email.messageID] == .explaining, openMail: openMail,
                             chooseFiles: { model.chooseFiles(for: email) })
                         // While comparing, the email itself has a pane of its own.
                         if model.showsExplanation, !comparing {
@@ -571,6 +577,7 @@ extension ProjectsEmailArea {
                     }
                 }
             }
+            FilesAskedFor(runtime: model.runtime, emailModel: emailModel)
         }
 
         private func section(_ title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {

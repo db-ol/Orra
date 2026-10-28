@@ -1335,7 +1335,11 @@ struct MailScanTests {
                     self.record(.other)
                     return []
                 },
-                reply: { _, _ in self.record(.other) }
+                reply: { _, _ in
+                    self.record(.other)
+                    return nil
+                },
+                attach: { _, _ in self.record(.other) }
             )
         }
 

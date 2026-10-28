@@ -66,7 +66,10 @@ struct ProjectsSettings: View {
                             }
                             Group {
                                 Text("Reads the Mail mailboxes you choose and the folders you add. What it keeps stays on this Mac.")
-                                Text("It never sends, moves or deletes mail, and never sends your mail or files anywhere.")
+                                Text("It never sends, moves or deletes mail.")
+                                // Files reach Mail only with a reply the user opens, and Mail
+                                // may save that reply to the account's Drafts on the server.
+                                Text("Files go into a reply only when you tick them, and only you send it. Before that, Mail may save the reply with its files to your account's Drafts on the mail server.")
                             }
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -91,7 +94,8 @@ struct ProjectsSettings: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                // True while the Mail bridge sends only its read requests and reply, which
+                // True while the Mail bridge sends only its read requests, reply and attach,
+                // which adds a file the user ticked to the reply it just opened, as
                 // Tools/ci/check_rules.py holds (rule 10).
                 Text("Assigning, editing and deleting in Projects change only what it keeps on this Mac, never your mail in Mail.")
                     .foregroundStyle(.secondary)

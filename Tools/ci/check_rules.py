@@ -220,8 +220,9 @@ INFO_PLIST = {
     "SUAllowsAutomaticUpdates": False,
     # The system audio recording prompt for meeting captions, approved on 2026-10-15.
     "NSAudioCaptureUsageDescription": "Orra listens to the sound your Mac plays, such as a call, to show live captions and translations. The audio stays on this Mac.",
-    # The Automation prompt for Mail, which Projects needs, approved on 2026-10-18.
-    "NSAppleEventsUsageDescription": "Orra reads mail in the Mail app only for Projects, and only from the mailboxes you choose. The mail it reads stays on this Mac.",
+    # The Automation prompt for Mail, which Projects needs, approved on 2026-10-18, and with
+    # the reply and the files the user ticks for it on 2026-10-26.
+    "NSAppleEventsUsageDescription": "Orra reads mail in the Mail app only for Projects, and only from the mailboxes you choose. It opens a reply, with the files you tick, only when you click. The mail it reads stays on this Mac.",
 }
 RESOLVED_FILE = "Orra.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
 DEPENDENCIES_DOC = "docs/dependencies.md"
@@ -484,14 +485,17 @@ def check_dependency_doc(doc, pins):
 # 5 also looks inside string literals, and reads every other file whole. Names match on word
 # boundaries. Rules 1 to 9 and 11 name paths only, never the syntax of a file they allow, so
 # a file that does not exist yet passes. Rule 10 reads the syntax of the one file it is
-# about, Orra/Projects/Mail/MailEvents.swift, once it exists. A failure names the file, the
-# line, the rule and the name it matched, never the rest of the line.
+# about, Orra/Projects/Mail/MailEvents.swift, once it exists, and looks for attach requests
+# in the code of every Swift file under Orra/. A failure names the file, the line, the rule
+# and the name it matched, never the rest of the line.
 
 PROJECTS_FOLDER = "Orra/Projects/"
 PROJECTS_TESTS_FOLDER = "OrraTests/Projects/"
 
 # The file of the Mail bridge that builds and sends Mail's events (rule 10).
 MAIL_EVENTS_FILE = "Orra/Projects/Mail/MailEvents.swift"
+# The file whose attach alone may make an attach request (rule 10).
+MAIL_BRIDGE_FILE = "Orra/Projects/Mail/MailBridge.swift"
 # The only Swift files under Orra/ that may build or send an Apple Event (rule 3).
 APPLE_EVENT_FILES = frozenset({MAIL_EVENTS_FILE})
 
@@ -534,27 +538,32 @@ SOURCE_RULES = {
     7: "In Orra/Projects only ProjectsStorage.swift removes, moves, replaces or trashes files.",
     8: "In Orra/Projects only ProjectsSwitch.swift and Mail/MailChoice.swift use UserDefaults.",
     9: "Orra/Projects holds Swift files only, since Xcode would copy any other file into the app.",
-    10: "MailEvents.swift builds only the get, count and reply events of its MailEvent enum, opens "
-        "a window with every reply, and holds no code of a Mail command that changes mail, sends "
-        "it, or opens, prints or quits something, nor the code of content.",
+    10: "MailEvents.swift builds only the get, count, reply and attach events of its MailEvent enum, "
+        "sets their parameters only where it builds them, and sends them only from sendNow, after the "
+        "check of the Mail session. It opens a window with every reply, makes nothing but an attachment "
+        "with only its file at the end of a reply's content, and holds no other code of a Mail command "
+        "that changes mail, sends it, or opens, prints or quits something, nor the code of content "
+        "outside that one place. In Orra only MailBridge's attach makes an attach request.",
     11: "In Orra only MailApp.swift opens another app, and tests open none.",
 }
 
-# Rule 10. The three events the Mail bridge may build, by their names in the MailEvent enum,
+# Rule 10. The four events the Mail bridge may build, by their names in the MailEvent enum,
 # each the event class and the event ID as Mail.sdef writes them. get and count, from the
 # standard suite, only read. reply, from Mail's suite, makes a reply in a window of its own.
-MAIL_EVENTS = {"get": "coregetd", "count": "corecnte", "reply": "emalrpms"}
+# attach is make, from the standard suite, which check_mail_events holds to one use: an
+# attachment, with only its file, at the end of the content of a reply.
+MAIL_EVENTS = {"get": "coregetd", "count": "corecnte", "reply": "emalrpms", "attach": "corecrel"}
 # The commands that change mail, send it, or open, print or quit something, from
 # /System/Applications/Mail.app/Contents/Resources/Mail.sdef (Mail 16.0 on macOS 26.6) and
 # the standard suite it includes from /System/Library/ScriptingDefinitions/CocoaStandard.sdef.
 # set is in neither, since AppleScript sends it for any property, so its code comes from
-# AERegistry.h (kAECoreSuite and kAESetData).
+# AERegistry.h (kAECoreSuite and kAESetData). make is the attach event of MAIL_EVENTS, so it
+# is not here, and its event ID is banned on its own below.
 MAIL_CHANGING_COMMANDS = {
     "coresetd": "set",
     "coredelo": "delete",
     "coremove": "move",
     "coreclon": "duplicate",
-    "corecrel": "make",
     "coresave": "save",
     "coreclos": "close",
     "emsgsend": "send",
@@ -572,8 +581,10 @@ MAIL_CHANGING_COMMANDS = {
     "aevtquit": "quit",
 }
 # The four letter codes rule 10 bans: the event ID of each of those commands, the event class
-# of those whose class no event of MAIL_EVENTS shares, and content, the message property
-# Mail renders, which the model must never read (AGENTS.md).
+# of those whose class no event of MAIL_EVENTS shares, the event ID of make, which only the
+# attach case of MailEvent may hold as part of its whole code, and content, the message
+# property Mail renders, which the model must never read (AGENTS.md). content stands only
+# as the place of a new attachment, see check_mail_events.
 MAIL_BANNED_CODES = {
     **{command[4:]: name for command, name in MAIL_CHANGING_COMMANDS.items()},
     **{
@@ -581,7 +592,22 @@ MAIL_BANNED_CODES = {
         for command, name in MAIL_CHANGING_COMMANDS.items()
         if command[:4] not in {event[:4] for event in MAIL_EVENTS.values()}
     },
+    "crel": "make",
     "ctnt": "content",
+}
+# The codes of the parameters of make and of an insertion location, and of the positions
+# other than the end, which MailEvents.swift must name through the SDK's names that
+# check_mail_events reads, never through their four letters.
+MAKE_CODES = {
+    "kocl": "the class of a new object",
+    "insh": "the place of a new object",
+    "prdt": "the properties of a new object",
+    "kobj": "the object of an insertion location",
+    "kpos": "the position of an insertion location",
+    "befo": "the position before",
+    "afte": "the position after",
+    "bgng": "the position at the beginning",
+    "rplc": "the position that replaces",
 }
 
 
@@ -796,13 +822,14 @@ DEFAULTS = _rule(r"\bUserDefaults\b", r"\bAppStorage\b", r"\bCFPreferences\w*", 
 APP_OPENING = _rule(r"\bopenApplication\b", r"\blaunchApplication\w*", r"\bLSOpen\w*")
 
 # Rule 10, in MailEvents.swift. Other ways to build an event, whose codes the rule cannot
-# read, and ways to change the class or the ID of an event after it is built.
+# read, and ways to change the class, the ID or a parameter of an event after it is built.
 MAIL_EVENTS_BANNED = _rule(
     r"\bAECreateAppleEvent\b",
     r"\bAEBuildAppleEvent\b",
     r"\btypeAppleEvent\b",
     r"\bsetAttribute\b",
-    r"\bAEPutAttribute\w*",
+    r"\bAEPut\w*",
+    r"\bAEReplaceDescData\b",
     r"\bkeyEventClassAttr\b",
     r"\bkeyEventIDAttr\b",
 )
@@ -817,6 +844,97 @@ OPENING_WINDOW = re.compile(
     r'forKeyword\s*:\s*(?:(?:MailEvents|Self)\s*\.\s*)?code\s*\(\s*"ropw"\s*\)\s*\)'
 )
 INTEGER_LITERAL = re.compile(r"(?<![\w.])(0x[0-9A-Fa-f_]+|0o[0-7_]+|0b[01_]+|[0-9][0-9_]*)(?![\w.])")
+# The calls of attach that check_mail_events allows, each once. make makes only an attachment:
+# its class is the attachment class atts, and keyAEObjectClass names no other class but the
+# class the count event counts. It goes only at the end of a reply's content, built by
+# endOfContent(ofReply:). Its properties are only its file, built by fileProperties(_:).
+_CODE_CALL = r'(?:(?:MailEvents|Self)\s*\.\s*)?code\s*\(\s*"{}"\s*\)'
+ATTACHMENT_CLASS = re.compile(
+    r'\.\s*setParam\s*\(\s*NSAppleEventDescriptor\s*\(\s*typeCode\s*:\s*' + _CODE_CALL.format("atts")
+    + r'\s*\)\s*,\s*forKeyword\s*:\s*keyAEObjectClass\s*\)'
+)
+COUNTED_CLASS = re.compile(
+    r'\.\s*setParam\s*\(\s*NSAppleEventDescriptor\s*\(\s*typeCode\s*:\s*elementClass\s*\)\s*,\s*forKeyword\s*:\s*keyAEObjectClass\s*\)'
+)
+END_OF_CONTENT_PLACE = re.compile(
+    r'\.\s*setParam\s*\(\s*try\s+Self\s*\.\s*endOfContent\s*\(\s*ofReply\s*:\s*\w+\s*\)\s*,\s*forKeyword\s*:\s*keyAEInsertHere\s*\)'
+)
+AT_THE_END = re.compile(
+    r'\.\s*setDescriptor\s*\(\s*NSAppleEventDescriptor\s*\(\s*enumCode\s*:\s*kAEEnd\s*\)\s*,\s*forKeyword\s*:\s*keyAEPosition\s*\)'
+)
+# The name of the reply's id in the declaration of endOfContent(ofReply:).
+REPLY_PARAMETER = re.compile(r"\bfunc\s+endOfContent\s*\(\s*ofReply\s+(\w+)\s*:\s*Int\s*\)")
+# The content of outgoing message id <reply> of the application, kept in a constant, and the
+# one place of the insertion location that names it. {} stands for the reply's id.
+REPLY_CONTENT = (
+    r'\blet\s+(\w+)\s*=\s*MailEvents\s*\.\s*Specifier\s*\.\s*property\s*\(\s*' + _CODE_CALL.format("ctnt")
+    + r'\s*,\s*of\s*:\s*\.\s*id\s*\(\s*MailEvents\s*\.\s*Code\s*\.\s*outgoingMessage\s*,\s*{}\s*,\s*of\s*:\s*\.\s*application\s*\)\s*\)'
+)
+CONTENT_PLACE = r'\.\s*setDescriptor\s*\(\s*try\s+{}\s*\.\s*descriptor\s*\(\s*\)\s*,\s*forKeyword\s*:\s*keyAEObject\s*\)'
+FILE_PROPERTIES = re.compile(
+    r'\.\s*setParam\s*\(\s*try\s+Self\s*\.\s*fileProperties\s*\(\s*\w+\s*\)\s*,\s*forKeyword\s*:\s*keyAEPropData\s*\)'
+)
+ONLY_THE_FILE = re.compile(
+    r'\.\s*setDescriptor\s*\(\s*NSAppleEventDescriptor\s*\(\s*fileURL\s*:\s*\w+\s*\)\s*,\s*forKeyword\s*:\s*' + _CODE_CALL.format("atfn") + r'\s*\)'
+)
+# The positions of an insertion location other than the end.
+OTHER_POSITIONS = _rule(r"\bkAEBefore\b", r"\bkAEAfter\b", r"\bkAEBeginning\b", r"\bkAEReplace\b")
+# The attach case of appleEvent(target:) and the bodies of its two builders as rule 10 allows
+# them, compared without white space. A helper called from them, another parameter or another
+# object fails, and a change of these lines takes a change of these values too.
+PINNED_ATTACH_CASE = """
+    case .attach(let file, let reply, _):
+        event.setParam(NSAppleEventDescriptor(typeCode: MailEvents.code("atts")), forKeyword: keyAEObjectClass)
+        event.setParam(try Self.endOfContent(ofReply: reply), forKeyword: keyAEInsertHere)
+        event.setParam(try Self.fileProperties(file), forKeyword: keyAEPropData)
+"""
+PINNED_END_OF_CONTENT = """
+    let content = MailEvents.Specifier.property(MailEvents.code("ctnt"), of: .id(MailEvents.Code.outgoingMessage, reply, of: .application))
+    guard let location = NSAppleEventDescriptor.record().coerce(toDescriptorType: typeInsertionLoc) else {
+        throw MailEvents.Failure(code: errAECoercionFail)
+    }
+    location.setDescriptor(try content.descriptor(), forKeyword: keyAEObject)
+    location.setDescriptor(NSAppleEventDescriptor(enumCode: kAEEnd), forKeyword: keyAEPosition)
+    return location
+"""
+PINNED_FILE_PROPERTIES = """
+    guard file.isFileURL else {
+        throw MailEvents.Failure(code: errAECoercionFail)
+    }
+    let properties = NSAppleEventDescriptor.record()
+    properties.setDescriptor(NSAppleEventDescriptor(fileURL: file), forKeyword: MailEvents.code("atfn"))
+    return properties
+"""
+# appleEvent(target:) makes the event, fills it in one switch over the request and returns it,
+# with nothing else before or after the switch.
+MAKE_THE_EVENT = re.compile(r"\s*let\s+event\s*=\s*NSAppleEventDescriptor\s*\.\s*appleEvent\s*\(")
+# sendNow(_ request:) sends every event, in these steps and in this order: it finds the running
+# Mail, refuses a request bound to another Mail session, builds the event for that Mail's
+# process id and sends it. Each step stands once in sendNow, sendEvent and a call of
+# appleEvent(target:) stand nowhere else, and sendNow never binds request, mail, target or event
+# again.
+SEND_NOW = re.compile(r"\bfunc\s+sendNow\s*\(")
+SEND_NOW_SIGNATURE = re.compile(r"\bfunc\s+sendNow\s*\(\s*_\s+request\s*:\s*Request\s*\)\s*throws\s*->\s*Value\s*\{")
+SEND_NOW_STEPS = (
+    ("the running Mail", re.compile(r"\bguard\s+let\s+mail\s*=\s*runningMail\s*\(\s*\)\s*else\s*\{")),
+    ("the check of the Mail session", re.compile(
+        r"\bif\s+let\s+code\s*=\s*refusal\s*\(\s*of\s*:\s*request\s*,\s*by\s*:\s*Session\s*\(\s*mail\s*\)\s*\)\s*\{"
+        r"[^{}]*\bthrow\s+Failure\s*\(\s*code\s*:\s*code\s*\)\s*\}"
+    )),
+    ("the target", re.compile(r"\blet\s+target\s*=\s*NSAppleEventDescriptor\s*\(\s*processIdentifier\s*:\s*mail\s*\.\s*processIdentifier\s*\)")),
+    ("the event", re.compile(r"\blet\s+event\s*=\s*try\s+request\s*\.\s*appleEvent\s*\(\s*target\s*:\s*target\s*\)")),
+    ("the send", re.compile(r"\btry\s+event\s*\.\s*sendEvent\s*\(\s*options\s*:\s*request\s*\.\s*sendOptions\s*,\s*timeout\s*:\s*request\s*\.\s*timeout\s*\)")),
+)
+# A name of sendNow bound again: declared, assigned or taken as a closure's parameter.
+SEND_NOW_NAMES = re.compile(r"\b(request|mail|target|event)\b(?=\s*(?:=(?!=)|\bin\b|,[^)]*\bin\b))")
+# The functions whose bodies may set a key of a record: the place and the properties of make,
+# and the builders of an object specifier.
+DESCRIPTOR_BUILDERS = (r"\bfunc\s+endOfContent\s*\(", r"\bfunc\s+fileProperties\s*\(", r"\bfunc\s+descriptor\s*\(", r"\bfunc\s+object\s*\(")
+# An attach request across Orra/: the case attach of MailEvents.Request named through its type,
+# or made with the label toReply, which only its declaration may hold besides.
+REQUEST_ATTACH = re.compile(r"\bRequest\s*\.\s*attach\b")
+TO_REPLY = re.compile(r"\btoReply\b")
+ATTACH_DECLARATION = re.compile(r"\s*case\s+attach\s*\(")
 
 SourceProblem = namedtuple("SourceProblem", "path line rule name")
 
@@ -1252,9 +1370,299 @@ def _mail_event_cases(code, uncommented, body):
     return cases
 
 
+def _function_bodies(code, signature):
+    """The spans of the bodies of the functions whose declaration matches signature, a
+    pattern that runs to the parenthesis that opens the parameters, in the code view."""
+    bodies = []
+    for match in re.finditer(signature, code):
+        opening = match.end() - 1
+        if _arguments(code, opening) is None:
+            continue
+        depth = 0
+        index = opening
+        while index < len(code):
+            if code[index] == "(":
+                depth += 1
+            elif code[index] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            index += 1
+        brace = code.find("{", index)
+        if brace < 0:
+            continue
+        depth = 0
+        for end in range(brace, len(code)):
+            if code[end] == "{":
+                depth += 1
+            elif code[end] == "}":
+                depth -= 1
+                if depth == 0:
+                    bodies.append((brace + 1, end))
+                    break
+    return bodies
+
+
+def _inside(offset, spans):
+    return any(start <= offset < end for start, end in spans)
+
+
+def _without_space(text):
+    return re.sub(r"\s+", "", text)
+
+
+def _case_blocks(code, start, end):
+    """The cases of a switch whose body runs from start to end: (start, end) of each, from its
+    case to the next one at the top level of the body."""
+    starts = []
+    depth = 0
+    for index in range(start, end):
+        character = code[index]
+        if character in "([{":
+            depth += 1
+        elif character in ")]}":
+            depth -= 1
+        elif depth == 0 and code.startswith("case", index) and _word_before(code, index)[0] == "" \
+                and not (code[index + 4:index + 5].isalnum() or code[index + 4:index + 5] == "_"):
+            starts.append(index)
+    return [(first, starts[number + 1] if number + 1 < len(starts) else end) for number, first in enumerate(starts)]
+
+
+def _switch_of_apple_event(code):
+    """The span of the body of the switch in appleEvent(target:), and whether the function
+    holds nothing but the making of the event, that switch and `return event`."""
+    bodies = _function_bodies(code, r"\bfunc\s+appleEvent\s*\(")
+    if len(bodies) != 1:
+        return None, False
+    start, end = bodies[0]
+    make = MAKE_THE_EVENT.match(code, start)
+    match = re.search(r"\bswitch\s+self\s*\{", code[start:end])
+    if match is None:
+        return None, False
+    opening = start + match.end() - 1
+    depth = 0
+    for index in range(opening, end):
+        if code[index] == "{":
+            depth += 1
+        elif code[index] == "}":
+            depth -= 1
+            if depth == 0:
+                arguments = _arguments(code, make.end() - 1) if make else None
+                made = make is not None and arguments is not None and code[make.end() + len(arguments) + 1:start + match.start()].strip() == ""
+                returned = re.fullmatch(r"\s*return\s+event\s*", code[index + 1:end]) is not None
+                return (opening + 1, index), made and returned
+    return None, False
+
+
+def _check_attach(text, code, uncommented, literals, problem):
+    """The attach event of rule 10: make makes an attachment and nothing else, at the end
+    of a reply's content only, with only its file."""
+    values = []
+    for start, end in literals:
+        value = _string_value(text, start, end)
+        if value is not None:
+            values.append((start, value))
+
+    def spans(pattern, view):
+        return [match.span() for match in pattern.finditer(view)]
+
+    def once(pattern, view, name):
+        found = spans(pattern, view)
+        if len(found) != 1:
+            problem(found[1][0] if len(found) > 1 else None, name)
+        return found
+
+    def words(name):
+        return [match.start() for match in re.finditer(r"\b" + name + r"\b", code)]
+
+    # appleEvent(target:) builds the attach event in its attach case only, as pinned, and
+    # sets the count's class in its count case only.
+    switch, plain = _switch_of_apple_event(code)
+    attach_case = count_case = None
+    if switch is None:
+        problem(None, "appleEvent(target:) without its switch over the request")
+    else:
+        for block in _case_blocks(code, *switch):
+            if re.match(r"case\s+\.attach\b", code[block[0]:block[1]]):
+                attach_case = block
+            elif re.match(r"case\s+\.count\b", code[block[0]:block[1]]):
+                count_case = block
+        if attach_case is None or _without_space(uncommented[attach_case[0]:attach_case[1]]) != _without_space(PINNED_ATTACH_CASE):
+            problem(attach_case[0] if attach_case else switch[0], "the attach case of appleEvent(target:) differs from what rule 10 allows")
+        if not plain:
+            problem(switch[0], "appleEvent(target:) does more than make the event, fill it in its switch and return it")
+    for name, pinned in (("endOfContent", PINNED_END_OF_CONTENT), ("fileProperties", PINNED_FILE_PROPERTIES)):
+        bodies = _function_bodies(code, r"\bfunc\s+" + name + r"\s*\(")
+        if len(bodies) == 1 and _without_space(uncommented[bodies[0][0]:bodies[0][1]]) != _without_space(pinned):
+            problem(bodies[0][0], name + " differs from what rule 10 allows")
+
+    # make makes only an attachment, and keyAEObjectClass names no other class but the one
+    # the count event counts.
+    attachment_class = once(ATTACHMENT_CLASS, uncommented, "make without the attachment class atts")
+    counted_class = [span for span in spans(COUNTED_CLASS, uncommented) if count_case and _inside(span[0], [count_case])]
+    for start, value in values:
+        if value == "atts" and not _inside(start, attachment_class[:1]):
+            problem(start, '"atts" outside the class of make')
+    for offset in words("keyAEObjectClass"):
+        if not _inside(offset, attachment_class[:1] + counted_class[:1]):
+            problem(offset, "keyAEObjectClass outside the classes of make and count")
+
+    # At the end of a reply's content only.
+    end_of_content = _function_bodies(code, r"\bfunc\s+endOfContent\s*\(")
+    if len(end_of_content) != 1:
+        problem(None, "not one endOfContent(ofReply:)")
+    place = once(END_OF_CONTENT_PLACE, uncommented, "make without its place at the end of a reply's content")
+    for offset in words("endOfContent"):
+        declared = re.match(r"endOfContent\s*\(\s*ofReply\b", code[offset:]) is not None and \
+            re.search(r"\bfunc\s+$", code[max(0, offset - 40):offset]) is not None
+        if not declared and not _inside(offset, place[:1]):
+            problem(offset, "endOfContent outside the place of make")
+    for offset in words("keyAEInsertHere"):
+        if not _inside(offset, place[:1]):
+            problem(offset, "keyAEInsertHere outside the place of make")
+    at_the_end = spans(AT_THE_END, uncommented)
+    for name in ("keyAEPosition", "kAEEnd"):
+        for offset in words(name):
+            if not (_inside(offset, at_the_end) and _inside(offset, end_of_content[:1])):
+                problem(offset, name + " outside the end of a reply's content")
+    if not any(_inside(start, end_of_content[:1]) for start, _ in at_the_end):
+        problem(None, "endOfContent(ofReply:) without the position at the end")
+    # The object of the place is the content of the reply, outgoing message id <reply> of the
+    # application, never of another message, and keyAEObject names it in one call only.
+    parameter = REPLY_PARAMETER.search(code)
+    contents = []
+    if parameter and end_of_content:
+        start, end = end_of_content[0]
+        body = uncommented[start:end]
+        reply_content = re.compile(REPLY_CONTENT.format(re.escape(parameter.group(1))))
+        contents = [match for match in reply_content.finditer(body)]
+    content_places = []
+    if len(contents) == 1:
+        start = end_of_content[0][0]
+        place_pattern = re.compile(CONTENT_PLACE.format(re.escape(contents[0].group(1))))
+        content_places = [(start + match.start(), start + match.end()) for match in place_pattern.finditer(uncommented[start:end_of_content[0][1]])]
+    if len(contents) != 1 or len(content_places) != 1:
+        problem(end_of_content[0][0] if end_of_content else None, "endOfContent(ofReply:) not at the content of outgoing message id reply")
+    for offset in words("keyAEObject"):
+        if not _inside(offset, content_places[:1]):
+            problem(offset, "keyAEObject outside the content of the reply")
+    for start, value in values:
+        if value == "ctnt" and not _inside(start, end_of_content[:1]):
+            problem(start, '"ctnt", the code of content, outside endOfContent(ofReply:)')
+
+    # With only its file.
+    file_properties = _function_bodies(code, r"\bfunc\s+fileProperties\s*\(")
+    if len(file_properties) != 1:
+        problem(None, "not one fileProperties(_:)")
+    properties = once(FILE_PROPERTIES, uncommented, "make without its file as its properties")
+    for offset in words("keyAEPropData"):
+        if not _inside(offset, properties[:1]):
+            problem(offset, "keyAEPropData outside the properties of make")
+    for offset in words("fileProperties"):
+        declared = re.search(r"\bfunc\s+$", code[max(0, offset - 40):offset]) is not None
+        if not declared and not _inside(offset, properties[:1]):
+            problem(offset, "fileProperties outside the properties of make")
+    only_the_file = [span for span in spans(ONLY_THE_FILE, uncommented) if _inside(span[0], file_properties[:1])]
+    keys = [match.start() for match in re.finditer(r"\bsetDescriptor\s*\(", code) if _inside(match.start(), file_properties[:1])]
+    if len(only_the_file) != 1 or len(keys) != 1:
+        problem(file_properties[0][0] if file_properties else None, "fileProperties(_:) with more than its file")
+    for start, value in values:
+        if value == "atfn" and not _inside(start, [span for span in only_the_file[:1]]):
+            problem(start, '"atfn" outside the file of the attachment')
+
+    # The parameters and positions only through the names read above.
+    for start, value in values:
+        if value in MAKE_CODES:
+            problem(start, f'"{value}", the code of {MAKE_CODES[value]}')
+    for pattern, _ in OTHER_POSITIONS:
+        for match in pattern.finditer(code):
+            problem(match.start(), match.group())
+
+
+def _check_sending(code, problem):
+    """Rule 10: MailEvents.swift sets an event's parameters only in the switch of
+    appleEvent(target:), sets a key of a record only in the builders that make the place, the
+    properties and the object specifiers, and sends an event only from sendNow, in its steps,
+    after the check of the Mail session."""
+    switch, _ = _switch_of_apple_event(code)
+    for match in re.finditer(r"\bsetParam\s*\(", code):
+        if switch is None or not _inside(match.start(), [switch]):
+            problem(match.start(), "setParam outside the switch of appleEvent(target:)")
+    builders = [span for signature in DESCRIPTOR_BUILDERS for span in _function_bodies(code, signature)]
+    for match in re.finditer(r"\bsetDescriptor\s*\(", code):
+        if not _inside(match.start(), builders):
+            problem(match.start(), "setDescriptor outside the builders of the place, the properties and the specifiers")
+
+    bodies = _function_bodies(code, SEND_NOW.pattern)
+    if len(bodies) != 1 or SEND_NOW_SIGNATURE.search(code) is None:
+        problem(None, "not one sendNow(_ request: Request) throws -> Value")
+        return
+    start, end = bodies[0]
+    body = code[start:end]
+    steps = []
+    for name, pattern in SEND_NOW_STEPS:
+        found = list(pattern.finditer(body))
+        if len(found) != 1:
+            problem(start + found[1].start() if len(found) > 1 else start, "sendNow without " + name + " once")
+        else:
+            steps.append((name, found[0].start()))
+    # A step that stands after a step that must follow it.
+    for number, (name, offset) in enumerate(steps):
+        if any(offset > later for _, later in steps[number + 1:]):
+            problem(start + offset, "sendNow with " + name + " out of its order")
+    # request is the parameter, and mail, target and event are each bound once, by their step.
+    for match in SEND_NOW_NAMES.finditer(body):
+        name = match.group(1)
+        declared = re.search(r"\blet\s+$", body[max(0, match.start() - 12):match.start()]) is not None
+        if name == "request" or not declared or len(re.findall(r"\blet\s+" + name + r"\b", body)) != 1:
+            problem(start + match.start(), "sendNow binds " + name + " again")
+    for match in re.finditer(r"\bsendEvent\b", code):
+        if not _inside(match.start(), [bodies[0]]):
+            problem(match.start(), "sendEvent outside sendNow")
+    if len(re.findall(r"\bsendEvent\b", body)) != 1:
+        problem(start, "sendNow without one sendEvent")
+    calls = []
+    for match in re.finditer(r"\bappleEvent\s*\(\s*target\b", code):
+        if re.search(r"\bfunc\s+$", code[max(0, match.start() - 40):match.start()]) is not None:
+            continue
+        calls.append(match.start())
+        if not _inside(match.start(), [bodies[0]]):
+            problem(match.start(), "appleEvent(target:) outside sendNow")
+    if len(calls) > 1:
+        problem(calls[1], "more than one call of appleEvent(target:)")
+
+
+def check_attach_requests(text, code, path):
+    """Rule 10 for a Swift file of Orra/: an attach request is made only in MailBridge's
+    attach, once. A request names the case through its type, as Request.attach, or with the
+    label toReply, which outside that place only the declaration of the case may hold. A
+    member of a value, such as mail.attach(file, reply), calls the bridge. It reads names,
+    not every way around them."""
+    problems = []
+
+    def problem(offset, name):
+        problems.append(SourceProblem(path, _line(text, offset), 10, name))
+
+    allowed = _function_bodies(code, r"\bfunc\s+attach\s*\(") if path == MAIL_BRIDGE_FILE else []
+    for match in REQUEST_ATTACH.finditer(code):
+        problem(match.start(), "an attach request outside MailBridge's attach")
+    inside = []
+    for match in TO_REPLY.finditer(code):
+        line = code[code.rfind("\n", 0, match.start()) + 1:match.start()]
+        if ATTACH_DECLARATION.match(line):
+            continue
+        if _inside(match.start(), allowed[:1]):
+            inside.append(match.start())
+        else:
+            problem(match.start(), "an attach request outside MailBridge's attach")
+    if len(inside) > 1:
+        problem(inside[1], "more than one attach request in MailBridge's attach")
+    return problems
+
+
 def check_mail_events(text, path=MAIL_EVENTS_FILE):
     """Rule 10 for MailEvents.swift: only the events of MAIL_EVENTS, every reply with its
-    window, and no code of MAIL_BANNED_CODES."""
+    window, make only as the attach event, and no code of MAIL_BANNED_CODES outside it."""
     comments, literals = _lex(text)
     code = _blanked(text, comments + literals)
     uncommented = _blanked(text, comments)
@@ -1263,7 +1671,7 @@ def check_mail_events(text, path=MAIL_EVENTS_FILE):
     def problem(offset, name):
         problems.append(SourceProblem(path, None if offset is None else _line(text, offset), 10, name))
 
-    # The enum holds exactly the three events, and its codes come from its raw values.
+    # The enum holds exactly the four events, and its codes come from its raw values.
     body = _enum_body(code, "MailEvent")
     declared = set()
     if body is None:
@@ -1315,15 +1723,22 @@ def check_mail_events(text, path=MAIL_EVENTS_FILE):
         if not any(start <= offset < end for start, end in allowed):
             problem(offset, "ropw not set to true")
 
-    # No code of a command that changes mail, in a string or as a number.
+    # make makes only an attachment, at the end of a reply's content, with only its file.
+    _check_attach(text, code, uncommented, literals, problem)
+    # The parameters only where the event is built, and the send only from sendNow.
+    _check_sending(code, problem)
+
+    # No code of a command that changes mail, in a string or as a number. content, which
+    # _check_attach allows as the place of an attachment, counts there.
     for start, end in literals:
         value = _string_value(text, start, end)
-        if value is None:
+        if value is None or value == "ctnt":
             continue
         name = MAIL_CHANGING_COMMANDS.get(value) if len(value) == 8 else MAIL_BANNED_CODES.get(value) if len(value) == 4 else None
         if name is not None:
             problem(start, f'"{value}", the code of {name}')
-    banned_numbers = {int.from_bytes(code_text.encode("latin-1"), "big"): (code_text, name) for code_text, name in MAIL_BANNED_CODES.items()}
+    numbered = {**MAIL_BANNED_CODES, **MAKE_CODES}
+    banned_numbers = {int.from_bytes(code_text.encode("latin-1"), "big"): (code_text, name) for code_text, name in numbered.items()}
     for match in INTEGER_LITERAL.finditer(code):
         literal = match.group(1).replace("_", "")
         number = int(literal, 0) if literal[:2].lower() in ("0x", "0o", "0b") else int(literal, 10)
@@ -1395,6 +1810,8 @@ def check_sources(root, apple_event_files=APPLE_EVENT_FILES):
             problems += _find(code, path, 3, APPLE_EVENT_BUILDING)
         if path == MAIL_EVENTS_FILE:
             problems += check_mail_events(text, path)
+        if in_app:
+            problems += check_attach_requests(text, code, path)
         if in_tests:
             problems += _find(code, path, 4, APPLE_EVENT_SENDING)
         if (in_app and path != MAIL_APP_FILE) or in_tests:

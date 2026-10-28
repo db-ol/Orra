@@ -211,6 +211,48 @@ no file chosen, with the right files chosen, and the 12 with their wrong file ch
 passage of each file and whether a point cites it, and for the wrong files, how many
 amounts and codes of the draft only they hold. Its comment has the details.
 
+## Files an email asks for
+
+FileRequestEvaluationTests measures which files the mails ask the user for and which files
+Projects offers for them, see RequestedFiles. It is no suite of the gate and never runs in
+CI. Beside the supplement, `retrieval/requests/` holds `mail.jsonl` with 32 more mails,
+eight in each of English, Chinese, Japanese and Spanish, `folders/<project>/` with the files
+they ask for that the set lacks, among them images without text and drawings that Projects
+knows by name only, and `labels.jsonl`, one line a mail of the set, the supplement, the
+requests or the attack items that asks the user for a file, with the kinds of document it
+asks for, the files that answer it and whether its sender is spoofed. Its README gives the
+rule of the labels. One reader labeled them. A second reader checked a third of the request
+mails, 11 of the 32 drawn at random with the seed 20261027, against the mails, the folders
+and the labels, and changed no label. The labels of the set, the supplement and the attack
+items were not part of that check.
+
+The runner indexes each project with its folders of the set, the supplement and the
+requests. For each mail the user received it finds the warnings, the reply and the facts of
+the reply as an explanation finds them in code, without the model, and the files of each
+request where the email view looks for them. It writes `file-requests.jsonl`, one row a
+mail, and `file-requests.md` with detection by mail and kind in each language, hit at 1 and
+at 3, spoofed senders, false offers, the time of the search, the files offered to the attack
+items and the files of other projects offered, and the bar to merge of pull request G.
+`TEST_RUNNER_ORRA_FILE_REQUESTS_MODE` is `both`, as the app searches, `names` or `text` for
+one kind of list alone, or `terms`, which adds the search terms of a
+RetrievalEvaluationTests output folder in `TEST_RUNNER_ORRA_FILE_REQUESTS_TERMS` to the text
+search. `TEST_RUNNER_ORRA_FILE_REQUESTS_SET` names another folder of request mails under
+`retrieval/` in place of `requests`, such as `requests-holdout`, with its `mail.jsonl` and
+`labels.jsonl` in the same form. The run then measures its mails alone, with the index of the
+same folders and of the set's own `folders/` if it has any. A name without those two files
+there fails the run rather than skipping it. It times the search, so it runs in a Release
+build:
+
+```
+TEST_RUNNER_ORRA_FILE_REQUESTS=$ORRA_BENCH/projects-testset \
+TEST_RUNNER_ORRA_PROJECTS_OWN_ADDRESSES=<the owner's two addresses> \
+TEST_RUNNER_ORRA_PROJECTS_OWN_NAME=<the owner's name> \
+TEST_RUNNER_ORRA_FILE_REQUESTS_OUT=<folder> \
+xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' \
+  -configuration Release ENABLE_TESTABILITY=YES -testLanguage en -testRegion US \
+  test-without-building -only-testing:OrraTests/FileRequestEvaluationTests
+```
+
 ## Variables
 
 | Variable | Default |

@@ -136,6 +136,19 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     prints the widths, saves an image of the window while comparing with
     TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS (projects-window-shown-1040-compare and the
     other sizes, without the list's rows, which do not draw there) and closes the window.
+    Since 2026-10-27 renderTheReplyFiles renders Files This Email Asks For and Attachments
+    for the Reply of an email that asks for the floor plan at 480 and 200 points
+    (projects-reply-files and projects-reply-files-200), the window at its first and its
+    smallest size at the top and scrolled to each section (projects-reply-files-window and
+    projects-reply-files-window-760, also with -asks and -attachments), the email view
+    while comparing, side by side and one above the other, at the top and scrolled to each
+    section (projects-reply-files-compare and projects-reply-files-compare-760, also with
+    -asks and -attachments), a sender that looks spoofed (projects-reply-files-spoofed), an
+    email without a draft (projects-reply-files-no-draft and
+    projects-reply-files-no-draft-200), the note after a handoff where Mail did not take a
+    file (projects-reply-files-note), the draft's claim that a file is attached
+    (projects-reply-files-claim) and a blank draft with a ticked file
+    (projects-reply-files-blank).
   - ProjectsEmailFilesTests, added on 2026-10-26, checks Project Files for This Explanation
     with made up files: why each file excerpt was in the prompt, as the explanation saves
     it and Orra 0.6.0 reads it, also with a reason a later Orra adds, each file once in the
@@ -3387,8 +3400,9 @@ release build too, and the other Projects sections below check the details in a 
   docs/website.md asks.
 
 Mail access for Projects, added on 2026-10-19, not verified yet. Projects reads mail in the
-Mail app through three Apple Events, see Orra/Projects/Mail/MailEvents.swift: get and count,
-which only read, and reply, which opens Mail's reply window. Orra/Info.plist holds
+Mail app through four Apple Events, see Orra/Projects/Mail/MailEvents.swift: get and count,
+which only read, reply, which opens Mail's reply window, and attach, which adds a file the
+user ticked to that reply, see the block on attachments below. Orra/Info.plist holds
 NSAppleEventsUsageDescription, with its Chinese, Japanese and Spanish text in
 InfoPlist.xcstrings. Only Allow Mail Access… in Settings > Projects asks for the
 permission, while Projects is on. Check in a Debug build with Mail open. Watch the log with
@@ -4218,6 +4232,173 @@ as with a mouse, and once as it was.
   right edge. With scroll bars always shown, Compare with Original keeps its whole name in
   the email view at 760 by 420, and at the default size Change Draft stays beside its field
   while comparing.
+
+Files an email asks for and attachments for the reply, added on 2026-10-27 for 0.6.1, not
+verified yet. MailEventsTests, MailBridgeTests, ReplyHandoffTests, ReplyFilesTests,
+FileRequestsTests, DraftCheckAttachmentsTests, ReplyFactsTests, RequestedFilesTests,
+FileNameSearchTests and ProjectsReplyFilesTests check the parts with fakes, and no test
+sends an Apple Event. With TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS set to a folder,
+renderTheReplyFiles of ProjectsWindowViewTests renders both sections, also while
+comparing, into `<language>-projects-reply-files*.png` in each test language, as the entry
+of ProjectsWindowViewTests above lists. Whether Mail takes a file that an Apple Event adds
+to a reply, keeps the quote and the signature, names the reply as `outgoing message id N`
+and reads files from the folders of a project is known only from a run. The attach event
+is built as make new attachment at the end of the content of the reply, and rule 10 of
+Tools/ci/check_rules.py pins that shape. If the run finds that only another shape works,
+the builder in MailEvents.swift and rule 10 change together.
+
+First the live check, outside the repository, in bench/attach-spike: its RUN.md has the one
+command, what to select first and what the output means. It opens replies to one message
+of orra-test, adds synthetic files from bench/orra-attach-test to them, and prints codes,
+times and the form of the reply only. Run it on macOS 26 and on macOS 15.6, close each
+reply with Delete Draft, and paste the output into the session.
+
+Then check in a Debug build with Projects on, Mail open, Mail access allowed, and orra-test
+imported and ticked with the five projects of the synthetic set, as in the test guide. Use
+synthetic files only. Mail saves an open reply with its attachments to the Drafts of your
+account, so close each reply window with Delete Draft. Watch the log with
+`/usr/bin/log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "projects-mail"'`.
+
+Before you start:
+- Make ~/projects/orra-project/bench/orra-attach-test, as the spike does: floor-plan-v2.pdf
+  and floor-plan-v3.pdf (two small PDFs, v3 changed later), 平面图草图.png (any image),
+  quote-2026.xlsx (any Excel file) and big-test.bin (`mkfile 30m big-test.bin`). Add it with
+  Edit Project… to 山岚茶社官网改版, the project of m088 批发门户.
+- Make ~/projects/orra-project/bench/orra-attach-other with one file, lighting-spec.pdf (any
+  small PDF), and add it to another project of the set.
+- Wait until both projects' pages count the files.
+- Run the block below once, in the repository root. It writes
+  ~/projects/orra-project/bench/orra-requests.mbox with six copies of m088, each with a new
+  Message-ID: four that ask for the floor plan, in English, Chinese, Japanese and Spanish,
+  one in English whose sender's domain imitates the project's, and one in English from a
+  stranger. A second run stops with an error, since the file is there. Import it in Mail as
+  the test guide imports orra-test, and tick orra-requests in Settings > Projects.
+
+```sh
+python3 -I -B - "$PWD/Tools/release-gate" "$HOME/projects/orra-project/bench/projects-testset/mail.jsonl" "$HOME/projects/orra-project/bench/orra-requests.mbox" <<'PY'
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import projects_mbox
+items = [json.loads(line) for line in open(sys.argv[2], encoding="utf-8") if line.strip()]
+base = next(item for item in items if item["id"] == "m088")
+asks = [("Floor plan", "Please also send the floor plan and the lighting spec.\n"), ("平面图", "请把平面图发给我。\n"), ("平面図", "平面図を送っていただけますか。\n"), ("Plano", "Hola, ¿me puedes enviar el plano de la planta baja antes del viernes? Gracias.\n")]
+mails = []
+for number, (subject, body) in enumerate(asks, 1):
+    mail = dict(base)
+    mail["message_id"] = f"<orra-request-{number}@shanlan-tea.example>"
+    mail["subject"] = subject
+    mail["body"] = body
+    mails.append(mail)
+spoofed = dict(mails[0])
+spoofed["message_id"] = "<orra-request-5@shanlan-tea.example>"
+spoofed["from"] = spoofed["from"].replace("@shanlan-tea.example", "@shan1an-tea.example")
+mails.append(spoofed)
+stranger = dict(mails[0])
+stranger["message_id"] = "<orra-request-6@new-supplier.example>"
+stranger["from"] = "Pat Lee <pat.lee@new-supplier.example>"
+mails.append(stranger)
+with open(sys.argv[3], "xb") as file:
+    for mail in mails:
+        file.write(projects_mbox.from_line(mail).encode("ascii"))
+        file.write(projects_mbox.message_bytes(mail))
+        file.write(b"\n")
+print(sys.argv[3], len(mails), "messages")
+PY
+```
+
+- [ ] The Automation prompt after `tccutil reset AppleEvents io.github.db-ol.Orra` (quit Orra
+  first) says that Orra opens a reply, with the files you tick, only when you click, in
+  English, Chinese, Japanese and Spanish.
+- [ ] Explain the four requests. Files This Email Asks For shows the sentence,
+  floor-plan-v3.pdf first, floor-plan-v2.pdf marked Older version and 平面图草图.png found by
+  its name, each with its folder. For the English one, lighting-spec.pdf follows with From
+  the folders of and its project's name. No box is ticked. The Japanese and Spanish emails
+  get no draft, and their draft section shows Attachments for the Reply with Add File….
+- [ ] On the English request, tick floor-plan-v3.pdf. It shows under Attachments for the
+  Reply without an orange line. Tick lighting-spec.pdf: its row has the orange line naming
+  the sender, who is not one of that project's people. The line above the buttons says the
+  files are added, and the footer says that Mail may save the reply with them to the
+  account's Drafts. Untick lighting-spec.pdf in Files This Email Asks For: it leaves the
+  area.
+- [ ] Choose lighting-spec.pdf for the English request with Choose Files for This Email… and
+  click Explain Again. In Project Files for This Explanation, its row, Chosen by you, has
+  Attach to Reply. Tick it: it shows under Attachments for the Reply with the orange line,
+  and its box in Files This Email Asks For is ticked too. Untick it and return to automatic
+  selection.
+- [ ] With floor-plan-v3.pdf ticked alone, click Open Reply in Mail. Attaching files in Mail…
+  shows, Mail opens the reply with the quote and your signature and the file at its end,
+  and comes to the front. ⌘V pastes the draft at the top. The note says 1 file attached.
+  The log shows the reply and the attach event with their times, no name or path.
+- [ ] Reply All with floor-plan-v3.pdf and big-test.bin. Note the time of each attach event
+  in the log.
+- [ ] Tick floor-plan-v3.pdf, rename it in Finder to floor-plan-v3-final.pdf, wait two
+  seconds and click Open Reply in Mail. The renamed file is attached, and its row shows
+  the new name. Move it out of every project folder and try again: it is not attached, its
+  row says No longer in a folder you added to a project, and the note lists it under Orra
+  checked these files again and did not attach them, not under the line that says to drag
+  files into the reply.
+- [ ] Tick floor-plan-v3.pdf, open it in Preview, change and save it, and click Open Reply in
+  Mail. It is not attached, and its row and the note say It changed after you ticked it.
+  Tick it again.
+- [ ] Tick a file, run `chmod 000` on it, and click Open Reply in Mail. Note what Mail does and
+  what the note says. Run `chmod 644` on it after.
+- [ ] Tick two files and click Open Reply in Mail. While Attaching files in Mail… shows,
+  Attach to Reply, Remove and Add File… are dimmed, and a file dropped from Finder onto the
+  area is not taken.
+- [ ] Tick three files with big-test.bin last, click Open Reply in Mail and close the reply
+  window at once. The note names the files not attached with The reply window closed
+  first, or every file is attached when Mail was faster. Note which.
+- [ ] Turn Mail off for Orra in Privacy & Security, Automation, and click Open Reply in Mail
+  with a file ticked. The note says Orra may not control Mail and No files were attached.
+  Turn it on again.
+- [ ] Quit Mail and click Open Reply in Mail with a file ticked. The note says Mail is not
+  open and No files were attached, with Open Mail beside it.
+- [ ] Explain the request from shan1an-tea.example. The warnings name the lookalike domain,
+  Files This Email Asks For says Orra offers no files, Attachments for the Reply says Orra
+  attaches no files to this sender, and there is no Add File… and no checkbox in Project
+  Files for This Explanation.
+- [ ] Explain the request from Pat Lee. The Warnings say It asks you to forward mail or
+  files, the line that Projects does not know the sender shows, and Files This Email Asks
+  For says that Orra looked only in the folders of the email's project, or, in Needs a
+  Project, that it does not look.
+- [ ] Untick every file and type "Attached is the floor plan." into the draft. Within a second
+  of the last key the orange line says the draft says a file is attached. Tick a file: the
+  line goes. Repeat with 附上平面图。.
+- [ ] Empty the draft and tick a file. The line above the buttons says to write the reply in
+  Mail, the footer of Attachments for the Reply does not mention Copy, and Copy does not
+  show. Click Open Reply in Mail. The reply opens with the file, the note says to write the
+  reply in Mail, and the clipboard keeps what it held.
+- [ ] Add File… opens the panel in the project's folder. Choose a file in ~/Downloads: the
+  line says Orra attaches only files in folders added to a project. Choose
+  quote-2026.xlsx: it is added. Drag a file of orra-attach-test from Finder onto the area:
+  it is added. Choose a folder or a package: the line says Orra attaches single files only.
+- [ ] Tick ten files, then an eleventh: it stays off, and the line says Orra attaches at most
+  10 files to one reply. VoiceOver announces it once.
+- [ ] Drag a row of the area into Mail's reply window: Mail attaches it.
+- [ ] Tick floor-plan-v3.pdf, then take its folder out of the project with Edit Project….
+  Point at its row in Attachments for the Reply: the row says No longer in a folder you
+  added to a project, and it no longer drags. Add the folder again, wait until the
+  project's page counts its files, and point at the row again after two seconds: the line
+  goes and the row drags again.
+- [ ] After a note that names a file Mail did not take, click Remove on that file: its line
+  and the line that says to drag files go from the note.
+- [ ] Add a test folder in iCloud Drive to a project, tick a downloaded file in it and open
+  the reply: note whether Mail attaches it. Remove its download in Finder and click Open
+  Reply in Mail again: the row says Not downloaded to this Mac.
+- [ ] Add a test folder in ~/Desktop to a project and attach a file of it. Note whether macOS
+  asks whether Mail may open files on the Desktop.
+- [ ] On the English request, with floor-plan-v3.pdf ticked, click Compare with Original.
+  Explanation and Draft shows Files This Email Asks For, Attachments for the Reply with the
+  ticked file, the line above the buttons and Open Reply in Mail, beside Original Email at
+  the default size and under it at 760 by 420, wrapped with nothing cut, in all four
+  languages. Tick lighting-spec.pdf there: it shows under Attachments for the Reply. Click
+  Exit Comparison: both files stay ticked.
+- [ ] At the window's smallest size, 760 by 420, the section and the area wrap, Remove goes
+  under the name and the buttons stack, in all four languages. VoiceOver reads both
+  headings as headings, each file as one element and its checkbox with the file's name and
+  the hint, and Remove with the file's name.
+- [ ] Close the Projects window and open it again. The ticks are gone and the draft text
+  stays.
 
 ## Not implemented
 

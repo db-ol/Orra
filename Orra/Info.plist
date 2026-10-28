@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Orra reads mail in the Mail app only for Projects, and only from the mailboxes you choose. The mail it reads stays on this Mac.</string>
+	<string>Orra reads mail in the Mail app only for Projects, and only from the mailboxes you choose. It opens a reply, with the files you tick, only when you click. The mail it reads stays on this Mac.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Orra listens to the sound your Mac plays, such as a call, to show live captions and translations. The audio stays on this Mac.</string>
 	<key>SUFeedURL</key>

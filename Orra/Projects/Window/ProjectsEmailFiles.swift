@@ -215,11 +215,11 @@ extension ProjectsEmailArea {
         }
 
         var body: some View {
-            let files = ProjectsEmailFiles.files(in: explanation)
+            let rows = self.rows()
             DisclosureGroup(isExpanded: Binding(get: { emailModel.showsProjectFiles }, set: { emailModel.showsProjectFiles = $0 })) {
-                content(files)
+                content(rows)
             } label: {
-                Text(verbatim: ProjectsWindowText.projectFiles(files.count))
+                Text(verbatim: ProjectsWindowText.projectFiles(rows.read.count))
                     .font(.headline)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
@@ -236,11 +236,10 @@ extension ProjectsEmailArea {
             email.project.flatMap { id in runtime.projectList.first { $0.id == id } }
         }
 
-        private func content(_ files: [ProjectsEmailFiles.File]) -> some View {
-            let missing = ProjectsEmailFiles.chosenWithoutExcerpts(in: explanation)
-            let reload = Reload(messageID: emailModel.messageID, files: files + missing, projectList: runtime.projectList)
+        private func content(_ rows: (read: [FileRow], missing: [FileRow])) -> some View {
+            let reload = Reload(messageID: emailModel.messageID, files: (rows.read + rows.missing).map(\.file), projectList: runtime.projectList)
             return VStack(alignment: .leading, spacing: 12) {
-                if files.isEmpty {
+                if rows.read.isEmpty {
                     Text(verbatim: ProjectsWindowText.noProjectFiles(inProject: email.project != nil))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -253,13 +252,13 @@ extension ProjectsEmailArea {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    ForEach(files) { file in
-                        FileRow(file: file, place: place(of: file), project: projectLine(file))
+                    ForEach(rows.read, id: \.file.id) { row in
+                        row
                     }
                 }
                 // The files the user chose that gave the model nothing, after those it read.
-                ForEach(missing) { file in
-                    FileRow(file: file, place: place(of: file), project: projectLine(file))
+                ForEach(rows.missing, id: \.file.id) { row in
+                    row
                 }
                 controls
                 if let note = emailModel.choiceNote {
@@ -386,6 +385,17 @@ extension ProjectsEmailArea {
             return ProjectsEmailFiles.place(of: file.url, in: roots)
         }
 
+        /// The rows the list shows, in its order: the files whose excerpts the explanation gave
+        /// the model, then the files the user chose that gave it nothing. Each has the email
+        /// view for Attach to Reply, those of the files the user chose too.
+        func rows() -> (read: [FileRow], missing: [FileRow]) {
+            (ProjectsEmailFiles.files(in: explanation).map(row), ProjectsEmailFiles.chosenWithoutExcerpts(in: explanation).map(row))
+        }
+
+        private func row(_ file: ProjectsEmailFiles.File) -> FileRow {
+            FileRow(file: file, place: place(of: file), project: projectLine(file), emailModel: emailModel)
+        }
+
         /// The project of a file of another project than the email's, nil for the email's own.
         private func projectLine(_ file: ProjectsEmailFiles.File) -> String? {
             guard let id = file.project, id != explanation.project else { return nil }
@@ -395,14 +405,17 @@ extension ProjectsEmailArea {
 
     /// One file of the list: its name, the folder that holds it, whether a point cites it,
     /// why it was in the prompt, its project when that is not the email's, and the warnings
-    /// found at it, as one element for VoiceOver, then a chip for each saved excerpt. As the
-    /// attachments under Original Email show, see ProjectsAttachmentList.
+    /// found at it, as one element for VoiceOver, then a chip for each saved excerpt, and
+    /// Attach to Reply while files can be ticked for the reply. As the attachments under
+    /// Original Email show, see ProjectsAttachmentList.
     struct FileRow: View {
         let file: ProjectsEmailFiles.File
         /// Where the file is now, nil while the folders resolve.
         let place: ProjectsEmailFiles.Place?
         /// The line that names the project of a file of another project.
         let project: String?
+        /// The email view, for Attach to Reply, nil where the row shows without it.
+        var emailModel: ProjectsEmailModel? = nil
 
         var body: some View {
             VStack(alignment: .leading, spacing: 6) {
@@ -461,6 +474,10 @@ extension ProjectsEmailArea {
                 // A chosen file's name has no excerpt to show.
                 if !file.isNameOnly {
                     ExcerptChips(file: file)
+                        .padding(.leading, 26)
+                }
+                if let emailModel {
+                    AttachToggle(url: file.url, emailModel: emailModel)
                         .padding(.leading, 26)
                 }
             }

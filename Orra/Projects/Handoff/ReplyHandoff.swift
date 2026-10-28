@@ -15,6 +15,14 @@ import os
 /// the reply fails, the draft stays on the clipboard. Copy only puts the draft on the
 /// clipboard.
 ///
+/// Between the reply and the second copy, Mail adds the files the user ticked for the
+/// reply, one event a file in their order, each at the end of that reply, see
+/// `attach(_:to:)`. Each file is checked again right before its event, so what Mail reads is
+/// still the file the user ticked, still ticked and in a folder a project holds at that
+/// moment. An email Projects wrote no draft for gets the reply and its files without the
+/// clipboard: with no draft, no step of a handoff, the failed ones included, puts anything
+/// on the clipboard. The draft and the files go to Mail only on the user's click.
+///
 /// The window runs one handoff at a time. It turns off Open Reply, Reply All and Copy while
 /// one runs, so the clipboard holds the draft of the reply window that Mail brings forward.
 ///
@@ -26,12 +34,16 @@ import os
 ///
 /// Logs what happened and error codes only.
 struct ReplyHandoff {
-    /// What a handoff did, for the window to say. None holds mail data.
+    /// What a handoff did, for the window to say. None holds mail data, a file's name or
+    /// its path, so the log may show it.
     nonisolated enum Outcome: Equatable, Sendable {
-        /// Mail opened the reply window. The draft went on the clipboard, and while Orra was
-        /// still in front and the window open it went there again and Mail was asked to come
-        /// to the front. The window says to press Command V there.
-        case replyOpened
+        /// Mail opened the reply window, with what became of each file in the order given,
+        /// empty when no file was given. With a draft, the draft went on the clipboard, and
+        /// while Orra was still in front and the window open it went there again. Then Mail
+        /// was asked to come to the front. The window says to press Command V there. The
+        /// files are fewer than given when the window closed while Mail added them: Mail
+        /// was not asked for the rest.
+        case replyOpened(files: [FileResult])
         /// The draft is on the clipboard and nothing else happened: Copy, or Open Reply ended
         /// before Mail was asked, such as when the window closed.
         case copied
@@ -48,22 +60,118 @@ struct ReplyHandoff {
         case emptyDraft
         /// The pasteboard did not take the draft, so nothing else happened either.
         case notCopied
+        /// Without a draft: Mail does not run, so there is no reply window, and nothing
+        /// went on the clipboard.
+        case mailNotRunning
+        /// Without a draft: Mail did not make the reply, for this reason, and nothing went
+        /// on the clipboard. With `timedOut`, Mail may still open the reply window later.
+        case replyFailed(MailBridgeError)
+        /// Without a draft: the handoff ended before Mail was asked, such as when the window
+        /// closed. Nothing changed.
+        case stopped
+    }
+
+    /// What became of a file given for the reply.
+    nonisolated enum FileResult: Equatable, Sendable {
+        /// Mail took it into the reply.
+        case attached
+        case notAttached(AttachProblem)
+    }
+
+    /// Why a file is not in the reply. None names the file.
+    nonisolated enum AttachProblem: Equatable, Sendable {
+        /// The check right before its event found it changed, gone, outside the folders the
+        /// projects hold now, or not on this Mac, so Mail was not asked for it. The next
+        /// file still goes.
+        case notChecked(ReplyFileProblem)
+        /// It was no longer ticked when its turn came, as when a warning that the sender may
+        /// not be who they claim arrived while earlier files went, so Mail was not asked for
+        /// it. The next file still goes.
+        case unticked
+        /// Mail's answer to the reply named no outgoing message of its own, or Mail started
+        /// again while it made the reply, so Orra cannot say where the files go.
+        case noReplyNamed
+        /// -1728: the reply is gone, as when the user closed its window first.
+        case replyClosed
+        /// Mail did not take this file, with its error code. The next file still goes.
+        case refused(code: Int)
+        /// Mail did not answer in time, and may still add the file.
+        case timedOut
+        /// Not asked for, since Mail did not answer in time for a file before it. A Mail that
+        /// slow would hold the send thread up to the timeout for each of the rest.
+        case afterTimeOut
+        /// -1743 or -1744: Orra may not control Mail.
+        case notAllowed
+        /// The Mail that made the reply quit, also when another Mail runs now.
+        case mailQuit
+
+        /// Whether Orra kept the file back itself, by its check or since it was no longer
+        /// ticked, rather than Mail not taking it.
+        var isOrras: Bool {
+            switch self {
+            case .notChecked, .unticked: true
+            case .noReplyNamed, .replyClosed, .refused, .timedOut, .afterTimeOut, .notAllowed, .mailQuit: false
+            }
+        }
+    }
+
+    /// The files the user ticked for a reply, in their order, with the check each passes
+    /// again right before Mail is asked to add it, such as ReplyFiles.recheck with the
+    /// folders the projects hold at that moment. The check gives the file as it is then, at
+    /// its new place after a rename, and the event takes that place. `isTicked` says whether
+    /// the user still has the file ticked, asked before its check and again right before its
+    /// event, so a file that went off the reply meanwhile, as every file does once the sender
+    /// looks spoofed, is not given to Mail.
+    nonisolated struct Files: Sendable {
+        var files: [ReplyFile]
+        var isTicked: @Sendable (ReplyFile) async -> Bool
+        var check: @Sendable (ReplyFile) async -> Result<ReplyFile, ReplyFileProblem>
+
+        init(
+            _ files: [ReplyFile],
+            isTicked: @escaping @Sendable (ReplyFile) async -> Bool = { _ in true },
+            check: @escaping @Sendable (ReplyFile) async -> Result<ReplyFile, ReplyFileProblem>
+        ) {
+            self.files = files
+            self.isTicked = isTicked
+            self.check = check
+        }
+
+        /// No file, as for every reply before the user ticks one.
+        static let none = Files([]) { .success($0) }
     }
 
     /// Puts the draft on the clipboard as it is, and says whether the pasteboard took it.
     let copy: (String) -> Bool
-    /// Mail. The handoff uses only `isRunning` and `reply`.
+    /// Mail. The handoff uses only `isRunning`, `reply` and `attach`.
     let mail: MailBridge
     /// Whether Orra is the active app, as it is right after the user's click.
     let isOrraActive: () -> Bool
     /// Brings Mail to the front, once it opened the reply window.
     let bringMailToFront: () -> Void
 
-    /// Open Reply in Mail, or Reply All with `all`. Only on the user's click.
-    func openReply(_ draft: String, to message: MailMessageRef, all: Bool) async -> Outcome {
-        let outcome = await handOver(draft, to: message, all: all)
-        Logger.projects.notice("Reply handoff, open reply\(all ? " to all" : "", privacy: .public): \(String(describing: outcome), privacy: .public)")
+    /// Open Reply in Mail, or Reply All with `all`, with the files the user ticked for the
+    /// reply, in their order. Only on the user's click. A nil draft is an email Projects
+    /// wrote no draft for, and nothing then goes on the clipboard.
+    func openReply(_ draft: String?, to message: MailMessageRef, all: Bool, files: Files = .none) async -> Outcome {
+        let outcome = await handOver(draft, to: message, all: all, files: files)
+        Logger.projects.notice("Reply handoff, open reply\(all ? " to all" : "", privacy: .public) with \(files.files.count) files: \(String(describing: outcome), privacy: .public)")
         return outcome
+    }
+
+    /// Open Reply in Mail, or Reply All, when no reply can be asked for: Mail did not confirm
+    /// that its message is the email, for this reason, or does not run. With a draft, the
+    /// draft goes on the clipboard as Copy puts it, and the outcome says why no reply opened.
+    /// Without a draft nothing goes on the clipboard.
+    func replyNotAsked(_ draft: String?, because error: MailBridgeError) -> Outcome {
+        guard let draft else {
+            return error == .mailNotRunning ? .mailNotRunning : .replyFailed(error)
+        }
+        let copied = put(draft)
+        guard copied == .copied else {
+            return copied
+        }
+        return error == .mailNotRunning ? .copiedMailNotRunning : .copiedReplyFailed(error)
     }
 
     /// Copy: puts the draft on the clipboard and asks nothing of Mail.
@@ -73,30 +181,37 @@ struct ReplyHandoff {
         return outcome
     }
 
-    private func handOver(_ draft: String, to message: MailMessageRef, all: Bool) async -> Outcome {
-        let copied = put(draft)
-        guard copied == .copied else {
-            return copied
+    private func handOver(_ draft: String?, to message: MailMessageRef, all: Bool, files: Files) async -> Outcome {
+        if let draft {
+            let copied = put(draft)
+            guard copied == .copied else {
+                return copied
+            }
         }
         guard mail.isRunning() else {
-            return .copiedMailNotRunning
+            return draft == nil ? .mailNotRunning : .copiedMailNotRunning
         }
+        let reply: MailReplyRef?
         do {
-            try await mail.reply(message, all)
+            reply = try await mail.reply(message, all)
         } catch is CancellationError {
             // Cancelled before its turn on the send thread, so Mail was never asked.
-            return .copied
+            return draft == nil ? .stopped : .copied
         } catch {
             // mailNotRunning here means that Mail quit before it answered.
             let error = error as? MailBridgeError ?? .failed(code: (error as NSError).code)
+            guard draft != nil else {
+                return error == .mailNotRunning ? .mailNotRunning : .replyFailed(error)
+            }
             return error == .mailNotRunning ? .copiedMailNotRunning : .copiedReplyFailed(error)
         }
-        // The window closed while Mail made the reply, such as when the user closed it or
-        // Projects turned off. Mail was asked, so the reply window opens, but the clipboard
-        // and Mail stay as they are.
+        let results = await attach(files, to: reply)
+        // The window closed while Mail made the reply or added the files, such as when the
+        // user closed it or Projects turned off. Mail was asked, so the reply window opens,
+        // but the clipboard and Mail stay as they are.
         guard !Task.isCancelled else {
             Logger.projects.info("Reply handoff: the window closed, Mail stays where it is")
-            return .replyOpened
+            return .replyOpened(files: results)
         }
         // A reply can take seconds. When the user went to another app meanwhile, Orra leaves
         // the clipboard and Mail as they are, so a copy made there is kept and Mail never
@@ -104,11 +219,84 @@ struct ReplyHandoff {
         // click in the window copied another one meanwhile, and Mail comes forward.
         guard isOrraActive() else {
             Logger.projects.info("Reply handoff: Orra is no longer in front, Mail stays where it is")
-            return .replyOpened
+            return .replyOpened(files: results)
         }
-        _ = copy(draft)
+        if let draft {
+            _ = copy(draft)
+        }
         bringMailToFront()
-        return .replyOpened
+        return .replyOpened(files: results)
+    }
+
+    /// Adds the files to the reply Mail made, one event a file, in order, each at the end of
+    /// the reply. Without a reply Mail named, none goes. Each file is checked again right
+    /// before its event, and one that fails the check, or is no longer ticked before or after
+    /// it, is left out, with the reason. A closed reply window, a refused permission, Mail
+    /// quitting and a timeout stop the files after it: a timeout since a slow Mail would hold
+    /// the send thread for each file in turn. Any other error skips its file only. A
+    /// cancelled task ends the loop, and the files after it are left out of the results,
+    /// since Mail was never asked for them.
+    private func attach(_ files: Files, to reply: MailReplyRef?) async -> [FileResult] {
+        guard let reply else {
+            return files.files.map { _ in .notAttached(.noReplyNamed) }
+        }
+        var results: [FileResult] = []
+        var stopped: AttachProblem?
+        for file in files.files {
+            if let stopped {
+                results.append(.notAttached(stopped))
+                continue
+            }
+            guard !Task.isCancelled else { break }
+            guard await files.isTicked(file) else {
+                results.append(.notAttached(.unticked))
+                continue
+            }
+            let current: ReplyFile
+            switch await files.check(file) {
+            case .success(let checked):
+                current = checked
+            case .failure(let problem):
+                results.append(.notAttached(.notChecked(problem)))
+                continue
+            }
+            guard !Task.isCancelled else { break }
+            // The check can take a while, such as for a folder on a share that hangs.
+            guard await files.isTicked(file) else {
+                results.append(.notAttached(.unticked))
+                continue
+            }
+            do {
+                try await mail.attach(current.url, reply)
+                results.append(.attached)
+            } catch is CancellationError {
+                break
+            } catch {
+                let problem = Self.problem(error as? MailBridgeError ?? .failed(code: (error as NSError).code))
+                results.append(.notAttached(problem))
+                switch problem {
+                case .replyClosed, .notAllowed, .mailQuit:
+                    stopped = problem
+                case .timedOut:
+                    stopped = .afterTimeOut
+                case .noReplyNamed, .refused, .afterTimeOut, .notChecked, .unticked:
+                    break
+                }
+            }
+        }
+        return results
+    }
+
+    /// What an error of `attach` means for the file.
+    private static func problem(_ error: MailBridgeError) -> AttachProblem {
+        switch error {
+        case .notFound: .replyClosed
+        case .denied, .notAsked: .notAllowed
+        case .mailNotRunning: .mailQuit
+        case .timedOut: .timedOut
+        case .notAnswered(let code), .failed(let code): .refused(code: code)
+        case .changedWhileReading, .unexpectedReply: .refused(code: 0)
+        }
     }
 
     /// Puts the draft on the clipboard, unless it is empty.

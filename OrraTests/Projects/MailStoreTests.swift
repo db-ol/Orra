@@ -1436,9 +1436,11 @@ struct MailStoreTests {
             modified: Self.date(-1), text: "The tealkettle floor plan.", fileHiddenRuns: 0, score: 1, matchedTerm: true,
             matchedTerms: ["floor plan", "tealkettle", "lobby"])
         let model = HeldAnswer()
+        // Kim wrote before, so the request for the plan is no stranger's, which would keep
+        // other projects' passages out of the explanation.
         let known = ExplainService.Known(ownName: "Bai Lu", ownAddresses: [Self.work], projects: [
             ExplainService.Project(id: Self.harbor, name: "Harbor"), ExplainService.Project(id: Self.maple, name: "Maple"),
-        ])
+        ], correspondents: [SenderChecks.Person(name: "Kim", address: "kim@quay.example")])
         let explained = Self.date(2)
         let service = ExplainService(
             lookups: ExplainService.Lookups(

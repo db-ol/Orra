@@ -5,7 +5,7 @@ import os
 import Synchronization
 
 extension Logger {
-    /// The Apple Events Projects sends to Mail: which of the three events, how long it took
+    /// The Apple Events Projects sends to Mail: which of the four events, how long it took
     /// and its error code, and the answers of the permission check. Never what was asked for
     /// or what came back.
     nonisolated static let projectsMail = Logger(subsystem: ProblemReport.subsystem, category: "projects-mail")
@@ -13,9 +13,11 @@ extension Logger {
 
 /// The only Apple Events Orra sends, all to Mail. Each raw value is the event class and the
 /// event ID, as Mail.sdef writes them. Get and count only read. Reply makes a reply to a
-/// message in a window of its own, which Mail never sends by itself.
+/// message in a window of its own, which Mail never sends by itself. Attach makes only an
+/// attachment, at the end of the content of a reply Mail just made, with a file the user
+/// ticked for it.
 ///
-/// Tools/ci/check_rules.py reads this enum. It must hold these three and no other, and every
+/// Tools/ci/check_rules.py reads this enum. It must hold these four and no other, and every
 /// event MailEvents builds takes its codes from here.
 nonisolated enum MailEvent: String, CaseIterable, Sendable {
     /// get, in the standard suite: reads a property or the elements of an object.
@@ -24,6 +26,9 @@ nonisolated enum MailEvent: String, CaseIterable, Sendable {
     case count = "corecnte"
     /// reply, in Mail's suite: makes a reply to a message and opens its window.
     case reply = "emalrpms"
+    /// make, in the standard suite, as attach: makes an attachment at the end of the content
+    /// of a reply Mail just made, and nothing else.
+    case attach = "corecrel"
 
     var eventClass: AEEventClass {
         MailEvents.code(rawValue.prefix(4))
@@ -34,7 +39,7 @@ nonisolated enum MailEvent: String, CaseIterable, Sendable {
     }
 }
 
-/// Mail's scripting, through the three events of MailEvent. The only code in Orra that
+/// Mail's scripting, through the four events of MailEvent. The only code in Orra that
 /// builds or sends an Apple Event. Projects reaches it through MailBridge, and tests pass
 /// fakes of these closures, since tests never send an Apple Event.
 ///
@@ -53,6 +58,9 @@ nonisolated struct MailEvents: Sendable {
     /// 0 allowed, -1743 denied, -1744 not asked yet, -600 Mail not running. With `ask` true,
     /// macOS may show its prompt and the answer waits for the user.
     var permission: @Sendable (_ ask: Bool) async -> Int
+    /// The session of the Mail that runs now, nil when none runs or macOS does not say when
+    /// it launched.
+    var session: @Sendable () -> Session?
 }
 
 nonisolated extension MailEvents {
@@ -66,9 +74,31 @@ nonisolated extension MailEvents {
         text.utf8.reduce(0) { $0 << 8 | FourCharCode($1) }
     }
 
+    /// One run of Mail, from its launch until it quits: its process id and when it launched.
+    /// Mail's ids of the replies it makes hold only in the session that made them, and a Mail
+    /// that starts again may give the same id to another message.
+    nonisolated struct Session: Sendable, Hashable {
+        let processIdentifier: pid_t
+        let launched: Date
+
+        init(processIdentifier: pid_t, launched: Date) {
+            self.processIdentifier = processIdentifier
+            self.launched = launched
+        }
+
+        /// The session of a running Mail, nil when macOS does not say when it launched, as
+        /// for a Mail started without Launch Services. A process id alone could name a later
+        /// process, so such a Mail gets no session, and no reply of it gets a file.
+        init?(_ mail: NSRunningApplication) {
+            guard let launched = mail.launchDate else { return nil }
+            self.init(processIdentifier: mail.processIdentifier, launched: launched)
+        }
+    }
+
     /// The codes of Mail.sdef that Projects reads (Mail 16.0 on macOS 26.6). There is no
     /// code for `content` here: the model reads only text that Projects parses out of
-    /// `source` itself.
+    /// `source` itself. The one place that names content, as where a new attachment goes,
+    /// is `Request.endOfContent(ofReply:)`.
     nonisolated enum Code {
         // Mail's own properties.
         static let selection = MailEvents.code("slct")
@@ -81,6 +111,8 @@ nonisolated extension MailEvents {
         static let toRecipient = MailEvents.code("trcp")
         static let ccRecipient = MailEvents.code("crcp")
         static let attachment = MailEvents.code("attc")
+        /// The reply that `reply` gives back, in Mail's own suite.
+        static let outgoingMessage = MailEvents.code("bcke")
         // Properties.
         static let name = MailEvents.code("pnam")
         static let id = MailEvents.code("ID  ")
@@ -145,22 +177,35 @@ nonisolated extension MailEvents {
         case count(FourCharCode, in: Specifier)
         /// Makes a reply to a message, to its sender or to all, and always opens its window.
         case reply(to: Specifier, all: Bool)
+        /// Adds a file as an attachment at the end of the content of the reply with this id,
+        /// which `reply` made in the Mail session given. Mail reads the file itself. Sent only
+        /// to the Mail of that session, never to a Mail that started since.
+        case attach(URL, toReply: Int, in: Session)
 
         var event: MailEvent {
             switch self {
             case .get: .get
             case .count: .count
             case .reply: .reply
+            case .attach: .attach
+            }
+        }
+
+        /// The Mail session the request must go to, nil when any running Mail may take it.
+        var session: Session? {
+            switch self {
+            case .attach(_, _, let session): session
+            case .get, .count, .reply: nil
             }
         }
 
         /// No event lets macOS show its Automation prompt. Before the user allows Orra, each
         /// fails with -1744 instead, so only a permission check that asks, from the user's
-        /// click in Settings, shows it. Get and count also never let Mail interact with the
-        /// user. A reply opens a window.
+        /// click in Settings, shows it. Get, count and attach also never let Mail interact
+        /// with the user. A reply opens a window.
         var sendOptions: NSAppleEventDescriptor.SendOptions {
             switch self {
-            case .get, .count: [.waitForReply, .neverInteract, Self.neverPrompt]
+            case .get, .count, .attach: [.waitForReply, .neverInteract, Self.neverPrompt]
             case .reply: [.waitForReply, .canInteract, Self.neverPrompt]
             }
         }
@@ -169,13 +214,14 @@ nonisolated extension MailEvents {
         /// its options to AESendMessage as they are.
         static let neverPrompt = NSAppleEventDescriptor.SendOptions(rawValue: UInt(kAEDoNotPromptForUserConsent))
 
-        /// How long Mail may take, in seconds: 30 for a request over many elements, 10 for
-        /// one value.
+        /// How long Mail may take, in seconds: 30 for a request over many elements and for an
+        /// attachment, which Mail may read in full first, 10 for one value.
         var timeout: TimeInterval {
             switch self {
             case .get(let specifier): specifier.isMany ? 30 : 10
             case .count: 30
             case .reply: 10
+            case .attach: 30
             }
         }
 
@@ -199,9 +245,41 @@ nonisolated extension MailEvents {
                 event.setParam(try message.descriptor(), forKeyword: keyDirectObject)
                 event.setParam(NSAppleEventDescriptor(boolean: true), forKeyword: MailEvents.code("ropw"))
                 event.setParam(NSAppleEventDescriptor(boolean: all), forKeyword: MailEvents.code("rpal"))
+            case .attach(let file, let reply, _):
+                event.setParam(NSAppleEventDescriptor(typeCode: MailEvents.code("atts")), forKeyword: keyAEObjectClass)
+                event.setParam(try Self.endOfContent(ofReply: reply), forKeyword: keyAEInsertHere)
+                event.setParam(try Self.fileProperties(file), forKeyword: keyAEPropData)
             }
             return event
         }
+    }
+}
+
+nonisolated extension MailEvents.Request {
+    /// Where a new attachment goes: the end of the content of the outgoing message with this
+    /// id, an insertion location as AppleScript builds `at end of content of outgoing message
+    /// id 7`. The only place in Orra that names a message's content, and only as where a new
+    /// attachment goes. Nothing reads it.
+    private static func endOfContent(ofReply reply: Int) throws -> NSAppleEventDescriptor {
+        let content = MailEvents.Specifier.property(MailEvents.code("ctnt"), of: .id(MailEvents.Code.outgoingMessage, reply, of: .application))
+        guard let location = NSAppleEventDescriptor.record().coerce(toDescriptorType: typeInsertionLoc) else {
+            throw MailEvents.Failure(code: errAECoercionFail)
+        }
+        location.setDescriptor(try content.descriptor(), forKeyword: keyAEObject)
+        location.setDescriptor(NSAppleEventDescriptor(enumCode: kAEEnd), forKeyword: keyAEPosition)
+        return location
+    }
+
+    /// The properties of a new attachment: its file and nothing else, as a file URL, so
+    /// Mail reads the file itself and Orra sends only where it is. A URL that is not a
+    /// file URL builds nothing.
+    private static func fileProperties(_ file: URL) throws -> NSAppleEventDescriptor {
+        guard file.isFileURL else {
+            throw MailEvents.Failure(code: errAECoercionFail)
+        }
+        let properties = NSAppleEventDescriptor.record()
+        properties.setDescriptor(NSAppleEventDescriptor(fileURL: file), forKeyword: MailEvents.code("atfn"))
+        return properties
     }
 }
 
@@ -392,7 +470,8 @@ nonisolated extension MailEvents {
     static let live = MailEvents(
         isRunning: { runningMail() != nil },
         send: { request in try await sendThread.run { try sendNow(request) } },
-        permission: { ask in await permissionOnItsOwnThread(ask: ask) }
+        permission: { ask in await permissionOnItsOwnThread(ask: ask) },
+        session: { runningMail().flatMap(Session.init) }
     )
 
     private static let mailIdentifier = "com.apple.mail"
@@ -408,11 +487,17 @@ nonisolated extension MailEvents {
     }
 
     /// On the send thread: builds the event, sends it to Mail's process id and reads the
-    /// reply. A process id target fails with -600 when Mail is gone and never launches it.
+    /// reply. A process id target fails with -600 when Mail is gone and never launches it. A
+    /// request bound to a Mail session goes only to that session's Mail, and fails with -600
+    /// as well when another Mail runs now.
     private static func sendNow(_ request: Request) throws -> Value {
         guard let mail = runningMail() else {
             Logger.projectsMail.info("Mail is not running, \(String(describing: request.event), privacy: .public) not sent")
             throw Failure(code: notRunning)
+        }
+        if let code = refusal(of: request, by: Session(mail)) {
+            Logger.projectsMail.info("Mail started again since the reply, \(String(describing: request.event), privacy: .public) not sent")
+            throw Failure(code: code)
         }
         let target = NSAppleEventDescriptor(processIdentifier: mail.processIdentifier)
         let event = try request.appleEvent(target: target)
@@ -432,6 +517,16 @@ nonisolated extension MailEvents {
         }
         log(request, since: started, code: 0)
         return Value(reply.paramDescriptor(forKeyword: keyDirectObject))
+    }
+
+    /// The code with which the send thread refuses a request before it builds the event, nil
+    /// when it may go. A request bound to a Mail session goes only to that session's Mail, so
+    /// another Mail refuses it with -600, as a Mail that is gone does. The event then goes to
+    /// the process id of the Mail checked here, which a later Mail cannot have taken in the
+    /// moment between.
+    static func refusal(of request: Request, by running: Session?) -> Int? {
+        guard let session = request.session else { return nil }
+        return running == session ? nil : notRunning
     }
 
     private static func log(_ request: Request, since started: ContinuousClock.Instant, code: Int) {
