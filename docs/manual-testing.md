@@ -136,6 +136,19 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     prints the widths, saves an image of the window while comparing with
     TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS (projects-window-shown-1040-compare and the
     other sizes, without the list's rows, which do not draw there) and closes the window.
+    Since 2026-10-27 renderTheReplyFiles renders Files This Email Asks For and Attachments
+    for the Reply of an email that asks for the floor plan at 480 and 200 points
+    (projects-reply-files and projects-reply-files-200), the window at its first and its
+    smallest size at the top and scrolled to each section (projects-reply-files-window and
+    projects-reply-files-window-760, also with -asks and -attachments), the email view
+    while comparing, side by side and one above the other, at the top and scrolled to each
+    section (projects-reply-files-compare and projects-reply-files-compare-760, also with
+    -asks and -attachments), a sender that looks spoofed (projects-reply-files-spoofed), an
+    email without a draft (projects-reply-files-no-draft and
+    projects-reply-files-no-draft-200), the note after a handoff where Mail did not take a
+    file (projects-reply-files-note), the draft's claim that a file is attached
+    (projects-reply-files-claim) and a blank draft with a ticked file
+    (projects-reply-files-blank).
   - ProjectsEmailFilesTests, added on 2026-10-26, checks Project Files for This Explanation
     with made up files: why each file excerpt was in the prompt, as the explanation saves
     it and Orra 0.6.0 reads it, also with a reason a later Orra adds, each file once in the
@@ -4224,10 +4237,13 @@ Files an email asks for and attachments for the reply, added on 2026-10-27 for 0
 verified yet. MailEventsTests, MailBridgeTests, ReplyHandoffTests, ReplyFilesTests,
 FileRequestsTests, DraftCheckAttachmentsTests, ReplyFactsTests, RequestedFilesTests,
 FileNameSearchTests and ProjectsReplyFilesTests check the parts with fakes, and no test
-sends an Apple Event. Whether Mail takes a file that an Apple Event adds to a reply, keeps
-the quote and the signature, names the reply as `outgoing message id N` and reads files
-from the folders of a project is known only from a run. The attach event is built as
-make new attachment at the end of the content of the reply, and rule 10 of
+sends an Apple Event. With TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS set to a folder,
+renderTheReplyFiles of ProjectsWindowViewTests renders both sections, also while
+comparing, into `<language>-projects-reply-files*.png` in each test language, as the entry
+of ProjectsWindowViewTests above lists. Whether Mail takes a file that an Apple Event adds
+to a reply, keeps the quote and the signature, names the reply as `outgoing message id N`
+and reads files from the folders of a project is known only from a run. The attach event
+is built as make new attachment at the end of the content of the reply, and rule 10 of
 Tools/ci/check_rules.py pins that shape. If the run finds that only another shape works,
 the builder in MailEvents.swift and rule 10 change together.
 
