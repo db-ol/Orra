@@ -32,16 +32,14 @@ struct WelcomeView: View {
     /// The localization the window shows, such as "zh-Hans". Kept, so a redraw for the
     /// download's progress does not read the Mac's languages again.
     @State private var localization: String
-    /// The height of the steps, measured, so they scroll only when the screen is too short
-    /// for them. The tallest at first, so the window opens on the screen and shrinks to fit.
-    @State private var stepsHeight: CGFloat
+    private let initialWindowHeight: CGFloat
     /// Whether the steps scroll on a short screen. Off only to draw the whole window.
     let limitsHeight: Bool
 
     init(pushToTalk: PushToTalkController, setup: SetupDownload, language: AppLanguage, projects: ProjectsSwitch? = nil, limitsHeight: Bool = true, close: @escaping () -> Void, localizationChanged: @escaping (String) -> Void, languagePicked: @escaping (AppLanguage) -> Void, guideSettings: @escaping (PermissionDemo.Kind) -> Void = { _ in }, openSettings: @escaping @MainActor (SettingsTab) -> Void = WelcomeView.openSettingsWindow) {
         self.projects = projects
         self.limitsHeight = limitsHeight
-        _stepsHeight = State(initialValue: Self.tallestSteps)
+        initialWindowHeight = Self.windowHeight
         self.pushToTalk = pushToTalk
         self.setup = setup
         self.close = close
@@ -106,9 +104,8 @@ struct WelcomeView: View {
             if limitsHeight {
                 ScrollView {
                     steps(checklist: checklist, summary: summary, step: step, downloadingCleanup: downloadingCleanup)
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { stepsHeight = $0 }
                 }
-                .frame(height: min(stepsHeight, Self.tallestSteps))
+                .frame(maxHeight: .infinity)
             } else {
                 steps(checklist: checklist, summary: summary, step: step, downloadingCleanup: downloadingCleanup)
             }
@@ -126,7 +123,7 @@ struct WelcomeView: View {
             .padding(.top, 10)
             .padding(.bottom, 20)
         }
-        .frame(width: 560)
+        .frame(width: 560, height: limitsHeight ? initialWindowHeight : nil)
     }
 
     /// What Orra does, with how the talk key works in its mode.
@@ -153,10 +150,9 @@ struct WelcomeView: View {
         DockIcon.openSettings()
     }
 
-    /// The most the steps take before they scroll: the screen's height less the title bar,
-    /// the header with the guide and the buttons.
-    private static var tallestSteps: CGFloat {
-        max((NSScreen.main?.visibleFrame.height ?? 900) - 300, 320)
+    /// Keep the window at one height as the steps change, leaving room for the title bar.
+    private static var windowHeight: CGFloat {
+        max(min((NSScreen.main?.visibleFrame.height ?? 900) - 60, 700), 1)
     }
 
     private func steps(checklist: SetupChecklist, summary: DownloadSummary, step: GuideStep, downloadingCleanup: Bool) -> some View {
