@@ -104,6 +104,7 @@ final class CorrectionWatcher {
 
     private let environment: Environment
     private var watches: [(id: Int, pasted: String, task: Task<Void, Never>, control: Control)] = []
+    private var finishing: [(id: Int, pasted: String, task: Task<Void, Never>, control: Control)] = []
     private var nextID = 0
     private let logger = Logger.learning
 
@@ -119,20 +120,23 @@ final class CorrectionWatcher {
     /// one is reported in terms of what the speech model wrote, see
     /// `CorrectionFinder.translate(_:pasted:replacements:)`, and `onRevert` gets the pairs
     /// of a replacement the user put back.
+    @discardableResult
     func watch(
         pasted: String,
         in pid: pid_t,
         replacements: [Replacement] = [],
         onCorrection: @escaping (Finding, Finding?) -> Void,
         onRevert: @escaping ([Correction]) -> Void = { _ in }
-    ) {
+    ) -> Task<Void, Never>? {
         // Before the oldest watch is pushed out, so a paste into Orra ends no other watch.
         guard pid != environment.ownProcess else {
             logger.notice("Learning: the paste went into Orra's own window")
-            return
+            return nil
         }
         if watches.count >= Self.maximumWatches {
-            watches.removeFirst().control.finish = true
+            let oldest = watches.removeFirst()
+            oldest.control.finish = true
+            finishing.append(oldest)
         }
         nextID += 1
         let id = nextID
@@ -140,7 +144,10 @@ final class CorrectionWatcher {
         let environment = environment
         let logger = logger
         let task = Task { @MainActor [weak self] in
-            defer { self?.watches.removeAll { $0.id == id } }
+            defer {
+                self?.watches.removeAll { $0.id == id }
+                self?.finishing.removeAll { $0.id == id }
+            }
             @MainActor func allowed() -> Bool {
                 environment.frontmost() == pid && environment.secureInputHolder() != pid
             }
@@ -238,6 +245,7 @@ final class CorrectionWatcher {
             report()
         }
         watches.append((id, pasted, task, control))
+        return task
     }
 
     /// Off the main actor, because the keyboard tap runs there.
@@ -247,18 +255,20 @@ final class CorrectionWatcher {
     }
 
     func stop() {
-        for watch in watches {
+        for watch in watches + finishing {
             watch.task.cancel()
         }
         watches = []
+        finishing = []
     }
 
     /// Ends the watches of this pasted text without reporting more.
     func stop(pasted: String) {
-        for watch in watches where watch.pasted == pasted {
+        for watch in watches + finishing where watch.pasted == pasted {
             watch.task.cancel()
         }
         watches.removeAll { $0.pasted == pasted }
+        finishing.removeAll { $0.pasted == pasted }
     }
 }
 

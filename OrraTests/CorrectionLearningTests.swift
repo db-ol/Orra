@@ -212,6 +212,35 @@ struct CorrectionWatcherTests {
         watcher.stop()
     }
 
+    @Test(.timeLimit(.minutes(1)), arguments: [true, false])
+    func stoppingAlsoCancelsAPushedOutWatch(stopAll: Bool) async throws {
+        let pasted = "我在用克劳德写代码"
+        let field = ScriptedField([pasted, "我在用Claude写代码"])
+        let hold = Hold(at: 2)
+        let watcher = CorrectionWatcher(environment: Self.held(field, hold))
+        var found: [Correction] = []
+        let first = try #require(watcher.watch(pasted: pasted, in: 42) {
+            found.append($0.correction)
+            _ = $1
+        })
+        defer { hold.waiting?.resume() }
+        try await eventually { hold.waiting != nil }
+        #expect(found.isEmpty)
+        for _ in 1...CorrectionWatcher.maximumWatches {
+            watcher.watch(pasted: "不在这里", in: 42) { _, _ in }
+        }
+        if stopAll {
+            watcher.stop()
+        } else {
+            watcher.stop(pasted: pasted)
+        }
+        hold.waiting?.resume()
+        hold.waiting = nil
+        await first.value
+        #expect(found.isEmpty)
+        watcher.stop()
+    }
+
     @Test func fixingAnEarlierLineAfterMoreDictationsIsLearned() async {
         // Three dictations of the same words, then the first line is fixed.
         let field = ScriptedField([
