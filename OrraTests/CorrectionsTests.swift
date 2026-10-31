@@ -223,6 +223,21 @@ struct PasteTrackerTests {
     @Test func aFieldWithoutThePasteHasNoTracker() {
         #expect(PasteTracker(pasted: "你好", field: "再见") == nil)
     }
+
+    @Test func theLastOverlappingMatchIsChosen() {
+        #expect(PasteTracker(pasted: "aba", field: "ababa")?.range == 2..<5)
+        #expect(PasteTracker(pasted: "🙂🙂", field: "🙂🙂🙂")?.range == 1..<3)
+        #expect(PasteTracker(pasted: "a", field: "baaa")?.range == 3..<4)
+        #expect(PasteTracker(pasted: "é", field: "e\u{301}")?.range == 0..<1)
+    }
+
+    @Test func repeatedPrefixesMatchTheLastOccurrence() {
+        let field = String(repeating: "a", count: 20_000)
+        let paste = String(repeating: "a", count: 1_999) + "b"
+        #expect(PasteTracker(pasted: paste, field: field) == nil)
+        let withTwo = paste + "a" + paste
+        #expect(PasteTracker(pasted: paste, field: withTwo)?.range == 2_001..<4_001)
+    }
 }
 
 struct SoundAlikeTests {

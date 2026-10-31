@@ -417,8 +417,29 @@ nonisolated struct PasteTracker: Equatable, Sendable {
         let paste = Array(pasted)
         let characters = Array(text)
         guard !paste.isEmpty, paste.count <= characters.count else { return nil }
-        guard let start = stride(from: characters.count - paste.count, through: 0, by: -1)
-            .first(where: { characters[$0..<($0 + paste.count)].elementsEqual(paste) }) else { return nil }
+        // Find the last match in linear time, including overlapping matches.
+        var prefix = Array(repeating: 0, count: paste.count)
+        var matched = 0
+        for index in 1..<paste.count {
+            while matched > 0 && paste[matched] != paste[index] {
+                matched = prefix[matched - 1]
+            }
+            if paste[matched] == paste[index] { matched += 1 }
+            prefix[index] = matched
+        }
+        matched = 0
+        var last: Int?
+        for (index, character) in characters.enumerated() {
+            while matched > 0 && paste[matched] != character {
+                matched = prefix[matched - 1]
+            }
+            if paste[matched] == character { matched += 1 }
+            if matched == paste.count {
+                last = index + 1 - paste.count
+                matched = prefix[matched - 1]
+            }
+        }
+        guard let start = last else { return nil }
         field = characters
         range = start..<(start + paste.count)
     }
