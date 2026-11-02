@@ -3707,7 +3707,8 @@ mail, as in the test guide, and with Mail open unless a check says otherwise:
 - [ ] Quit Mail. A list with no mail says Mail is not open. Projects reads new mail while
   Mail runs. Open Mail again: Reading mail… shows while Projects reads back, then nothing.
   If Mail is slow to answer. shows right after Mail opens, note it, since Projects then
-  waits two minutes before it asks Mail again.
+  asks again for what Mail did not answer only after a minute or two, and twice as long
+  each time Mail is still slow, up to 30 minutes.
 - [ ] Turn Mail off for Orra in Privacy & Security, Automation. Within a few minutes the
   window says Orra is not allowed to read Mail yet. Allow it in Settings., and Settings…
   opens the Projects page. Turn Mail on again and open that page: the line goes, and
