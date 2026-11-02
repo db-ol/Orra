@@ -116,11 +116,12 @@ struct CaptionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // What captions listen to by name and three segments while they fit. In a
-            // narrower window the source shows as its icon, then the modes as a menu, and
-            // last the caption target as its icon.
+            // narrower window the modes become a menu first, since the source is the
+            // choice that says whether the microphone is used, then the source shows as
+            // its icon, and last the caption target as its icon.
             ViewThatFits(in: .horizontal) {
                 topRow(sourceTitle: true, segmented: true, targetTitle: true)
-                topRow(sourceTitle: false, segmented: true, targetTitle: true)
+                topRow(sourceTitle: true, segmented: false, targetTitle: true)
                 topRow(sourceTitle: false, segmented: false, targetTitle: true)
                 topRow(sourceTitle: false, segmented: false, targetTitle: false)
             }

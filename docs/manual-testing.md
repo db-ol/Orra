@@ -2929,10 +2929,12 @@ it shows starts, stops, counts and failures, never text.
   does not activate Orra: a click on the icon copies, a click on the arrow opens the
   menu, and the call app keeps the focus.
 - [ ] The top row with Copy, at 520 pt and at the narrowest width, in all four languages,
-  since 2026-10-19 not verified yet in the running app. The three segments sit at the
-  left, Copy at the right. When the window is too narrow for the segments they turn into
-  a pop up menu showing the chosen mode, and they come back once it is wide enough. The
-  window can be made as narrow as 300 pt. Pointing at Original shows its help, "Shows what
+  since 2026-10-19 not verified yet in the running app. The menu of what captions listen
+  to and the three segments sit at the left, Copy at the right. When the window is too
+  narrow for the segments they turn into a pop up menu showing the chosen mode, before
+  the menu of what captions listen to loses its name, and they come back once it is wide
+  enough. At 520 pt in English and Español the menu shows What the Mac Plays by name and
+  the modes as a pop up menu. The window can be made as narrow as 300 pt. Pointing at Original shows its help, "Shows what
   was said, without translating it." Clicks on the segments and on the menu work in the
   panel without taking the focus from the call app.
 - [ ] Paste a copy into Notes on the Mac: plain text, no header, no times. A clipboard
