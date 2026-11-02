@@ -325,6 +325,24 @@ struct CaptionNotes: View {
             ForEach(Self.lines(captions: captions, speechReady: pushToTalk.modelState == .ready, turns: turns), id: \.self) { line in
                 plainNote(line)
             }
+            // The prompt while access is not decided, and the microphone pane of System
+            // Settings while it is off, as in the welcome window.
+            if case .microphoneUnavailable(.access(let access)) = captions.capture {
+                switch access {
+                case .notDetermined:
+                    Button("Allow Microphone Access…") {
+                        pushToTalk.requestMicrophoneAccess()
+                    }
+                    .controlSize(.small)
+                case .denied:
+                    Button("Open Microphone Settings…") {
+                        pushToTalk.requestMicrophoneAccess()
+                    }
+                    .controlSize(.small)
+                case .authorized, .notConfigured:
+                    EmptyView()
+                }
+            }
             // No translation notes or download until the capture runs. While it starts,
             // captions do not need the model yet, and a download agreed to then would be
             // ignored. None in Original only, which does not translate.
@@ -343,12 +361,24 @@ struct CaptionNotes: View {
             lines.append(String(localized: "This build of Orra cannot capture the sound the Mac plays yet."))
         case .unavailable(.failed):
             lines.append(String(localized: "Orra could not capture the sound the Mac plays. Turn Live Captions off and on again to try again."))
+        case .microphoneUnavailable(.access(.notDetermined)):
+            lines.append(String(localized: "The microphone needs permission"))
+        case .microphoneUnavailable(.access(.denied)):
+            lines.append(String(localized: "Microphone access is off. Turn on Orra under Microphone in System Settings."))
+        case .microphoneUnavailable(.access(.notConfigured)):
+            lines.append(String(localized: "This build has no microphone usage description"))
+        case .microphoneUnavailable(.noInput):
+            lines.append(String(localized: "No microphone is connected. Captions start once you connect one."))
+        case .microphoneUnavailable(.access(.authorized)), .microphoneUnavailable(.failed):
+            lines.append(String(localized: "Orra could not start the microphone. Turn Live Captions off and on again to try again."))
         case .off, .starting, .listening:
             switch captions.silence {
             case .noAudio:
                 lines.append(String(localized: "Nothing is playing on the Mac. Captions show what the Mac plays, such as a call or a video, not what you say into your microphone."))
             case .noSound:
                 lines.append(String(localized: "No sound from the Mac yet. If something is playing, allow Orra under Screen & System Audio Recording in Privacy & Security settings."))
+            case .microphoneSilent(let situation):
+                lines.append(Silence.advice(for: situation))
             case nil:
                 break
             }
@@ -359,9 +389,14 @@ struct CaptionNotes: View {
         // From the press of a key until the paste, captions start no model call, see
         // EngineTurns. Said once the dictation has gone on for a moment, so a tap of the
         // talk key does not flash it. Not for a capture that failed, which has nothing to
-        // catch up on.
+        // catch up on. What the Mac plays waits and catches up, and what the microphone
+        // hears meanwhile is left out, see MeetingCaptions.MicrophonePause.
         if turns.dictationNoteDue, captions.capture == .starting || captions.capture == .listening {
-            lines.append(String(localized: "Captions wait while you dictate and catch up when you finish."))
+            if captions.source == .microphone {
+                lines.append(String(localized: "Captions pause while you dictate and go on when you finish."))
+            } else {
+                lines.append(String(localized: "Captions wait while you dictate and catch up when you finish."))
+            }
         }
         return lines
     }

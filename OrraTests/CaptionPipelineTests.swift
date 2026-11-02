@@ -23,6 +23,8 @@ final class FakeCaptionModels {
     /// long the test takes to feed the audio after it.
     var holdsFirstTranscription = false
     private(set) var transcribed = 0
+    /// The audio of each transcription, in order.
+    private(set) var heard: [[Float]] = []
     /// The dictation language each transcription was given.
     private(set) var languages: [DictationLanguage] = []
     /// The dictation language the engines report, as the user's setting.
@@ -73,6 +75,7 @@ final class FakeCaptionModels {
     private func transcribe(_ samples: [Float], _ language: DictationLanguage) async throws -> String {
         let turn = transcribed
         transcribed += 1
+        heard.append(samples)
         languages.append(language)
         running += 1
         mostRunning = max(mostRunning, running)

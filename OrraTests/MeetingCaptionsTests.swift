@@ -133,18 +133,186 @@ struct MeetingCaptionsTests {
         }
     }
 
+    /// Stands in for the caption microphone, named apart from PushToTalkControllerTests'
+    /// FakeMicrophone. MeetingCaptions starts and stops it off the main actor, so its state
+    /// is behind a lock. With `holdsStart`, a start waits until `releaseStart`, like a
+    /// Bluetooth microphone that takes seconds. `move` tells the captions that the device
+    /// moved, and `inputs` stands in for the watch of the devices.
+    private final class FakeCaptionMicrophone: Sendable {
+        private struct State {
+            var access = MicrophoneAccess.authorized
+            var fails: MicrophoneCaptionProblem?
+            var holdsStart = false
+            var lidClosed = false
+            var input = AudioInput(id: 7, uid: "usb-1", name: "USB Microphone", isInternalMicrophone: false)
+            var deliver: (@Sendable ([Float]) -> Void)?
+            var moved: (@Sendable () -> Void)?
+            var calls: [String] = []
+            var startedUIDs: [String?] = []
+            var startedOnMain = false
+            var accessReads = 0
+        }
+
+        /// The watch of the devices, which captions start while no microphone is
+        /// connected.
+        @MainActor
+        final class Inputs {
+            var onChange: (@MainActor () -> Void)?
+            var watches = 0
+        }
+
+        private let state = OSAllocatedUnfairLock(initialState: State())
+        private let gate = DispatchSemaphore(value: 0)
+        let inputs = MainActor.assumeIsolated { Inputs() }
+
+        var access: MicrophoneAccess {
+            get { state.withLock { $0.access } }
+            set { state.withLock { $0.access = newValue } }
+        }
+
+        var fails: MicrophoneCaptionProblem? {
+            get { state.withLock { $0.fails } }
+            set { state.withLock { $0.fails = newValue } }
+        }
+
+        var holdsStart: Bool {
+            get { state.withLock { $0.holdsStart } }
+            set { state.withLock { $0.holdsStart = newValue } }
+        }
+
+        var lidClosed: Bool {
+            get { state.withLock { $0.lidClosed } }
+            set { state.withLock { $0.lidClosed = newValue } }
+        }
+
+        var input: AudioInput {
+            get { state.withLock { $0.input } }
+            set { state.withLock { $0.input = newValue } }
+        }
+
+        /// "start", "started", "failed" and "stop", in the order they happened.
+        var calls: [String] {
+            state.withLock { $0.calls }
+        }
+
+        var starts: Int {
+            calls.filter { $0 == "start" }.count
+        }
+
+        var stops: Int {
+            calls.filter { $0 == "stop" }.count
+        }
+
+        /// The UID each start was given, nil for the system default.
+        var startedUIDs: [String?] {
+            state.withLock { $0.startedUIDs }
+        }
+
+        var startedOnMain: Bool {
+            state.withLock { $0.startedOnMain }
+        }
+
+        var accessReads: Int {
+            state.withLock { $0.accessReads }
+        }
+
+        var isCapturing: Bool {
+            state.withLock { $0.deliver != nil }
+        }
+
+        func releaseStart() {
+            gate.signal()
+        }
+
+        /// The device went away or changed, as the capture reports it, on a background
+        /// queue.
+        func move() {
+            let moved = state.withLock { $0.moved }
+            DispatchQueue.global().async {
+                moved?()
+            }
+        }
+
+        var source: MicrophoneCaptionSource {
+            MicrophoneCaptionSource(access: { [self] in
+                state.withLock {
+                    $0.accessReads += 1
+                    return $0.access
+                }
+            }, start: { [self] uid, deliver, moved in
+                let (holds, fails, input) = state.withLock {
+                    $0.calls.append("start")
+                    $0.startedUIDs.append(uid)
+                    if Thread.isMainThread {
+                        $0.startedOnMain = true
+                    }
+                    return ($0.holdsStart, $0.fails, $0.input)
+                }
+                if holds {
+                    // Bounded, so a broken test cannot hang, but long, since a busy runner
+                    // can keep the main actor away from a test for many seconds.
+                    _ = gate.wait(timeout: .now() + 120)
+                }
+                if let fails {
+                    state.withLock { $0.calls.append("failed") }
+                    throw fails
+                }
+                state.withLock {
+                    $0.calls.append("started")
+                    $0.deliver = deliver
+                    $0.moved = moved
+                }
+                return input
+            }, stop: { [self] in
+                state.withLock {
+                    $0.calls.append("stop")
+                    $0.deliver = nil
+                    $0.moved = nil
+                }
+            }, lidClosed: { [self] in
+                state.withLock { $0.lidClosed }
+            }, watchInputs: { [inputs] onChange in
+                MainActor.assumeIsolated {
+                    inputs.onChange = onChange
+                    inputs.watches += 1
+                }
+                return inputs
+            })
+        }
+    }
+
     /// The checks whether something plays come quickly in the tests, and their answers
-    /// may take long, since a busy runner can keep the queue they run on waiting.
-    private func makeCaptions(_ models: FakeCaptionModels, source: FakeSource, events: Box, displayMode: CaptionDisplayMode = .translationOnly, silenceHint: Double = 2, playCheckLimit: Double = 60) -> MeetingCaptions {
+    /// may take long, since a busy runner can keep the queue they run on waiting. The
+    /// microphone's hold after a pause is off unless a test sets it, and its starts again
+    /// and looks at access come quickly.
+    private func makeCaptions(
+        _ models: FakeCaptionModels,
+        source: FakeSource,
+        events: Box,
+        microphone: FakeCaptionMicrophone? = nil,
+        displayMode: CaptionDisplayMode = .translationOnly,
+        silenceHint: Double = 2,
+        playCheckLimit: Double = 60,
+        microphoneHold: Double = 0,
+        microphoneQuietLimit: Double = 60,
+        restartDelay: Double = 0.01
+    ) -> MeetingCaptions {
         let captions = MeetingCaptions(
-            source: source.source,
+            systemAudio: source.source,
+            microphone: microphone?.source ?? .unavailable,
             engines: models.engines(),
             started: { events.items.append("started") },
             stopped: { events.items.append("stopped") },
             displayMode: displayMode,
+            pausesMicrophone: { events.pause },
+            askForMicrophoneAccess: { events.asks += 1 },
             silenceHint: silenceHint,
             playCheckInterval: 0.05,
-            playCheckLimit: playCheckLimit
+            playCheckLimit: playCheckLimit,
+            microphoneHold: microphoneHold,
+            microphoneQuietLimit: microphoneQuietLimit,
+            restartDelay: restartDelay,
+            accessCheckInterval: 0.01
         )
         captions.showWindow = { events.items.append("show") }
         captions.closeWindow = { events.items.append("close") }
@@ -154,6 +322,18 @@ struct MeetingCaptionsTests {
     @MainActor
     private final class Box {
         var items: [String] = []
+        /// What holds microphone captions back, as AppDelegate reads it from a dictation.
+        var pause = MeetingCaptions.MicrophonePause.notPaused
+        /// How often the captions asked for microphone access.
+        var asks = 0
+    }
+
+    /// Captions that listen to the microphone, on and listening, and the run of that start.
+    private func listeningToTheMicrophone(_ captions: MeetingCaptions) async throws -> Int {
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        return captions.currentRun
     }
 
     private static let nothingPlays = "Nothing is playing on the Mac. Captions show what the Mac plays, such as a call or a video, not what you say into your microphone."
@@ -284,7 +464,7 @@ struct MeetingCaptionsTests {
     @Test func copyingUsesTheDisplayModeUnlessAContentIsChosen() {
         var copies: [String] = []
         let store = CaptionStore()
-        let captions = MeetingCaptions(source: FakeSource().source, engines: FakeCaptionModels([]).engines(), store: store, copyText: { copies.append($0) })
+        let captions = MeetingCaptions(systemAudio: FakeSource().source, engines: FakeCaptionModels([]).engines(), store: store, copyText: { copies.append($0) })
         #expect(!captions.copy(store.transcript))
         store.apply(CaptionSentence(id: 1, start: 0, end: 1, original: "Hello everyone.", translation: .done("大家好。")))
         store.apply(CaptionSentence(id: 2, start: 1, end: 2, original: "Next slide", translation: .none, isInterim: true))
@@ -723,7 +903,7 @@ struct MeetingCaptionsTests {
 
     @Test func theDisplayModeIsSaved() {
         var saved: [CaptionDisplayMode] = []
-        let captions = MeetingCaptions(source: FakeSource().source, engines: FakeCaptionModels([]).engines(), saveDisplayMode: { saved.append($0) })
+        let captions = MeetingCaptions(systemAudio: FakeSource().source, engines: FakeCaptionModels([]).engines(), saveDisplayMode: { saved.append($0) })
         #expect(captions.displayMode == .translationOnly)
         captions.setDisplayMode(.originalAndTranslation)
         captions.setDisplayMode(.originalAndTranslation)
@@ -743,6 +923,525 @@ struct MeetingCaptionsTests {
             defaults.set("somethingNewer", forKey: CaptionDisplayMode.defaultsKey)
             #expect(CaptionDisplayMode.load(from: defaults) == .translationOnly)
         }
+    }
+
+    // MARK: The microphone
+
+    /// Every new MeetingCaptions listens to what the Mac plays, and nothing of the
+    /// microphone is used or asked until the user chooses it.
+    @Test func captionsListenToWhatTheMacPlaysAtFirst() async throws {
+        let source = FakeSource()
+        let microphone = FakeCaptionMicrophone()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), microphone: microphone)
+        #expect(captions.source == .systemAudio)
+        #expect(CaptionSource.allCases == [.systemAudio, .microphone])
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        #expect(source.starts == 1)
+        #expect(captions.microphoneInUse == nil)
+        captions.setOn(false)
+        try await eventually { source.stops == 1 }
+        #expect(microphone.calls.isEmpty)
+        #expect(microphone.accessReads == 0)
+    }
+
+    /// The prompt follows the user's own choice of the microphone, only while access is not
+    /// decided. Turning captions on never asks.
+    @Test(arguments: [MicrophoneAccess.notDetermined, .denied, .authorized, .notConfigured])
+    func choosingTheMicrophoneAsksForAccessOnlyWhenNotDecided(access: MicrophoneAccess) async throws {
+        let microphone = FakeCaptionMicrophone()
+        microphone.access = access
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: events, microphone: microphone)
+        captions.setOn(true)
+        captions.setOn(false)
+        #expect(events.asks == 0)
+        captions.setSource(.microphone)
+        #expect(events.asks == (access == .notDetermined ? 1 : 0))
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        captions.setOn(false)
+        #expect(events.asks == (access == .notDetermined ? 1 : 0))
+    }
+
+    @Test func turningOnWithTheMicrophoneListensToItOffTheMainActor() async throws {
+        let source = FakeSource()
+        let microphone = FakeCaptionMicrophone()
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: events, microphone: microphone)
+        captions.microphoneChosen("usb-1")
+        captions.setSource(.microphone)
+        #expect(microphone.calls.isEmpty)
+        captions.setOn(true)
+        #expect(captions.capture == .starting)
+        try await eventually { captions.capture == .listening }
+        #expect(microphone.startedUIDs == ["usb-1"])
+        #expect(!microphone.startedOnMain)
+        #expect(captions.microphoneInUse == microphone.input)
+        #expect(source.calls.isEmpty)
+        #expect(events.items == ["show", "started"])
+        captions.setOn(false)
+    }
+
+    /// A switch while captions are on changes only the capture: the meeting, its window and
+    /// its sentences go on, and the model is not asked for again.
+    @Test func aSwitchWhileOnKeepsTheMeetingAndTheWindow() async throws {
+        let source = FakeSource()
+        let microphone = FakeCaptionMicrophone()
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels(["Hello everyone.", "Next slide please."]), source: source, events: events, microphone: microphone)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: captions.currentRun)
+        try await eventually { captions.store.sentences.first?.translatedText == "大家好。" }
+        let previous = captions.store.previous
+        captions.setSource(.microphone)
+        try await eventually { captions.capture == .listening && microphone.calls == ["start", "started"] }
+        try await eventually { source.stops == 1 }
+        #expect(events.items == ["show", "started"])
+        #expect(captions.store.previous == previous)
+        #expect(captions.store.sentences.map(\.original) == ["Hello everyone."])
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: captions.currentRun)
+        try await eventually { captions.store.sentences.last?.translatedText == "请看下一张幻灯片。" }
+        #expect(captions.store.sentences.map(\.original) == ["Hello everyone.", "Next slide please."])
+        captions.setOn(false)
+        #expect(events.items == ["show", "started", "stopped", "close"])
+    }
+
+    @Test func turningOffOrChoosingTheMacLetsGoOfTheMicrophoneAtOnce() async throws {
+        let source = FakeSource()
+        let microphone = FakeCaptionMicrophone()
+        let captions = makeCaptions(FakeCaptionModels(["Hello everyone."]), source: source, events: Box(), microphone: microphone)
+        var run = try await listeningToTheMicrophone(captions)
+        captions.setOn(false)
+        #expect(captions.microphoneInUse == nil)
+        try await eventually { microphone.stops == 1 }
+        #expect(!microphone.isCapturing)
+        // Samples still on their way from the microphone are ignored.
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: run)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        run = captions.currentRun
+        captions.setSource(.systemAudio)
+        #expect(captions.microphoneInUse == nil)
+        try await eventually { microphone.stops == 2 && source.starts == 1 }
+        #expect(!microphone.isCapturing)
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: run)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(captions.store.sentences.isEmpty)
+        captions.setOn(false)
+    }
+
+    /// A switch never waits for a start of the other capture, such as one that waits for
+    /// the permission prompt. That start's outcome is ignored, and its stop follows it.
+    @Test func aSwitchDoesNotWaitForAStartOfTheOtherSource() async throws {
+        let source = FakeSource()
+        source.holdsStart = true
+        let microphone = FakeCaptionMicrophone()
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: events, microphone: microphone)
+        captions.setOn(true)
+        try await eventually { source.calls == ["start"] }
+        captions.setSource(.microphone)
+        try await eventually { captions.capture == .listening }
+        #expect(microphone.calls == ["start", "started"])
+        #expect(captions.microphoneInUse == microphone.input)
+        source.releaseStart()
+        try await eventually { source.calls == ["start", "started", "stop"] }
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(captions.capture == .listening)
+        #expect(captions.microphoneInUse == microphone.input)
+        #expect(events.items == ["show", "started"])
+        captions.setOn(false)
+    }
+
+    @Test(arguments: [MicrophoneAccess.denied, .notDetermined, .notConfigured])
+    func withoutAccessTheWindowSaysSoAndNothingStarts(access: MicrophoneAccess) async throws {
+        let microphone = FakeCaptionMicrophone()
+        microphone.access = access
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: events, microphone: microphone, silenceHint: 0.1)
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        #expect(captions.capture == .microphoneUnavailable(.access(access)))
+        let note = switch access {
+        case .denied: "Microphone access is off. Turn on Orra under Microphone in System Settings."
+        case .notDetermined: "The microphone needs permission"
+        default: "This build has no microphone usage description"
+        }
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: EngineTurns()) == [note])
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(microphone.starts == 0)
+        #expect(captions.silence == nil)
+        #expect(captions.microphoneInUse == nil)
+        // The local model is not loaded for captions that cannot hear anything.
+        #expect(events.items == ["show"])
+        captions.setOn(false)
+    }
+
+    /// Access given while captions wait for it starts the microphone, as after a click on
+    /// Allow in the prompt or a switch in System Settings.
+    @Test func theMicrophoneStartsOnceAccessIsGiven() async throws {
+        let microphone = FakeCaptionMicrophone()
+        microphone.access = .denied
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone)
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        #expect(captions.capture == .microphoneUnavailable(.access(.denied)))
+        microphone.access = .notDetermined
+        try await eventually { captions.capture == .microphoneUnavailable(.access(.notDetermined)) }
+        #expect(microphone.starts == 0)
+        microphone.access = .authorized
+        try await eventually { captions.capture == .listening }
+        #expect(microphone.starts == 1)
+        captions.setOn(false)
+    }
+
+    /// Access given after captions were turned off, or switched to what the Mac plays,
+    /// never opens the microphone.
+    @Test func accessGivenLaterOpensNothingForCaptionsThatMovedOn() async throws {
+        let source = FakeSource()
+        let microphone = FakeCaptionMicrophone()
+        microphone.access = .denied
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), microphone: microphone)
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        captions.setOn(false)
+        captions.setOn(true)
+        captions.setSource(.systemAudio)
+        try await eventually { captions.capture == .listening }
+        microphone.access = .authorized
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(microphone.starts == 0)
+        #expect(source.starts == 1)
+        captions.setOn(false)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(microphone.starts == 0)
+    }
+
+    /// The press of a key until the paste: what the microphone hears meanwhile never reaches
+    /// the models, the sentence before the press ends, and captions go on after it.
+    @Test func aDictationPausesMicrophoneCaptionsAndTheyGoOnAfterIt() async throws {
+        let models = FakeCaptionModels(["Hello everyone.", "Next slide please."])
+        let events = Box()
+        let captions = makeCaptions(models, source: FakeSource(), events: events, microphone: FakeCaptionMicrophone())
+        let run = try await listeningToTheMicrophone(captions)
+        // Speech with no pause after it yet.
+        captions.receive(CaptionAudio.silence(0.5) + CaptionAudio.tone(0.7), run: run)
+        events.pause = .paused
+        // The dictation, louder, so it shows if it ever reaches a model.
+        captions.receive(CaptionAudio.tone(1, amplitude: 0.3), run: run)
+        events.pause = .notPaused
+        // Right after it: without the cut this would go on the sentence before the press.
+        captions.receive(CaptionAudio.tone(0.7) + CaptionAudio.silence(1), run: run)
+        try await eventually { captions.store.sentences.compactMap(\.translatedText).count == 2 }
+        #expect(captions.store.sentences.map(\.original) == ["Hello everyone.", "Next slide please."])
+        #expect(models.transcribed == 2)
+        #expect(models.heard.allSatisfy { samples in samples.allSatisfy { abs($0) <= 0.1 } })
+        captions.setOn(false)
+    }
+
+    /// What arrives within the hold after a pause, such as the end of Orra's voice from the
+    /// speakers, is left out too, and the captions go on once it has passed.
+    @Test func whatArrivesRightAfterAPauseIsLeftOutToo() async throws {
+        let models = FakeCaptionModels(["Hello everyone.", "Next slide please."])
+        let events = Box()
+        let captions = makeCaptions(models, source: FakeSource(), events: events, microphone: FakeCaptionMicrophone(), microphoneHold: 0.3)
+        let run = try await listeningToTheMicrophone(captions)
+        captions.receive(CaptionAudio.silence(0.5) + CaptionAudio.tone(0.7), run: run)
+        events.pause = .paused
+        captions.receive(CaptionAudio.tone(0.5, amplitude: 0.3), run: run)
+        events.pause = .notPaused
+        captions.receive(CaptionAudio.tone(0.5, amplitude: 0.3), run: run)
+        try await Task.sleep(for: .milliseconds(350))
+        captions.receive(CaptionAudio.tone(0.7) + CaptionAudio.silence(1), run: run)
+        try await eventually { captions.store.sentences.compactMap(\.translatedText).count == 2 }
+        #expect(captions.store.sentences.map(\.original) == ["Hello everyone.", "Next slide please."])
+        #expect(models.heard.allSatisfy { samples in samples.allSatisfy { abs($0) <= 0.1 } })
+        captions.setOn(false)
+    }
+
+    /// A key that waits, such as right Option, records nothing for captions until its press
+    /// counts. A press that turns out to be a shortcut leaves nothing out and cuts nothing.
+    @Test func aKeyThatTurnsOutToBeAShortcutLeavesNothingOut() async throws {
+        let models = FakeCaptionModels(["One sentence."])
+        let events = Box()
+        let captions = makeCaptions(models, source: FakeSource(), events: events, microphone: FakeCaptionMicrophone())
+        let run = try await listeningToTheMicrophone(captions)
+        captions.receive(CaptionAudio.silence(0.5) + CaptionAudio.tone(0.5), run: run)
+        events.pause = .arming
+        captions.receive(CaptionAudio.tone(0.3), run: run)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(models.transcribed == 0)
+        events.pause = .notPaused
+        captions.receive(CaptionAudio.silence(1), run: run)
+        try await eventually { captions.store.sentences.first.map { !$0.isInterim && $0.translation != .pending } == true }
+        #expect(models.transcribed == 1)
+        // One sentence: the preroll, 0.8 s of speech and the tail.
+        let heard = try #require(models.heard.first)
+        #expect(abs(Double(heard.count) / CaptionAudio.rate - 1.15) < 0.03)
+        captions.setOn(false)
+    }
+
+    /// A press that counts makes what its key heard part of the dictation, left out like the
+    /// rest of it.
+    @Test func aKeyWhosePressCountsLeavesOutWhatItHeard() async throws {
+        let models = FakeCaptionModels(["Hello everyone.", "Next slide please."])
+        let events = Box()
+        let captions = makeCaptions(models, source: FakeSource(), events: events, microphone: FakeCaptionMicrophone())
+        let run = try await listeningToTheMicrophone(captions)
+        captions.receive(CaptionAudio.silence(0.5) + CaptionAudio.tone(0.7), run: run)
+        events.pause = .arming
+        captions.receive(CaptionAudio.tone(0.3, amplitude: 0.3), run: run)
+        events.pause = .paused
+        captions.receive(CaptionAudio.tone(0.5, amplitude: 0.3), run: run)
+        events.pause = .notPaused
+        captions.receive(CaptionAudio.tone(0.7) + CaptionAudio.silence(1), run: run)
+        try await eventually { captions.store.sentences.compactMap(\.translatedText).count == 2 }
+        #expect(captions.store.sentences.map(\.original) == ["Hello everyone.", "Next slide please."])
+        #expect(models.heard.allSatisfy { samples in samples.allSatisfy { abs($0) <= 0.1 } })
+        captions.setOn(false)
+    }
+
+    /// A dictation pauses captions of the microphone only. What the Mac plays waits and
+    /// catches up, see EngineTurns, and nothing of it is left out.
+    @Test func thePauseHoldsOnlyMicrophoneCaptions() async throws {
+        let events = Box()
+        events.pause = .paused
+        let captions = makeCaptions(FakeCaptionModels(["Hello everyone."]), source: FakeSource(), events: events)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: captions.currentRun)
+        try await eventually { captions.store.sentences.first?.translatedText == "大家好。" }
+        captions.setOn(false)
+    }
+
+    /// Captions never set up the microphone while a dictation holds it. The start waits
+    /// until the dictation is over, and a stop meanwhile starts nothing.
+    @Test func aStartOfTheMicrophoneWaitsForADictationToEnd() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let events = Box()
+        events.pause = .paused
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: events, microphone: microphone)
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        #expect(captions.capture == .starting)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(microphone.starts == 0)
+        events.pause = .notPaused
+        try await eventually { captions.capture == .listening }
+        #expect(microphone.starts == 1)
+        captions.setOn(false)
+        events.pause = .paused
+        captions.setOn(true)
+        captions.setOn(false)
+        events.pause = .notPaused
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(microphone.starts == 1)
+    }
+
+    @Test func microphoneCaptionsTranslateLikeTheMacs() async throws {
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels(["Hello everyone."]), source: FakeSource(), events: events, microphone: FakeCaptionMicrophone())
+        let run = try await listeningToTheMicrophone(captions)
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: run)
+        try await eventually { captions.store.sentences.first?.translatedText == "大家好。" }
+        #expect(events.items == ["show", "started"])
+        captions.setOn(false)
+    }
+
+    /// The microphone gets no note about what plays and never asks Core Audio. No sound
+    /// since its start, or none for the quiet limit after some, names the device, and the
+    /// first sound takes the note away.
+    @Test func microphoneCaptionsAskNothingAboutWhatPlays() async throws {
+        let source = FakeSource()
+        let microphone = FakeCaptionMicrophone()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), microphone: microphone, silenceHint: 0.2, microphoneQuietLimit: 0.5)
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening && captions.silence != nil }
+        let silent = MeetingCaptions.SilenceKind.microphoneSilent(MicrophoneSituation(lidClosed: false, input: microphone.input))
+        #expect(captions.silence == silent)
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: EngineTurns()) == ["No sound came from USB Microphone"])
+        let run = captions.currentRun
+        captions.receive(CaptionAudio.tone(0.1), run: run)
+        #expect(captions.silence == nil)
+        captions.receive(CaptionAudio.silence(0.4), run: run)
+        #expect(captions.silence == nil)
+        captions.receive(CaptionAudio.silence(0.1), run: run)
+        #expect(captions.silence == silent)
+        captions.receive(CaptionAudio.tone(0.1), run: run)
+        #expect(captions.silence == nil)
+        #expect(source.answers.isEmpty)
+        captions.setOn(false)
+        // Quiet samples from the start, with the lid closed and the built in microphone.
+        microphone.lidClosed = true
+        microphone.input = AudioInput(id: 1, uid: "built-in", name: "MacBook Pro Microphone", isInternalMicrophone: true)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        captions.receive(CaptionAudio.silence(0.2), run: captions.currentRun)
+        #expect(captions.silence == .microphoneSilent(MicrophoneSituation(lidClosed: true, input: microphone.input)))
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: EngineTurns()) == ["The lid is closed, so the built in microphone is off"])
+        #expect(source.answers.isEmpty)
+        #expect(source.calls.isEmpty)
+        captions.setOn(false)
+    }
+
+    /// A device that went away or changed starts the microphone again after the delay, in
+    /// the same meeting. Samples of the earlier start are ignored, and while a dictation
+    /// holds the microphone, the start waits for its end.
+    @Test func aMicrophoneThatMovesStartsAgainInTheSameMeeting() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels(["Hello everyone."]), source: FakeSource(), events: events, microphone: microphone, restartDelay: 0.05)
+        let first = try await listeningToTheMicrophone(captions)
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: first)
+        try await eventually { captions.store.sentences.first?.translatedText == "大家好。" }
+        microphone.move()
+        try await eventually { microphone.calls == ["start", "started", "stop", "start", "started"] }
+        try await eventually { captions.currentRun != first && captions.capture == .listening }
+        #expect(events.items == ["show", "started"])
+        #expect(captions.store.sentences.count == 1)
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: first)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(captions.store.sentences.count == 1)
+        events.pause = .paused
+        microphone.move()
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(microphone.starts == 2)
+        events.pause = .notPaused
+        try await eventually { microphone.starts == 3 && captions.capture == .listening }
+        captions.setOn(false)
+    }
+
+    @Test func aNewMicrophoneChoiceStartsTheMicrophoneAgain() async throws {
+        let source = FakeSource()
+        let microphone = FakeCaptionMicrophone()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), microphone: microphone)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        captions.microphoneChosen("usb-2")
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(microphone.calls.isEmpty)
+        #expect(source.calls == ["start", "started"])
+        captions.setSource(.microphone)
+        try await eventually { microphone.startedUIDs == ["usb-2"] && captions.capture == .listening }
+        captions.microphoneChosen("usb-3")
+        try await eventually { microphone.startedUIDs == ["usb-2", "usb-3"] && captions.capture == .listening }
+        captions.microphoneChosen("usb-3")
+        captions.microphoneChosen(nil)
+        try await eventually { microphone.startedUIDs == ["usb-2", "usb-3", nil] }
+        captions.setOn(false)
+    }
+
+    @Test func wakeStartsTheMicrophoneAgainButNotTheMac() async throws {
+        let source = FakeSource()
+        let microphone = FakeCaptionMicrophone()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), microphone: microphone)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        captions.macDidWake()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(source.calls == ["start", "started"])
+        captions.setSource(.microphone)
+        try await eventually { captions.capture == .listening && microphone.starts == 1 }
+        captions.macDidWake()
+        try await eventually { microphone.starts == 2 && captions.capture == .listening }
+        #expect(microphone.calls == ["start", "started", "stop", "start", "started"])
+        captions.setOn(false)
+    }
+
+    @Test func aMicrophoneThatFailsToStartSaysSo() async throws {
+        let microphone = FakeCaptionMicrophone()
+        microphone.fails = .failed(step: "start the input unit", status: -1)
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: events, microphone: microphone, silenceHint: 0.1)
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        try await eventually { captions.capture == .microphoneUnavailable(.failed(step: "start the input unit", status: -1)) }
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: EngineTurns()) == ["Orra could not start the microphone. Turn Live Captions off and on again to try again."])
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(captions.silence == nil)
+        #expect(captions.microphoneInUse == nil)
+        #expect(events.items == ["show"])
+        captions.setOn(false)
+    }
+
+    /// No microphone at all says so, and one plugged in later is used.
+    @Test func aMicrophonePluggedInLaterIsUsed() async throws {
+        let microphone = FakeCaptionMicrophone()
+        microphone.fails = .noInput
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone)
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        try await eventually { captions.capture == .microphoneUnavailable(.noInput) }
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: EngineTurns()) == ["No microphone is connected. Captions start once you connect one."])
+        #expect(microphone.inputs.watches == 1)
+        microphone.fails = nil
+        microphone.inputs.onChange?()
+        try await eventually { captions.capture == .listening }
+        #expect(captions.microphoneInUse == microphone.input)
+        captions.setOn(false)
+    }
+
+    /// Once a dictation has gone on for a moment, the window says what becomes of the
+    /// captions: those of the microphone pause, those of the Mac wait and catch up.
+    @Test func theDictationNoteSaysCaptionsPauseForTheMicrophone() async throws {
+        let turns = EngineTurns(noteDelay: .milliseconds(10))
+        let pause = "Captions pause while you dictate and go on when you finish."
+        let wait = "Captions wait while you dictate and catch up when you finish."
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: FakeCaptionMicrophone(), silenceHint: 60)
+        _ = try await listeningToTheMicrophone(captions)
+        turns.dictationStarted()
+        try await eventually { turns.dictationNoteDue }
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: turns) == [pause])
+        captions.setSource(.systemAudio)
+        try await eventually { captions.capture == .listening }
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: turns) == [wait])
+        turns.dictationEnded()
+        captions.setOn(false)
+    }
+
+    /// The window's sign that the microphone is on shows only while captions listen to it.
+    @Test func theMicrophoneSignShowsOnlyWhileItListens() async throws {
+        let microphone = FakeCaptionMicrophone()
+        microphone.holdsStart = true
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone)
+        captions.setSource(.microphone)
+        #expect(captions.microphoneInUse == nil)
+        captions.setOn(true)
+        try await eventually { microphone.calls == ["start"] }
+        #expect(captions.capture == .starting)
+        #expect(captions.microphoneInUse == nil)
+        microphone.holdsStart = false
+        microphone.releaseStart()
+        try await eventually { captions.capture == .listening }
+        #expect(captions.microphoneInUse == microphone.input)
+        captions.setSource(.systemAudio)
+        #expect(captions.microphoneInUse == nil)
+        captions.setSource(.microphone)
+        try await eventually { captions.microphoneInUse == microphone.input }
+        captions.setOn(false)
+        #expect(captions.microphoneInUse == nil)
+        microphone.access = .denied
+        captions.setOn(true)
+        #expect(captions.microphoneInUse == nil)
+        captions.setOn(false)
+    }
+
+    /// The press of any key that starts a dictation pauses the microphone until the paste or
+    /// the cancel, and so do a voice sample and Orra's voice. A key that waits holds the
+    /// microphone's audio back until its press counts.
+    @Test func theMicrophonePausesFromThePressUntilTheDictationIsOver() {
+        typealias Pause = MeetingCaptions.MicrophonePause
+        #expect(Pause(dictation: .idle, recordsVoiceSample: false, speaks: false) == .notPaused)
+        #expect(Pause(dictation: .arming, recordsVoiceSample: false, speaks: false) == .arming)
+        for state in [PushToTalkStateMachine.State.listening, .waitingForSecondPress, .handsFree, .processing] {
+            #expect(Pause(dictation: state, recordsVoiceSample: false, speaks: false) == .paused)
+        }
+        #expect(Pause(dictation: .idle, recordsVoiceSample: true, speaks: false) == .paused)
+        #expect(Pause(dictation: .idle, recordsVoiceSample: false, speaks: true) == .paused)
+        #expect(Pause(dictation: .arming, recordsVoiceSample: false, speaks: true) == .paused)
     }
 }
 

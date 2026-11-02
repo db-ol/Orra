@@ -90,10 +90,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         save: { $0.save() },
         voiceFile: .live
     )
-    /// Meeting captions, off at every launch. Lazy, because they read the controller's
-    /// speech model state.
+    /// Meeting captions, off at every launch, listening to what the Mac plays until the
+    /// user chooses the microphone. Lazy, because they read the controller's speech model
+    /// state.
     lazy var captions = MeetingCaptions(
-        source: .live(),
+        systemAudio: .live(),
+        microphone: .live(),
         engines: .live(
             transcription: transcription,
             isSpeechReady: { [pushToTalk] in pushToTalk.modelState == .ready },
@@ -104,7 +106,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         started: { [cleanup] in cleanup.captionsStarted() },
         stopped: { [cleanup] in cleanup.captionsStopped() },
         displayMode: CaptionDisplayMode.load(),
-        saveDisplayMode: { $0.save() }
+        saveDisplayMode: { $0.save() },
+        // Dictation goes first: microphone captions leave out what a dictation, a voice
+        // sample or Orra's voice gives the microphone.
+        pausesMicrophone: { [pushToTalk, speech] in
+            MeetingCaptions.MicrophonePause(
+                dictation: pushToTalk.state,
+                recordsVoiceSample: pushToTalk.isRecordingVoiceSample,
+                speaks: speech.state == .speaking
+            )
+        },
+        // The prompt, when the user chooses the microphone before access was decided. The
+        // controller learns the answer, so the menu and the welcome window follow it.
+        askForMicrophoneAccess: { [pushToTalk] in pushToTalk.requestMicrophoneAccess() }
     )
     lazy var captionWindow = CaptionWindow(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup, turns: turns)
     /// Projects, off until the user turns it on in Settings, and only in builds that show
@@ -201,6 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.learnedNotice.offerKeyboardTip(key)
     }
     private var menuObserver: (any NSObjectProtocol)?
+    private var wakeObserver: (any NSObjectProtocol)?
     private var mailObservers: [any NSObjectProtocol] = []
     /// Orra's access to Mail as the Projects page last learned it, see `followMailAccess()`.
     private var mailAccess: ProjectsSettings.MailAccess.Access?
@@ -361,6 +376,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    /// Tells the captions the microphone chosen under Microphone, now and after every
+    /// change, so captions that listen to the microphone use the one a dictation records
+    /// from.
+    private func followMicrophoneChoice() {
+        captions.microphoneChosen(withObservationTracking {
+            pushToTalk.microphone?.uid
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                self?.followMicrophoneChoice()
+            }
+        })
+    }
+
+    /// Tells the captions when the Mac wakes, so captions that listen to the microphone
+    /// start it again.
+    private func followWake() {
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [captions] _ in
+            MainActor.assumeIsolated {
+                captions.macDidWake()
+            }
+        }
+    }
+
     /// Watches the translation key while translation is on, now and after every change of
     /// the switch.
     private func followTranslation() {
@@ -472,6 +514,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         captions.showWindow = { [captionWindow] in captionWindow.show() }
         captions.closeWindow = { [captionWindow] in captionWindow.close() }
         pushToTalk.onLiveCaptionsShortcut = { [weak self] in self?.toggleCaptionsFromShortcut() }
+        followMicrophoneChoice()
+        followWake()
         // The steps that keep a user's settings across versions. A version that changes
         // what a setting starts as adds its step inside, not here.
         LaunchMigrations.run(pushToTalk, cleanup: cleanup, setUpBefore: setUpBefore)

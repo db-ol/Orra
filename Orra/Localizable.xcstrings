@@ -2843,6 +2843,28 @@
         }
       }
     },
+    "Captions pause while you dictate and go on when you finish." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los subtítulos se pausan mientras dictas y continúan cuando terminas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声入力中はキャプションを一時停止し、終わると再開します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听写时字幕会暂停，结束后继续。"
+          }
+        }
+      }
+    },
     "Captions show" : {
       "localizations" : {
         "es-419" : {
@@ -9438,6 +9460,28 @@
         }
       }
     },
+    "No microphone is connected. Captions start once you connect one." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay ningún micrófono conectado. Los subtítulos empezarán cuando conectes uno."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイクが接続されていません。マイクを接続するとキャプションが表示され始めます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有连接麦克风。连接麦克风后字幕就会开始。"
+          }
+        }
+      }
+    },
     "No one yet." : {
       "localizations" : {
         "es-419" : {
@@ -11241,6 +11285,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 无法在这台 Mac 上保存声音样本。"
+          }
+        }
+      }
+    },
+    "Orra could not start the microphone. Turn Live Captions off and on again to try again." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra no pudo iniciar el micrófono. Desactiva y vuelve a activar Subtítulos en vivo para intentarlo de nuevo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraはマイクを起動できませんでした。もう一度試すには、“ライブキャプション”をオフにしてから再度オンにしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无法启动麦克风。请关闭“实时字幕”后再打开，重试一次。"
           }
         }
       }

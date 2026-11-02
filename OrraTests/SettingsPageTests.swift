@@ -398,7 +398,7 @@ struct SettingsPageTests {
             dockIcon: DockIcon(showsInDock: true, save: { _ in }, setPolicy: { _ in }, hasOpenWindow: { true }),
             updater: AppUpdater(),
             captions: meeting ? MeetingCaptions(
-                source: SystemAudioSource(start: { _ in }, stop: {}, somethingPlays: { false }),
+                systemAudio: SystemAudioSource(start: { _ in }, stop: {}, somethingPlays: { false }),
                 engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, target: { .chinese }, translate: { text, _ in text })
             ) : nil,
             speech: meeting ? TranslationSpeech(engines: .only(FakeSynthesizer()), playback: FakePlayback(), outputs: { [] }, folders: { nil }) : nil,
