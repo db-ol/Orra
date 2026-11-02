@@ -130,8 +130,8 @@ struct CaptionView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
                     // Says where captions come from, since a test with one's own voice
-                    // gives none. The note that nothing plays says it too, so it shows
-                    // alone.
+                    // gives none. The note that nothing plays says the same, so the
+                    // placeholder hides while that note shows.
                     if captions.store.sentences.isEmpty, captions.silence != .noAudio {
                         Text("Captions of what the Mac plays, such as a call or a video, appear here. What you say into your microphone is not captioned.")
                             .foregroundStyle(.secondary)

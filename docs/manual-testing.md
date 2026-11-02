@@ -2991,9 +2991,9 @@ it shows starts, stops, counts and failures, never text.
 What Live Captions hear and when they wait, added on 2026-10-25, not verified yet.
 MeetingCaptionsTests checks the notes with a fake capture that delivers nothing or only
 zeros, or whose start waits or fails, and with EngineTurns for a dictation. Since
-2026-11-01 the window tells no audio at all, which with tap auto start means that nothing
-plays, from samples of only zeros, which is what a refused permission looks like, also
-not verified yet. Watch the log with
+2026-11-01 the window tells no audio at all from samples of only zeros, not verified yet
+either. With tap auto start, no audio means that nothing plays. Samples of only zeros are
+what a refused permission looks like. Watch the log with
 `log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "captions"'`.
 
 - [ ] Turn Live Captions on with nothing playing. The window says "Captions of what the
