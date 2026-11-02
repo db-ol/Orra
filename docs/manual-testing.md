@@ -3056,10 +3056,15 @@ quit such apps for the checks with nothing playing. Watch the log with
   notes still read and the list keeps some room.
 
 Microphone captions, added on 2026-11-01, not verified yet. MeetingCaptionsTests checks the
-choice, the starts and stops, the pause for dictation and the notes with a fake microphone,
-CaptionMicrophoneTests the rules for which microphone captions use and when they start it
-again, and TapConversionTests the conversion of mono audio at the device's own rate. No
-test opens a microphone. Check in a build from Xcode with the log open:
+choice, the starts, the starts again and the stops, the pause for dictation and the notes
+with a fake microphone, CaptionMicrophoneTests the rules for which microphone captions use
+and when they start it again, and TapConversionTests the conversion of mono audio at the
+device's own rate. No test opens a microphone or takes a unit apart, so the checks of the
+indicator below are the only ones of the stop. Make the build for these checks only after
+INFOPLIST_KEY_NSMicrophoneUsageDescription in the project names Live Captions, as
+LocalizationTests.theEnglishMicrophonePromptMatchesTheCatalog asks: a build from Xcode
+before that change takes the old English prompt back into Orra/InfoPlist.xcstrings.
+Check in a build from Xcode with the log open:
 `log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND (category == "captions" OR category == "push-to-talk" OR category == "audio")'`.
 Write down which microphones were tried: the MacBook's own, a USB microphone, AirPods, and
 a headset that gives exactly zero while you are quiet, if there is one.
@@ -3108,6 +3113,13 @@ a headset that gives exactly zero while you are quiet, if there is one.
   Microphone: they follow it, with "start the microphone again: choice".
 - [ ] Sleep the Mac with captions on the microphone and wake it: captions go on, with "start
   the microphone again: wake" in the log.
+- [ ] Connect AirPods while captions listen to System Default and macOS makes them the
+  default input: captions move to them and keep going. Write down how many "start the
+  microphone again" lines the log shows. A start that fails says "Orra could not start the
+  microphone", and the next change of the devices tries once more, with "start the
+  microphone again: retry". If the log says "let go of the microphone after 3 starts
+  again", write down the headset, since a headset that changes its profile at each start
+  would do that.
 - [ ] With captions on the microphone, `pmset -g assertions` shows whether Core Audio keeps
   the Mac from idle sleep. Write down what it shows, since the user guide says it may.
 - [ ] Lock the screen with captions on the microphone, talk for a moment and unlock it:
