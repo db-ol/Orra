@@ -375,8 +375,6 @@ struct MailBridgeTests {
 
     // MARK: The fake
 
-    /// Mail as a test plays it. Each request gets the answers set for it in turn, the last
-    /// one again and again, and an empty list when none is set. Records what was asked.
     /// The pauses a bridge waited.
     private final class Pauses: Sendable {
         private let pauses = Mutex<[Duration]>([])
@@ -390,6 +388,8 @@ struct MailBridgeTests {
         }
     }
 
+    /// Mail as a test plays it. Each request gets the answers set for it in turn, the last
+    /// one again and again, and an empty list when none is set. Records what was asked.
     private final class FakeMail: Sendable {
         private struct State {
             var answers: [Request: [Result<Value, MailEvents.Failure>]] = [:]
