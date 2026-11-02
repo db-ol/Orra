@@ -248,9 +248,11 @@ nonisolated enum CaptionSource: String, CaseIterable, Sendable {
 ///
 /// The microphone is the user's own voice, and dictation goes first: from the press of the
 /// talk key or the translation key until the dictation is pasted or cancelled, while a
-/// voice sample records and while Orra speaks a translation, microphone captions take in
-/// no audio, see `MicrophonePause`, and they go on afterwards. Their model calls go through
-/// EngineTurns as all caption calls do.
+/// voice sample records and while Orra speaks a translation, microphone captions drop what
+/// the microphone hears before it reaches the pipeline, see `MicrophonePause`, and they go
+/// on afterwards. Their unit keeps running meanwhile, and a start of it waits until the
+/// pause is over, see `startMicrophone`. Their model calls go through EngineTurns as all
+/// caption calls do.
 ///
 /// Turning it off stops the capture, lets go of the microphone and closes the window. The
 /// sentences stay in memory until Orra quits, so they can still be copied, and the next
