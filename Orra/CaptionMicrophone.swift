@@ -111,15 +111,6 @@ nonisolated final class CaptionMicrophone: @unchecked Sendable {
         preferredInput.flatMap(connected) ?? systemDefault()
     }
 
-    /// Whether captions start the microphone again: the input they listen to went away,
-    /// changed its rate or lost its inputs, or the input to listen to is now another one,
-    /// or none, such as after the chosen microphone was plugged in or the default input
-    /// changed. A change of the list that leaves the same input, such as the private
-    /// aggregate device that dictation's engine makes, is no move.
-    static func hasMoved(interrupted: Bool, listensTo bound: String, resolved: String?) -> Bool {
-        interrupted || resolved != bound
-    }
-
     /// Starts listening, see MicrophoneCaptionSource.start. Never shows the prompt: without
     /// microphone access it throws before it touches a device.
     func start(preferredInput: String?, deliver: @escaping @Sendable ([Float]) -> Void, moved: @escaping @Sendable () -> Void) throws -> AudioInput {
@@ -296,9 +287,9 @@ nonisolated final class CaptionInputContext: @unchecked Sendable {
     }
 }
 
-/// Whether the caption microphone moved, for its drain timer, see
-/// `CaptionMicrophone.hasMoved`. The watches only set flags, and `look` reads the devices
-/// on the capture's queue, never on the main thread, and calls `moved` once.
+/// Whether the caption microphone moved, for its drain timer. The watches only set flags,
+/// and `look` reads the devices on the capture's queue, never on the main thread, and
+/// calls `moved` once.
 nonisolated final class MicrophoneMoveCheck: @unchecked Sendable {
     /// Set by DeviceWatch when the bound device goes away, changes its rate or loses its
     /// inputs.
@@ -307,23 +298,40 @@ nonisolated final class MicrophoneMoveCheck: @unchecked Sendable {
     let devicesChanged = Atomic<Bool>(false)
     private let bound: AudioInput
     private let preferredInput: String?
+    private let connected: @Sendable (String) -> AudioInput?
+    private let systemDefault: @Sendable () -> AudioInput?
     private let moved: @Sendable () -> Void
     /// Used on the capture's queue only.
     private var reported = false
 
-    init(listensTo bound: AudioInput, preferredInput: String?, moved: @escaping @Sendable () -> Void) {
+    /// `connected` and `systemDefault` read Core Audio's devices, as CaptionMicrophone
+    /// resolves them. Tests pass made up ones.
+    init(
+        listensTo bound: AudioInput,
+        preferredInput: String?,
+        connected: @escaping @Sendable (String) -> AudioInput? = AudioInput.device(uid:),
+        systemDefault: @escaping @Sendable () -> AudioInput? = AudioInput.systemDefault,
+        moved: @escaping @Sendable () -> Void
+    ) {
         self.bound = bound
         self.preferredInput = preferredInput
+        self.connected = connected
+        self.systemDefault = systemDefault
         self.moved = moved
     }
 
+    /// Calls `moved` the first time the input captions listen to went away, changed its
+    /// rate or lost its inputs, or the input to listen to is now another one, or none, such
+    /// as after the chosen microphone was plugged in or the default input changed. A change
+    /// of the list that leaves the same input, such as the private aggregate device that
+    /// dictation's engine makes, is no move. Reads the devices only after a change.
     func look() {
         guard !reported else { return }
         var resolved: String? = bound.uid
         if devicesChanged.exchange(false, ordering: .acquiringAndReleasing) {
-            resolved = CaptionMicrophone.resolve(preferredInput: preferredInput, connected: AudioInput.device(uid:), systemDefault: AudioInput.systemDefault)?.uid
+            resolved = CaptionMicrophone.resolve(preferredInput: preferredInput, connected: connected, systemDefault: systemDefault)?.uid
         }
-        guard CaptionMicrophone.hasMoved(interrupted: interrupted.isSet, listensTo: bound.uid, resolved: resolved) else { return }
+        guard interrupted.isSet || resolved != bound.uid else { return }
         reported = true
         moved()
     }

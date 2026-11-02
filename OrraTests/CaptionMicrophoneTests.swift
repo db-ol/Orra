@@ -1,4 +1,6 @@
 import Foundation
+import os
+import Synchronization
 import Testing
 @testable import Orra
 
@@ -27,13 +29,99 @@ struct CaptionMicrophoneTests {
         #expect(resolve(nil, connected: [], systemDefault: nil) == nil)
     }
 
-    /// A device that went away or changed, or another input to listen to, starts the
-    /// microphone again. A change of the list that leaves the same input does not.
-    @Test func onlyAMoveOfTheInputStartsTheMicrophoneAgain() {
-        #expect(CaptionMicrophone.hasMoved(interrupted: true, listensTo: "built-in", resolved: "built-in"))
-        #expect(CaptionMicrophone.hasMoved(interrupted: false, listensTo: "built-in", resolved: "usb-1"))
-        #expect(CaptionMicrophone.hasMoved(interrupted: false, listensTo: "usb-1", resolved: nil))
-        #expect(!CaptionMicrophone.hasMoved(interrupted: false, listensTo: "built-in", resolved: "built-in"))
+    /// Made up devices for the move check, which it reads on the capture's queue, and the
+    /// moves it reported.
+    private final class Devices: Sendable {
+        private struct State {
+            var connected: [AudioInput]
+            var systemDefault: AudioInput?
+            var moves = 0
+        }
+
+        private let state: OSAllocatedUnfairLock<State>
+
+        init(connected: [AudioInput], systemDefault: AudioInput?) {
+            state = OSAllocatedUnfairLock(initialState: State(connected: connected, systemDefault: systemDefault))
+        }
+
+        var moves: Int {
+            state.withLock { $0.moves }
+        }
+
+        func set(connected: [AudioInput], systemDefault: AudioInput?) {
+            state.withLock {
+                $0.connected = connected
+                $0.systemDefault = systemDefault
+            }
+        }
+
+        func check(listensTo bound: AudioInput, preferredInput: String?) -> MicrophoneMoveCheck {
+            MicrophoneMoveCheck(
+                listensTo: bound,
+                preferredInput: preferredInput,
+                connected: { [self] uid in state.withLock { $0.connected.first { $0.uid == uid } } },
+                systemDefault: { [self] in state.withLock { $0.systemDefault } },
+                moved: { [self] in state.withLock { $0.moves += 1 } }
+            )
+        }
+    }
+
+    /// The device captions listen to went away, changed its rate or lost its inputs: the
+    /// microphone starts again, once, however often the drain timer looks.
+    @Test func anInterruptedDeviceIsOneMove() {
+        let devices = Devices(connected: [Self.builtIn], systemDefault: Self.builtIn)
+        let check = devices.check(listensTo: Self.builtIn, preferredInput: nil)
+        check.look()
+        #expect(devices.moves == 0)
+        check.interrupted.set()
+        check.look()
+        check.look()
+        #expect(devices.moves == 1)
+    }
+
+    /// A change of the devices is a move only when it changes the input to listen to, and
+    /// the devices are read only after a change.
+    @Test func onlyAChangeOfTheInputToListenToIsAMove() {
+        let devices = Devices(connected: [Self.builtIn], systemDefault: Self.builtIn)
+        let check = devices.check(listensTo: Self.builtIn, preferredInput: nil)
+        // A device that comes and leaves the default input as it was, such as the private
+        // aggregate device of dictation's engine.
+        devices.set(connected: [Self.builtIn, Self.usb], systemDefault: Self.builtIn)
+        check.devicesChanged.store(true, ordering: .releasing)
+        check.look()
+        #expect(devices.moves == 0)
+        // A new default input, but no change reported yet.
+        devices.set(connected: [Self.builtIn, Self.usb], systemDefault: Self.usb)
+        check.look()
+        #expect(devices.moves == 0)
+        check.devicesChanged.store(true, ordering: .releasing)
+        check.look()
+        check.devicesChanged.store(true, ordering: .releasing)
+        check.look()
+        #expect(devices.moves == 1)
+    }
+
+    /// Captions on the system default because the chosen microphone was missing go to it
+    /// once it is plugged in, and captions on the chosen one go to the default once it is
+    /// unplugged.
+    @Test func theChosenMicrophoneComingOrGoingIsAMove() {
+        let devices = Devices(connected: [Self.builtIn], systemDefault: Self.builtIn)
+        let waiting = devices.check(listensTo: Self.builtIn, preferredInput: "usb-1")
+        devices.set(connected: [Self.builtIn, Self.usb], systemDefault: Self.builtIn)
+        waiting.devicesChanged.store(true, ordering: .releasing)
+        waiting.look()
+        #expect(devices.moves == 1)
+        let chosen = devices.check(listensTo: Self.usb, preferredInput: "usb-1")
+        devices.set(connected: [Self.builtIn], systemDefault: Self.builtIn)
+        chosen.devicesChanged.store(true, ordering: .releasing)
+        chosen.look()
+        #expect(devices.moves == 2)
+        // No input left at all is a move too.
+        let alone = devices.check(listensTo: Self.builtIn, preferredInput: nil)
+        devices.set(connected: [], systemDefault: nil)
+        alone.devicesChanged.store(true, ordering: .releasing)
+        alone.look()
+        #expect(devices.moves == 3)
     }
 
     /// Captions that never chose the microphone have none to use, and never ask.
