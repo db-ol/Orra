@@ -149,6 +149,22 @@ struct ReplyRuleTests {
         #expect(decide("森さん、資料を確認してください。") == .noReply(.notAddressed))
     }
 
+    /// An address of the user with a tag after + reaches the user's mailbox. A tag on
+    /// someone else's address does not make it the user's.
+    @Test func mailToATaggedAddressOfTheUserIsForTheUser() {
+        let outline = "Here is the outline of chapter 3. Can you check the order of the sections?"
+        #expect(decide(to: ["Bai.Lu+Proofs@LumenHaus.example"], text: outline) == .reply(.en))
+        #expect(decide(to: ["theo.marsh+bai.lu@printworks.example"], cc: ["bai.lu@lumenhaus.example"], text: outline) == .noReply(.notAddressed))
+    }
+
+    /// The rule reads the recipients sorting reads, the first 100 with To first, so the
+    /// mark in the list and the draft agree for mail to very many people.
+    @Test func theRuleReadsTheRecipientsSortingReads() {
+        let members = (0..<SortingService.maximumRecipients).map { "member\($0)@club.example" }
+        #expect(decide(to: members + ["bai.lu@lumenhaus.example"], text: "Can you check it?") == .noReply(.notAddressed))
+        #expect(decide(to: Array(members.dropLast()) + ["bai.lu@lumenhaus.example"], text: "Can you check it?") == .reply(.en))
+    }
+
     /// Mail to a group address or with the user in Bcc only names others.
     @Test func mailToOthersOnlyNeedsNoReply() {
         let notice = "Dear all,\n\nThe clocks go back one hour this Sunday. Please check the time on your office phone."

@@ -108,14 +108,25 @@ nonisolated struct ReplyRule: Sendable, Equatable {
         return hasLetters(subject) ? ProjectsLanguage.reading(subject) : .other
     }
 
-    /// Whether the email is meant for the user: one of the user's addresses is in To, or
-    /// the text names the user. Without the user's addresses, or with neither To nor Cc,
-    /// such as mail to undisclosed recipients, it cannot tell, and says yes.
+    /// Whether the email is meant for the user: one of the user's addresses is in To, also
+    /// with a tag after +, or the text names the user. Without the user's addresses, or with
+    /// neither To nor Cc, such as mail to undisclosed recipients, it cannot tell, and says
+    /// yes. It reads the recipients that sorting reads, To first, see
+    /// `SortingService.maximumRecipients`, so the mark in the list and the draft agree.
     private func isAddressed(to: [String], cc: [String], text: String) -> Bool {
-        let to = to.compactMap(ProjectsAddress.normalized)
-        let cc = cc.compactMap(ProjectsAddress.normalized)
+        let read = to.prefix(SortingService.maximumRecipients)
+        let to = read.compactMap(ProjectsAddress.normalized)
+        let cc = cc.prefix(SortingService.maximumRecipients - read.count).compactMap(ProjectsAddress.normalized)
         guard !ownAddresses.isEmpty, !(to.isEmpty && cc.isEmpty) else { return true }
-        return to.contains(where: ownAddresses.contains) || names(text)
+        let own = Set(ownAddresses.map(Self.untagged))
+        return to.contains { own.contains(Self.untagged($0)) } || names(text)
+    }
+
+    /// The address without a tag after + in its local part, as bai.lu+print@lumenhaus.example
+    /// reaches bai.lu@lumenhaus.example.
+    private static func untagged(_ address: String) -> String {
+        guard let at = address.lastIndex(of: "@"), let plus = address[..<at].firstIndex(of: "+") else { return address }
+        return String(address[..<plus] + address[at...])
     }
 
     /// Whether the text holds a form of the user's name: a form in Latin letters as a word
