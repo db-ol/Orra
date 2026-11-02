@@ -3186,7 +3186,9 @@ after screen saver begins or display is turned off to Immediately. Watch
   lists a PreventUserIdleDisplaySleep of Orra's named "Showing Live Captions", and the log
   says "Meeting captions keep the display on". Leave the Mac alone for 3 minutes: the
   screen does not dim, the screen saver does not start, and the display does not turn off
-  or lock. The same with Microphone.
+  or lock. The same with Microphone. The user guide says only that the screen does not dim
+  or turn off on its own. If the screen saver and the lock stay away too, write it down,
+  so the guide can say so.
 - [ ] Within a second the assertion is gone and the log says "Meeting captions no longer
   keep the display on" when captions turn off from the menu, from the shortcut and from the
   window's close button, when Orra is hidden with Hide Others in another app while Orra
