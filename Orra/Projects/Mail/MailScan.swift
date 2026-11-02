@@ -45,6 +45,11 @@ import os
 ///   that waited comes after the others of its range. The loop sleeps longer only while
 ///   every mailbox waits. When two mailboxes in a row get no answer, Mail itself does not
 ///   answer: the pass ends and the scan waits as after a refusal.
+/// - A linked mailbox may file mail that a mailbox that is not linked lists too, as the
+///   inbox of all accounts lists the inbox of each account. So while a linked mailbox
+///   waits, the mailboxes that are not linked wait with it, and a message that waits in a
+///   linked mailbox waits in the others too. That mail is then saved with the mailbox that
+///   files it.
 /// - It tells the window when a pass begins, whether that pass reads a mailbox back to the
 ///   days, and how it ended, see `Report`.
 ///
@@ -142,8 +147,8 @@ final class MailScan {
         /// Messages Mail did not give in time. Each waits, and a later pass asks for it
         /// again.
         var slow = 0
-        /// Mailboxes and messages that wait after Mail did not answer for them in time
-        /// lately, so the pass did not ask for them.
+        /// Mailboxes and messages that wait after Mail did not answer in time lately, for
+        /// them or for a linked mailbox that may file them, so the pass did not ask for them.
         var waiting = 0
         /// The error that ended the pass, or else the last one that ended a mailbox or left
         /// a mailbox or a message for later.
@@ -464,12 +469,17 @@ final class MailScan {
         var unique = Set<MailMailbox>()
         // The linked mailboxes first: a message in a linked account Inbox, which the inbox
         // of all accounts lists too, is then saved with the mailbox that files it.
-        let mailboxes = ((await lookups.linkedMailboxes()) + choice.mailboxes).filter { unique.insert($0).inserted }
+        let linked = (await lookups.linkedMailboxes()).filter { unique.insert($0).inserted }
+        let mailboxes = linked + choice.mailboxes.filter { unique.insert($0).inserted }
         let days = choice.days
         lastMailboxes = mailboxes
         if !Task.isCancelled {
+            // As the loop below decides, except for a linked mailbox Mail does not answer
+            // for during the pass.
+            let linkedWaits = leavesWaiting && linked.contains { waits(progress[$0]?.retry) }
             report(.began(readsBack: mailboxes.contains { mailbox in
-                !(leavesWaiting && waits(progress[mailbox]?.retry)) && !polls(mailbox, days: days, leavesWaiting: leavesWaiting)
+                let skips = (leavesWaiting && waits(progress[mailbox]?.retry)) || (linkedWaits && !linked.contains(mailbox))
+                return !skips && !polls(mailbox, days: days, leavesWaiting: leavesWaiting)
             }))
         }
         let cutoff = now().addingTimeInterval(-Double(days) * 86_400)
@@ -482,10 +492,19 @@ final class MailScan {
                 pass.error = retry.error
                 continue
             }
+            let isLinked = linked.contains(mailbox)
+            if !isLinked, let retry = linked.lazy.compactMap({ self.progress[$0]?.retry }).first {
+                // A linked mailbox that Mail did not answer for may file mail this one lists
+                // too. This one waits with it, so that mail is saved with the linked one.
+                pass.waiting += 1
+                pass.error = retry.error
+                continue
+            }
             do {
                 try checkMayRead()
                 pass.mailboxes += 1
-                try await read(mailbox, cutoff: cutoff, days: days, leavesWaiting: leavesWaiting, seen: &seen, pass: &pass)
+                let held = isLinked ? [:] : waitingMessages(in: linked)
+                try await read(mailbox, cutoff: cutoff, days: days, leavesWaiting: leavesWaiting, held: held, seen: &seen, pass: &pass)
                 progress[mailbox]?.retry = nil
                 unanswered = 0
             } catch let stop as Stop {
@@ -527,6 +546,14 @@ final class MailScan {
         Progress(order: mailbox.kind == .inbox ? .newestFirst : nil)
     }
 
+    /// The messages that wait in these linked mailboxes, by Message-ID. A mailbox that is
+    /// not linked leaves them to the linked one, which files them.
+    private func waitingMessages(in linked: [MailMailbox]) -> [String: Retry] {
+        linked.reduce(into: [:]) { waiting, mailbox in
+            waiting.merge(progress[mailbox]?.slow ?? [:]) { first, _ in first }
+        }
+    }
+
     /// Whether a pass only polls the mailbox: one read it back to the days before, and no
     /// message that Mail did not give in time may be asked for again yet.
     private func polls(_ mailbox: MailMailbox, days: Int, leavesWaiting: Bool) -> Bool {
@@ -563,7 +590,16 @@ final class MailScan {
     /// end. Once a pass read it back to the days, the next ones only poll it: they end
     /// after the first range that holds a message known before the pass. A message that
     /// Mail did not give in time has the mailbox read back to it once its wait is over.
-    private func read(_ mailbox: MailMailbox, cutoff: Date, days: Int, leavesWaiting: Bool, seen: inout Set<String>, pass: inout Pass) async throws {
+    /// `held` are the messages that wait in a linked mailbox, which this one leaves to it.
+    private func read(
+        _ mailbox: MailMailbox,
+        cutoff: Date,
+        days: Int,
+        leavesWaiting: Bool,
+        held: [String: Retry],
+        seen: inout Set<String>,
+        pass: inout Pass
+    ) async throws {
         var total = try await bridge.count(mailbox)
         try checkMayRead()
         let polls = self.polls(mailbox, days: days, leavesWaiting: leavesWaiting)
@@ -626,7 +662,7 @@ final class MailScan {
             next = last + 1
             size = Self.rangeSize
             let done = try await take(
-                listings, cutoff: cutoff, polls: polls, leavesWaiting: leavesWaiting,
+                listings, cutoff: cutoff, polls: polls, leavesWaiting: leavesWaiting, held: held,
                 listed: &listed, met: &met, slow: &state.slow, seen: &seen, pass: &pass)
             if done {
                 break
@@ -671,12 +707,14 @@ final class MailScan {
     /// came before the days, or, while the mailbox is polled, the range held a message
     /// known before the pass. A message that Mail does not give in time waits in `slow`,
     /// and the range goes on, unless `slowInARow` in a row do not come, which ends the
-    /// mailbox.
+    /// mailbox. A message in `held` waits in `slow` too, with the wait it has in a linked
+    /// mailbox, and is never read here.
     private func take(
         _ listings: [MailListing],
         cutoff: Date,
         polls: Bool,
         leavesWaiting: Bool,
+        held: [String: Retry],
         listed: inout Set<Int>,
         met: inout Set<String>,
         slow: inout [String: Retry],
@@ -720,6 +758,15 @@ final class MailScan {
                 if known.contains(listing.messageID) {
                     pass.known += 1
                     knownBefore = true
+                    continue
+                }
+                if let wait = held[listing.messageID] {
+                    // The linked mailbox that files it asks for it again. This one reads back
+                    // to it once that wait is over, and reads it then if the linked one no
+                    // longer has it.
+                    slow[listing.messageID] = wait
+                    pass.waiting += 1
+                    pass.error = wait.error
                     continue
                 }
                 if let retry, !asksAgain || (leavesWaiting && waits(retry)) {

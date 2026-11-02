@@ -16,6 +16,8 @@ struct MailScanTests {
     static let archive = mailbox("Archive")
     static let clients = mailbox("Clients")
     static let receipts = mailbox("Receipts")
+    /// The account's inbox, which the inbox of all accounts lists too.
+    static let studioInbox = mailbox("INBOX")
 
     static func mailbox(_ name: String) -> MailMailbox {
         MailMailbox(kind: .mailbox, reference: .name(MailEvents.Code.mailbox, name, of: account), name: name, account: "Studio")
@@ -1002,6 +1004,118 @@ struct MailScanTests {
         clock.advance(by: .seconds(60))
         try await waitUntil { clock.sleeping == 0 }
         #expect(mail.calls.isEmpty)
+    }
+
+    // MARK: Linked mailboxes Mail is slow for
+
+    /// The account's inbox linked to a project, with a message that the inbox of all
+    /// accounts lists too, under another of Mail's ids, and a message of another account
+    /// there.
+    private func putLinkedInbox() {
+        mail.put([FakeMail.mail(1, in: Self.studioInbox, received: Self.now - Self.hour)], in: Self.studioInbox)
+        var copy = FakeMail.mail(1, in: .inbox, received: Self.now - Self.hour)
+        copy.listing = MailListing(
+            message: MailMessageRef(id: 51, mailbox: .inbox), messageID: copy.listing.messageID,
+            dateReceived: copy.listing.dateReceived, sender: copy.listing.sender, subject: copy.listing.subject,
+            to: copy.listing.to, cc: [], size: copy.listing.size
+        )
+        mail.put([copy, FakeMail.mail(2, in: .inbox, received: Self.now - 2 * Self.hour)], in: .inbox)
+        store.linked = [Self.studioInbox]
+    }
+
+    /// Mail of a linked mailbox that Mail does not answer for in time at first is saved
+    /// with that mailbox, which files it. Until then the mailboxes that are not linked
+    /// wait with it, since they may list its mail.
+    @Test func mailOfALinkedMailboxMailIsSlowForIsSavedWithIt() async {
+        defer { cleanUp() }
+        putLinkedInbox()
+        let linked = Self.studioInbox
+        mail.failure = { call in call == .count(linked) ? .timedOut : nil }
+        let scan = scan(choice([.inbox]))
+        let first = await scan.scan()
+        #expect(first.error == .timedOut)
+        #expect(first.stoppedBy == nil)
+        #expect(first.waiting == 1)
+        #expect(mail.counted == [linked])
+        #expect(store.saved.isEmpty)
+
+        mail.failure = { _ in nil }
+        await scan.scan()
+        #expect(store.saved.map(\.reference) == [MailMessageRef(id: 1, mailbox: linked), MailMessageRef(id: 2, mailbox: .inbox)])
+    }
+
+    /// A message that Mail does not give in time in a linked mailbox waits for it. The
+    /// inbox of all accounts, which lists it too, leaves it to that mailbox and reads the
+    /// rest.
+    @Test func aMessageThatWaitsInALinkedMailboxIsSavedWithIt() async {
+        defer { cleanUp() }
+        putLinkedInbox()
+        let linked = Self.studioInbox
+        mail.failure = { call in call == .source(1) ? .timedOut : nil }
+        let scan = scan(choice([.inbox]))
+        let first = await scan.scan()
+        #expect(first.slow == 1)
+        #expect(first.waiting == 1)
+        #expect(mail.sourcesRead == [1, 2])
+        #expect(store.saved.map(\.reference) == [MailMessageRef(id: 2, mailbox: .inbox)])
+
+        mail.failure = { _ in nil }
+        mail.clearCalls()
+        await scan.scan()
+        #expect(mail.sourcesRead == [1])
+        #expect(store.saved.map(\.reference) == [MailMessageRef(id: 2, mailbox: .inbox), MailMessageRef(id: 1, mailbox: linked)])
+    }
+
+    /// While a linked mailbox waits in the loop, the mailboxes that are not linked wait
+    /// with it and cost no event. Once Mail answers for it, its mail is saved with it.
+    @Test func theMailboxesThatAreNotLinkedWaitWhileALinkedOneWaits() async throws {
+        defer { cleanUp() }
+        putLinkedInbox()
+        let linked = Self.studioInbox
+        mail.failure = { call in call == .count(linked) ? .timedOut : nil }
+        let clock = TestClock()
+        let waits = Waits()
+        let scan = scan(choice([.inbox]), sleep: { duration in
+            waits.add(duration)
+            try await clock.sleep(for: duration)
+        })
+        scan.start()
+        defer { scan.stop() }
+        try await waitUntil { waits.all.count == 1 && clock.sleeping == 1 }
+        // A minute on, Mail does not answer for it again, and it waits two minutes.
+        clock.advance(by: .seconds(60))
+        try await waitUntil { waits.all.count == 2 && clock.sleeping == 1 }
+        #expect(mail.counted == [linked, linked])
+        mail.clearCalls()
+        clock.advance(by: .seconds(60))
+        try await waitUntil { waits.all.count == 3 && clock.sleeping == 1 }
+        #expect(mail.calls.allSatisfy { $0 == .isRunning })
+        #expect(store.saved.isEmpty)
+        // Its wait is over, and Mail answers.
+        mail.failure = { _ in nil }
+        clock.advance(by: .seconds(60))
+        try await waitUntil { waits.all.count == 4 && clock.sleeping == 1 }
+        #expect(store.saved.map(\.reference) == [MailMessageRef(id: 1, mailbox: linked), MailMessageRef(id: 2, mailbox: .inbox)])
+        #expect(waits.all == Array(repeating: .seconds(60), count: 4))
+        scan.stop()
+        try await waitUntil { clock.sleeping == 0 }
+    }
+
+    /// A linked mailbox that Mail no longer has holds back no other, also after Mail was
+    /// slow for it.
+    @Test func aLinkedMailboxMailNoLongerHasHoldsBackNoOther() async {
+        defer { cleanUp() }
+        putLinkedInbox()
+        let linked = Self.studioInbox
+        mail.failure = { call in call == .count(linked) ? .timedOut : nil }
+        let scan = scan(choice([.inbox]))
+        await scan.scan()
+        #expect(store.saved.isEmpty)
+        mail.failure = { call in call == .count(linked) ? .notFound : nil }
+        let second = await scan.scan()
+        #expect(second.error == .notFound)
+        #expect(second.waiting == 0)
+        #expect(store.saved.map(\.reference) == [MailMessageRef(id: 51, mailbox: .inbox), MailMessageRef(id: 2, mailbox: .inbox)])
     }
 
     // MARK: The user
