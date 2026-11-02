@@ -791,6 +791,63 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// A notice that an earlier version filed in the only project on the model's choice
+    /// alone, and a reply filed under it by its thread, as the store of 0.6.2 holds them.
+    /// Once the window opens, both go to Needs a Project without the model and get the reply
+    /// marks of the rule as it is now, and a later reply to the reply stays out of the
+    /// project too.
+    @Test(.timeLimit(.minutes(1)))
+    func anOldGuessAndTheReplyUnderItLeaveTheOnlyProject() async throws {
+        defer { cleanUp() }
+        model.isThere.withLock { $0 = true }
+        let (runtime, projects, _) = try await started(installed: Installed(true))
+        let harbor = Project(name: "Harbor")
+        try await runtime.add(harbor)
+        await runtime.untilResorted()
+        let store = try #require(runtime.running?.store)
+        // The user is only in Cc of both.
+        var notice = Self.message("x@campus.example", from: "desk@campus.example", subject: "Clocks change on Sunday")
+        notice.to = [MailStore.Person(address: "all-staff@campus.example")]
+        notice.cc = [MailStore.Person(address: Self.own)]
+        notice.text = "The clocks go back one hour on Sunday."
+        notice.visibleText = notice.text
+        var reply = Self.message("y@campus.example", from: "kai@campus.example", day: 1, subject: "Re: Clocks change on Sunday")
+        reply.to = [MailStore.Person(address: "desk@campus.example"), MailStore.Person(address: "all-staff@campus.example")]
+        reply.cc = [MailStore.Person(address: Self.own)]
+        reply.inReplyTo = ["x@campus.example"]
+        reply.references = ["x@campus.example"]
+        reply.text = "Thanks, the lab clocks are done."
+        reply.visibleText = reply.text
+        try await store.save([notice, reply], ownAddresses: [Self.own], at: Self.today)
+        #expect(try await store.saveDecision(SortingDecision(project: harbor.id, level: .likely, reasons: [.model]), for: "x@campus.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: harbor.id, level: .sure, reasons: [.thread]), for: "y@campus.example"))
+        for id in ["x@campus.example", "y@campus.example"] {
+            try await store.saveReply(.reply(.en), for: id)
+        }
+
+        runtime.windowOpened()
+        // The reply mark is saved after the decision, and the reply comes after the notice.
+        try await waitUntilListed("x@campus.example", in: .needsProject, runtime) { $0.reply == .noReply(.notAddressed) }
+        try await waitUntil { !runtime.isSorting }
+        let left = try await runtime.list(.needsProject)
+        try #require(left.map(\.messageID) == ["y@campus.example", "x@campus.example"])
+        #expect(left.allSatisfy { $0.level == .unsure && $0.reasons == [.noSignal] && $0.reply == .noReply(.notAddressed) })
+        #expect(try await runtime.list(.project(harbor.id)).isEmpty)
+        #expect(model.jobs.value == 0)
+
+        var later = Self.message("z@campus.example", from: "desk@campus.example", day: 2, subject: "Re: Clocks change on Sunday")
+        later.inReplyTo = ["y@campus.example"]
+        later.references = ["x@campus.example", "y@campus.example"]
+        try await store.save([later], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("z@campus.example", in: .needsProject, runtime) { $0.level == .unsure }
+        #expect(try await runtime.list(.project(harbor.id)).isEmpty)
+        #expect(model.jobs.value == 0)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     /// Sorting again never moves mail the user moved, or mail whose explanation holds a
     /// draft, which the user may have changed.
     @Test(.timeLimit(.minutes(1)))

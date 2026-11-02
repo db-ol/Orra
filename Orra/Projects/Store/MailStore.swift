@@ -536,13 +536,21 @@ nonisolated struct MailStore: Sendable {
     /// The emails never sorted, whose decision waits for the model, that wait in their
     /// project until the model answers, see `markWaiting(_:)`, or whose thread an earlier
     /// message joined later, oldest first, each with where it is filed. Never one the user
-    /// moved. Also a filing on the model's choice alone without a draft, which Orra 0.6.2
-    /// and earlier made and sorting no longer makes, so it is sorted again once.
+    /// moved. Also a filing on the model's choice alone, which Orra 0.6.2 and earlier made
+    /// and sorting no longer makes, so it is sorted again once, with the sure thread replies
+    /// in its thread, so a reply follows the message it answers. Not such a filing whose
+    /// explanation holds a draft, or whose text Retention removed, since sorting would judge
+    /// it by its headers alone, as in `resortIDs(reaching:)`.
     func waiting() async throws -> [SortingService.Email] {
         try await database.transaction { database in
             try Self.rows(where: """
                 moved_by_user = 0 AND (level IS NULL OR waits = 1
-                    OR (level = 'likely' AND reasons = '["model"]' AND explanation_draft = 0)) ORDER BY date, id
+                    OR (level = 'likely' AND reasons = '["model"]' AND explanation_draft = 0 AND text IS NOT NULL)
+                    OR (level = 'sure' AND json_extract(reasons, '$[0]') = 'thread' AND explanation_draft = 0 AND thread_root IN (
+                        SELECT g.thread_root FROM mail_messages g
+                        WHERE g.moved_by_user = 0 AND g.level = 'likely' AND g.reasons = '["model"]'
+                            AND g.explanation_draft = 0 AND g.text IS NOT NULL)))
+                ORDER BY date, id
                 """, in: database)
                 .map(\.sortingEmail)
         }

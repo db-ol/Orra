@@ -165,8 +165,10 @@ final class SortingService {
         /// The full text score of each project for a text, see ChunkSearch.projectScores.
         var scores: @Sendable (String) async -> [UUID: Double]
         /// The emails without a decision, whose decision waits for the model, see
-        /// `SortingDecision.waitsForModel`, or that `Saves.wait` kept in place, each with
-        /// where it is filed. Never one the user moved.
+        /// `SortingDecision.waitsForModel`, or that `Saves.wait` kept in place, and a filing
+        /// on the model's choice alone that an earlier version made, with the sure thread
+        /// replies in its thread, see MailStore.waiting(), each with where it is filed. Never
+        /// one the user moved.
         var waiting: () async -> [Email]
         /// These emails, by their Message-IDs, each with where it is filed, for sorting
         /// again. Never one the user moved or one whose explanation holds a draft.
