@@ -1320,6 +1320,25 @@ struct MeetingCaptionsTests {
         captions.setOn(false)
     }
 
+    /// A start that waits for a dictation, and a start again for a wake or a new choice
+    /// that comes meanwhile, start the microphone once, not once and then again, which would
+    /// switch a Bluetooth headset's profile twice.
+    @Test func aStartAgainWhileAStartWaitsStartsTheMicrophoneOnce() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let events = Box()
+        events.pause = .paused
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: events, microphone: microphone, restartDelay: 0.3)
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        captions.macDidWake()
+        events.pause = .notPaused
+        try await eventually { captions.capture == .listening }
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(microphone.starts == 1)
+        #expect(captions.capture == .listening)
+        captions.setOn(false)
+    }
+
     @Test func microphoneCaptionsTranslateLikeTheMacs() async throws {
         let events = Box()
         let captions = makeCaptions(FakeCaptionModels(["Hello everyone."]), source: FakeSource(), events: events, microphone: FakeCaptionMicrophone())

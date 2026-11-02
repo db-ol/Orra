@@ -918,10 +918,13 @@ final class MeetingCaptions {
 
     /// Starts the microphone again after `delay`, once no pause holds it, unless captions
     /// were turned off, switched or started again meanwhile. Only while they listen to the
-    /// microphone. A later call takes the place of one that still waits.
+    /// microphone. A later call takes the place of one that still waits, and so does it of
+    /// a start that still waits, since it starts the microphone anyway, so the microphone
+    /// does not start only to stop and start again.
     private func scheduleRestart(_ reason: RestartReason, after delay: Double) {
         guard isOn, capturing == .microphone else { return }
         let current = run
+        self.runState.waitingStart?.cancel()
         self.runState.restart?.cancel()
         self.runState.restart = Task { [weak self] in
             if delay > 0 {
