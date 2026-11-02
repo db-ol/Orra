@@ -2821,24 +2821,68 @@
         }
       }
     },
-    "Captions of what the Mac plays, such as a call or a video, appear here. What you say into your microphone is not captioned." : {
+    "Captions listen to" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aquí aparecen los subtítulos de lo que reproduce la Mac, como una llamada o un video. Lo que dices al micrófono no se subtitula."
+            "value" : "Fuente de los subtítulos"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Macで再生中の音声（通話や動画など）のキャプションがここに表示されます。マイクに向かって話した内容は表示されません。"
+            "value" : "キャプションの入力元"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mac 播放的声音（比如通话或视频）的字幕会显示在这里。你对着麦克风说的话不会显示。"
+            "value" : "字幕来源"
+          }
+        }
+      }
+    },
+    "Captions of what the Mac plays, such as a call or a video, appear here. To caption what you say, choose Microphone in the menu at the top left of the window." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aquí aparecen los subtítulos de lo que reproduce la Mac, como una llamada o un video. Para subtitular lo que dices, elige Micrófono en el menú de la parte superior izquierda de la ventana."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macで再生中の音声（通話や動画など）のキャプションがここに表示されます。自分が話した内容をキャプションにするには、ウインドウ左上のメニューで“マイク”を選びます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 播放的声音（比如通话或视频）的字幕会显示在这里。想为你说的话显示字幕，请在窗口左上角的菜单中选择“麦克风”。"
+          }
+        }
+      }
+    },
+    "Captions of what you say into the microphone appear here." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aquí aparecen los subtítulos de lo que dices al micrófono."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイクに向かって話した内容のキャプションがここに表示されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你对着麦克风说的话的字幕会显示在这里。"
           }
         }
       }
@@ -5262,6 +5306,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "草稿需要核对。发送前请逐行阅读。"
+          }
+        }
+      }
+    },
+    "Each time Orra starts, captions listen to what the Mac plays. Choose Microphone to caption what you say." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cada vez que se abre Orra, los subtítulos escuchan lo que reproduce la Mac. Elige Micrófono para subtitular lo que dices."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraを起動するたびに、キャプションはMacで再生中の音声を聞き取ります。自分が話した内容をキャプションにするには“マイク”を選びます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次启动 Orra 时，字幕来源都是 Mac 播放的声音。选择“麦克风”可以为你说的话显示字幕。"
           }
         }
       }
@@ -8096,7 +8162,7 @@
       }
     },
     "Live Captions" : {
-      "comment" : "The menu item and window that show live captions of the sound the Mac plays",
+      "comment" : "The menu item and window that show live captions of the sound the Mac plays or of the microphone",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -9126,6 +9192,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "麦克风访问权限已关闭。请在系统设置的“麦克风”中打开 Orra。"
+          }
+        }
+      }
+    },
+    "Microphone on: %@" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Micrófono activado: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイクがオン:%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麦克风已打开：%@"
           }
         }
       }
@@ -10208,24 +10296,24 @@
         }
       }
     },
-    "Nothing is playing on the Mac. Captions show what the Mac plays, such as a call or a video, not what you say into your microphone." : {
+    "Nothing is playing on the Mac. Captions show what the Mac plays, such as a call or a video. To caption what you say, choose Microphone in the menu at the top left of the window." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No se está reproduciendo nada en la Mac. Los subtítulos muestran lo que reproduce la Mac, como una llamada o un video, no lo que dices al micrófono."
+            "value" : "No se está reproduciendo nada en la Mac. Los subtítulos muestran lo que reproduce la Mac, como una llamada o un video. Para subtitular lo que dices, elige Micrófono en el menú de la parte superior izquierda de la ventana."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Macでは何も再生されていません。キャプションに表示されるのは、通話や動画などMacで再生中の音声で、マイクに向かって話した内容ではありません。"
+            "value" : "Macでは何も再生されていません。キャプションに表示されるのは、通話や動画などMacで再生中の音声です。自分が話した内容をキャプションにするには、ウインドウ左上のメニューで“マイク”を選びます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mac 上现在没有播放任何声音。字幕显示的是 Mac 播放的声音（比如通话或视频），不是你对着麦克风说的话。"
+            "value" : "Mac 上现在没有播放任何声音。字幕显示的是 Mac 播放的声音（比如通话或视频）。想为你说的话显示字幕，请在窗口左上角的菜单中选择“麦克风”。"
           }
         }
       }
@@ -11927,24 +12015,24 @@
         }
       }
     },
-    "Orra translates the sound the Mac plays into captions, in a floating window." : {
+    "Orra translates the sound the Mac plays, or what you say into the microphone once you choose it, into captions, in a floating window." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra traduce a subtítulos el sonido que reproduce la Mac, en una ventana flotante."
+            "value" : "Orra traduce a subtítulos el sonido que reproduce la Mac, o lo que dices al micrófono si lo eliges, en una ventana flotante."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "OrraがMacで再生中の音声を翻訳し、フローティングウインドウにキャプションとして表示します。"
+            "value" : "OrraがMacで再生中の音声を、マイクを選んだ場合は自分が話した内容を翻訳し、フローティングウインドウにキャプションとして表示します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra 把 Mac 播放的声音译成字幕，显示在浮动窗口中。"
+            "value" : "Orra 把 Mac 播放的声音，或你选择麦克风后对它说的话，译成字幕，显示在浮动窗口中。"
           }
         }
       }
@@ -20893,6 +20981,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "邮件要点"
+          }
+        }
+      }
+    },
+    "What the Mac Plays" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lo que reproduce la Mac"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macで再生中の音声"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 播放的声音"
           }
         }
       }

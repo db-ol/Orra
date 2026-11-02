@@ -336,7 +336,7 @@ struct MeetingCaptionsTests {
         return captions.currentRun
     }
 
-    private static let nothingPlays = "Nothing is playing on the Mac. Captions show what the Mac plays, such as a call or a video, not what you say into your microphone."
+    private static let nothingPlays = "Nothing is playing on the Mac. Captions show what the Mac plays, such as a call or a video. To caption what you say, choose Microphone in the menu at the top left of the window."
     private static let permission = "No sound from the Mac yet. If something is playing, allow Orra under Screen & System Audio Recording in Privacy & Security settings."
     private static let captureFailed = "Orra could not capture the sound the Mac plays. Turn Live Captions off and on again to try again."
 
