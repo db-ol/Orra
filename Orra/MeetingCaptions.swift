@@ -332,6 +332,9 @@ final class MeetingCaptions {
         case access
         /// A device came or went while no microphone was connected.
         case inputs
+        /// A device came or went after a start of the microphone failed, as on a headset
+        /// whose input was not ready yet.
+        case retry
     }
 
     /// Seconds between the checks of whether an app plays, while no samples came and the
@@ -432,7 +435,8 @@ final class MeetingCaptions {
         var waitingStart: Task<Void, Never>?
         /// A start again of the microphone, see `scheduleRestart`.
         var restart: Task<Void, Never>?
-        /// Watches the devices while no microphone is connected.
+        /// Watches the devices while no microphone is connected or after a start of it
+        /// failed.
         var inputWatch: AnyObject?
 
         func cancelTasks() {
@@ -865,8 +869,8 @@ final class MeetingCaptions {
     }
 
     /// The window says why the microphone cannot be used, so it shows no note about
-    /// silence. Captions start it once access is given, or once a device comes while none
-    /// was connected.
+    /// silence. Captions start it once access is given, or at the next change of the
+    /// devices after none was connected or its start failed.
     private func microphoneUnavailable(_ problem: MicrophoneCaptionProblem) {
         capture = .microphoneUnavailable(problem)
         runState.silenceCheck?.cancel()
@@ -878,13 +882,22 @@ final class MeetingCaptions {
             watchAccess(from: access)
         case .noInput:
             Logger.captions.notice("Meeting captions found no microphone to listen to")
-            let current = run
-            self.runState.inputWatch = microphone.watchInputs { [weak self] in
-                guard let self, self.run == current else { return }
-                self.scheduleRestart(.inputs, after: self.restartDelay)
-            }
+            startAgainWhenTheDevicesChange(.inputs)
         case .failed(let step, let status):
             Logger.captions.error("Meeting captions could not start the microphone: \(step, privacy: .public), \(status, privacy: .public)")
+            startAgainWhenTheDevicesChange(.retry)
+        }
+    }
+
+    /// Starts the microphone again after the next change of Core Audio's devices, such as a
+    /// microphone plugged in while none was connected, or a headset whose input is ready by
+    /// then. Part of the current start, so a stop, a switch or the start again ends the
+    /// watch.
+    private func startAgainWhenTheDevicesChange(_ reason: RestartReason) {
+        let current = run
+        self.runState.inputWatch = microphone.watchInputs { [weak self] in
+            guard let self, self.run == current else { return }
+            self.scheduleRestart(reason, after: self.restartDelay)
         }
     }
 

@@ -1480,6 +1480,24 @@ struct MeetingCaptionsTests {
         captions.setOn(false)
     }
 
+    /// A start that failed, such as on AirPods whose input was not ready yet, is tried again
+    /// at the next change of the devices.
+    @Test func aMicrophoneThatFailedToStartTriesAgainWhenTheDevicesChange() async throws {
+        let microphone = FakeCaptionMicrophone()
+        microphone.fails = .failed(step: "start the input unit", status: -1)
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone)
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        try await eventually { captions.capture == .microphoneUnavailable(.failed(step: "start the input unit", status: -1)) }
+        try #require(microphone.inputs.watches == 1)
+        microphone.fails = nil
+        microphone.inputs.onChange?()
+        try await eventually { captions.capture == .listening }
+        #expect(microphone.starts == 2)
+        #expect(captions.microphoneInUse == microphone.input)
+        captions.setOn(false)
+    }
+
     /// No microphone at all says so, and one plugged in later is used.
     @Test func aMicrophonePluggedInLaterIsUsed() async throws {
         let microphone = FakeCaptionMicrophone()
