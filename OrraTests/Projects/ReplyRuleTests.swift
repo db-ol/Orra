@@ -112,10 +112,41 @@ struct ReplyRuleTests {
         let cc = ["bai.lu@lumenhaus.example"]
         #expect(decide(to: [Self.theo], cc: cc, text: "Hi Theo and Bai Lu,\n\nCan you both check the outline?") == .reply(.en))
         #expect(decide(to: [Self.theo], cc: cc, text: "Theo, Lu: one question about chapter 3.") == .reply(.en))
+        #expect(decide(to: [Self.theo], cc: cc, text: "Hi Theo and Bailu,\n\nCan you both check the outline?") == .reply(.en))
         #expect(decide(to: [Self.theo], cc: cc, text: "白露，第三章的提纲你也看看吧。") == .reply(.zh))
         #expect(decide(to: [Self.theo], cc: cc, text: "白老师，提纲请您过目。") == .reply(.zh))
         // A word that only holds the name is no name.
         #expect(decide(to: [Self.theo], cc: cc, text: "Theo, the bailiff wrote again. Can you call him?") == .noReply(.notAddressed))
+    }
+
+    /// A Chinese name of three characters, the usual length, counts as English mail writes
+    /// its given name, in one word, and in Chinese as its given name or the family name with
+    /// a title.
+    @Test func aNameOfThreeCharactersCountsAsMailWritesIt() {
+        #expect(Set(["王小明", "小明", "王老师", "wang", "xiaoming", "wangxiaoming"]).isSubset(of: ReplyRule.nameForms("王小明")))
+        let rule = ReplyRule(ownAddresses: ["xiaoming.wang@lumenhaus.example"], ownName: "王小明")
+        func decide(_ text: String) -> ReplyRule.Decision {
+            rule.decision(
+                sender: Self.theo, to: ["Tom Reed <tom.reed@printworks.example>"], cc: ["xiaoming.wang@lumenhaus.example"],
+                date: Self.received, thread: [], list: ListMail(), text: text, subject: "Budget")
+        }
+        #expect(decide("Hi Tom and Xiaoming, could you both review the budget by Friday?") == .reply(.en))
+        #expect(decide("Dear Mr. Wang, could you review the budget by Friday?") == .reply(.en))
+        #expect(decide("小明，预算你也看看吧。") == .reply(.zh))
+        #expect(decide("王老师，预算请您过目。") == .reply(.zh))
+        #expect(decide("Hi Tom, could you review the budget by Friday?") == .noReply(.notAddressed))
+    }
+
+    /// A name in kana counts with the honorific that Japanese writes right after it.
+    @Test func aNameInKanaCountsBeforeItsHonorific() {
+        let rule = ReplyRule(ownAddresses: ["sakura@lumenhaus.example"], ownName: "さくら")
+        func decide(_ text: String) -> ReplyRule.Decision {
+            rule.decision(
+                sender: Self.theo, to: ["Kenji Mori <kenji.mori@printworks.example>"], cc: ["sakura@lumenhaus.example"],
+                date: Self.received, thread: [], list: ListMail(), text: text, subject: "資料")
+        }
+        #expect(decide("さくらさん、資料を確認してください。") == .reply(.other))
+        #expect(decide("森さん、資料を確認してください。") == .noReply(.notAddressed))
     }
 
     /// Mail to a group address or with the user in Bcc only names others.

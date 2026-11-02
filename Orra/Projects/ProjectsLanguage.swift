@@ -66,7 +66,7 @@ nonisolated enum ProjectsLanguage: String, CaseIterable, Sendable, Codable {
 
     /// Whether a letter is in the Latin script: ASCII, Latin-1, Latin Extended A and B,
     /// Latin Extended Additional, and the full width forms.
-    private static func isLatin(_ scalar: Unicode.Scalar) -> Bool {
+    static func isLatin(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.value {
         case 0x41...0x5A, 0x61...0x7A, 0xC0...0x24F, 0x1E00...0x1EFF, 0xFF21...0xFF3A, 0xFF41...0xFF5A:
             true

@@ -118,12 +118,13 @@ nonisolated struct ReplyRule: Sendable, Equatable {
         return to.contains(where: ownAddresses.contains) || names(text)
     }
 
-    /// Whether the text holds a form of the user's name: a Latin form as a word of its own,
-    /// in any case, and a Chinese form anywhere.
+    /// Whether the text holds a form of the user's name: a form in Latin letters as a word
+    /// of its own, in any case, and a form in other letters anywhere, since Chinese and
+    /// Japanese write a title or an honorific right after a name, as in さくらさん.
     private func names(_ text: String) -> Bool {
         let text = text.precomposedStringWithCompatibilityMapping.lowercased()
         return ownNames.contains { name in
-            name.contains(where: \.isHan) ? text.contains(name) : Self.containsWord(text, name)
+            name.unicodeScalars.allSatisfy(ProjectsLanguage.isLatin) ? Self.containsWord(text, name) : text.contains(name)
         }
     }
 
@@ -132,9 +133,9 @@ nonisolated struct ReplyRule: Sendable, Equatable {
     }
 
     /// The forms of a name that address its bearer, lowercased: each part of two letters
-    /// or more, and for a Chinese name its pinyin, which English mail writes, its given
-    /// name when it has three characters or more, and its family name with a title, as in
-    /// 白老师.
+    /// or more, and for a Chinese name its pinyin, which English mail writes, by syllable
+    /// and as one word, as in Xiaoming for 小明, its given name when it has three characters
+    /// or more, and its family name with a title, as in 白老师.
     static func nameForms(_ name: String) -> [String] {
         var forms: [String] = []
         let parts = name.precomposedStringWithCompatibilityMapping.lowercased()
@@ -142,7 +143,8 @@ nonisolated struct ReplyRule: Sendable, Equatable {
         for part in parts where part.count >= 2 {
             forms.append(part)
             guard part.contains(where: \.isHan) else { continue }
-            if part.allSatisfy(\.isHan), part.count <= 4 {
+            let isChineseName = part.allSatisfy(\.isHan) && part.count <= 4
+            if isChineseName {
                 if part.count >= 3 {
                     forms.append(String(part.dropFirst()))
                 }
@@ -150,7 +152,15 @@ nonisolated struct ReplyRule: Sendable, Equatable {
             }
             let pinyin = part.applyingTransform(.mandarinToLatin, reverse: false)?
                 .applyingTransform(.stripDiacritics, reverse: false) ?? ""
-            forms += pinyin.lowercased().split { !$0.isASCIILetter }.map(String.init).filter { $0.count >= 2 }
+            let syllables = pinyin.lowercased().split { !$0.isASCIILetter }.map(String.init)
+            forms += syllables.filter { $0.count >= 2 }
+            if isChineseName, syllables.count == part.count {
+                // The whole name and the given name as one word, as in Bailu and Xiaoming.
+                forms.append(syllables.joined())
+                if part.count >= 3 {
+                    forms.append(syllables.dropFirst().joined())
+                }
+            }
         }
         var seen = Set<String>()
         return forms.filter { seen.insert($0).inserted }
