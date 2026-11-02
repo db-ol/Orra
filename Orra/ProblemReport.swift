@@ -33,6 +33,8 @@ nonisolated enum ProblemReport {
         var translateInto: String
         /// What the caption window shows, as the log names the display mode.
         var captionsShow: String
+        /// What Live Captions listen to, as the log names it: systemAudio or microphone.
+        var captionsListenTo: String
         /// The caption target, see `describe(captionTarget:picked:for:)`.
         var translateCaptionsInto: String
         var settings: [Setting]
@@ -172,6 +174,7 @@ nonisolated enum ProblemReport {
         lines.append("Dictation language: \(facts.dictationLanguage)")
         lines.append("Translate into: \(facts.translateInto)")
         lines.append("Live Captions show: \(facts.captionsShow)")
+        lines.append("Live Captions listen to: \(facts.captionsListenTo)")
         lines.append("Translate captions into: \(facts.translateCaptionsInto)")
         for setting in facts.settings {
             lines.append("\(setting.name): \(setting.on ? "on" : "off")")

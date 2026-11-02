@@ -440,7 +440,14 @@ struct LiveCaptionsShortcutTests {
     }
 
     @Test func voiceOverHearsWhetherCaptionsTurnedOnOrOff() {
-        #expect(LiveCaptionsShortcut.announcement(captionsOn: true, in: Locale(identifier: "en")) == "Live Captions on")
-        #expect(LiveCaptionsShortcut.announcement(captionsOn: false, in: Locale(identifier: "zh-Hans")) == "实时字幕已关闭")
+        #expect(LiveCaptionsShortcut.announcement(captionsOn: true, microphone: false, in: Locale(identifier: "en")) == "Live Captions on")
+        #expect(LiveCaptionsShortcut.announcement(captionsOn: false, microphone: false, in: Locale(identifier: "zh-Hans")) == "实时字幕已关闭")
+        #expect(LiveCaptionsShortcut.announcement(captionsOn: false, microphone: true, in: Locale(identifier: "en")) == "Live Captions off")
+    }
+
+    /// Captions that turn on listening to the microphone say so, since that opens it.
+    @Test func voiceOverHearsThatCaptionsListenToTheMicrophone() {
+        #expect(LiveCaptionsShortcut.announcement(captionsOn: true, microphone: true, in: Locale(identifier: "en")) == "Live Captions on, listening to the microphone")
+        #expect(LiveCaptionsShortcut.announcement(captionsOn: true, microphone: true, in: Locale(identifier: "zh-Hans")) == "实时字幕已打开，正在收听麦克风")
     }
 }

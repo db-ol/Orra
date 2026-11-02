@@ -363,14 +363,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The Live Captions shortcut turns captions on, or off as closing the window does. The
-    /// window is the only other sign, so VoiceOver hears which.
+    /// window is the only other sign, so VoiceOver hears which, and whether they listen to
+    /// the microphone.
     private func toggleCaptionsFromShortcut() {
         captions.setOn(!captions.isOn)
         NSAccessibility.post(
             element: NSApp as Any,
             notification: .announcementRequested,
             userInfo: [
-                .announcement: LiveCaptionsShortcut.announcement(captionsOn: captions.isOn),
+                .announcement: LiveCaptionsShortcut.announcement(captionsOn: captions.isOn, microphone: captions.source == .microphone),
                 .priority: NSAccessibilityPriorityLevel.high.rawValue,
             ]
         )

@@ -255,6 +255,7 @@ final class ProblemReporter {
                 dictationLanguage: pushToTalk.dictationLanguage.rawValue,
                 translateInto: ProblemReport.describe(cleanup.translationDirection, for: pushToTalk.dictationLanguage),
                 captionsShow: captions.displayMode.rawValue,
+                captionsListenTo: captions.source.rawValue,
                 translateCaptionsInto: ProblemReport.describe(captionTarget: cleanup.captionTarget, picked: cleanup.pickedCaptionTarget != nil, for: pushToTalk.dictationLanguage),
                 settings: [
                     .init(name: "Recording indicator", on: feedback.showsIndicator),

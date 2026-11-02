@@ -8316,6 +8316,28 @@
         }
       }
     },
+    "Live Captions on, listening to the microphone" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subtítulos en vivo activados, escuchando el micrófono"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブキャプションをオンにしました（マイク）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时字幕已打开，正在收听麦克风"
+          }
+        }
+      }
+    },
     "Live Captions shortcut" : {
       "localizations" : {
         "es-419" : {
