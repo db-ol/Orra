@@ -399,6 +399,11 @@ final class MeetingCaptions {
     /// The most audio heard while a key that waits is down that is kept for the captions.
     /// A key waits 0.3 s, see TalkKeyDetector.
     static let armingLimit = 1.0
+    /// Seconds between the looks at the window server's session while captions are on and
+    /// take the screen as locked, since Apple's DistributedNotificationCenter says that a
+    /// note may come late or be dropped, see `followTheScreenLock()`. A look reads one
+    /// dictionary of the window server.
+    static let screenLockCheckInterval = 2.0
 
     private(set) var isOn = false
     private(set) var capture: CaptureState = .off
@@ -506,6 +511,7 @@ final class MeetingCaptions {
     @ObservationIgnored private let restartDelay: Double
     @ObservationIgnored private let restartWindow: Double
     @ObservationIgnored private let accessCheckInterval: Double
+    @ObservationIgnored private let screenLockCheckInterval: Double
     @ObservationIgnored private var pipeline: CaptionPipeline?
     /// Starts and stops the capture of what the Mac plays, one after the other, off the
     /// main actor. Since it is serial, a stop that comes while a start still runs tears
@@ -544,6 +550,9 @@ final class MeetingCaptions {
     /// True once a read of the session said locked since captions took the screen as
     /// locked, see `sessionShowsTheUnlock()`.
     @ObservationIgnored private var sessionSaidLocked = false
+    /// Looks at the session while captions are on and the screen is locked, see
+    /// `followTheScreenLock()`.
+    @ObservationIgnored private var screenLockCheck: Task<Void, Never>?
 
     /// - Parameters:
     ///   - systemAudio: The capture of the sound the Mac plays. Tests pass a fake.
@@ -570,6 +579,7 @@ final class MeetingCaptions {
     ///   - restartDelay: See `MeetingCaptions.restartDelay`.
     ///   - restartWindow: See `MeetingCaptions.restartWindow`.
     ///   - accessCheckInterval: See `MeetingCaptions.accessCheckInterval`.
+    ///   - screenLockCheckInterval: See `MeetingCaptions.screenLockCheckInterval`.
     init(
         systemAudio: SystemAudioSource,
         microphone: MicrophoneCaptionSource = .unavailable,
@@ -590,7 +600,8 @@ final class MeetingCaptions {
         microphoneQuietLimit: Double = MeetingCaptions.microphoneQuietLimit,
         restartDelay: Double = MeetingCaptions.restartDelay,
         restartWindow: Double = MeetingCaptions.restartWindow,
-        accessCheckInterval: Double = MeetingCaptions.accessCheckInterval
+        accessCheckInterval: Double = MeetingCaptions.accessCheckInterval,
+        screenLockCheckInterval: Double = MeetingCaptions.screenLockCheckInterval
     ) {
         self.systemAudio = systemAudio
         self.microphone = microphone
@@ -612,6 +623,7 @@ final class MeetingCaptions {
         self.restartDelay = restartDelay
         self.restartWindow = restartWindow
         self.accessCheckInterval = accessCheckInterval
+        self.screenLockCheckInterval = screenLockCheckInterval
         // As the session says now, which covers a launch while the screen is locked or the
         // session is switched away, and after that as the watch reports.
         screenLocked = screenLock.isLocked()
@@ -712,10 +724,12 @@ final class MeetingCaptions {
         self.pipeline = pipeline
         showWindow()
         startCapture()
+        followTheScreenLock()
     }
 
     private func stop() {
         isOn = false
+        followTheScreenLock()
         let listenedTo = capturing ?? source
         stopCapture()
         let sentences = pipeline?.counts ?? CaptionPipeline.Counts()
@@ -1055,10 +1069,25 @@ final class MeetingCaptions {
     }
 
     /// The watch's report, see ScreenLockSource.watch. It comes after each note, so only a
-    /// change counts.
+    /// change counts. Any process can post the note of an unlock, so an unlock counts only
+    /// while the session agrees, and otherwise the look at the session finds it once the
+    /// session does, see `followTheScreenLock()`.
     private func screenLockNoted(_ locked: Bool) {
         guard locked != screenLocked else { return }
+        if !locked, screenLock.isLocked() {
+            Logger.captions.notice("Meeting captions take no unlock while the session says that the screen is locked")
+            return
+        }
         screenLockChanged(locked)
+    }
+
+    /// The user opened one of Orra's menus or clicked the caption window, which they can do
+    /// only at an unlocked screen. A lock whose unlock note never came ends here when the
+    /// session agrees, also on a Mac whose session does not tell a lock.
+    func userIsAtTheScreen() {
+        guard screenLocked, !screenLock.isLocked() else { return }
+        Logger.captions.notice("Meeting captions found the screen unlocked without its note, at a menu or a click")
+        screenLockChanged(false)
     }
 
     /// Takes the screen as locked or unlocked. Microphone captions that are on let go of
@@ -1071,6 +1100,7 @@ final class MeetingCaptions {
         if locked {
             sessionSaidLocked = screenLock.isLocked()
         }
+        followTheScreenLock()
         guard isOn, source == .microphone else { return }
         if locked {
             Logger.captions.notice("Meeting captions let go of the microphone while the screen is locked")
@@ -1100,6 +1130,28 @@ final class MeetingCaptions {
         guard sessionShowsTheUnlock() else { return }
         Logger.captions.notice("Meeting captions found the screen unlocked without its note")
         screenLocked = false
+        followTheScreenLock()
+    }
+
+    /// Looks at the session every `screenLockCheckInterval` while captions are on and take
+    /// the screen as locked, so an unlock whose note came late, never came or came while
+    /// the session still said locked is found without the user's help, see
+    /// `sessionShowsTheUnlock()`. Ends with the lock and when captions stop.
+    private func followTheScreenLock() {
+        screenLockCheck?.cancel()
+        screenLockCheck = nil
+        guard isOn, screenLocked else { return }
+        screenLockCheck = Task { [weak self, screenLockCheckInterval] in
+            while true {
+                try? await Task.sleep(for: .seconds(screenLockCheckInterval))
+                guard !Task.isCancelled, let self, self.isOn, self.screenLocked else { return }
+                if self.sessionShowsTheUnlock() {
+                    Logger.captions.notice("Meeting captions found the screen unlocked without its note")
+                    self.screenLockChanged(false)
+                    return
+                }
+            }
+        }
     }
 
     /// Returns once nothing holds the microphone back, looking every

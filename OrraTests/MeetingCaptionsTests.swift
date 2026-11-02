@@ -351,7 +351,8 @@ struct MeetingCaptionsTests {
     /// microphone's hold after a pause is off unless a test sets it, and its starts again
     /// and looks at access come quickly. The limit of starts again counts over ten minutes,
     /// since a busy runner can spread a test's moves over more than the app's 20 s. The
-    /// screen never locks unless a test passes a fake lock.
+    /// screen never locks unless a test passes a fake lock, and the looks at its session
+    /// come quickly.
     private func makeCaptions(
         _ models: FakeCaptionModels,
         source: FakeSource,
@@ -363,7 +364,8 @@ struct MeetingCaptionsTests {
         playCheckLimit: Double = 60,
         microphoneHold: Double = 0,
         microphoneQuietLimit: Double = 60,
-        restartDelay: Double = 0.01
+        restartDelay: Double = 0.01,
+        screenLockCheckInterval: Double = 0.01
     ) -> MeetingCaptions {
         let captions = MeetingCaptions(
             systemAudio: source.source,
@@ -382,7 +384,8 @@ struct MeetingCaptionsTests {
             microphoneQuietLimit: microphoneQuietLimit,
             restartDelay: restartDelay,
             restartWindow: 600,
-            accessCheckInterval: 0.01
+            accessCheckInterval: 0.01,
+            screenLockCheckInterval: screenLockCheckInterval
         )
         captions.showWindow = { events.items.append("show") }
         captions.closeWindow = { events.items.append("close") }
@@ -2009,7 +2012,8 @@ struct MeetingCaptionsTests {
         let source = FakeSource()
         let microphone = FakeCaptionMicrophone()
         let screen = FakeScreenLock()
-        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), microphone: microphone, screenLock: screen)
+        // No look at the session meanwhile.
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), microphone: microphone, screenLock: screen, screenLockCheckInterval: 60)
         _ = try await listeningToTheMicrophone(captions)
         screen.lock()
         screen.locked = false
@@ -2071,6 +2075,77 @@ struct MeetingCaptionsTests {
         try await eventually { captions.capture == .listening && microphone.starts == 2 }
         try await Task.sleep(for: .milliseconds(100))
         #expect(microphone.calls == ["start", "started", "stop", "start", "started"])
+        captions.setOn(false)
+    }
+
+    /// A look at the session every few seconds finds an unlock whose note was lost, so
+    /// microphone captions go on without the user's help. Only after a read during the
+    /// lock said locked: on a Mac whose session does not tell a lock, the look starts
+    /// nothing, and the unlock note ends the lock.
+    @Test func aLookAtTheSessionFindsAnUnlockWhoseNoteWasLost() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let screen = FakeScreenLock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone, screenLock: screen)
+        _ = try await listeningToTheMicrophone(captions)
+        screen.lock()
+        try await eventually { microphone.stops == 1 }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(captions.capture == .pausedWhileLocked)
+        screen.locked = false
+        try await eventually { captions.capture == .listening && microphone.starts == 2 }
+        #expect(!captions.screenLocked)
+        screen.note(true)
+        #expect(captions.capture == .pausedWhileLocked)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(captions.capture == .pausedWhileLocked)
+        #expect(microphone.starts == 2)
+        screen.note(false)
+        try await eventually { captions.capture == .listening && microphone.starts == 3 }
+        captions.setOn(false)
+    }
+
+    /// Any process can post the note of an unlock, so it starts the microphone only while
+    /// the session agrees, and otherwise the look at the session starts it once it does.
+    @Test func anUnlockNoteCountsOnlyWhileTheSessionAgrees() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let screen = FakeScreenLock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone, screenLock: screen)
+        _ = try await listeningToTheMicrophone(captions)
+        screen.lock()
+        screen.note(false)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(captions.screenLocked)
+        #expect(captions.capture == .pausedWhileLocked)
+        #expect(microphone.starts == 1)
+        screen.locked = false
+        try await eventually { captions.capture == .listening && microphone.starts == 2 }
+        captions.setOn(false)
+    }
+
+    /// Opening a menu of Orra or clicking the caption window shows that the screen is
+    /// unlocked, so a lock whose unlock note was lost ends there once the session agrees,
+    /// also on a Mac whose session does not tell a lock.
+    @Test func aClickInOrraFindsAnUnlockWhoseNoteWasLost() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let screen = FakeScreenLock()
+        // No look at the session meanwhile.
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone, screenLock: screen, screenLockCheckInterval: 60)
+        _ = try await listeningToTheMicrophone(captions)
+        screen.lock()
+        captions.userIsAtTheScreen()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(captions.capture == .pausedWhileLocked)
+        screen.locked = false
+        captions.userIsAtTheScreen()
+        try await eventually { captions.capture == .listening && microphone.starts == 2 }
+        screen.note(true)
+        #expect(captions.capture == .pausedWhileLocked)
+        captions.userIsAtTheScreen()
+        try await eventually { captions.capture == .listening && microphone.starts == 3 }
+        // Nothing changes while the screen is not locked.
+        captions.userIsAtTheScreen()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(microphone.calls == ["start", "started", "stop", "start", "started", "stop", "start", "started"])
         captions.setOn(false)
     }
 

@@ -316,17 +316,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Reads the login item, the microphones and the copied word again each time a menu
-    /// opens, Orra's menu bar menu included, so the open menu shows them as they are now.
+    /// opens, Orra's menu bar menu and the caption window's menus included, so the open
+    /// menu shows them as they are now. A menu that opens also shows that the screen is
+    /// unlocked, see MeetingCaptions.userIsAtTheScreen().
     private func refreshWhenMenusOpen() {
         menuObserver = NotificationCenter.default.addObserver(
             forName: NSMenu.didBeginTrackingNotification,
             object: nil,
             queue: .main
-        ) { [openAtLogin, audioInputs, clipboard] _ in
+        ) { [openAtLogin, audioInputs, clipboard, captions] _ in
             MainActor.assumeIsolated {
                 openAtLogin.refresh()
                 audioInputs.refresh()
                 clipboard.refresh()
+                captions.userIsAtTheScreen()
             }
         }
     }

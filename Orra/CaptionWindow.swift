@@ -89,6 +89,12 @@ final class CaptionWindow: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         captions.setOn(false)
     }
+
+    /// A click in the window shows that the screen is unlocked, see
+    /// MeetingCaptions.userIsAtTheScreen().
+    func windowDidBecomeKey(_ notification: Notification) {
+        captions.userIsAtTheScreen()
+    }
 }
 
 /// The captions, newest at the bottom, with what is in the way above them, and what
