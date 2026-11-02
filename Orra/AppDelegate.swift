@@ -218,6 +218,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private var menuObserver: (any NSObjectProtocol)?
     private var wakeObserver: (any NSObjectProtocol)?
+    /// Keeps the display on while captions show, see `followCaptionDisplay()`.
+    private var captionDisplayActivity: (any NSObjectProtocol)?
     private var mailObservers: [any NSObjectProtocol] = []
     /// Orra's access to Mail as the Projects page last learned it, see `followMailAccess()`.
     private var mailAccess: ProjectsSettings.MailAccess.Access?
@@ -409,6 +411,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Keeps the display on while captions start or listen and their window can be seen,
+    /// see MeetingCaptions.keepsDisplayOn, now and after every change: one process activity
+    /// that disables idle display sleep, as a video player holds, which macOS drops when
+    /// Orra quits. It never lights a display that is off, and never holds back a lock the
+    /// user asks for, Sleep or a closed lid.
+    private func followCaptionDisplay() {
+        let keeps = withObservationTracking {
+            captions.keepsDisplayOn
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                self?.followCaptionDisplay()
+            }
+        }
+        if keeps, captionDisplayActivity == nil {
+            captionDisplayActivity = ProcessInfo.processInfo.beginActivity(options: .idleDisplaySleepDisabled, reason: "Showing Live Captions")
+            Logger.captions.notice("Meeting captions keep the display on")
+        } else if !keeps, let activity = captionDisplayActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            captionDisplayActivity = nil
+            Logger.captions.notice("Meeting captions no longer keep the display on")
+        }
+    }
+
     /// Watches the translation key while translation is on, now and after every change of
     /// the switch.
     private func followTranslation() {
@@ -522,6 +547,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pushToTalk.onLiveCaptionsShortcut = { [weak self] in self?.toggleCaptionsFromShortcut() }
         followMicrophoneChoice()
         followWake()
+        followCaptionDisplay()
         // The steps that keep a user's settings across versions. A version that changes
         // what a setting starts as adds its step inside, not here.
         LaunchMigrations.run(pushToTalk, cleanup: cleanup, setUpBefore: setUpBefore)

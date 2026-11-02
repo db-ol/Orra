@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import Observation
 import os
 import Testing
 @testable import Orra
@@ -343,6 +345,32 @@ struct MeetingCaptionsTests {
                 }
                 return self
             })
+        }
+    }
+
+    /// Follows `keepsDisplayOn` the way AppDelegate does, after each change on the next turn
+    /// of the main queue, and records each value it reads that differs from the last.
+    @MainActor
+    private final class DisplayFollower {
+        private(set) var values: [Bool] = []
+        private let captions: MeetingCaptions
+
+        init(_ captions: MeetingCaptions) {
+            self.captions = captions
+            follow()
+        }
+
+        private func follow() {
+            let keeps = withObservationTracking {
+                captions.keepsDisplayOn
+            } onChange: { [weak self] in
+                DispatchQueue.main.async {
+                    self?.follow()
+                }
+            }
+            if values.last != keeps {
+                values.append(keeps)
+            }
         }
     }
 
@@ -2149,6 +2177,141 @@ struct MeetingCaptionsTests {
         captions.setOn(false)
     }
 
+    // MARK: The display
+
+    /// Captions keep the display on while they are on and start or listen and their window
+    /// can be seen, for both sources, the way a video player does.
+    @Test func captionsKeepTheDisplayOnWhileTheyListenAndTheirWindowCanBeSeen() async throws {
+        let source = FakeSource()
+        source.holdsStart = true
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), microphone: FakeCaptionMicrophone())
+        captions.setWindowVisible(true)
+        #expect(captions.windowVisible)
+        #expect(!captions.keepsDisplayOn)
+        captions.setWindowVisible(false)
+        captions.setOn(true)
+        try await eventually { source.calls == ["start"] }
+        #expect(captions.capture == .starting)
+        #expect(!captions.keepsDisplayOn)
+        captions.setWindowVisible(true)
+        #expect(captions.keepsDisplayOn)
+        source.holdsStart = false
+        source.releaseStart()
+        try await eventually { captions.capture == .listening }
+        #expect(captions.keepsDisplayOn)
+        captions.setSource(.microphone)
+        #expect(captions.capture == .starting)
+        #expect(captions.keepsDisplayOn)
+        try await eventually { captions.capture == .listening }
+        #expect(captions.keepsDisplayOn)
+        // Minimized, hidden with Orra, covered whole, or on displays that sleep.
+        captions.setWindowVisible(false)
+        #expect(!captions.keepsDisplayOn)
+        captions.setWindowVisible(true)
+        #expect(captions.keepsDisplayOn)
+        captions.setOn(false)
+        #expect(!captions.keepsDisplayOn)
+    }
+
+    /// The screen lock lets the display sleep for both sources, and the unlock keeps it on
+    /// again at once. So does the look at the session that finds an unlock whose note was
+    /// lost, also while captions listen to what the Mac plays.
+    @Test func aLockLetsTheDisplaySleepForBothSources() async throws {
+        let screen = FakeScreenLock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: FakeCaptionMicrophone(), screenLock: screen)
+        captions.setWindowVisible(true)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        #expect(captions.keepsDisplayOn)
+        screen.lock()
+        #expect(captions.capture == .listening)
+        #expect(!captions.keepsDisplayOn)
+        screen.unlock()
+        #expect(captions.keepsDisplayOn)
+        screen.lock()
+        #expect(!captions.keepsDisplayOn)
+        screen.locked = false
+        try await eventually { captions.keepsDisplayOn }
+        captions.setSource(.microphone)
+        try await eventually { captions.capture == .listening }
+        screen.lock()
+        #expect(captions.capture == .pausedWhileLocked)
+        #expect(!captions.keepsDisplayOn)
+        screen.unlock()
+        #expect(captions.capture == .starting)
+        #expect(captions.keepsDisplayOn)
+        captions.setOn(false)
+    }
+
+    /// A capture that cannot start lets the display sleep, since its window then only says
+    /// why: what the Mac plays refused, no microphone access, a failed start, no microphone,
+    /// and the microphone let go after it kept moving.
+    @Test func aCaptureThatCannotStartLetsTheDisplaySleep() async throws {
+        let source = FakeSource()
+        source.fails = .failed(step: "start the device", status: -1)
+        let microphone = FakeCaptionMicrophone()
+        microphone.access = .denied
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), microphone: microphone)
+        captions.setWindowVisible(true)
+        captions.setOn(true)
+        try await eventually { captions.capture == .unavailable(.failed(step: "start the device", status: -1)) }
+        #expect(!captions.keepsDisplayOn)
+        captions.setSource(.microphone)
+        #expect(captions.capture == .microphoneUnavailable(.access(.denied)))
+        #expect(!captions.keepsDisplayOn)
+        microphone.access = .authorized
+        try await eventually { captions.capture == .listening }
+        #expect(captions.keepsDisplayOn)
+        captions.setOn(false)
+        microphone.fails = .failed(step: "start the input unit", status: -1)
+        captions.setOn(true)
+        try await eventually { captions.capture == .microphoneUnavailable(.failed(step: "start the input unit", status: -1)) }
+        #expect(!captions.keepsDisplayOn)
+        captions.setOn(false)
+        microphone.fails = .noInput
+        captions.setOn(true)
+        try await eventually { captions.capture == .microphoneUnavailable(.noInput) }
+        #expect(!captions.keepsDisplayOn)
+        captions.setOn(false)
+        microphone.fails = nil
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        var starts = microphone.starts
+        for _ in 1...MeetingCaptions.restartLimit {
+            microphone.move()
+            starts += 1
+            try await eventually { microphone.starts == starts && captions.capture == .listening }
+        }
+        microphone.move()
+        try await eventually { captions.capture == .microphoneUnavailable(.failed(step: "follow the microphone", status: 0)) }
+        #expect(!captions.keepsDisplayOn)
+        captions.setOn(false)
+    }
+
+    /// A dictation, a start again after a move and a new choice of microphone keep the
+    /// display on throughout, as AppDelegate follows it, so a display whose idle time has
+    /// passed never dims during a start again.
+    @Test func aDictationAndAStartAgainKeepTheDisplayOnThroughout() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: events, microphone: microphone)
+        captions.setWindowVisible(true)
+        let follower = DisplayFollower(captions)
+        let run = try await listeningToTheMicrophone(captions)
+        try await eventually { follower.values == [false, true] }
+        events.pause = .paused
+        captions.receive(CaptionAudio.tone(0.3), run: run)
+        events.pause = .notPaused
+        microphone.move()
+        try await eventually { microphone.starts == 2 && captions.capture == .listening }
+        captions.microphoneChosen("usb-2")
+        try await eventually { microphone.starts == 3 && captions.capture == .listening }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(follower.values == [false, true])
+        captions.setOn(false)
+        try await eventually { follower.values == [false, true, false] }
+    }
+
     /// The window shows no note while the screen is locked, which nobody can see, and the
     /// note about a silent microphone goes at the lock.
     @Test func theWindowShowsNoNoteWhileTheScreenIsLocked() async throws {
@@ -2362,5 +2525,19 @@ struct CaptionFollowTests {
         #expect(!follow.isFollowing)
         follow.jumpToLatest()
         #expect(follow.isFollowing)
+    }
+}
+
+/// When the caption window counts as seen, so captions keep the display on, see
+/// MeetingCaptions.keepsDisplayOn.
+struct CaptionWindowVisibilityTests {
+    @Test func theWindowCountsAsVisibleOnlyWhenItCanBeSeen() {
+        #expect(CaptionWindow.canBeSeen(onScreen: true, miniaturized: false, occlusion: .visible, displaysAsleep: false))
+        // Closed, or hidden with Orra.
+        #expect(!CaptionWindow.canBeSeen(onScreen: false, miniaturized: false, occlusion: .visible, displaysAsleep: false))
+        #expect(!CaptionWindow.canBeSeen(onScreen: true, miniaturized: true, occlusion: .visible, displaysAsleep: false))
+        // Covered whole by other windows.
+        #expect(!CaptionWindow.canBeSeen(onScreen: true, miniaturized: false, occlusion: [], displaysAsleep: false))
+        #expect(!CaptionWindow.canBeSeen(onScreen: true, miniaturized: false, occlusion: .visible, displaysAsleep: true))
     }
 }

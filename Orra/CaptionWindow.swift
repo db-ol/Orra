@@ -3,7 +3,8 @@ import SwiftUI
 
 /// The floating caption window: always on top, on every Space and over full screen apps,
 /// translucent, and moved by dragging anywhere on it. Closing it turns captions off.
-/// macOS remembers where it was and its size.
+/// macOS remembers where it was and its size. It tells the captions whether it can be
+/// seen, so they keep the display on only then, see MeetingCaptions.keepsDisplayOn.
 final class CaptionWindow: NSObject, NSWindowDelegate {
     static let defaultSize = CGSize(width: 520, height: 260)
     static let minimumSize = CGSize(width: 300, height: 140)
@@ -13,12 +14,42 @@ final class CaptionWindow: NSObject, NSWindowDelegate {
     private let cleanup: TextCleanup
     private let turns: EngineTurns
     private var panel: NSPanel?
+    /// True from the note that the displays went to sleep until the note that they woke,
+    /// or until the window shows or can be seen again.
+    private var displaysAsleep = false
+    /// The displays' sleep and wake, and Orra hidden and shown again.
+    private var observers: [any NSObjectProtocol] = []
 
     init(captions: MeetingCaptions, pushToTalk: PushToTalkController, cleanup: TextCleanup, turns: EngineTurns) {
         self.captions = captions
         self.pushToTalk = pushToTalk
         self.cleanup = cleanup
         self.turns = turns
+        super.init()
+        let workspace = NSWorkspace.shared.notificationCenter
+        let app = NotificationCenter.default
+        observers = [
+            workspace.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.displaysSlept(true)
+                }
+            },
+            workspace.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.displaysSlept(false)
+                }
+            },
+            app.addObserver(forName: NSApplication.didHideNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.noteVisibility()
+                }
+            },
+            app.addObserver(forName: NSApplication.didUnhideNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.noteVisibility()
+                }
+            },
+        ]
     }
 
     func show() {
@@ -26,10 +57,35 @@ final class CaptionWindow: NSObject, NSWindowDelegate {
         self.panel = panel
         // Without taking the focus from the call.
         panel.orderFrontRegardless()
+        // Captions are turned on while the displays are awake.
+        displaysAsleep = false
+        noteVisibility()
     }
 
     func close() {
         panel?.orderOut(nil)
+        noteVisibility()
+    }
+
+    /// Whether the window can be seen: ordered in and not hidden with Orra, not minimized,
+    /// not covered whole by other windows, and on displays that are awake. A window that is
+    /// covered in part counts as seen. Internal for tests.
+    nonisolated static func canBeSeen(onScreen: Bool, miniaturized: Bool, occlusion: NSWindow.OcclusionState, displaysAsleep: Bool) -> Bool {
+        onScreen && !miniaturized && occlusion.contains(.visible) && !displaysAsleep
+    }
+
+    /// Tells the captions whether the window can be seen now.
+    private func noteVisibility() {
+        guard let panel else {
+            captions.setWindowVisible(false)
+            return
+        }
+        captions.setWindowVisible(Self.canBeSeen(onScreen: panel.isVisible, miniaturized: panel.isMiniaturized, occlusion: panel.occlusionState, displaysAsleep: displaysAsleep))
+    }
+
+    private func displaysSlept(_ asleep: Bool) {
+        displaysAsleep = asleep
+        noteVisibility()
     }
 
     /// Internal so tests can check the panel without showing it.
@@ -88,6 +144,26 @@ final class CaptionWindow: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         captions.setOn(false)
+    }
+
+    /// Covered, or seen again. A window that can be seen means that the displays are
+    /// awake, so a note of their wake that never came does not let the display sleep while
+    /// captions show.
+    func windowDidChangeOcclusionState(_ notification: Notification) {
+        if panel?.occlusionState.contains(.visible) == true {
+            displaysAsleep = false
+        }
+        noteVisibility()
+    }
+
+    /// The panel cannot be minimized today, so these only keep the visibility right if it
+    /// ever can.
+    func windowDidMiniaturize(_ notification: Notification) {
+        noteVisibility()
+    }
+
+    func windowDidDeminiaturize(_ notification: Notification) {
+        noteVisibility()
     }
 
     /// A click in the window shows that the screen is unlocked, see

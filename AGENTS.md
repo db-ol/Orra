@@ -172,6 +172,14 @@ trusted once in Xcode. docs/dependencies.md has the details.
   press, and usually not at all. They keep only what captions of the Mac keep: the text
   in memory until Orra quits, no audio, and nothing in the log but counts, timings and
   states.
+- While Live Captions are on and start or listen, their window can be seen (ordered in, not
+  minimized or hidden, not covered whole, on displays that are awake) and the screen is not
+  locked, Orra keeps the display on through one process activity with
+  idleDisplaySleepDisabled, the way a video player does, for both sources, approved by the
+  maintainer on 2026-11-02. AppDelegate holds it while MeetingCaptions.keepsDisplayOn is
+  true and ends it as soon as it is not, and macOS drops it when Orra quits. The activity
+  never keeps the Mac awake with its displays off, and never holds back a lock the user
+  asks for, Sleep or a closed lid.
 - Orra goes online only for the speech model download the user starts from the menu or the
   welcome window, the cleanup model download the user agrees to in Settings, for Clean Up
   Text, Translation or Projects, or starts in the welcome window (with the speech model
@@ -221,8 +229,8 @@ docs/privacy.md, as docs/website.md describes.
   rewrites Orra's microphone permission for the unsigned build.
 - MeetingCaptions gets the microphone and the screen lock as closures,
   MicrophoneCaptionSource and ScreenLockSource, as it gets SystemAudioSource, and tests pass
-  fakes. No test starts CaptionMicrophone, sets up its unit, asks for microphone access or
-  watches the real screen lock.
+  fakes. No test starts CaptionMicrophone, sets up its unit, asks for microphone access,
+  watches the real screen lock or keeps the display on.
 - Tests never send Apple Events. Projects code must keep the Mail bridge behind closures, and
   tests pass fakes, as they do for the models.
 

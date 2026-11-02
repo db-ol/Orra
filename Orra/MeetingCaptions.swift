@@ -260,6 +260,9 @@ nonisolated enum CaptionSource: String, CaseIterable, Sendable {
 /// being heard ends at the lock, and nothing said meanwhile is captioned. Captions of what
 /// the Mac plays go on.
 ///
+/// While captions start or listen and their window can be seen, they keep the display on,
+/// as a video player does, see `keepsDisplayOn`.
+///
 /// Turning it off stops the capture, lets go of the microphone and closes the window. The
 /// sentences stay in memory until Orra quits, so they can still be copied, and the next
 /// start keeps them as the previous transcript. Nothing is logged or saved but counts,
@@ -418,6 +421,9 @@ final class MeetingCaptions {
     /// last learned it, see ScreenLockSource. Microphone captions let go of the microphone
     /// meanwhile, see `screenLockChanged(_:)`.
     private(set) var screenLocked = false
+    /// Whether the caption window can be seen, as CaptionWindow reports it, see
+    /// `keepsDisplayOn`.
+    private(set) var windowVisible = false
     /// What came in place of sound for `silenceHint` since the capture started, for the
     /// window's note. Nil until then and from the first sound on. No audio at all from the
     /// Mac becomes no sound when an app starts to play and still no audio comes, see
@@ -670,6 +676,26 @@ final class MeetingCaptions {
     /// Mac plays goes on as it is.
     func macDidWake() {
         scheduleRestart(.wake, after: restartDelay)
+    }
+
+    /// Whether captions keep the display on now, the way a video player does: while they
+    /// are on and start or listen, their window can be seen and the screen is not locked,
+    /// for both sources. AppDelegate holds a process activity while this is true. A capture
+    /// that cannot start lets the display sleep, since its window then only says why, and
+    /// so does the pause while the screen is locked. A dictation does not change it, and a
+    /// start again stops and starts within one turn of the main actor, so it stays true.
+    var keepsDisplayOn: Bool {
+        guard isOn, windowVisible, !screenLocked else { return false }
+        return switch capture {
+        case .starting, .listening: true
+        case .off, .unavailable, .microphoneUnavailable, .pausedWhileLocked: false
+        }
+    }
+
+    /// The caption window can be seen now, or no longer, see CaptionWindow.
+    func setWindowVisible(_ visible: Bool) {
+        guard visible != windowVisible else { return }
+        windowVisible = visible
     }
 
     func setDisplayMode(_ mode: CaptionDisplayMode) {
