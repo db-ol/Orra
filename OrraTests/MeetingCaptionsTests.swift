@@ -2150,6 +2150,74 @@ struct MeetingCaptionsTests {
         captions.setOn(false)
     }
 
+    /// The session may lag behind both notes: the note of the lock comes while it still
+    /// says unlocked, and the note of the unlock while it still says locked. The read that
+    /// refuses the unlock note is a read during the lock that said locked, so the look at
+    /// the session ends the lock once the session says unlocked: microphone captions start
+    /// the microphone again, and captions of what the Mac plays keep the display on again.
+    @Test func anUnlockNoteRefusedWhileTheSessionLagsStillEndsTheLock() async throws {
+        let source = FakeSource()
+        let microphone = FakeCaptionMicrophone()
+        let screen = FakeScreenLock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), microphone: microphone, screenLock: screen)
+        captions.setWindowVisible(true)
+        _ = try await listeningToTheMicrophone(captions)
+        // No look at the session runs between these steps, since none of them waits.
+        screen.note(true)
+        screen.locked = true
+        screen.note(false)
+        screen.locked = false
+        #expect(captions.capture == .pausedWhileLocked)
+        try await eventually { captions.capture == .listening && microphone.starts == 2 }
+        #expect(!captions.screenLocked)
+        captions.setSource(.systemAudio)
+        try await eventually { captions.capture == .listening && source.starts == 1 }
+        #expect(captions.keepsDisplayOn)
+        screen.note(true)
+        screen.locked = true
+        screen.note(false)
+        screen.locked = false
+        #expect(!captions.keepsDisplayOn)
+        try await eventually { captions.keepsDisplayOn }
+        #expect(!captions.screenLocked)
+        captions.setOn(false)
+    }
+
+    /// The same lag while captions are off, when no look runs: turning them on finds the
+    /// unlock, since the read that refused the unlock note said locked.
+    @Test func captionsTurnedOnAfterAnUnlockNoteTheSessionLaggedBehindListen() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let screen = FakeScreenLock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone, screenLock: screen)
+        screen.note(true)
+        screen.locked = true
+        screen.note(false)
+        screen.locked = false
+        #expect(captions.screenLocked)
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        #expect(!captions.screenLocked)
+        try await eventually { captions.capture == .listening && microphone.starts == 1 }
+        captions.setOn(false)
+    }
+
+    /// A read at a menu or a click that says locked is a read during the lock too, so the
+    /// look ends a lock whose note came before the session said locked, once the session
+    /// says unlocked.
+    @Test func aReadAtAClickThatSaysLockedLetsTheLookEndTheLock() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let screen = FakeScreenLock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone, screenLock: screen)
+        _ = try await listeningToTheMicrophone(captions)
+        screen.note(true)
+        screen.locked = true
+        captions.userIsAtTheScreen()
+        screen.locked = false
+        #expect(captions.capture == .pausedWhileLocked)
+        try await eventually { captions.capture == .listening && microphone.starts == 2 }
+        captions.setOn(false)
+    }
+
     /// Opening a menu of Orra or clicking the caption window shows that the screen is
     /// unlocked, so a lock whose unlock note was lost ends there once the session agrees,
     /// also on a Mac whose session does not tell a lock.

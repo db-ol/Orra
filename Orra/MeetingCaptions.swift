@@ -1097,10 +1097,12 @@ final class MeetingCaptions {
     /// The watch's report, see ScreenLockSource.watch. It comes after each note, so only a
     /// change counts. Any process can post the note of an unlock, so an unlock counts only
     /// while the session agrees, and otherwise the look at the session finds it once the
-    /// session does, see `followTheScreenLock()`.
+    /// session does, see `followTheScreenLock()`. The read that refuses the note said
+    /// locked, so it counts for the look, also when the note of the lock came before the
+    /// session said locked.
     private func screenLockNoted(_ locked: Bool) {
         guard locked != screenLocked else { return }
-        if !locked, screenLock.isLocked() {
+        if !locked, sessionSaysLocked() {
             Logger.captions.notice("Meeting captions take no unlock while the session says that the screen is locked")
             return
         }
@@ -1111,7 +1113,7 @@ final class MeetingCaptions {
     /// only at an unlocked screen. A lock whose unlock note never came ends here when the
     /// session agrees, also on a Mac whose session does not tell a lock.
     func userIsAtTheScreen() {
-        guard screenLocked, !screenLock.isLocked() else { return }
+        guard screenLocked, !sessionSaysLocked() else { return }
         Logger.captions.notice("Meeting captions found the screen unlocked without its note, at a menu or a click")
         screenLockChanged(false)
     }
@@ -1124,7 +1126,9 @@ final class MeetingCaptions {
     private func screenLockChanged(_ locked: Bool) {
         screenLocked = locked
         if locked {
-            sessionSaidLocked = screenLock.isLocked()
+            // Only reads from this lock on count.
+            sessionSaidLocked = false
+            _ = sessionSaysLocked()
         }
         followTheScreenLock()
         guard isOn, source == .microphone else { return }
@@ -1136,16 +1140,23 @@ final class MeetingCaptions {
         restartCapture()
     }
 
+    /// Reads the window server's session, see ScreenLockSource.isLocked. Every read after
+    /// the first, in init, goes through here, so none that says locked while captions take
+    /// the screen as locked is lost: it is noted, see `sessionShowsTheUnlock()`.
+    private func sessionSaysLocked() -> Bool {
+        let locked = screenLock.isLocked()
+        if locked, screenLocked {
+            sessionSaidLocked = true
+        }
+        return locked
+    }
+
     /// Whether a read of the session shows that a lock captions still keep is over: it
     /// says unlocked now, and a read since the lock said locked. So on a Mac whose session
     /// does not tell a lock only the unlock note ends it, and the microphone never starts
-    /// at the lock screen. A read that says locked is noted, and a read never locks.
+    /// at the lock screen. A read never locks.
     private func sessionShowsTheUnlock() -> Bool {
-        guard screenLocked else { return false }
-        guard !screenLock.isLocked() else {
-            sessionSaidLocked = true
-            return false
-        }
+        guard screenLocked, !sessionSaysLocked() else { return false }
         return sessionSaidLocked
     }
 
