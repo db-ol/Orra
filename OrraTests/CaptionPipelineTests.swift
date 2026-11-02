@@ -443,6 +443,52 @@ struct CaptionPipelineTests {
         await unready.finish()
         #expect(unready.counts == CaptionPipeline.Counts(cut: 1, reported: 0, empty: 0, dropped: 1))
     }
+
+    /// A gap in the audio, such as a dictation that captions of the microphone leave out,
+    /// ends the sentence being heard as a pause would, and the stream goes on.
+    @Test func endingTheSentenceCutsItWithoutEndingTheStream() async throws {
+        let models = FakeCaptionModels(["Hello everyone.", "Next slide please."])
+        var reports: [CaptionSentence] = []
+        let pipeline = CaptionPipeline(engines: models.engines()) { reports.append($0) }
+        // Half a sentence: speech with no pause after it yet.
+        pipeline.feed(CaptionAudio.silence(0.5) + CaptionAudio.tone(1))
+        pipeline.endSentence()
+        try await eventually { reports.count == 2 }
+        #expect(reports.map(\.original) == ["Hello everyone.", "Hello everyone."])
+        pipeline.feed(FakeCaptionModels.audio(sentences: 1))
+        await pipeline.finish()
+        #expect(reports.map(\.id) == [1, 1, 2, 2])
+        #expect(reports.compactMap(\.translatedText) == ["大家好。", "请看下一张幻灯片。"])
+        #expect(pipeline.counts.cut == 2)
+    }
+
+    /// The interim line of the sentence a gap ends gets its final text under the same id.
+    /// Between sentences, a gap reports nothing.
+    @Test func endingTheSentenceReplacesItsInterimLine() async throws {
+        let models = FakeCaptionModels(["Hello", "Hello everyone."])
+        var reports: [CaptionSentence] = []
+        var withdrawn: [Int] = []
+        let pipeline = CaptionPipeline(engines: models.engines(), interimInterval: 1, withdraw: { withdrawn.append($0) }) { reports.append($0) }
+        // Like the capture, in 100 ms pieces, until the sentence shows as interim text.
+        let audio = CaptionAudio.silence(0.5) + CaptionAudio.tone(1.5)
+        let chunk = RecordingLimits.sampleRate / 10
+        for start in stride(from: 0, to: audio.count, by: chunk) {
+            pipeline.feed(Array(audio[start..<min(audio.count, start + chunk)]))
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        try await eventually { reports.first?.isInterim == true }
+        pipeline.endSentence()
+        try await eventually { reports.contains { !$0.isInterim && $0.translation == .done("大家好。") } }
+        #expect(reports.map(\.id).allSatisfy { $0 == 1 })
+        #expect(reports.filter { !$0.isInterim }.map(\.original) == ["Hello everyone.", "Hello everyone."])
+        #expect(withdrawn.isEmpty)
+        let count = reports.count
+        pipeline.feed(CaptionAudio.silence(1))
+        pipeline.endSentence()
+        await pipeline.finish()
+        #expect(reports.count == count)
+        #expect(pipeline.counts.cut == 1)
+    }
 }
 
 /// Captions give way to dictation on the shared models, see EngineTurns.
