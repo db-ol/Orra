@@ -3059,11 +3059,13 @@ quit such apps for the checks with nothing playing. Watch the log with
 
 Microphone captions, added on 2026-11-01, not verified yet. MeetingCaptionsTests checks the
 choice, the starts, the starts again and the stops, the pause for dictation and the notes
-with a fake microphone, CaptionMicrophoneTests the rules for which microphone captions use
-and when they start it again, and TapConversionTests the conversion of mono audio at the
-device's own rate. No test opens a microphone or takes a unit apart, so the checks of the
-indicator below are the only ones of the stop. Check in a build from Xcode with the log
-open:
+with a fake microphone, and since 2026-11-02 the pause while the screen is locked with a
+fake screen lock. ScreenLockTests checks how the window server's session and the notes of
+a lock tell that the screen is locked, CaptionMicrophoneTests the rules for which
+microphone captions use and when they start it again, and TapConversionTests the
+conversion of mono audio at the device's own rate. No test opens a microphone or takes a
+unit apart, so the checks of the indicator and the log below are the only ones of the
+stop. Check in a build from Xcode with the log open:
 `log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND (category == "captions" OR category == "push-to-talk" OR category == "audio")'`.
 Write down which microphones were tried: the MacBook's own, a USB microphone, AirPods, and
 a headset that gives exactly zero while you are quiet, if there is one.
@@ -3110,8 +3112,15 @@ a headset that gives exactly zero while you are quiet, if there is one.
   Plug it back in: they go back to it. Change the default input in Sound settings while
   captions listen to System Default: they follow. Choose another microphone under
   Microphone: they follow it, with "start the microphone again: choice".
-- [ ] Sleep the Mac with captions on the microphone and wake it: captions go on, with "start
-  the microphone again: wake" in the log.
+- [ ] Sleep the Mac with captions on the microphone and wake it. With the password asked
+  right after sleep, the microphone is off at the lock screen: the log has "let go of the
+  microphone while the screen is locked" at the sleep or within a second of the wake, and
+  any "Caption microphone started" at the lock screen is followed within a second by
+  "Caption microphone stopped after". A "start the microphone again: wake" may come first
+  when the note of the lock reaches Orra after the wake. Within a second of the unlock the
+  log says "start the microphone again after the screen unlocked" and captions go on. With
+  the password asked later or never, captions go on after the wake, with "start the
+  microphone again: wake".
 - [ ] Connect AirPods while captions listen to System Default and macOS makes them the
   default input: captions move to them and keep going. Write down how many "start the
   microphone again" lines the log shows. A start that fails says "Orra could not start the
@@ -3121,9 +3130,33 @@ a headset that gives exactly zero while you are quiet, if there is one.
   would do that.
 - [ ] With captions on the microphone, `pmset -g assertions` shows whether Core Audio keeps
   the Mac from idle sleep. Write down what it shows, since the user guide says it may.
-- [ ] Lock the screen with captions on the microphone, talk for a moment and unlock it:
-  what you said while the screen was locked shows as captions, as the user guide and the
-  privacy page say.
+- [ ] Talk to captions on the microphone and press Control Command Q in the middle of a
+  sentence. Within a second the log says "Screen lock note: the screen locked, locked
+  true", "let go of the microphone while the screen is locked" and "Caption microphone
+  stopped after", and the orange indicator goes off where the lock screen shows it. Talk
+  for a moment, then unlock. Within a second the window shows "Microphone on" and the
+  indicator is back, the log says "Screen lock note: the screen unlocked, locked false" and
+  "start the microphone again after the screen unlocked", the sentence before the lock
+  stands on a line of its own, and nothing said while the screen was locked shows, as the
+  user guide and the privacy page say. If a note is missing from the log, write down how
+  the screen was locked and whether "found the screen unlocked without its note" came
+  instead, within about 2 seconds of the unlock.
+- [ ] With the built in or a USB microphone, lock and unlock four times within 20 seconds:
+  each unlock starts the microphone again, and the log has no "let go of the microphone
+  after 3 starts again". Not with AirPods, where each start may switch the call profile
+  and count as a move.
+- [ ] The same as the first lock check with Lock Screen in the Apple menu, with a screen
+  saver that asks for the password at once, and with Put Display to Sleep from a hot
+  corner. Write down any way to lock that leaves the microphone on, by the log.
+- [ ] With a second user account, switch to it from the menu bar and back: the log says
+  "Screen lock note: the session was switched away" and "let go of the microphone" while
+  the other user is in front, and microphone captions go on once you are back.
+- [ ] With What the Mac Plays and a video playing, lock the screen for a minute and unlock
+  it: the window shows what the video said meanwhile.
+- [ ] At the lock screen, press the Live Captions shortcut. Write down whether it turns
+  captions on or off there. If it turns them on with Microphone chosen earlier, the log
+  says "wait for the screen to unlock to start the microphone" and has no "Caption
+  microphone started" until the unlock.
 - [ ] Mute yourself in a call app while captions listen to the same microphone: Orra still
   captions you, as the user guide says.
 - [ ] Copy All Captions, Copy Captions and Copy Previous Captions hold only text, also for a
