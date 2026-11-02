@@ -335,6 +335,12 @@ final class MeetingCaptions {
         /// A device came or went after a start of the microphone failed, as on a headset
         /// whose input was not ready yet.
         case retry
+
+        /// Whether the start again follows the device, not the user or the Mac, and so
+        /// counts toward `restartLimit`.
+        var followsTheDevice: Bool {
+            self == .moved || self == .retry
+        }
     }
 
     /// Seconds between the checks of whether an app plays, while no samples came and the
@@ -360,9 +366,16 @@ final class MeetingCaptions {
     /// says so. Longer than `silenceHint`, since a headset may give exactly zero while its
     /// user only listens.
     static let microphoneQuietLimit = 30.0
-    /// Seconds a start again of the microphone waits after a move or a wake, so a device
-    /// that changes in steps opens once.
+    /// Seconds a start again of the microphone waits after a move, a wake or a change of
+    /// the devices, so a device that changes in steps opens once.
     static let restartDelay = 0.5
+    /// The most starts again of the microphone that follow the device, after a move or a
+    /// failed start, within `restartWindow`. One more lets go of the microphone and says
+    /// that it could not start, so a device that keeps moving, such as a headset that
+    /// changes its profile at each start, does not start again without end.
+    static let restartLimit = 3
+    /// Seconds over which `restartLimit` counts.
+    static let restartWindow = 20.0
     /// Seconds between the looks at microphone access while it is not given, as the
     /// welcome window looks.
     static let accessCheckInterval = 1.0
@@ -492,6 +505,10 @@ final class MeetingCaptions {
     /// The microphone chosen under Microphone, nil for the system default, see
     /// `microphoneChosen(_:)`.
     @ObservationIgnored private var chosenMicrophone: String?
+    /// When the microphone started again to follow the device, within `restartWindow`.
+    /// Cleared when captions turn on and when the user chooses what they listen to or a
+    /// microphone.
+    @ObservationIgnored private var deviceRestarts: [ContinuousClock.Instant] = []
     @ObservationIgnored private var runState = CaptureRun()
     @ObservationIgnored private var meeting = MeetingCounts()
     /// When captions were turned on, for the times in the log.
@@ -575,6 +592,7 @@ final class MeetingCaptions {
     func setSource(_ choice: CaptionSource) {
         guard choice != source else { return }
         source = choice
+        deviceRestarts = []
         if choice == .microphone, microphone.access() == .notDetermined {
             askForMicrophoneAccess()
         }
@@ -588,6 +606,7 @@ final class MeetingCaptions {
     func microphoneChosen(_ uid: String?) {
         guard uid != chosenMicrophone else { return }
         chosenMicrophone = uid
+        deviceRestarts = []
         scheduleRestart(.choice, after: 0)
     }
 
@@ -631,6 +650,7 @@ final class MeetingCaptions {
         isOn = true
         turnedOn = .now
         meeting = MeetingCounts()
+        deviceRestarts = []
         Logger.captions.notice("Meeting captions turned on, listening to \(self.source.rawValue, privacy: .public)")
         store.startOver()
         follow = CaptionFollow()
@@ -951,9 +971,36 @@ final class MeetingCaptions {
             }
             await self?.waitWhileMicrophonePaused()
             guard !Task.isCancelled, let self, self.isOn, self.capturing == .microphone, self.run == current else { return }
+            if reason.followsTheDevice, !self.mayFollowTheDevice() {
+                self.stopFollowingTheMicrophone()
+                return
+            }
             Logger.captions.notice("Meeting captions start the microphone again: \(reason.rawValue, privacy: .public)")
             self.restartCapture()
         }
+    }
+
+    /// Whether the microphone may start again to follow the device, see `restartLimit`.
+    /// Counts the start again when it may.
+    private func mayFollowTheDevice() -> Bool {
+        let now = ContinuousClock.now
+        deviceRestarts.removeAll { $0.duration(to: now) > .seconds(Self.restartWindow) }
+        guard deviceRestarts.count < Self.restartLimit else { return false }
+        deviceRestarts.append(now)
+        return true
+    }
+
+    /// The microphone kept moving, so captions let go of it, as a stop does, and the window
+    /// says that it could not start. The sentence that was open ends. They still listen to
+    /// the microphone, so turning them off and on, a choice of a microphone and a wake start
+    /// it again, and a change of the devices does not.
+    private func stopFollowingTheMicrophone() {
+        Logger.captions.error("Meeting captions let go of the microphone after \(Self.restartLimit, privacy: .public) starts again within \(Self.restartWindow, format: .fixed(precision: 0), privacy: .public) s")
+        stopCapture()
+        pipeline?.endSentence()
+        capturing = .microphone
+        capture = .microphoneUnavailable(.failed(step: "follow the microphone", status: 0))
+        silence = nil
     }
 
     /// Returns once nothing holds the microphone back, looking every

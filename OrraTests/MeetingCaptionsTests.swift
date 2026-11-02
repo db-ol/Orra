@@ -1427,6 +1427,39 @@ struct MeetingCaptionsTests {
         captions.setOn(false)
     }
 
+    /// A microphone that keeps moving, as a headset might that changes its profile at each
+    /// start, starts again a few times only. Then captions let go of it and say that it
+    /// could not start, until the user turns them off and on.
+    @Test func aMicrophoneThatKeepsMovingIsLetGo() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone)
+        _ = try await listeningToTheMicrophone(captions)
+        let limit = MeetingCaptions.restartLimit
+        for starts in 2...(limit + 1) {
+            microphone.move()
+            try await eventually { microphone.starts == starts && captions.capture == .listening }
+        }
+        microphone.move()
+        try await eventually { captions.capture == .microphoneUnavailable(.failed(step: "follow the microphone", status: 0)) }
+        try await eventually { microphone.stops == limit + 1 }
+        #expect(!microphone.isCapturing)
+        #expect(captions.microphoneInUse == nil)
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: EngineTurns()) == ["Orra could not start the microphone. Turn Live Captions off and on again to try again."])
+        // No change of the devices starts it again.
+        #expect(microphone.inputs.watches == 0)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(microphone.starts == limit + 1)
+        // Turning captions off and on starts it, and counts the moves from nothing.
+        captions.setOn(false)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening && microphone.starts == limit + 2 }
+        for starts in (limit + 3)...(2 * limit + 2) {
+            microphone.move()
+            try await eventually { microphone.starts == starts && captions.capture == .listening }
+        }
+        captions.setOn(false)
+    }
+
     @Test func aNewMicrophoneChoiceStartsTheMicrophoneAgain() async throws {
         let source = FakeSource()
         let microphone = FakeCaptionMicrophone()
