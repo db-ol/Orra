@@ -193,9 +193,33 @@ struct ReplyRuleTests {
         #expect(decide(text: invite, subject: "Fwd: Invitation: reading group") == .noReply(.forwardedNotice))
         #expect(decide(text: "FYI, see below.\n\n" + invite, subject: "Fwd: Invitation: reading group") == .noReply(.forwardedNotice))
         #expect(decide(text: "供参考。\n\n" + invite, subject: "转发：读书会") == .noReply(.forwardedNotice))
+        #expect(decide(text: "请查收。\n\n" + invite, subject: "转发：读书会") == .noReply(.forwardedNotice))
         #expect(decide(text: "Will you join us on Friday?\n\n" + invite, subject: "Fwd: Invitation: reading group") == .reply(.en))
         #expect(decide(text: "Please confirm the time with the room desk.\n\n" + invite, subject: "Fwd: Invitation: reading group") == .reply(.en))
         #expect(decide(text: "白露，转给你，您看看。\n\n" + invite, subject: "转发：读书会") == .reply(.zh))
+        #expect(decide(text: "你看下。\n\n" + invite, subject: "转发：读书会") == .reply(.zh))
+    }
+
+    /// A note asks with a question mark or with wording that asks for an answer or an
+    /// action, in each of the four languages, the short forms of quick mail included.
+    /// Wording that only passes something on asks nothing.
+    @Test func requestWordingInEachLanguage() {
+        let asking = [
+            "Pls review.", "Can u check the times", "Need this by Friday.", "Handle this by Friday.", "Take a look when you have time.",
+            "你看下。", "你处理一下。", "尽快处理。", "需要你签字。",
+            "ご確認ください。", "よろしくお願いします。", "明日までに届きますか。",
+            "Revísalo, por favor.", "¿Puedes confirmar la hora?", "Confirma la sala.",
+        ]
+        for note in asking {
+            #expect(ReplyRule.asks(note), "\(note)")
+        }
+        let passing = [
+            "", "FYI", "FYI, see below.", "Please see below.", "Please find the agenda attached.",
+            "请查收。", "请知悉。", "供参考。", "参考までに転送します。", "Para tu información.",
+        ]
+        for note in passing {
+            #expect(!ReplyRule.asks(note), "\(note)")
+        }
     }
 
     // MARK: Forwards

@@ -190,14 +190,15 @@ nonisolated struct ReplyRule: Sendable, Equatable {
 
     // Built once rather than for every email.
     nonisolated(unsafe) private static let requestWording: [Regex<Substring>] = [
-        /\b(?:can|could|would|will)\s+you\b/.ignoresCase(),
+        /\b(?:can|could|would|will)\s+(?:you|u)\b/.ignoresCase(),
         /\blet\s+(?:me|us)\s+know\b/.ignoresCase(),
         /\bplease\b(?!\s+(?:see|find|note|read)\b)/.ignoresCase(),
-        /\b(?:kindly|reply|respond|confirm|rsvp|approve|sign|decide)\b/.ignoresCase(),
-        /\b(?:need|want)s?\s+(?:you|your)\b/.ignoresCase(),
+        /\b(?:pls|plz|kindly|reply|respond|confirm|rsvp|approve|sign|decide|handle|asap)\b/.ignoresCase(),
+        /\b(?:need|want)s?\s+(?:you|your|u|this|it)\b/.ignoresCase(),
+        /\b(?:take|have)\s+a\s+look\b|\bfollow\s+up\b/.ignoresCase(),
         /\byour\s+(?:thoughts|feedback|input|comments?|opinion|views?|decision|approval|answer|help)\b/.ignoresCase(),
         /请(?!知悉|参考|查收|查阅|见|看下面|看以下|看附件)/,
-        /麻烦|劳驾|拜托|烦请|务必|能否|可否|能不能|可不可以|帮忙|帮我|看看|看一下|过目|定夺|回复|答复|回信|告知|确认|反馈/,
+        /麻烦|劳驾|拜托|烦请|务必|尽快|能否|可否|能不能|可不可以|需要你|需要您|帮忙|帮我|看看|看下|一下|处理|跟进|过目|定夺|回复|答复|回信|告知|确认|反馈/,
         /ください|下さい|お願い|いただけ|頂け|ますか|でしょうか/,
         /\bpor\s+favor\b|\bpodr[ií]as?\b|\bpuedes\b|\bfavor\s+de\b|\bconfirm[ae]\b|\bresp[oó]nde\b|\bav[ií]same\b|\bme\s+avisas\b/.ignoresCase(),
     ]
