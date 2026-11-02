@@ -2,9 +2,10 @@ import SwiftUI
 
 /// Meeting Interpretation, its own page in Settings: a meeting where each side speaks
 /// another language. Live captions show what the other side says, or what the user says
-/// into the microphone once they choose it, translated into the caption target. Speak translations to others speaks what the translation key
-/// translated, so the other side hears it, in the voice of a sample the user recorded if
-/// they like. Each part shows only where the page has it.
+/// into the microphone once they choose it, translated into the caption target. Speak
+/// translations to others speaks what the translation key translated, so the other side
+/// hears it, in the voice of a sample the user recorded if they like. Each part shows only
+/// where the page has it.
 struct MeetingInterpretationSettings: View {
     let pushToTalk: PushToTalkController
     let captions: MeetingCaptions?
