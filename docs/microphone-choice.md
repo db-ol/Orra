@@ -94,6 +94,14 @@ without a buffer, such as a shortcut during the wait of the translation key, kee
 unit. When AudioOutputUnitStop fails, its status goes to the log and the unit is
 uninitialized and disposed at once, so its IO does not go on until the next press.
 
+No IO runs between holds only while Live Captions do not listen to the microphone. Once the
+user chooses the microphone for them, CaptionMicrophone sets up a unit of its own on the
+microphone a dictation would record from, with the steps above, and its IO runs until
+captions stop or listen to what the Mac plays again. Core Audio serves both, so dictation's
+unit or engine starts and stops as before. The caption unit is stopped, uninitialized and
+disposed at once when captions let go of the microphone, so nothing of it stays set up,
+and while a dictation holds the microphone, captions set up no unit.
+
 The input callback runs on Core Audio's real time thread. It renders into scratch
 memory set aside in advance and copies into a buffer for the whole recording, which is
 allocated and touched before the first start. It takes no lock, allocates nothing and
@@ -174,6 +182,11 @@ records from the choice or the default and explains the silence afterwards.
   its call profile between holds, which would lower the quality of what it plays.
 - How much faster a hold starts with the kept unit and the prepared engine. The timing
   log line of each hold shows it, see docs/manual-testing.md.
+- Whether a dictation starts as quickly while Live Captions listen to the same microphone,
+  and whether the private aggregate device of the System Default engine changes the
+  device's rate under the caption unit. The timing log line of each hold shows the first,
+  and "Meeting captions start the microphone again: moved" in the log after a dictation
+  shows the second.
 - That uninitializing and disposing a unit whose AudioOutputUnitStop failed ends its IO.
   No stop has failed on this Mac, and a test cannot make one fail without starting IO,
   so only the decision to make a new unit afterwards is tested.

@@ -1448,7 +1448,8 @@ Fn hotkey, added on 2026-10-04, not verified yet. Since 2026-10-05 fn is no long
 default talk key. Set it in Settings, General for the fn checks, and keep the on screen
 hint at Always or Only while dictating in Settings. The indicator shows only once the microphone
 records, so for the checks that expect no indicator, also listen for no start sound and
-look for no orange microphone indicator in the menu bar:
+look for no orange microphone indicator in the menu bar, with Live Captions off or on
+What the Mac Plays:
 
 - [ ] At launch without Accessibility access, the welcome window appears instead of the
   system prompt, the menu bar icon is a crossed out mic, and the menu shows "The talk
@@ -1634,7 +1635,8 @@ are in place since 2026-10-05:
   then the plain mic appears within a few seconds.
 - [ ] The first hold of the talk key shows the macOS microphone prompt and records
   nothing. After allowing access, the next hold records.
-- [ ] The orange microphone indicator shows only while the talk key is held.
+- [ ] With Live Captions off or on What the Mac Plays, the orange microphone indicator
+  shows only while the talk key is held.
 - [ ] With the lid closed and the MacBook microphone as the default input, a hold shows
   "The lid is closed, so the built in microphone is off" and "Open Sound Settings…",
   which opens System Settings at Sound. After choosing another input there, such as a
@@ -2730,8 +2732,9 @@ Welcome window above, and also run `defaults delete io.github.db-ol.Orra talkKey
   "Press the key once to start, and once more to paste. Escape cancels." under them.
   `defaults read io.github.db-ol.Orra talkKeyMode` prints toggle right after the launch.
 - [ ] The texts say press: the line under the title "Press a key, speak, and press it
-  again.", the microphone step "Orra records only after you press the talk key, until
-  you press it again.", the Accessibility step, the menu and the idle bar "Press right
+  again.", the microphone step "For dictation, Orra records only after you press the talk
+  key, until you press it again." with "Live Captions listen to the microphone only when
+  you choose it." under it, the Accessibility step, the menu and the idle bar "Press right
   Control to talk, and again to finish", the guide at step 4 "Pick your talk key and how
   it works.", and once ready "All set! Press the talk key and say hello." and "Try it in
   any app: press the talk key, say something, and press it again." No line about double
@@ -2816,7 +2819,8 @@ Live captions, added on 2026-10-14 as Meeting Captions. On 2026-10-15 the mainta
 checked captions and the scroll follow with a local build. Live Captions, under Meeting
 Interpretation in the menu and in Settings, captures the sound the Mac plays with a Core Audio process tap, cuts it into sentences at
 pauses, transcribes each with the speech model and translates it with the local model,
-in a floating window. The microphone is never used for it. Orra/Info.plist holds
+in a floating window. The microphone is used for it only when chosen, see Microphone
+captions below. Orra/Info.plist holds
 NSAudioCaptureUsageDescription, with its Chinese text in InfoPlist.xcstrings. A build
 without the key says "This build of Orra cannot capture the sound the Mac plays yet." and
 captures nothing. Watch the log with
@@ -2850,8 +2854,8 @@ it shows starts, stops, counts and failures, never text.
   leaves no line behind.
 - [ ] Orra's own sounds, the start and stop sounds of a dictation, never show up as a
   caption.
-- [ ] Dictation while captions run: the talk key and the translation key paste as
-  quickly as without captions. Sentences said during the dictation show after it, in
+- [ ] Dictation while captions run on What the Mac Plays: the talk key and the
+  translation key paste as quickly as without captions. Sentences said during the dictation show after it, in
   order. Hands free dictation works the same way.
 - [ ] The display mode, three choices since 2026-10-19, not verified yet in the running
   app. "Original" shows each final sentence as its original in large type and never
@@ -2999,12 +3003,13 @@ that keeps its audio output running, such as a call app in a call, counts as pla
 quit such apps for the checks with nothing playing. Watch the log with
 `log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "captions"'`.
 
-- [ ] Turn Live Captions on with nothing playing. The window says "Captions of what the
-  Mac plays, such as a call or a video, appear here. What you say into your microphone is
-  not captioned." After about 8 s the note "Nothing is playing on the Mac. Captions show
-  what the Mac plays, such as a call or a video, not what you say into your microphone."
-  takes its place at the top, and the window does not mention the permission. Speaking
-  into the microphone shows no caption.
+- [ ] Turn Live Captions on with nothing playing and What the Mac Plays chosen. The
+  window says "Captions of what the Mac plays, such as a call or a video, appear here. To
+  caption what you say, choose Microphone in the menu at the top left of the window."
+  After about 8 s the note "Nothing is playing on the Mac. Captions show what the Mac
+  plays, such as a call or a video. To caption what you say, choose Microphone in the menu
+  at the top left of the window." takes its place at the top, and the window does not
+  mention the permission. Speaking into the microphone shows no caption.
 - [ ] The log shows "Meeting captions turned on", then "System audio capture is starting
   its device, the tap at … Hz with … channels". Note whether "System audio capture
   started at …" and "Meeting captions started, showing …, after …" follow at once or only
@@ -3035,8 +3040,8 @@ quit such apps for the checks with nothing playing. Watch the log with
   captions off and on again while the video plays. After about 8 s the window shows the
   permission note, and never the note that nothing plays. Turn Orra on there again
   afterwards.
-- [ ] With the video playing, start a dictation with the talk key and then one with the
-  translation key, also hands free. From about a second after the press until the paste
+- [ ] With the video playing and What the Mac Plays chosen, start a dictation with the
+  talk key and then one with the translation key, also hands free. From about a second after the press until the paste
   or Escape the window shows "Captions wait while you dictate and catch up when you
   finish." The note goes after the paste, and the sentences heard meanwhile show, in
   order. With the talk key in Hold, a tap of it shows no note, and in any mode a shortcut
@@ -3049,6 +3054,74 @@ quit such apps for the checks with nothing playing. Watch the log with
 - [ ] Make the window as small as it goes, in English and in Español, with nothing
   playing. Once the note that nothing is playing shows, start a hands free dictation. The
   notes still read and the list keeps some room.
+
+Microphone captions, added on 2026-11-01, not verified yet. MeetingCaptionsTests checks the
+choice, the starts and stops, the pause for dictation and the notes with a fake microphone,
+CaptionMicrophoneTests the rules for which microphone captions use and when they start it
+again, and TapConversionTests the conversion of mono audio at the device's own rate. No
+test opens a microphone. Check in a build from Xcode with the log open:
+`log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND (category == "captions" OR category == "push-to-talk" OR category == "audio")'`.
+Write down which microphones were tried: the MacBook's own, a USB microphone, AirPods, and
+a headset that gives exactly zero while you are quiet, if there is one.
+
+- [ ] A new launch shows What the Mac Plays in the caption window's menu and under Captions
+  listen to in Settings, Meeting Interpretation, also when captions listened to the
+  microphone before Orra quit. The menu bar menu has no such choice.
+- [ ] With microphone access not decided, as after `tccutil reset Microphone
+  io.github.db-ol.Orra`, choosing Microphone in the window shows the macOS prompt, and so
+  does choosing it in Settings. Turning captions on never shows it. Allow it: within a
+  second the window shows "Microphone on: …" and captions of what you say. With access
+  turned off in System Settings, the window says "Microphone access is off. Turn on Orra
+  under Microphone in System Settings." with Open Microphone Settings…, and turning access
+  back on there starts the captions within a second.
+- [ ] The orange microphone indicator and the window's "Microphone on" line show only while
+  captions listen to the microphone. The indicator goes off within a second when captions
+  turn off from the menu, from the shortcut or by closing the window, when What the Mac
+  Plays is chosen, and when Orra quits. With VoiceOver on, the shortcut says "Live Captions
+  on, listening to the microphone".
+- [ ] Dictation stays as fast: with System Default, a USB microphone and AirPods, compare the
+  capture timing line of ten holds with captions off and ten with captions on the
+  microphone. Note any hold that starts later with captions on.
+- [ ] Pause and resume, for the talk key, the second talk key and the translation key, in
+  Hold, Press to start and stop and Double press, and hands free: talk to the captions,
+  press the key in the middle of a sentence, dictate, and talk again after the paste.
+  Nothing you dictated shows as a caption, the sentence before the press ends on a line of
+  its own, and captions go on after the paste. From about a second after the press the
+  window says "Captions pause while you dictate and go on when you finish." Escape gives
+  the same. The stop line counts the pauses and the seconds left out.
+- [ ] With right Option as the translation key and Translation on, type Option E then E (é)
+  while you talk to the captions: no sentence is cut and nothing is left out.
+- [ ] With Speak into set to the speakers, have Orra speak a translation while captions
+  listen to the microphone: Orra's voice shows as no caption.
+- [ ] Translated and Both translate what you say. With your dictation language under
+  Translate captions into, your own sentences show as you said them, and English
+  translates them.
+- [ ] Close the lid with an external display and the MacBook's microphone as the default
+  input: within 8 seconds the window says "The lid is closed, so the built in microphone is
+  off". Mute a USB microphone with its own switch: after 30 seconds the window says "No
+  sound came from …", and the note goes with the first sound. Note whether a headset that
+  gives exactly zero while you are quiet shows the note while you only listen.
+- [ ] Unplug the chosen microphone while captions listen to it: within a second or two they
+  listen to the system default, and the log says "start the microphone again: moved".
+  Plug it back in: they go back to it. Change the default input in Sound settings while
+  captions listen to System Default: they follow. Choose another microphone under
+  Microphone: they follow it, with "start the microphone again: choice".
+- [ ] Sleep the Mac with captions on the microphone and wake it: captions go on, with "start
+  the microphone again: wake" in the log.
+- [ ] With captions on the microphone, `pmset -g assertions` shows whether Core Audio keeps
+  the Mac from idle sleep. Write down what it shows, since the user guide says it may.
+- [ ] Mute yourself in a call app while captions listen to the same microphone: Orra still
+  captions you, as the user guide says.
+- [ ] Copy All Captions, Copy Captions and Copy Previous Captions hold only text, also for a
+  meeting that switched between the two sources.
+- [ ] No line of the captions category holds text or a device name. The stop line names
+  what captions listened to.
+- [ ] On a Mac without any microphone, such as a Mac mini, choosing Microphone says "No
+  microphone is connected. Captions start once you connect one.", and plugging one in
+  starts the captions.
+- [ ] In 简体中文, 日本語 and Español the menu, the "Microphone on" line, the notes, the
+  placeholders and the Settings row read well, at the window's first size and its
+  smallest.
 
 The Live Captions shortcut, added on 2026-10-19, not verified yet in the running app. It
 is a Carbon hot key, see docs/hotkey-options.md, ⌃ ⌥ ⌘ C unless changed in Settings,
@@ -3168,8 +3241,9 @@ it shows registrations and refusals, never keys.
 - [ ] Changing the output device during a call, such as plugging in headphones: captions
   go on. If they stop, turning them off and on brings them back. This is a known gap to
   confirm.
-- [ ] A call with AirPods or another headset with a microphone as the output device:
-  captions show what the other person says, never what you say into the headset. The
+- [ ] With What the Mac Plays, a call with AirPods or another headset with a microphone
+  as the output device: captions show what the other person says, never what you say
+  into the headset. The
   log shows at most one notice about the number of input buffers.
 - [ ] While the permission prompt is open, the menu bar icon and its menu still respond.
   Turning captions off while the prompt is open and on again after answering it leaves
@@ -3224,8 +3298,9 @@ user who never turned Translation on before 2026-10-19:
   (é), and Option Command Escape, in Notes: the characters and Force Quit work, no sound
   plays and no bars show. The orange microphone indicator may flash, and it is off right
   after. Do it ten times quickly, then hold right Option and dictate: it works.
-- [ ] Between holds the orange microphone indicator stays off, with the Brio 500 chosen
-  under Microphone and with System Default. Check it again a minute after a dictation.
+- [ ] With Live Captions off or on What the Mac Plays, the orange microphone indicator
+  stays off between holds, with the Brio 500 chosen under Microphone and with System
+  Default. Check it again a minute after a dictation.
 - [ ] With the Brio 500 chosen, another app can record from it between dictations, such
   as QuickTime Player's New Audio Recording.
 - [ ] With AirPods as the chosen microphone, and again as the default input with System
@@ -3761,9 +3836,10 @@ when Clean Up Text or Translation is turned on meanwhile. Prepare a first launch
 Welcome window above, then choose Hold for the talk key in the welcome window:
 
 - [ ] With Double press in Hold to keep recording on, as it starts, the microphone step
-  reads "Orra records only while you hold the talk key, or after you press it twice
-  quickly, until you press it once more." With it off in Settings, the step reads "Orra
-  records only while you hold the talk key."
+  reads "For dictation, Orra records only while you hold the talk key, or after you press
+  it twice quickly, until you press it once more." With it off in Settings, the step reads
+  "For dictation, Orra records only while you hold the talk key." Both have "Live Captions
+  listen to the microphone only when you choose it." under them.
 - [ ] Allow Microphone Access… shows the macOS prompt with "Orra uses the microphone when
   you start a dictation or a translation, record a voice sample, or choose the microphone
   for Live Captions, and turns your voice into text on this Mac." Check it in English,
@@ -4288,6 +4364,8 @@ the addresses and the name the set's README gives the user:
 
 ## Not implemented
 
+- Live Captions of what the Mac plays and of the microphone at once, with Me and Them
+  labels.
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is
   0.5 seconds everywhere and needs a decision before it changes.
 - A choice of model, a personal dictionary, and the onboarding that adapts to the user.
