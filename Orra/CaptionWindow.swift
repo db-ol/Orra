@@ -347,7 +347,7 @@ struct CaptionNotes: View {
             switch captions.silence {
             case .noAudio:
                 lines.append(String(localized: "Nothing is playing on the Mac. Captions show what the Mac plays, such as a call or a video, not what you say into your microphone."))
-            case .onlyZeros:
+            case .noSound:
                 lines.append(String(localized: "No sound from the Mac yet. If something is playing, allow Orra under Screen & System Audio Recording in Privacy & Security settings."))
             case nil:
                 break

@@ -248,20 +248,38 @@ final class MeetingCaptions {
 
     /// What came in place of sound, see `silence`.
     nonisolated enum SilenceKind: Equatable, Sendable {
-        /// No samples at all. The capture delivers none until an app plays something, see
-        /// SystemAudioTap, so this is a Mac that plays nothing, or a start that still waits.
+        /// No samples at all while Core Audio says that no app but Orra plays. The capture
+        /// delivers none until an app plays something, see SystemAudioTap, so the window
+        /// says that nothing plays.
         case noAudio
+        /// No sound although something may play, so the window suggests the permission.
         /// Samples that were all exactly zero, which is what a refused permission looks
-        /// like while something plays.
-        case onlyZeros
+        /// like while something plays, or no samples at all while an app plays or Core
+        /// Audio cannot tell, which a refused permission may give too.
+        case noSound
     }
+
+    /// Seconds between the checks of whether an app plays, while no samples came and the
+    /// window says that nothing plays. Two checks in a row that find an app playing, or
+    /// that cannot tell, suggest the permission instead, so the tap's auto start has had
+    /// at least this long to deliver audio once something plays. A call that starts while
+    /// the window says that nothing plays, and brings no audio, gets the permission note 3
+    /// to 6 s later. Each check reads only Core Audio's list of processes and their state,
+    /// see SystemAudioTap.somethingPlays, and the checks end with the first audio and when
+    /// captions stop.
+    static let playCheckInterval = 3.0
+    /// Seconds a check waits for Core Audio's answer. Its reads take milliseconds, so a
+    /// check with no answer by then counts as one that cannot tell, and an audio server
+    /// that hangs suggests the permission instead of leaving the window without a note.
+    static let playCheckLimit = 2.0
 
     private(set) var isOn = false
     private(set) var capture: CaptureState = .off
     /// What came in place of sound for `silenceHint` since captions were turned on, for
     /// the window's note. Nil until then and from the first sound on. No audio at all
-    /// also goes once audio comes, since something plays then, and both go after a start
-    /// that failed, whose own note says why.
+    /// becomes no sound when an app starts to play and still no audio comes, see
+    /// `playCheckInterval`, and goes once audio comes, since something plays then. Both go
+    /// after a start that failed, whose own note says why.
     private(set) var silence: SilenceKind?
     /// True after a sentence was dropped since the speech model was not loaded.
     private(set) var speechModelMissing = false
@@ -281,10 +299,15 @@ final class MeetingCaptions {
     @ObservationIgnored private let saveDisplayMode: (CaptionDisplayMode) -> Void
     @ObservationIgnored private let copyText: (String) -> Void
     @ObservationIgnored private let silenceHint: Double
+    @ObservationIgnored private let playCheckInterval: Double
+    @ObservationIgnored private let playCheckLimit: Double
     @ObservationIgnored private var pipeline: CaptionPipeline?
     /// Starts and stops the capture, one after the other, off the main actor. Since it is
     /// serial, a stop that comes while a start still runs tears down what the start made.
     @ObservationIgnored private let captureQueue = DispatchQueue(label: "io.github.db-ol.Orra.caption-capture", qos: .userInitiated)
+    /// Asks whether an app plays, off the main actor. Not `captureQueue`, which a start
+    /// that waits for the first sound holds.
+    @ObservationIgnored private let playQueue = DispatchQueue(label: "io.github.db-ol.Orra.caption-plays", qos: .userInitiated)
     /// Counts the starts, so samples of an earlier run are ignored.
     @ObservationIgnored private var run = 0
     /// When captions were turned on, for the times in the log.
@@ -294,8 +317,11 @@ final class MeetingCaptions {
     @ObservationIgnored private var receivedSeconds = 0.0
     @ObservationIgnored private var soundSeconds = 0.0
     @ObservationIgnored private var heardSound = false
-    /// Says that nothing plays when no samples came at all, see `start`.
+    /// Checks what plays while no samples come, see `checkSilence`.
     @ObservationIgnored private var silenceCheck: Task<Void, Never>?
+    /// True once a check found an app playing, or could not tell, while the window said
+    /// that nothing plays, until a check finds none.
+    @ObservationIgnored private var mayPlay = false
     /// True once this run called `started`, so a switch to a mode that translates calls it
     /// once, and a switch back does not undo it until captions stop.
     @ObservationIgnored private var wantsModel = false
@@ -310,6 +336,8 @@ final class MeetingCaptions {
     ///   - copyText: Puts a copy on the clipboard. Tests pass a fake.
     ///   - silenceHint: Seconds without sound before the window says that nothing plays or
     ///     suggests the permission.
+    ///   - playCheckInterval: See `MeetingCaptions.playCheckInterval`.
+    ///   - playCheckLimit: See `MeetingCaptions.playCheckLimit`.
     init(
         source: SystemAudioSource,
         engines: CaptionEngines,
@@ -319,7 +347,9 @@ final class MeetingCaptions {
         saveDisplayMode: @escaping (CaptionDisplayMode) -> Void = { _ in },
         store: CaptionStore = CaptionStore(),
         copyText: @escaping (String) -> Void = { ConcealedClipboard.copy($0, to: .general) },
-        silenceHint: Double = 8
+        silenceHint: Double = 8,
+        playCheckInterval: Double = MeetingCaptions.playCheckInterval,
+        playCheckLimit: Double = MeetingCaptions.playCheckLimit
     ) {
         self.source = source
         self.engines = engines
@@ -330,6 +360,8 @@ final class MeetingCaptions {
         self.store = store
         self.copyText = copyText
         self.silenceHint = silenceHint
+        self.playCheckInterval = playCheckInterval
+        self.playCheckLimit = playCheckLimit
     }
 
     func setOn(_ on: Bool) {
@@ -378,6 +410,7 @@ final class MeetingCaptions {
         receivedSeconds = 0
         soundSeconds = 0
         heardSound = false
+        mayPlay = false
         let pipeline = CaptionPipeline(engines: engines, interimInterval: CaptionPipeline.defaultInterimInterval, wantsTranslation: { [weak self] in
             self?.displayMode.translates ?? false
         }, speechNotReady: { [weak self] in
@@ -393,12 +426,15 @@ final class MeetingCaptions {
         let current = run
         capture = .starting
         // When no samples at all came by the time samples of only zeros would suggest the
-        // permission, as while nothing plays or the start waits, the window says that
-        // nothing plays. See receive.
+        // permission, as while nothing plays or the start waits, Core Audio tells whether
+        // an app plays. See checkSilence and receive.
         silenceCheck = Task { [weak self, silenceHint] in
-            try? await Task.sleep(for: .seconds(silenceHint))
-            guard let self, !Task.isCancelled, current == run, receivedSeconds == 0 else { return }
-            sayNothingPlays()
+            var wait = silenceHint
+            while true {
+                try? await Task.sleep(for: .seconds(wait))
+                guard !Task.isCancelled, let next = await self?.checkSilence(run: current) else { return }
+                wait = next
+            }
         }
         let source = source
         let deliver: @Sendable ([Float]) -> Void = { [weak self] samples in
@@ -430,9 +466,10 @@ final class MeetingCaptions {
         guard isOn, current == run else { return }
         if let problem {
             capture = .unavailable(problem)
-            // The window says that the capture failed, which is why no sound comes, so
-            // neither the window nor the log says that nothing plays or suggests the
-            // permission for this run.
+            // The window says that the capture failed, which is why no sound comes. So it
+            // shows no note about silence, and this run neither checks what plays nor logs
+            // about silence anymore. When the start failed after `silenceHint`, the log may
+            // already say that nothing plays.
             silenceCheck?.cancel()
             silenceCheck = nil
             silence = nil
@@ -486,8 +523,11 @@ final class MeetingCaptions {
         guard isOn, run == nil || run == self.run, let pipeline else { return }
         if receivedSeconds == 0, !samples.isEmpty {
             Logger.captions.notice("Meeting captions got the first audio \(self.turnedOn.duration(to: .now), privacy: .public) after they were turned on")
-            // Something plays now, so the window no longer says that nothing does.
-            silence = nil
+            // Something plays now, so the window no longer says that nothing does. A
+            // suggestion of the permission stays until the first sound, as with zeros.
+            if silence == .noAudio {
+                silence = nil
+            }
         }
         let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
         receivedSeconds += seconds
@@ -499,25 +539,77 @@ final class MeetingCaptions {
                 Logger.captions.notice("Meeting captions got the first sound \(self.turnedOn.duration(to: .now), privacy: .public) after they were turned on")
             }
         } else if !heardSound, receivedSeconds >= silenceHint {
-            suggestPermission()
+            suggestPermission(after: silenceHint)
         }
         pipeline.feed(samples)
     }
 
-    /// No samples at all came for `silenceHint`, so the window says that nothing plays.
-    /// The log line has the shape of the one in `suggestPermission`, and its 0.0 s of
-    /// audio tells the two apart.
+    /// One check of what plays while no samples came this run: at `silenceHint`, and every
+    /// `playCheckInterval` while the window says that nothing plays. Returns the seconds
+    /// until the next check, or nil when none is needed anymore.
+    private func checkSilence(run current: Int) async -> Double? {
+        guard waitsForAudio(run: current) else { return nil }
+        let plays = await somethingPlays()
+        guard !Task.isCancelled, waitsForAudio(run: current) else { return nil }
+        if plays == false {
+            mayPlay = false
+            if silence == nil {
+                sayNothingPlays()
+            }
+            return playCheckInterval
+        }
+        // An app plays, or Core Audio cannot tell. At `silenceHint` that suggests the
+        // permission at once, as samples of only zeros do. Once the window said that
+        // nothing plays, the tap's auto start gets until the next check to deliver audio.
+        if silence == .noAudio, !mayPlay {
+            mayPlay = true
+            if plays == true {
+                Logger.captions.notice("Meeting captions found an app playing \(self.turnedOn.duration(to: .now), privacy: .public) after they were turned on, with no audio yet")
+            }
+            return playCheckInterval
+        }
+        suggestPermission(after: silence == nil ? silenceHint : turnedOn.duration(to: .now) / .seconds(1))
+        return nil
+    }
+
+    /// Whether this run still got no samples at all, with no note or the note that nothing
+    /// plays in the window.
+    private func waitsForAudio(run current: Int) -> Bool {
+        isOn && current == run && receivedSeconds == 0 && silence != .noSound
+    }
+
+    /// Asks on `playQueue` whether an app plays, see SystemAudioSource.somethingPlays. Nil
+    /// when Core Audio cannot tell, also when it gave no answer within `playCheckLimit`.
+    private func somethingPlays() async -> Bool? {
+        let ask = source.somethingPlays
+        let queue = playQueue
+        let (answer, timedOut) = await TimedCall.run(within: .seconds(playCheckLimit)) {
+            await withCheckedContinuation { continuation in
+                queue.async {
+                    continuation.resume(returning: ask())
+                }
+            }
+        }
+        if timedOut {
+            Logger.captions.notice("Meeting captions could not tell within \(self.playCheckLimit, format: .fixed(precision: 1), privacy: .public) s whether an app plays")
+        }
+        return try? answer.get()
+    }
+
+    /// No samples at all came for `silenceHint` while no app plays, so the window says
+    /// that nothing plays. The log line has the shape of the one in `suggestPermission`,
+    /// and its 0.0 s of audio tells the two apart.
     private func sayNothingPlays() {
         silence = .noAudio
         Logger.captions.notice("Meeting captions got no sound for \(self.silenceHint, format: .fixed(precision: 1), privacy: .public) s, with \(self.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio, and say that nothing plays")
     }
 
-    /// Samples of only zeros came for `silenceHint`, as with a refused permission while
-    /// something plays, so the window suggests the permission.
-    private func suggestPermission() {
-        guard silence != .onlyZeros else { return }
-        silence = .onlyZeros
-        Logger.captions.notice("Meeting captions got no sound for \(self.silenceHint, format: .fixed(precision: 1), privacy: .public) s, with \(self.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio, and suggest the permission")
+    /// No sound came for `seconds` although something may play, see SilenceKind.noSound,
+    /// so the window suggests the permission.
+    private func suggestPermission(after seconds: Double) {
+        guard silence != .noSound else { return }
+        silence = .noSound
+        Logger.captions.notice("Meeting captions got no sound for \(seconds, format: .fixed(precision: 1), privacy: .public) s, with \(self.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio, and suggest the permission")
     }
 
     /// The run of the latest start, for tests that feed samples like the capture does.

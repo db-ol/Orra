@@ -535,7 +535,8 @@ struct CleanupModel {
     static let off = CleanupModel(waitUntilLoaded: { false }, complete: { _ in throw RewriteError.notLoaded })
 }
 
-/// A model call with a time limit, for the cleanup and translation steps.
+/// A model call with a time limit, for the cleanup and translation steps. Live Captions
+/// also use it for their check of what plays, see MeetingCaptions.playCheckLimit.
 ///
 /// At the limit it cancels the call and returns at once, so the paste never waits past
 /// the limit. The call goes on until it ends by itself, and its result is dropped: one

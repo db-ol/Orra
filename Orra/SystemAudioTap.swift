@@ -12,17 +12,23 @@ nonisolated enum SystemAudioProblem: Error, Equatable, Sendable {
 }
 
 /// What meeting captions need from the capture of the sound the Mac plays. Closures, so
-/// tests pass a fake. MeetingCaptions calls both off the main actor, one after the other,
-/// since starting can wait for the permission prompt.
+/// tests pass a fake. MeetingCaptions calls `start` and `stop` off the main actor, one
+/// after the other, since starting can wait for the permission prompt. It calls
+/// `somethingPlays` off the main actor too, on a queue of its own, since a start that
+/// waits would hold it back.
 nonisolated struct SystemAudioSource: Sendable {
     /// Starts the capture. `deliver` gets 16 kHz mono samples on a background queue, in
     /// order, about every 100 ms.
     var start: @Sendable (_ deliver: @escaping @Sendable ([Float]) -> Void) throws -> Void
     var stop: @Sendable () -> Void
+    /// Whether an app other than Orra plays sound now, or nil when Core Audio cannot tell,
+    /// see SystemAudioTap.somethingPlays. It can wait for the audio server, so never on
+    /// the main thread.
+    var somethingPlays: @Sendable () -> Bool?
 
     static func live() -> SystemAudioSource {
         let tap = SystemAudioTap()
-        return SystemAudioSource(start: { try tap.start(deliver: $0) }, stop: { tap.stop() })
+        return SystemAudioSource(start: { try tap.start(deliver: $0) }, stop: { tap.stop() }, somethingPlays: { SystemAudioTap.somethingPlays() })
     }
 }
 
@@ -37,10 +43,11 @@ nonisolated struct SystemAudioSource: Sendable {
 ///
 /// The tap feeds a private aggregate device, whose input Orra reads like a microphone.
 /// macOS asks for the permission when that device starts. There is no public way to read
-/// the permission, and when it is refused the tap delivers samples of only zeros while
-/// something plays. With tap auto start the device starts only once an app plays
-/// something, so while nothing plays no samples come at all. MeetingCaptions tells the
-/// two apart.
+/// the permission. When it is refused, the tap delivers samples of only zeros while
+/// something plays, as other developers report, or maybe no samples at all, since Apple
+/// does not document it. With tap auto start the device starts only once an app plays
+/// something, so while nothing plays no samples come at all. MeetingCaptions tells these
+/// apart, with `somethingPlays` for a capture that delivers nothing.
 ///
 /// The IO block runs on Core Audio's real time thread and only copies the tap's frames
 /// into an AudioFrameRing. A timer on `queue` takes them out, converts them to 16 kHz
@@ -180,6 +187,72 @@ nonisolated final class SystemAudioTap: @unchecked Sendable {
         }
         // Waits for a conversion under way, so no samples come after stop returns.
         queue.sync {}
+    }
+
+    /// Whether a process other than Orra runs audio output, from Core Audio's list of the
+    /// processes that use audio. Orra is left out by its process ID, as the tap leaves it
+    /// out. Tap auto start waits for such a process before the capture delivers samples,
+    /// as Core Audio's header describes it. Nil when Core Audio cannot tell: when a read
+    /// fails, and when the list holds no process but Orra. A Mac always has others, such
+    /// as Control Center, so such a list means that Core Audio hides them.
+    ///
+    /// It only reads properties. It creates no tap and starts no device, so it never shows
+    /// the permission prompt. Reading the list makes coreaudiod preflight the system audio
+    /// recording permission, which never prompts, as the TCC log showed on 2026-11-01. What
+    /// the list holds while the permission is refused is not known. Each read asks the
+    /// audio server, so it never runs on the main thread. On an M5 Pro with 49 processes
+    /// in the list, reading them all took about 16 ms.
+    static func somethingPlays() -> Bool? {
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyProcessObjectList, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        var status = AudioObjectGetPropertyDataSize(system, &address, 0, nil, &size)
+        var processes = [AudioObjectID](repeating: AudioObjectID(kAudioObjectUnknown), count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        if status == noErr, !processes.isEmpty {
+            status = processes.withUnsafeMutableBytes { AudioObjectGetPropertyData(system, &address, 0, nil, &size, $0.baseAddress!) }
+        }
+        guard status == noErr else {
+            Logger.captions.error("System audio capture could not read the processes that use audio: \(status, privacy: .public)")
+            return nil
+        }
+        let own = ProcessInfo.processInfo.processIdentifier
+        var others = 0
+        var failure: OSStatus?
+        // The list may have become shorter since its size was read.
+        for process in processes.prefix(Int(size) / MemoryLayout<AudioObjectID>.size) {
+            let pid = property(process, kAudioProcessPropertyPID, pid_t(0))
+            guard pid.status == noErr else {
+                // A process that quit since the list was read plays nothing.
+                if pid.status != kAudioHardwareBadObjectError { failure = pid.status }
+                continue
+            }
+            guard pid.value != own else { continue }
+            let running = property(process, kAudioProcessPropertyIsRunningOutput, UInt32(0))
+            guard running.status == noErr else {
+                if running.status != kAudioHardwareBadObjectError { failure = running.status }
+                continue
+            }
+            if running.value != 0 { return true }
+            others += 1
+        }
+        if let failure {
+            Logger.captions.error("System audio capture could not read whether a process plays: \(failure, privacy: .public)")
+            return nil
+        }
+        guard others > 0 else {
+            Logger.captions.notice("System audio capture found no process but Orra among those that use audio")
+            return nil
+        }
+        return false
+    }
+
+    /// A property of an object, with the status of the read, which `read` would log.
+    private static func property<T>(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ initial: T) -> (status: OSStatus, value: T) {
+        var address = AudioObjectPropertyAddress(mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var value = initial
+        var size = UInt32(MemoryLayout<T>.size)
+        let status = withUnsafeMutablePointer(to: &value) { AudioObjectGetPropertyData(object, &address, 0, nil, &size, $0) }
+        return (status, value)
     }
 
     /// Orra's own process as a Core Audio object, to leave out of the tap.

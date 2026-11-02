@@ -261,7 +261,7 @@ struct StatusMenuTests {
                 environment: ModelDownload.Environment(fetch: FileFetch { _, _, _, _, _, _ in throw URLError(.notConnectedToInternet) }, freeSpace: { _ in nil }, sleep: { _ in })
             ),
             captions: MeetingCaptions(
-                source: SystemAudioSource(start: { _ in }, stop: {}),
+                source: SystemAudioSource(start: { _ in }, stop: {}, somethingPlays: { false }),
                 engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, target: { .chinese }, translate: { text, _ in text }),
                 store: store
             ),
