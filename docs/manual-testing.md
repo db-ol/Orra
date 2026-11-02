@@ -3128,8 +3128,11 @@ a headset that gives exactly zero while you are quiet, if there is one.
   microphone again: retry". If the log says "let go of the microphone after 3 starts
   again", write down the headset, since a headset that changes its profile at each start
   would do that.
-- [ ] With captions on the microphone, `pmset -g assertions` shows whether Core Audio keeps
-  the Mac from idle sleep. Write down what it shows, since the user guide says it may.
+- [ ] With captions on the microphone and the window in view, `pmset -g assertions` lists
+  Orra's "Showing Live Captions" and shows whether Core Audio also keeps the Mac from idle
+  sleep. Write down what Core Audio shows, since the user guide says it may. Lock the
+  screen and look again: Orra's assertion is gone, and write down whether Core Audio's is
+  too.
 - [ ] Talk to captions on the microphone and press Control Command Q in the middle of a
   sentence. Within a second the log says "Screen lock note: the screen locked, locked
   true", "let go of the microphone while the screen is locked" and "Caption microphone
@@ -3169,6 +3172,36 @@ a headset that gives exactly zero while you are quiet, if there is one.
 - [ ] In 简体中文, 日本語 and Español the menu, the "Microphone on" line, the notes, the
   placeholders and the Settings row read well, at the window's first size and its
   smallest.
+
+The screen while Live Captions show, added on 2026-11-02, not verified yet.
+MeetingCaptionsTests checks when captions keep the display on, and
+CaptionWindowVisibilityTests when the window counts as seen. Nothing tests the activity
+itself or the notes the window follows. In Lock Screen settings set Start Screen Saver
+when inactive to 1 minute, Turn display off when inactive to 2 minutes (on a MacBook on
+its power adapter, Turn display off on power adapter when inactive), and Require password
+after screen saver begins or display is turned off to Immediately. Watch
+`pmset -g assertions` and the captions log.
+
+- [ ] With captions on What the Mac Plays and the window in view, `pmset -g assertions`
+  lists a PreventUserIdleDisplaySleep of Orra's named "Showing Live Captions", and the log
+  says "Meeting captions keep the display on". Leave the Mac alone for 3 minutes: the
+  screen does not dim, the screen saver does not start, and the display does not turn off
+  or lock. The same with Microphone.
+- [ ] Within a second the assertion is gone and the log says "Meeting captions no longer
+  keep the display on" when captions turn off from the menu, from the shortcut and from the
+  window's close button, when Orra is hidden with Hide Others in another app while Orra
+  shows in the Dock, when the screen is locked, when Put Display to Sleep turns the display
+  off, and after Quit. Each time, with no input, the screen saver then starts after a
+  minute, as usual. With the window in view again after Show All, an unlock or a wake of
+  the display, the assertion is back.
+- [ ] With microphone access off, or on a Mac without a microphone, the window shows its
+  note and pmset lists no assertion of Orra's.
+- [ ] A dictation, a voice sample and Orra speaking a translation keep the assertion, and so
+  does choosing another microphone under Microphone, which starts the microphone again. The
+  display never dims meanwhile.
+- [ ] With captions on and no external display, close the lid of a MacBook: the Mac sleeps.
+  With an external display, power and a keyboard, the Mac stays awake with the window on
+  the external display, as it does without Orra.
 
 The Live Captions shortcut, added on 2026-10-19, not verified yet in the running app. It
 is a Carbon hot key, see docs/hotkey-options.md, ⌃ ⌥ ⌘ C unless changed in Settings,
