@@ -2132,6 +2132,23 @@ struct MeetingCaptionsTests {
         captions.setOn(false)
     }
 
+    /// Captions turned on while the screen is locked, as the shortcut might at the lock
+    /// screen, look at the session from the start, so an unlock whose note was lost ends
+    /// without a menu or a click.
+    @Test func captionsTurnedOnWhileLockedFindAnUnlockWhoseNoteWasLost() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let screen = FakeScreenLock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone, screenLock: screen)
+        screen.lock()
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        #expect(captions.capture == .pausedWhileLocked)
+        screen.locked = false
+        try await eventually { captions.capture == .listening && microphone.starts == 1 }
+        #expect(!captions.screenLocked)
+        captions.setOn(false)
+    }
+
     /// Any process can post the note of an unlock, so it starts the microphone only while
     /// the session agrees, and otherwise the look at the session starts it once it does.
     @Test func anUnlockNoteCountsOnlyWhileTheSessionAgrees() async throws {
