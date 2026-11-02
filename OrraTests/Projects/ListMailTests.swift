@@ -38,6 +38,7 @@ struct ListMailTests {
         "donotreply@shop.example", "noreply+orders@shop.example", "noreply-billing@shop.example",
         "newsletter@shop.example", "digest@forum.example", "billing@power.example", "orders@shop.example",
         "alumni@college.example", "cfp@conference.example", "Mailer-Daemon@relay.example",
+        "it-noreply@campus.example", "calendar.donotreply@campus.example", "events_no-reply@campus.example",
     ])
     func sendersPeopleDoNotWriteFrom(_ address: String) {
         #expect(ListMail.isNoReplySender(address))
@@ -46,6 +47,7 @@ struct ListMailTests {
     @Test(arguments: [
         "bill.chen@orchard.example", "bill@orchard.example", "hello@orchard.example", "info@orchard.example",
         "nora@orchard.example", "noel.reyes@orchard.example", "news.desk.lead@paper.example", "no-at-sign",
+        "nora.reply@orchard.example", "reply-desk@orchard.example",
     ])
     func sendersPeopleWriteFrom(_ address: String) {
         #expect(!ListMail.isNoReplySender(address))

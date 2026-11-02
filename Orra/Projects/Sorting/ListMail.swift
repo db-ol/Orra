@@ -73,8 +73,9 @@ nonisolated struct ListMail: Sendable, Equatable {
     }
 
     /// Whether the address is a sender that people do not write from, such as noreply@,
-    /// newsletter@ or billing@. A tag after + is ignored. Only the whole local part counts,
-    /// so bill.chen@ is a person.
+    /// it-noreply@, newsletter@ or billing@. A tag after + is ignored. No reply counts after
+    /// a dot, a dash or an underscore too. The other senders count only as the whole local
+    /// part, so bill.chen@ is a person.
     static func isNoReplySender(_ address: String) -> Bool {
         guard let at = address.lastIndex(of: "@") else { return false }
         var local = address[..<at].lowercased()
@@ -105,7 +106,7 @@ nonisolated struct ListMail: Sendable, Equatable {
     private static let footerLines = 10
 
     // Built once rather than for every email.
-    nonisolated(unsafe) private static let noReplyLocalPart = /^(no|do[-_.]?not)[-_.]?reply/
+    nonisolated(unsafe) private static let noReplyLocalPart = /(?:^|[-_.])(?:no|do[-_.]?not)[-_.]?reply/
     nonisolated(unsafe) private static let footerWording: [Regex<Substring>] = [
         // "unsubscribe here", but not "I unsubscribed".
         /\bunsubscribe\b/.ignoresCase(),

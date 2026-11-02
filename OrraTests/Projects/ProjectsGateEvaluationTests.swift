@@ -689,7 +689,7 @@ nonisolated private struct GateAttackSet: Sendable {
         SortingService.Email(
             messageID: bare(message.message_id),
             sender: message.from,
-            recipients: message.to + (message.cc ?? []),
+            to: message.to, cc: message.cc ?? [],
             date: date(message.date),
             subject: message.subject,
             text: QuotedHistory(splitting: visible(message).text).ownText,

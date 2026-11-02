@@ -549,13 +549,14 @@ struct ProjectsRuntimeTests {
         runtime.resortBatchLimit = 2
         let store = try #require(runtime.running?.store)
         // Oldest first: three emails no rule files, one of Harbor's domain, the two newest
-        // that sorting may file, and a move of the user.
+        // that sorting may file, and a move of the user. Harbor's words in the subjects
+        // leave the mail from Kiln to the model.
         let older = (0..<3).map { "o\($0)@kiln.example" }
         let newest = (0..<2).map { "n\($0)@kiln.example" }
         try await store.save(
-            older.enumerated().map { index, id in Self.message(id, from: "kai@kiln.example", day: Double(index) / 10) }
+            older.enumerated().map { index, id in Self.message(id, from: "kai@kiln.example", day: Double(index) / 10, subject: "Harbor tiles") }
                 + [Self.message("h@harbor.example", from: "mei@harbor.example", day: 0.3)]
-                + newest.enumerated().map { index, id in Self.message(id, from: "kai@kiln.example", day: 0.5 + Double(index) / 10) }
+                + newest.enumerated().map { index, id in Self.message(id, from: "kai@kiln.example", day: 0.5 + Double(index) / 10, subject: "Harbor tiles") }
                 + [Self.message("moved@kiln.example", from: "kai@kiln.example", day: 1)],
             ownAddresses: [Self.own], at: Self.today)
         // The sorting of new mail reads them first, with no project yet, so none of its
@@ -730,9 +731,10 @@ struct ProjectsRuntimeTests {
         reply.to = [MailStore.Person(address: "kai@kiln.example")]
         reply.inReplyTo = ["k1@kiln.example"]
         reply.references = ["k1@kiln.example"]
+        // Alder's words in the subjects leave the mail to the model.
         try await store.save([
-            Self.message("k1@kiln.example", from: "kai@kiln.example"), reply,
-            Self.message("k2@kiln.example", from: "kai@kiln.example", day: 1),
+            Self.message("k1@kiln.example", from: "kai@kiln.example", subject: "Alder tiles"), reply,
+            Self.message("k2@kiln.example", from: "kai@kiln.example", day: 1, subject: "Alder tiles"),
         ], ownAddresses: [Self.own], at: Self.today)
         runtime.requestSort()
         _ = try await listed(.needsProject, runtime) { $0.count == 3 && $0.allSatisfy { $0.level != nil } }
@@ -746,7 +748,7 @@ struct ProjectsRuntimeTests {
         #expect(guessed["r1@studio.example"]?.reasons == [.thread])
         // Neither the guess of k1 nor the reply under it is people seen of Alder.
         #expect(guessed["k2@kiln.example"]?.level == .likely)
-        #expect(guessed["k2@kiln.example"]?.reasons == [.model])
+        #expect(guessed["k2@kiln.example"]?.reasons == [.words, .model])
 
         let birch = Project(name: "Birch", people: [Project.Person(name: "Kai Moss", address: "kai@kiln.example")])
         try await runtime.add(birch)
@@ -764,8 +766,9 @@ struct ProjectsRuntimeTests {
     }
 
     /// A person removed from a project takes their mail out of it, unless another setting or
-    /// a thread files it there. The mail waits for the model in Needs a Project, and its own
-    /// filing no longer counts as people seen in the project it left.
+    /// a thread files it there. Nothing else points to a project, so the mail goes to Needs a
+    /// Project without the model, and its own filing no longer counts as people seen in the
+    /// project it left.
     @Test(.timeLimit(.minutes(1)))
     func removingAPersonSendsTheirMailBackToNeedsAProject() async throws {
         defer { cleanUp() }
@@ -783,7 +786,64 @@ struct ProjectsRuntimeTests {
         await runtime.untilResorted()
         #expect(try await runtime.list(.project(birch.id)).isEmpty)
         let waiting = try #require(try await runtime.list(.needsProject).first(where: { $0.messageID == "s1@post.example" }))
-        #expect(waiting.reasons == [.waitingForModel, .noSignal])
+        #expect(waiting.reasons == [.noSignal])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A notice that an earlier version filed in the only project on the model's choice
+    /// alone, and a reply filed under it by its thread, as the store of 0.6.2 holds them.
+    /// Once the window opens, both go to Needs a Project without the model and get the reply
+    /// marks of the rule as it is now, and a later reply to the reply stays out of the
+    /// project too.
+    @Test(.timeLimit(.minutes(1)))
+    func anOldGuessAndTheReplyUnderItLeaveTheOnlyProject() async throws {
+        defer { cleanUp() }
+        model.isThere.withLock { $0 = true }
+        let (runtime, projects, _) = try await started(installed: Installed(true))
+        let harbor = Project(name: "Harbor")
+        try await runtime.add(harbor)
+        await runtime.untilResorted()
+        let store = try #require(runtime.running?.store)
+        // The user is only in Cc of both.
+        var notice = Self.message("x@campus.example", from: "desk@campus.example", subject: "Clocks change on Sunday")
+        notice.to = [MailStore.Person(address: "all-staff@campus.example")]
+        notice.cc = [MailStore.Person(address: Self.own)]
+        notice.text = "The clocks go back one hour on Sunday."
+        notice.visibleText = notice.text
+        var reply = Self.message("y@campus.example", from: "kai@campus.example", day: 1, subject: "Re: Clocks change on Sunday")
+        reply.to = [MailStore.Person(address: "desk@campus.example"), MailStore.Person(address: "all-staff@campus.example")]
+        reply.cc = [MailStore.Person(address: Self.own)]
+        reply.inReplyTo = ["x@campus.example"]
+        reply.references = ["x@campus.example"]
+        reply.text = "Thanks, the lab clocks are done."
+        reply.visibleText = reply.text
+        try await store.save([notice, reply], ownAddresses: [Self.own], at: Self.today)
+        #expect(try await store.saveDecision(SortingDecision(project: harbor.id, level: .likely, reasons: [.model]), for: "x@campus.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: harbor.id, level: .sure, reasons: [.thread]), for: "y@campus.example"))
+        for id in ["x@campus.example", "y@campus.example"] {
+            try await store.saveReply(.reply(.en), for: id)
+        }
+
+        runtime.windowOpened()
+        // The reply mark is saved after the decision, and the reply comes after the notice.
+        try await waitUntilListed("x@campus.example", in: .needsProject, runtime) { $0.reply == .noReply(.notAddressed) }
+        try await waitUntil { !runtime.isSorting }
+        let left = try await runtime.list(.needsProject)
+        try #require(left.map(\.messageID) == ["y@campus.example", "x@campus.example"])
+        #expect(left.allSatisfy { $0.level == .unsure && $0.reasons == [.noSignal] && $0.reply == .noReply(.notAddressed) })
+        #expect(try await runtime.list(.project(harbor.id)).isEmpty)
+        #expect(model.jobs.value == 0)
+
+        var later = Self.message("z@campus.example", from: "desk@campus.example", day: 2, subject: "Re: Clocks change on Sunday")
+        later.inReplyTo = ["y@campus.example"]
+        later.references = ["x@campus.example", "y@campus.example"]
+        try await store.save([later], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("z@campus.example", in: .needsProject, runtime) { $0.level == .unsure }
+        #expect(try await runtime.list(.project(harbor.id)).isEmpty)
+        #expect(model.jobs.value == 0)
+        runtime.windowClosed()
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
     }
@@ -834,11 +894,12 @@ struct ProjectsRuntimeTests {
         }
         await runtime.untilResorted()
         let store = try #require(runtime.running?.store)
+        // The words of Alder and Birch, one each, leave both emails to the model.
         try await store.save([
-            Self.message("e1@kiln.example", from: "kai@kiln.example"),
-            Self.message("e2@kiln.example", from: "kai@kiln.example", day: 1),
+            Self.message("e1@kiln.example", from: "kai@kiln.example", subject: "Alder or Birch"),
+            Self.message("e2@kiln.example", from: "kai@kiln.example", day: 1, subject: "Alder or Birch"),
         ], ownAddresses: [Self.own], at: Self.today)
-        #expect(try await store.saveDecision(SortingDecision(project: alder.id, level: .likely, reasons: [.model]), for: "e1@kiln.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: alder.id, level: .likely, reasons: [.words, .model]), for: "e1@kiln.example"))
         #expect(try await store.saveDecision(SortingDecision(project: nil, level: .unsure, reasons: [.modelSaidNone, .noSignal]), for: "e2@kiln.example"))
         runtime.windowOpened()
 
@@ -873,8 +934,9 @@ struct ProjectsRuntimeTests {
         }
         await runtime.untilResorted()
         let store = try #require(runtime.running?.store)
-        try await store.save([Self.message("e1@kiln.example", from: "kai@kiln.example")], ownAddresses: [Self.own], at: Self.today)
-        #expect(try await store.saveDecision(SortingDecision(project: alder.id, level: .likely, reasons: [.model]), for: "e1@kiln.example"))
+        // The words of Alder and Birch, one each, leave the email to the model.
+        try await store.save([Self.message("e1@kiln.example", from: "kai@kiln.example", subject: "Alder or Birch")], ownAddresses: [Self.own], at: Self.today)
+        #expect(try await store.saveDecision(SortingDecision(project: alder.id, level: .likely, reasons: [.words, .model]), for: "e1@kiln.example"))
         runtime.windowOpened()
 
         model.blocks.withLock { $0 = true }
@@ -965,7 +1027,7 @@ struct ProjectsRuntimeTests {
         let (runtime, projects, choice) = try await started(installed: Installed(true))
         try await runtime.add(Project(name: "Harbor"))
         let store = try #require(runtime.running?.store)
-        try await store.save([Self.message("h@kiln.example", from: "ana@kiln.example")], ownAddresses: [Self.own], at: Self.today)
+        try await store.save([Self.message("h@kiln.example", from: "ana@kiln.example", subject: "Harbor tiles")], ownAddresses: [Self.own], at: Self.today)
         // The window holds the model, so sorting asks it, and it does not answer.
         runtime.windowOpened()
         try await waitUntil { model.jobs.value == 1 }
@@ -1200,7 +1262,7 @@ struct ProjectsRuntimeTests {
         let (runtime, projects, _) = try await started(installed: Installed(true))
         try await runtime.add(Project(name: "Harbor"))
         let store = try #require(runtime.running?.store)
-        try await store.save([Self.message("h@kiln.example", from: "ana@kiln.example")], ownAddresses: [Self.own], at: Self.today)
+        try await store.save([Self.message("h@kiln.example", from: "ana@kiln.example", subject: "Harbor tiles")], ownAddresses: [Self.own], at: Self.today)
         runtime.windowOpened()
         try await waitUntil { model.jobs.value == 1 }
         #expect(runtime.isSorting)
@@ -1594,7 +1656,7 @@ struct ProjectsRuntimeTests {
         let harbor = Project(name: "Harbor")
         try await runtime.add(harbor)
         let store = try #require(runtime.running?.store)
-        try await store.save([Self.message("h@kiln.example", from: "ana@kiln.example")], ownAddresses: [Self.own], at: Self.today)
+        try await store.save([Self.message("h@kiln.example", from: "ana@kiln.example", subject: "Harbor tiles")], ownAddresses: [Self.own], at: Self.today)
         runtime.requestSort()
         try await waitUntilListed("h@kiln.example", in: .needsProject, runtime) { $0.level == .unsure }
         #expect(model.jobs.value == 0)
@@ -1614,7 +1676,7 @@ struct ProjectsRuntimeTests {
         let (runtime, projects, _) = try await started(installed: Installed(true))
         try await runtime.add(Project(name: "Harbor"))
         let store = try #require(runtime.running?.store)
-        try await store.save([Self.message("h@kiln.example", from: "ana@kiln.example")], ownAddresses: [Self.own], at: Self.today)
+        try await store.save([Self.message("h@kiln.example", from: "ana@kiln.example", subject: "Harbor tiles")], ownAddresses: [Self.own], at: Self.today)
         runtime.windowOpened()
         try await waitUntil { model.jobs.value == 1 }
         runtime.windowClosed()
@@ -1634,7 +1696,7 @@ struct ProjectsRuntimeTests {
         let harbor = Project(name: "Harbor")
         try await runtime.add(harbor)
         let store = try #require(runtime.running?.store)
-        try await store.save([Self.message("h@kiln.example", from: "ana@kiln.example")], ownAddresses: [Self.own], at: Self.today)
+        try await store.save([Self.message("h@kiln.example", from: "ana@kiln.example", subject: "Harbor tiles")], ownAddresses: [Self.own], at: Self.today)
         runtime.windowOpened()
         try await waitUntilListed("h@kiln.example", in: .needsProject, runtime) { $0.level == .unsure }
         #expect(model.jobs.value == 0)
@@ -1658,7 +1720,7 @@ struct ProjectsRuntimeTests {
         #expect(keyDown.handlers.count == 1)
         try await runtime.add(Project(name: "Harbor"))
         let store = try #require(runtime.running?.store)
-        try await store.save([Self.message("h@kiln.example", from: "ana@kiln.example")], ownAddresses: [Self.own], at: Self.today)
+        try await store.save([Self.message("h@kiln.example", from: "ana@kiln.example", subject: "Harbor tiles")], ownAddresses: [Self.own], at: Self.today)
         runtime.windowOpened()
         try await waitUntil { model.jobs.value == 1 }
         keyDown.press()
@@ -3273,11 +3335,13 @@ struct ProjectsRuntimeTests {
         return folder
     }
 
-    private static func message(_ id: String, from sender: String, day: Double = 0) -> MailStore.Message {
+    /// An email to the user. A subject that names a project gives that project's words as
+    /// a signal, without which sorting never asks the model.
+    private static func message(_ id: String, from sender: String, day: Double = 0, subject: String = "Hello") -> MailStore.Message {
         MailStore.Message(
             messageID: id, mailbox: nil, date: today.addingTimeInterval(-86_400 * (3 - day)),
             sender: MailStore.Person(address: sender), to: [MailStore.Person(address: own)],
-            subject: "Hello", text: "Could you send the plan?", visibleText: "Could you send the plan?")
+            subject: subject, text: "Could you send the plan?", visibleText: "Could you send the plan?")
     }
 
     /// Saves `count` emails of Harbor an hour apart, each with a subject of its own, files

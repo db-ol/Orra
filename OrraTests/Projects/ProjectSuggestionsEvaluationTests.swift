@@ -219,7 +219,7 @@ struct ProjectSuggestionsEvaluationTests {
                     id: id, thread: object["thread"] as? String ?? id, gold: labels["project"] as? String ?? "none",
                     addresses: addresses,
                     email: SortingService.Email(
-                        messageID: messageID, sender: from, recipients: recipients, date: date, subject: subject, text: text,
+                        messageID: messageID, sender: from, to: object["to"] as? [String] ?? [], cc: object["cc"] as? [String] ?? [], date: date, subject: subject, text: text,
                         attachmentNames: attachments, inReplyTo: inReplyTo, references: references)))
                 suggestionMail.append(ProjectSuggestions.Mail(
                     messageID: messageID, date: date, sender: Self.person(from), recipients: recipients.map(Self.person),

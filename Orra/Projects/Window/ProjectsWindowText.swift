@@ -278,6 +278,8 @@ nonisolated enum ProjectsWindowText {
         case .noReply(.sentByUser): String(localized: "No reply needed. You sent this email.")
         case .noReply(.answeredLater): String(localized: "No reply needed. You answered it later in the thread.")
         case .noReply(.listMail): String(localized: "No reply needed. It went to a list or came from a machine.")
+        case .noReply(.notAddressed): String(localized: "No reply needed. You are not in To, and it does not name you.")
+        case .noReply(.forwardedNotice): String(localized: "No reply needed. It forwards a message and asks you nothing.")
         case .noDraft: String(localized: "This email is in a language Projects writes no drafts in.")
         case .missing: String(localized: "The model wrote no draft. Explain the email again to try once more.")
         case .expired: String(localized: "Projects removed this draft \(days(Retention.drafts)) days after its last change. Explain the email again for a new one.")

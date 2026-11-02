@@ -1502,7 +1502,10 @@ struct ProjectsWindowViewTests {
             .copiedReplyFailed(.notFound), .copiedReplyFailed(.failed(code: -1)), .emptyDraft, .notCopied,
         ]
         #expect(Set((outcomes.map(ProjectsEmailModel.HandoffNote.outcome) + [.messageNotFound]).map(ProjectsWindowText.handoff)).count == 10)
-        let drafts: [Explanation.Draft] = [.noReply(.sentByUser), .noReply(.answeredLater), .noReply(.listMail), .noDraft, .missing, .expired, .checked(DraftCheck.Result(draft: nil, language: .zh))]
+        let drafts: [Explanation.Draft] = [
+            .noReply(.sentByUser), .noReply(.answeredLater), .noReply(.listMail), .noReply(.notAddressed), .noReply(.forwardedNotice),
+            .noDraft, .missing, .expired, .checked(DraftCheck.Result(draft: nil, language: .zh)),
+        ]
         #expect(Set(drafts.compactMap(ProjectsWindowText.noDraft)).count == drafts.count)
         #expect(ProjectsWindowText.noDraft(.checked(DraftCheck.Result(draft: "Hi", language: .en))) == nil)
         #expect(ProjectsWindowText.takenOut(.hidden(.tinyFont)) != ProjectsWindowText.takenOut(.addressesAssistant))

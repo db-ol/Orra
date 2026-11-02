@@ -273,8 +273,81 @@ struct MailStoreTests {
         #expect(waiting.map(\.messageID) == ["waits@test.example", "new@test.example"])
         let new = try #require(waiting.last)
         #expect(new == SortingService.Email(
-            messageID: "new@test.example", sender: "kim@quay.example", recipients: [Self.work], date: Self.date(4),
+            messageID: "new@test.example", sender: "kim@quay.example", to: [Self.work], date: Self.date(4),
             subject: "Hello", text: "First text", mailbox: "Work/INBOX"))
+        await store.close()
+    }
+
+    /// A filing on the model's choice alone, which sorting no longer makes, comes back to be
+    /// sorted again, unless its explanation holds a draft, the user moved it or Retention
+    /// removed its text.
+    @Test func aFilingOnTheModelsChoiceAloneIsSortedAgain() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([
+            Self.message("alone@test.example", from: "kim@quay.example"),
+            Self.message("drafted@test.example", from: "kim@quay.example", day: 1),
+            Self.message("signal@test.example", from: "kim@quay.example", day: 2),
+            Self.message("moved@test.example", from: "kim@quay.example", day: 3),
+            Self.message("faded@test.example", from: "kim@quay.example", day: 4),
+        ], ownAddresses: [Self.work], at: Self.date(5))
+        let alone = SortingDecision(project: Self.harbor, level: .likely, reasons: [.model])
+        #expect(try await store.saveDecision(alone, for: "alone@test.example"))
+        #expect(try await store.saveDecision(alone, for: "drafted@test.example"))
+        #expect(try await store.save(Self.explanation("drafted@test.example"), at: Self.date(4)))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .likely, reasons: [.words, .model]), for: "signal@test.example"))
+        #expect(try await store.saveDecision(alone, for: "moved@test.example"))
+        #expect(try await store.move("moved@test.example", to: Self.harbor))
+        #expect(try await store.saveDecision(alone, for: "faded@test.example"))
+        try await store.database.run("UPDATE mail_messages SET text = NULL WHERE message_id = ?", [.text("faded@test.example")])
+        let waiting = try await store.waiting()
+        #expect(waiting.map(\.messageID) == ["alone@test.example"])
+        #expect(waiting.first?.decided == alone)
+        await store.close()
+    }
+
+    /// The sure thread replies in the thread of a filing on the model's choice alone come
+    /// back with it, oldest first, so each is sorted after the message it answers. A reply
+    /// the user moved, one with a draft and one a rule files stay out, and so do the replies
+    /// in the thread of a filing by a setting or of a guess whose text Retention removed.
+    @Test func theThreadRepliesUnderAFilingOnTheModelsChoiceAloneComeWithIt() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([
+            Self.message("guess@test.example", from: "kim@quay.example"),
+            Self.message("reply@test.example", from: "joe@quay.example", day: 1, inReplyTo: ["guess@test.example"]),
+            Self.message("reply-2@test.example", from: "kim@quay.example", day: 2, inReplyTo: ["reply@test.example"], references: ["guess@test.example", "reply@test.example"]),
+            Self.message("drafted@test.example", from: "joe@quay.example", day: 3, inReplyTo: ["guess@test.example"]),
+            Self.message("moved@test.example", from: "joe@quay.example", day: 4, inReplyTo: ["guess@test.example"]),
+            Self.message("ruled@test.example", from: "joe@quay.example", day: 5, inReplyTo: ["guess@test.example"]),
+            Self.message("person@test.example", from: "lee@quay.example", day: 6),
+            Self.message("person-reply@test.example", from: "ann@quay.example", day: 7, inReplyTo: ["person@test.example"]),
+            Self.message("faded@test.example", from: "max@quay.example", day: 8),
+            Self.message("faded-reply@test.example", from: "pat@quay.example", day: 9, inReplyTo: ["faded@test.example"]),
+        ], ownAddresses: [Self.work], at: Self.date(10))
+        let guess = SortingDecision(project: Self.harbor, level: .likely, reasons: [.model])
+        let thread = SortingDecision(project: Self.harbor, level: .sure, reasons: [.thread])
+        #expect(try await store.saveDecision(guess, for: "guess@test.example"))
+        #expect(try await store.saveDecision(thread, for: "reply@test.example"))
+        let threadAndPerson = SortingDecision(project: Self.harbor, level: .sure, reasons: [.thread, .person])
+        #expect(try await store.saveDecision(threadAndPerson, for: "reply-2@test.example"))
+        #expect(try await store.saveDecision(thread, for: "drafted@test.example"))
+        #expect(try await store.save(Self.explanation("drafted@test.example"), at: Self.date(10)))
+        #expect(try await store.saveDecision(thread, for: "moved@test.example"))
+        #expect(try await store.move("moved@test.example", to: Self.harbor))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.rule]), for: "ruled@test.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.maple, level: .sure, reasons: [.person]), for: "person@test.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.maple, level: .sure, reasons: [.thread]), for: "person-reply@test.example"))
+        #expect(try await store.saveDecision(guess, for: "faded@test.example"))
+        #expect(try await store.saveDecision(thread, for: "faded-reply@test.example"))
+        try await store.database.run("UPDATE mail_messages SET text = NULL WHERE message_id = ?", [.text("faded@test.example")])
+
+        let waiting = try await store.waiting()
+        #expect(waiting.map(\.messageID) == ["guess@test.example", "reply@test.example", "reply-2@test.example"])
+        #expect(waiting.map(\.decided) == [guess, thread, threadAndPerson])
+        // Once the guess is sorted again, its thread no longer comes back.
+        #expect(try await store.saveDecision(SortingDecision(project: nil, level: .unsure, reasons: [.noSignal]), for: "guess@test.example"))
+        #expect(try await store.waiting().isEmpty)
         await store.close()
     }
 
