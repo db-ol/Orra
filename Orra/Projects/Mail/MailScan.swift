@@ -153,7 +153,9 @@ final class MailScan {
         /// them or for a linked mailbox that may file them, so the pass did not ask for them.
         var waiting = 0
         /// The error that ended the pass, or else the last one that ended a mailbox or left
-        /// a mailbox or a message for later.
+        /// a mailbox or a message for later, or else the one of a message that still waits
+        /// after an earlier pass. So the window says that Mail is slow to answer while one
+        /// waits.
         var error: MailBridgeError?
         /// The error that ended the pass before it read every mailbox: Mail quit, Orra may
         /// not control it, or Mail did not answer for two mailboxes in a row.
@@ -535,6 +537,11 @@ final class MailScan {
             } catch {
                 break
             }
+        }
+        if pass.skipped == nil, pass.error == nil,
+           let waiting = mailboxes.lazy.compactMap({ self.progress[$0]?.slow.values.first }).first {
+            // A poll does not reach a message that waits further down.
+            pass.error = waiting.error
         }
         log(pass, since: started)
         return pass

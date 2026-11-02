@@ -987,6 +987,41 @@ struct MailScanTests {
         try await waitUntil { clock.sleeping == 0 }
     }
 
+    /// A pass that only polls a mailbox and so does not reach a message that waits further
+    /// down still has the error Mail gave for it, so the window keeps saying that Mail is
+    /// slow to answer while the message waits.
+    @Test func aPollThatDoesNotReachAMessageThatWaitsSaysMailIsSlow() async throws {
+        defer { cleanUp() }
+        mail.put(Self.hourly(30), in: .inbox)
+        mail.failure = { call in call == .source(25) ? .timedOut : nil }
+        let clock = TestClock()
+        let waits = Waits()
+        let reports = Reports()
+        let scan = scan(choice([.inbox]), report: { reports.all.append($0) }, sleep: { duration in
+            waits.add(duration)
+            try await clock.sleep(for: duration)
+        })
+        scan.start()
+        defer { scan.stop() }
+        try await waitUntil { waits.all.count == 1 && clock.sleeping == 1 }
+        // A minute on, Mail does not give it again, and it waits two minutes.
+        clock.advance(by: .seconds(60))
+        try await waitUntil { waits.all.count == 2 && clock.sleeping == 1 }
+        mail.clearCalls()
+        reports.all = []
+        clock.advance(by: .seconds(60))
+        try await waitUntil { waits.all.count == 3 && clock.sleeping == 1 }
+        #expect(mail.listings == [1...20])
+        let poll = try #require(reports.all.compactMap { report -> MailScan.Pass? in
+            if case .ended(let pass) = report { pass } else { nil }
+        }.first)
+        #expect(poll.error == .timedOut)
+        #expect(poll.stoppedBy == nil)
+        #expect(ProjectsRuntime.scanState(after: poll, saveFailed: false) == .mailIsSlow)
+        scan.stop()
+        try await waitUntil { clock.sleeping == 0 }
+    }
+
     /// A scan let go without `stop()` ends its loop at the next wake, and reads nothing
     /// more.
     @Test func theLoopLetsGoOfAScan() async throws {
