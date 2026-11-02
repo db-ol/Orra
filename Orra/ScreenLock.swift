@@ -121,7 +121,10 @@ nonisolated struct ScreenLockFlags: Equatable, Sendable {
 /// bar app whose caption panel does not activate it, is almost never active, so both ask
 /// for `.deliverImmediately`. Apple's DistributedNotificationCenter says that they arrive on
 /// the main thread, and that they may come late or be dropped, which is why MeetingCaptions
-/// also looks at the session. A switch of the session comes from NSWorkspace.
+/// also reads the session: while it takes the screen as locked, which finds only an unlock
+/// whose note came late, never came or came while the session still said locked, and at a
+/// wake, which finds a lock whose note comes after the wake. A note of a lock that is
+/// dropped at any other time is not found. A switch of the session comes from NSWorkspace.
 final class ScreenLockWatch: NSObject {
     private let onChange: @MainActor (Bool) -> Void
     private var flags: ScreenLockFlags

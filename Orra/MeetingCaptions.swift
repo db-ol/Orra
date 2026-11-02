@@ -258,7 +258,8 @@ nonisolated enum CaptionSource: String, CaseIterable, Sendable {
 /// let go of the microphone as a stop does, and start it again once the screen unlocks, if
 /// they are still on and still listen to it, see `screenLockChanged(_:)`. The sentence
 /// being heard ends at the lock, and nothing said meanwhile is captioned. Captions of what
-/// the Mac plays go on.
+/// the Mac plays go on. The note of a lock makes it, and a read of the window server's
+/// session that says locked does only at a wake, see `macDidWake()`.
 ///
 /// While captions start or listen and their window can be seen, they keep the display on,
 /// as a video player does, see `keepsDisplayOn`.
@@ -343,7 +344,7 @@ final class MeetingCaptions {
         /// The user chose another microphone under Microphone.
         case choice
         /// The Mac woke from sleep, after which a device may come back silent or under a
-        /// new ID.
+        /// new ID. Its start reads the session first, see `lockedAtTheWake()`.
         case wake
         /// Microphone access was given.
         case access
@@ -671,10 +672,13 @@ final class MeetingCaptions {
     }
 
     /// The Mac woke from sleep. Captions that listen to the microphone start it again,
-    /// since its IO may come back silent or its device under a new ID. While the screen is
-    /// locked nothing starts, and the unlock starts the microphone. The capture of what the
-    /// Mac plays goes on as it is.
+    /// since its IO may come back silent or its device under a new ID. The note of a lock
+    /// may reach Orra after the wake, so a session that says locked at the wake, or at the
+    /// wake's start of the microphone, counts as a lock, see `lockedAtTheWake()`. While the
+    /// screen is locked nothing starts, and the unlock starts the microphone. The capture of
+    /// what the Mac plays goes on as it is.
     func macDidWake() {
+        if lockedAtTheWake() { return }
         scheduleRestart(.wake, after: restartDelay)
     }
 
@@ -1062,6 +1066,7 @@ final class MeetingCaptions {
             }
             await self?.waitWhileMicrophonePaused()
             guard !Task.isCancelled, let self, self.isOn, self.capturing == .microphone, self.run == current else { return }
+            if reason == .wake, self.lockedAtTheWake() { return }
             if reason.followsTheDevice, !self.mayFollowTheDevice() {
                 self.stopFollowingTheMicrophone()
                 return
@@ -1109,6 +1114,18 @@ final class MeetingCaptions {
         screenLockChanged(locked)
     }
 
+    /// Takes the screen as locked when captions do not yet and the session says that it is,
+    /// at a wake and at the wake's start of the microphone, since the note of a lock that
+    /// came with the sleep may reach Orra after the wake. Only there: elsewhere only the
+    /// watch's note locks. The note that comes late then changes nothing, and the unlock
+    /// note or the look at the session ends the lock. Returns whether it locked.
+    private func lockedAtTheWake() -> Bool {
+        guard !screenLocked, sessionSaysLocked() else { return false }
+        Logger.captions.notice("Meeting captions found the screen locked at the wake")
+        screenLockChanged(true)
+        return true
+    }
+
     /// The user opened one of Orra's menus or clicked the caption window, which they can do
     /// only at an unlocked screen. A lock whose unlock note never came ends here when the
     /// session agrees, also on a Mac whose session does not tell a lock.
@@ -1154,7 +1171,7 @@ final class MeetingCaptions {
     /// Whether a read of the session shows that a lock captions still keep is over: it
     /// says unlocked now, and a read since the lock said locked. So on a Mac whose session
     /// does not tell a lock only the unlock note ends it, and the microphone never starts
-    /// at the lock screen. A read never locks.
+    /// at the lock screen. A read locks only at a wake, see `lockedAtTheWake()`.
     private func sessionShowsTheUnlock() -> Bool {
         guard screenLocked, !sessionSaysLocked() else { return false }
         return sessionSaidLocked

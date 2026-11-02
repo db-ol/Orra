@@ -1979,6 +1979,92 @@ struct MeetingCaptionsTests {
         captions.setOn(false)
     }
 
+    /// The note of a lock may reach Orra after the wake, so a wake whose session says that
+    /// the screen is locked counts as a lock: microphone captions let go of the microphone
+    /// at once, start nothing at the lock screen and let the display sleep. The note that
+    /// comes late changes nothing, and the unlock starts the microphone. Without any note,
+    /// the look at the session ends the lock once the session says unlocked.
+    @Test func aWakeIntoALockedScreenStartsNothingUntilTheUnlock() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let screen = FakeScreenLock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone, screenLock: screen)
+        captions.setWindowVisible(true)
+        _ = try await listeningToTheMicrophone(captions)
+        screen.locked = true
+        captions.macDidWake()
+        #expect(captions.screenLocked)
+        #expect(captions.capture == .pausedWhileLocked)
+        #expect(captions.microphoneInUse == nil)
+        #expect(!captions.keepsDisplayOn)
+        try await eventually { microphone.stops == 1 }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(microphone.starts == 1)
+        screen.note(true)
+        #expect(captions.capture == .pausedWhileLocked)
+        screen.unlock()
+        try await eventually { captions.capture == .listening && microphone.starts == 2 }
+        #expect(captions.keepsDisplayOn)
+        screen.locked = true
+        captions.macDidWake()
+        #expect(captions.capture == .pausedWhileLocked)
+        screen.locked = false
+        try await eventually { captions.capture == .listening && microphone.starts == 3 }
+        captions.setOn(false)
+    }
+
+    /// The wake's start of the microphone reads the session again, so a lock that the session
+    /// shows only after the wake, as when the password is asked once the Mac slept for a
+    /// while, starts nothing either.
+    @Test func aLockTheSessionShowsJustAfterTheWakeStartsNothing() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let screen = FakeScreenLock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone, screenLock: screen)
+        _ = try await listeningToTheMicrophone(captions)
+        captions.macDidWake()
+        #expect(!captions.screenLocked)
+        screen.locked = true
+        try await eventually { captions.capture == .pausedWhileLocked }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(microphone.starts == 1)
+        #expect(captions.screenLocked)
+        screen.unlock()
+        try await eventually { captions.capture == .listening && microphone.starts == 2 }
+        captions.setOn(false)
+    }
+
+    /// A wake whose session says locked counts as a lock for captions of what the Mac plays
+    /// too, which go on and let the display sleep, and while captions are off, so captions
+    /// turned on at the lock screen wait for the unlock.
+    @Test func aWakeIntoALockedScreenCountsForWhatTheMacPlaysAndWhileOff() async throws {
+        let source = FakeSource()
+        let microphone = FakeCaptionMicrophone()
+        let screen = FakeScreenLock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), microphone: microphone, screenLock: screen)
+        captions.setWindowVisible(true)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening && captions.keepsDisplayOn }
+        screen.locked = true
+        captions.macDidWake()
+        #expect(captions.screenLocked)
+        #expect(captions.capture == .listening)
+        #expect(!captions.keepsDisplayOn)
+        screen.unlock()
+        #expect(captions.keepsDisplayOn)
+        captions.setOn(false)
+        screen.locked = true
+        captions.macDidWake()
+        #expect(captions.screenLocked)
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        #expect(captions.capture == .pausedWhileLocked)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(microphone.calls.isEmpty)
+        screen.locked = false
+        try await eventually { captions.capture == .listening && microphone.starts == 1 }
+        #expect(source.starts == 1)
+        captions.setOn(false)
+    }
+
     /// The start at the unlock follows the user, not the device, so it never counts toward
     /// the limit of starts again. Like a wake, it starts the microphone again after the
     /// limit let go of it.
@@ -2071,8 +2157,10 @@ struct MeetingCaptionsTests {
         captions.setOn(false)
     }
 
-    /// A read of the session never locks: only the watch's note does. Turning captions on
-    /// and choosing what they listen to read the session, and neither pauses.
+    /// A read of the session locks only at a wake, see
+    /// aWakeIntoALockedScreenStartsNothingUntilTheUnlock: otherwise only the watch's note
+    /// does. Turning captions on and choosing what they listen to read the session, and
+    /// neither pauses.
     @Test func aReadThatSaysLockedWithoutANoteNeverPauses() async throws {
         let microphone = FakeCaptionMicrophone()
         let screen = FakeScreenLock()
