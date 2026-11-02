@@ -194,8 +194,9 @@ nonisolated final class InputUnit {
     }
 
     /// Makes the unit an input only unit on `device`, delivering 32 bit float mono at the
-    /// device's rate from its first channel. Returns that format.
-    private static func configure(_ unit: AudioUnit, device: AudioInput) throws -> AudioStreamBasicDescription {
+    /// device's rate from its first channel. Returns that format. Internal, because
+    /// CaptionMicrophone sets up its own unit the same way.
+    static func configure(_ unit: AudioUnit, device: AudioInput) throws -> AudioStreamBasicDescription {
         var on: UInt32 = 1
         var off: UInt32 = 0
         let flagSize = UInt32(MemoryLayout<UInt32>.size)
@@ -233,7 +234,8 @@ nonisolated final class InputUnit {
     }
 
     /// The most frames one callback may bring: the unit's own limit, and at least 8192.
-    private static func maximumFrames(of unit: AudioUnit) -> Int {
+    /// Internal, for CaptionMicrophone too.
+    static func maximumFrames(of unit: AudioUnit) -> Int {
         var frames: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
         _ = AudioUnitGetProperty(unit, kAudioUnitProperty_MaximumFramesPerSlice, kAudioUnitScope_Global, 0, &frames, &size)
