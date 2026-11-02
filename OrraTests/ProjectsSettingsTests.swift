@@ -533,7 +533,7 @@ struct ProjectsSettingsTests {
             bridge: mail.bridge,
             choice: access.choice,
             lookups: MailScan.Lookups(known: { _ in [] }, linkedMailboxes: { [] }),
-            save: { saved += $0 },
+            save: { messages, _ in saved += messages },
             isOn: { true },
             now: { Self.now }
         )

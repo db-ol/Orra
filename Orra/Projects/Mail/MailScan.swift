@@ -54,7 +54,9 @@ import os
 ///   days, and how it ended, see `Report`.
 ///
 /// The user's own addresses and name come from Mail's accounts, or from the override that
-/// a Debug build passes in, with which the scan never asks Mail for the accounts.
+/// a Debug build passes in, with which the scan never asks Mail for the accounts. Each save
+/// gets them. While Mail does not give the accounts, a range asks for them at its first
+/// save only, and any other caller of `owner()` asks again.
 ///
 /// Logs counts, times and error codes only.
 final class MailScan {
@@ -235,7 +237,7 @@ final class MailScan {
     private let bridge: MailBridge
     private let choice: MailChoice
     private let lookups: Lookups
-    private let save: ([Message]) async throws -> Void
+    private let save: ([Message], SortingService.Owner?) async throws -> Void
     private let report: (Report) -> Void
     private let ownerOverride: SortingService.Owner?
     private let isOn: () -> Bool
@@ -251,17 +253,18 @@ final class MailScan {
     private var lastMailboxes: [MailMailbox] = []
     /// The user as Mail's accounts gave it, read once while the scan runs.
     private var accountsOwner: SortingService.Owner?
-    /// The time the loop had waited when Mail last did not give the accounts.
-    private var accountsFailed: Duration?
     private var loop: Task<Void, Never>?
     /// The pass under way. Two passes at once would read the same mail twice.
     private var current: Task<Pass, Never>?
 
     /// - Parameters:
-    ///   - save: saves the new messages of a range, newest first, and throws when it could
-    ///     not. Each later call of a pass holds older mail than the one before, so a caller
-    ///     that sorts the mail should do so after the pass, oldest first, such as with
-    ///     `SortingService.sortWaiting()`.
+    ///   - save: saves new messages, `saveBatch` at a time and the rest of a range at its
+    ///     end, with the user as `owner()` gives it, and throws when it could not. The user
+    ///     is nil while Mail does not give the accounts, which the scan then asks for again
+    ///     at the next range. A later call may hold newer mail than one before, such as a
+    ///     message that waited, which comes after the others of its range, or the mail of
+    ///     the next mailbox. So a caller that sorts the mail should sort it oldest first,
+    ///     such as with `SortingService.sortWaiting()`.
     ///   - report: hears when each pass begins and ends, for the window.
     ///   - ownerOverride: the user's addresses and name in a Debug build that sets them, so
     ///     Mail's accounts are never read.
@@ -274,7 +277,7 @@ final class MailScan {
         bridge: MailBridge,
         choice: MailChoice,
         lookups: Lookups,
-        save: @escaping ([Message]) async throws -> Void,
+        save: @escaping ([Message], SortingService.Owner?) async throws -> Void,
         report: @escaping (Report) -> Void = { _ in },
         ownerOverride: SortingService.Owner? = nil,
         isOn: @escaping () -> Bool,
@@ -330,7 +333,6 @@ final class MailScan {
         waited = .zero
         lastMailboxes = []
         accountsOwner = nil
-        accountsFailed = nil
         Logger.projectsMail.notice("Mail scan: stopped")
     }
 
@@ -384,8 +386,6 @@ final class MailScan {
     /// The user's own addresses and name: the override of a Debug build, else Mail's
     /// accounts, read once while the scan runs. Nil while Projects is off, before the user
     /// confirmed the mailbox choice, while Mail does not run, or when Mail does not answer.
-    /// After Mail did not give the accounts, they are asked for again only once the loop
-    /// waited, so the saves of one pass, ten messages each, do not ask again and again.
     func owner() async -> SortingService.Owner? {
         if let ownerOverride {
             return ownerOverride
@@ -393,7 +393,7 @@ final class MailScan {
         if let accountsOwner {
             return accountsOwner
         }
-        guard isOn(), choice.isConfirmed, bridge.isRunning(), accountsFailed != waited else { return nil }
+        guard isOn(), choice.isConfirmed, bridge.isRunning() else { return nil }
         do {
             let accounts = try await bridge.accounts()
             var seen = Set<String>()
@@ -403,7 +403,6 @@ final class MailScan {
             Logger.projectsMail.notice("Mail scan: \(accounts.count, privacy: .public) accounts with \(addresses.count, privacy: .public) addresses")
             return owner
         } catch {
-            accountsFailed = waited
             Logger.projectsMail.error("Mail scan: reading the accounts failed: \(String(describing: error), privacy: .public)")
             return nil
         }
@@ -735,6 +734,8 @@ final class MailScan {
         // come after the others of the range, so two that never come hold up no other mail.
         var unanswered = 0
         var asksAgain = true
+        // Whether Mail did not give the accounts for a save of this range, see `keep`.
+        var ownerFailed = false
         let ordered = fresh.filter { slow[$0.messageID] == nil } + fresh.filter { slow[$0.messageID] != nil }
         do {
             for listing in ordered {
@@ -783,7 +784,7 @@ final class MailScan {
                     if found.count >= Self.saveBatch {
                         let batch = found
                         found = []
-                        try await keep(batch, pass: &pass)
+                        try await keep(batch, ownerFailed: &ownerFailed, pass: &pass)
                     }
                 } catch let error as MailBridgeError where Self.endsOnlyItsMessage(error) {
                     unanswered = 0
@@ -810,26 +811,39 @@ final class MailScan {
             // What was read before Mail quit or stopped answering is kept. Nothing is saved
             // after `stop()`, or once Projects is off. The error ends the mailbox, so the
             // next pass reads it back to the days again, also when this save fails.
-            try? await keep(found, pass: &pass)
+            try? await keep(found, ownerFailed: &ownerFailed, pass: &pass)
             throw error
         }
-        try await keep(found, pass: &pass)
+        try await keep(found, ownerFailed: &ownerFailed, pass: &pass)
         if let oldest = listings.last?.dateReceived, oldest < cutoff {
             return true
         }
         return polls && knownBefore
     }
 
-    /// Saves the new messages of a range and counts them. Throws when the store could not
+    /// Saves new messages of a range and counts them, with the user as `owner()` gives it.
+    /// Once Mail did not give the accounts for a save of the range, which `ownerFailed`
+    /// notes, the later saves of the range do not ask again, so a range of slow answers
+    /// costs one read of the accounts, not one per save. Throws when the store could not
     /// save them, which ends the pass.
-    private func keep(_ found: [Message], pass: inout Pass) async throws {
-        guard !found.isEmpty, !Task.isCancelled, isOn(), choice.isConfirmed else { return }
+    private func keep(_ found: [Message], ownerFailed: inout Bool, pass: inout Pass) async throws {
+        guard !found.isEmpty, mayKeep() else { return }
+        let owner = ownerFailed ? nil : await self.owner()
+        ownerFailed = owner == nil
+        // Mail may have taken a while to answer.
+        guard mayKeep() else { return }
         do {
-            try await save(found)
+            try await save(found, owner)
         } catch {
             throw Stop(reason: .storeFailed)
         }
         pass.saved += found.count
+    }
+
+    /// Whether the pass may still save what it read: `stop()` did not end it, Projects is
+    /// on and the confirm holds.
+    private func mayKeep() -> Bool {
+        !Task.isCancelled && isOn() && choice.isConfirmed
     }
 
     /// Reads one message: its source, or for a message that is too large its headers and

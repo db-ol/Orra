@@ -67,16 +67,13 @@ struct MailScanSpeedTests {
             bridge: MailBridge(events: mail.events, pause: { mail.advance(by: $0) }),
             choice: choice,
             lookups: MailScan.Lookups(known: { ids in Set(ids).intersection(saved.ids) }, linkedMailboxes: { [] }),
-            save: { messages in
-                // As ProjectsRuntime does before each save.
-                _ = await saved.scan?.owner()
+            save: { messages, _ in
                 saved.ids += messages.map(\.messageID)
                 saved.batches.append(messages.count)
             },
             isOn: { true },
             now: { Self.start.addingTimeInterval(mail.elapsedSeconds) }
         )
-        saved.scan = scan
         let first = await scan.scan()
         typealias Kind = SlowMail.Event.Kind
         let listing = Array(repeating: Kind.listing("Inbox", 1...15), count: 9)
@@ -99,7 +96,6 @@ struct MailScanSpeedTests {
     /// What the store saved in `aPassSendsOneEventPerNewMessageInThisOrder`.
     @MainActor
     final class Saved {
-        weak var scan: MailScan?
         var ids: [String] = []
         var batches: [Int] = []
     }
@@ -243,17 +239,12 @@ struct MailScanSpeedTests {
             bridge: MailBridge(events: mail.events, pause: { mail.advance(by: $0) }),
             choice: choice,
             lookups: MailScan.Lookups(known: { ids in driver.known(ids) }, linkedMailboxes: { [] }),
-            save: { messages in
-                // As ProjectsRuntime does before each save.
-                _ = await driver.scan?.owner()
-                driver.save(messages)
-            },
+            save: { messages, _ in driver.save(messages) },
             report: { driver.reported($0) },
             isOn: { true },
             now: { Self.start.addingTimeInterval(mail.elapsedSeconds) },
             sleep: { try await driver.sleep($0) }
         )
-        driver.scan = scan
         await withCheckedContinuation { continuation in
             driver.finished = continuation
             scan.start()
@@ -267,7 +258,6 @@ struct MailScanSpeedTests {
     final class Driver {
         let mail: SlowMail
         let limit: Duration
-        weak var scan: MailScan?
         var finished: CheckedContinuation<Void, Never>?
         var run = Run()
         private var savedIDs: Set<String> = []

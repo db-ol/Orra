@@ -60,7 +60,7 @@ struct MailScanTests {
             bridge: mail.bridge,
             choice: choice,
             lookups: store.lookups,
-            save: { try store.save($0) },
+            save: { try store.save($0, owner: $1) },
             report: report,
             ownerOverride: owner,
             isOn: isOn,
@@ -1152,51 +1152,43 @@ struct MailScanTests {
         #expect(mail.calls.filter { $0 == .accounts }.count == 2)
     }
 
-    /// Mail that does not give the accounts is not asked again at each save of a pass, ten
-    /// messages each, only once the loop waited, or after a stop.
-    @Test func accountsMailDidNotGiveAreAskedForAgainOnlyAfterAWait() async throws {
+    /// Each save gets the user. While Mail does not give the accounts, a range asks for
+    /// them at its first save only, so its saves of ten do not ask again and again, and the
+    /// next range asks again. Once Mail gives them, each save gets them.
+    @Test func aRangeAsksForTheAccountsOnceWhileMailDoesNotGiveThem() async {
         defer { cleanUp() }
-        mail.put(Self.hourly(25), in: .inbox)
+        mail.put(Self.hourly(250), in: .inbox)
+        mail.accounts = [MailAccountInfo(name: "Studio", addresses: ["bai.lu@lumenhaus.example"], fullName: "白露")]
         mail.failure = { call in call == .accounts ? .timedOut : nil }
-        let clock = TestClock()
-        let waits = Waits()
-        var asked = 0
-        var scanRef: MailScan?
-        let store = store
-        let scan = MailScan(
-            bridge: mail.bridge,
-            choice: choice([.inbox]),
-            lookups: store.lookups,
-            save: { messages in
-                if await scanRef?.owner() == nil {
-                    asked += 1
-                }
-                try store.save(messages)
-            },
-            isOn: { true },
-            now: { Self.now },
-            sleep: { duration in
-                waits.add(duration)
-                try await clock.sleep(for: duration)
-            }
-        )
-        scanRef = scan
-        scan.start()
-        defer { scan.stop() }
-        try await waitUntil { waits.all.count == 1 && clock.sleeping == 1 }
-        #expect(store.saved.count == 25)
-        #expect(asked == 3)
-        #expect(mail.calls.filter { $0 == .accounts }.count == 1)
-        mail.receive([FakeMail.mail(100, in: .inbox, received: Self.now - 60)], in: .inbox)
-        clock.advance(by: .seconds(60))
-        try await waitUntil { waits.all.count == 2 && clock.sleeping == 1 }
-        #expect(store.saved.count == 26)
+        let scan = scan(choice([.inbox]))
+        await scan.scan()
+        // Two ranges, of 200 and 50 new messages.
+        #expect(store.owners.count == 25)
+        #expect(store.owners.allSatisfy { $0 == nil })
         #expect(mail.calls.filter { $0 == .accounts }.count == 2)
-        scan.stop()
+
         mail.failure = { _ in nil }
-        #expect(await scan.owner() != nil)
+        mail.receive((0..<15).map { FakeMail.mail(1_001 + $0, in: .inbox, received: Self.now - Double($0 + 1)) }, in: .inbox)
+        await scan.scan()
+        let owner = SortingService.Owner(addresses: ["bai.lu@lumenhaus.example"], name: "白露")
+        #expect(store.owners.suffix(2) == [owner, owner])
         #expect(mail.calls.filter { $0 == .accounts }.count == 3)
-        scanRef = nil
+    }
+
+    /// Any other caller, such as sorting, Explain or Revise, asks Mail for the accounts
+    /// again at once after a save of the scan did not get them.
+    @Test func anotherCallerAsksForTheAccountsAgainAtOnce() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(2), in: .inbox)
+        mail.accounts = [MailAccountInfo(name: "Studio", addresses: ["bai.lu@lumenhaus.example"], fullName: "白露")]
+        mail.failure = { call in call == .accounts ? .timedOut : nil }
+        let scan = scan(choice([.inbox]))
+        await scan.scan()
+        #expect(store.owners == [nil])
+        #expect(await scan.owner() == nil)
+        mail.failure = { _ in nil }
+        #expect(await scan.owner() == SortingService.Owner(addresses: ["bai.lu@lumenhaus.example"], name: "白露"))
+        #expect(mail.calls.filter { $0 == .accounts }.count == 3)
     }
 
     // MARK: Parsing
@@ -1454,6 +1446,8 @@ struct MailScanTests {
     final class Store {
         var saved: [MailScan.Message] = []
         var batches: [[String]] = []
+        /// The user each save got.
+        var owners: [SortingService.Owner?] = []
         var linked: [MailMailbox] = []
         var linkedReads = 0
         /// Holds each lookup of known messages until the test resumes it.
@@ -1492,13 +1486,14 @@ struct MailScanTests {
         /// SQLITE_IOERR, as the store throws it.
         static let diskIOError = ProjectsDatabase.Failure(step: .step, code: 10)
 
-        func save(_ messages: [MailScan.Message]) throws {
+        func save(_ messages: [MailScan.Message], owner: SortingService.Owner?) throws {
             saves += 1
             if failingSaves.contains(saves) {
                 throw Self.diskIOError
             }
             saved += messages
             batches.append(messages.map(\.messageID))
+            owners.append(owner)
             if let afterSave {
                 self.afterSave = nil
                 afterSave()
