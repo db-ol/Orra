@@ -246,13 +246,23 @@ final class MeetingCaptions {
         case unavailable(SystemAudioProblem)
     }
 
+    /// What came in place of sound, see `silence`.
+    nonisolated enum SilenceKind: Equatable, Sendable {
+        /// No samples at all. The capture delivers none until an app plays something, see
+        /// SystemAudioTap, so this is a Mac that plays nothing, or a start that still waits.
+        case noAudio
+        /// Samples that were all exactly zero, which is what a refused permission looks
+        /// like while something plays.
+        case onlyZeros
+    }
+
     private(set) var isOn = false
     private(set) var capture: CaptureState = .off
-    /// True when no sound came for `silenceHint` since captions were turned on: samples
-    /// that were all exactly zero, which is what a refused permission looks like, or no
-    /// samples at all, as while nothing plays or the start still waits. Cleared by the
-    /// first sound, and by a start that failed, whose own note says why.
-    private(set) var hearsOnlySilence = false
+    /// What came in place of sound for `silenceHint` since captions were turned on, for
+    /// the window's note. Nil until then and from the first sound on. No audio at all
+    /// also goes once audio comes, since something plays then, and both go after a start
+    /// that failed, whose own note says why.
+    private(set) var silence: SilenceKind?
     /// True after a sentence was dropped since the speech model was not loaded.
     private(set) var speechModelMissing = false
     private(set) var displayMode: CaptionDisplayMode
@@ -284,7 +294,7 @@ final class MeetingCaptions {
     @ObservationIgnored private var receivedSeconds = 0.0
     @ObservationIgnored private var soundSeconds = 0.0
     @ObservationIgnored private var heardSound = false
-    /// Sets `hearsOnlySilence` when no samples came at all, see `start`.
+    /// Says that nothing plays when no samples came at all, see `start`.
     @ObservationIgnored private var silenceCheck: Task<Void, Never>?
     /// True once this run called `started`, so a switch to a mode that translates calls it
     /// once, and a switch back does not undo it until captions stop.
@@ -298,7 +308,8 @@ final class MeetingCaptions {
     ///     user switches to a mode that translates.
     ///   - stopped: Called when they stop.
     ///   - copyText: Puts a copy on the clipboard. Tests pass a fake.
-    ///   - silenceHint: Seconds without sound before the window suggests the permission.
+    ///   - silenceHint: Seconds without sound before the window says that nothing plays or
+    ///     suggests the permission.
     init(
         source: SystemAudioSource,
         engines: CaptionEngines,
@@ -362,7 +373,7 @@ final class MeetingCaptions {
         Logger.captions.notice("Meeting captions turned on")
         store.startOver()
         follow = CaptionFollow()
-        hearsOnlySilence = false
+        silence = nil
         speechModelMissing = false
         receivedSeconds = 0
         soundSeconds = 0
@@ -381,12 +392,13 @@ final class MeetingCaptions {
         showWindow()
         let current = run
         capture = .starting
-        // No samples at all, as while nothing plays or the start waits, suggest the
-        // permission after the same time as samples of only zeros, see receive.
+        // When no samples at all came by the time samples of only zeros would suggest the
+        // permission, as while nothing plays or the start waits, the window says that
+        // nothing plays. See receive.
         silenceCheck = Task { [weak self, silenceHint] in
             try? await Task.sleep(for: .seconds(silenceHint))
-            guard let self, !Task.isCancelled, current == run, !heardSound else { return }
-            suggestPermission()
+            guard let self, !Task.isCancelled, current == run, receivedSeconds == 0 else { return }
+            sayNothingPlays()
         }
         let source = source
         let deliver: @Sendable ([Float]) -> Void = { [weak self] samples in
@@ -419,10 +431,11 @@ final class MeetingCaptions {
         if let problem {
             capture = .unavailable(problem)
             // The window says that the capture failed, which is why no sound comes, so
-            // neither the window nor the log suggests the permission for this run.
+            // neither the window nor the log says that nothing plays or suggests the
+            // permission for this run.
             silenceCheck?.cancel()
             silenceCheck = nil
-            hearsOnlySilence = false
+            silence = nil
             return
         }
         // Only once the capture runs: the local model is not loaded, nor its download
@@ -459,7 +472,7 @@ final class MeetingCaptions {
         // are dropped, since transcribing them would keep the GPU busy after the stop.
         store.settle()
         capture = .off
-        hearsOnlySilence = false
+        silence = nil
         speechModelMissing = false
         stopped()
         closeWindow()
@@ -473,6 +486,8 @@ final class MeetingCaptions {
         guard isOn, run == nil || run == self.run, let pipeline else { return }
         if receivedSeconds == 0, !samples.isEmpty {
             Logger.captions.notice("Meeting captions got the first audio \(self.turnedOn.duration(to: .now), privacy: .public) after they were turned on")
+            // Something plays now, so the window no longer says that nothing does.
+            silence = nil
         }
         let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
         receivedSeconds += seconds
@@ -480,22 +495,28 @@ final class MeetingCaptions {
             soundSeconds += seconds
             if !heardSound {
                 heardSound = true
-                hearsOnlySilence = false
+                silence = nil
                 Logger.captions.notice("Meeting captions got the first sound \(self.turnedOn.duration(to: .now), privacy: .public) after they were turned on")
             }
         } else if !heardSound, receivedSeconds >= silenceHint {
-            // Never clears it, since a time without samples may have set it already.
             suggestPermission()
         }
         pipeline.feed(samples)
     }
 
-    /// No sound came for `silenceHint`, so the window suggests the permission. The log
-    /// says how much audio came, which tells no samples at all, as while nothing plays,
-    /// from samples of only zeros, as with a refused permission.
+    /// No samples at all came for `silenceHint`, so the window says that nothing plays.
+    /// The log line has the shape of the one in `suggestPermission`, and its 0.0 s of
+    /// audio tells the two apart.
+    private func sayNothingPlays() {
+        silence = .noAudio
+        Logger.captions.notice("Meeting captions got no sound for \(self.silenceHint, format: .fixed(precision: 1), privacy: .public) s, with \(self.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio, and say that nothing plays")
+    }
+
+    /// Samples of only zeros came for `silenceHint`, as with a refused permission while
+    /// something plays, so the window suggests the permission.
     private func suggestPermission() {
-        guard !hearsOnlySilence else { return }
-        hearsOnlySilence = true
+        guard silence != .onlyZeros else { return }
+        silence = .onlyZeros
         Logger.captions.notice("Meeting captions got no sound for \(self.silenceHint, format: .fixed(precision: 1), privacy: .public) s, with \(self.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio, and suggest the permission")
     }
 

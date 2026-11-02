@@ -130,8 +130,9 @@ struct CaptionView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
                     // Says where captions come from, since a test with one's own voice
-                    // gives none.
-                    if captions.store.sentences.isEmpty {
+                    // gives none. The note that nothing plays says it too, so it shows
+                    // alone.
+                    if captions.store.sentences.isEmpty, captions.silence != .noAudio {
                         Text("Captions of what the Mac plays, such as a call or a video, appear here. What you say into your microphone is not captioned.")
                             .foregroundStyle(.secondary)
                     }
@@ -343,8 +344,13 @@ struct CaptionNotes: View {
         case .unavailable(.failed):
             lines.append(String(localized: "Orra could not capture the sound the Mac plays. Turn Live Captions off and on again to try again."))
         case .off, .starting, .listening:
-            if captions.hearsOnlySilence {
+            switch captions.silence {
+            case .noAudio:
+                lines.append(String(localized: "Nothing is playing on the Mac. Captions show what the Mac plays, such as a call or a video, not what you say into your microphone."))
+            case .onlyZeros:
                 lines.append(String(localized: "No sound from the Mac yet. If something is playing, allow Orra under Screen & System Audio Recording in Privacy & Security settings."))
+            case nil:
+                break
             }
         }
         if !speechReady || captions.speechModelMissing {

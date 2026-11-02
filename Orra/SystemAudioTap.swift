@@ -37,8 +37,10 @@ nonisolated struct SystemAudioSource: Sendable {
 ///
 /// The tap feeds a private aggregate device, whose input Orra reads like a microphone.
 /// macOS asks for the permission when that device starts. There is no public way to read
-/// the permission, and when it is refused the tap delivers silence, which MeetingCaptions
-/// watches for.
+/// the permission, and when it is refused the tap delivers samples of only zeros while
+/// something plays. With tap auto start the device starts only once an app plays
+/// something, so while nothing plays no samples come at all. MeetingCaptions tells the
+/// two apart.
 ///
 /// The IO block runs on Core Audio's real time thread and only copies the tap's frames
 /// into an AudioFrameRing. A timer on `queue` takes them out, converts them to 16 kHz
