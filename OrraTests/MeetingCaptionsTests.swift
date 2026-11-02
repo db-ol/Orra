@@ -312,7 +312,8 @@ struct MeetingCaptionsTests {
     /// The checks whether something plays come quickly in the tests, and their answers
     /// may take long, since a busy runner can keep the queue they run on waiting. The
     /// microphone's hold after a pause is off unless a test sets it, and its starts again
-    /// and looks at access come quickly.
+    /// and looks at access come quickly. The limit of starts again counts over ten minutes,
+    /// since a busy runner can spread a test's moves over more than the app's 20 s.
     private func makeCaptions(
         _ models: FakeCaptionModels,
         source: FakeSource,
@@ -340,6 +341,7 @@ struct MeetingCaptionsTests {
             microphoneHold: microphoneHold,
             microphoneQuietLimit: microphoneQuietLimit,
             restartDelay: restartDelay,
+            restartWindow: 600,
             accessCheckInterval: 0.01
         )
         captions.showWindow = { events.items.append("show") }

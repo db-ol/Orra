@@ -487,6 +487,7 @@ final class MeetingCaptions {
     @ObservationIgnored private let microphoneHold: Double
     @ObservationIgnored private let microphoneQuietLimit: Double
     @ObservationIgnored private let restartDelay: Double
+    @ObservationIgnored private let restartWindow: Double
     @ObservationIgnored private let accessCheckInterval: Double
     @ObservationIgnored private var pipeline: CaptionPipeline?
     /// Starts and stops the capture of what the Mac plays, one after the other, off the
@@ -542,6 +543,7 @@ final class MeetingCaptions {
     ///   - microphoneHold: See `MeetingCaptions.microphoneHold`.
     ///   - microphoneQuietLimit: See `MeetingCaptions.microphoneQuietLimit`.
     ///   - restartDelay: See `MeetingCaptions.restartDelay`.
+    ///   - restartWindow: See `MeetingCaptions.restartWindow`.
     ///   - accessCheckInterval: See `MeetingCaptions.accessCheckInterval`.
     init(
         systemAudio: SystemAudioSource,
@@ -561,6 +563,7 @@ final class MeetingCaptions {
         microphoneHold: Double = MeetingCaptions.microphoneHold,
         microphoneQuietLimit: Double = MeetingCaptions.microphoneQuietLimit,
         restartDelay: Double = MeetingCaptions.restartDelay,
+        restartWindow: Double = MeetingCaptions.restartWindow,
         accessCheckInterval: Double = MeetingCaptions.accessCheckInterval
     ) {
         self.systemAudio = systemAudio
@@ -580,6 +583,7 @@ final class MeetingCaptions {
         self.microphoneHold = microphoneHold
         self.microphoneQuietLimit = microphoneQuietLimit
         self.restartDelay = restartDelay
+        self.restartWindow = restartWindow
         self.accessCheckInterval = accessCheckInterval
     }
 
@@ -986,7 +990,7 @@ final class MeetingCaptions {
     /// Counts the start again when it may.
     private func mayFollowTheDevice() -> Bool {
         let now = ContinuousClock.now
-        deviceRestarts.removeAll { $0.duration(to: now) > .seconds(Self.restartWindow) }
+        deviceRestarts.removeAll { $0.duration(to: now) > .seconds(restartWindow) }
         guard deviceRestarts.count < Self.restartLimit else { return false }
         deviceRestarts.append(now)
         return true
@@ -997,7 +1001,7 @@ final class MeetingCaptions {
     /// the microphone, so turning them off and on, a choice of a microphone and a wake start
     /// it again, and a change of the devices does not.
     private func stopFollowingTheMicrophone() {
-        Logger.captions.error("Meeting captions let go of the microphone after \(Self.restartLimit, privacy: .public) starts again within \(Self.restartWindow, format: .fixed(precision: 0), privacy: .public) s")
+        Logger.captions.error("Meeting captions let go of the microphone after \(Self.restartLimit, privacy: .public) starts again within \(self.restartWindow, format: .fixed(precision: 0), privacy: .public) s")
         stopCapture()
         pipeline?.endSentence()
         capturing = .microphone
