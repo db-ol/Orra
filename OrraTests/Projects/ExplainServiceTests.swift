@@ -238,6 +238,28 @@ struct ExplainServiceTests {
         #expect(explanation.draft == .noReply(.answeredLater))
     }
 
+    /// The rule reads the email's To and Cc apart and the user's name: mail to someone else
+    /// with the user only in Cc gets no draft, unless it names the user, and the same mail
+    /// with the user in To needs a reply.
+    @Test func mailThatOnlyCopiesTheUserGetsNoDraftUnlessItNamesThem() async throws {
+        let fakes = Fakes(answer: .success(Fixture.englishAnswer))
+        var copied = Fixture.email("Hi Rufus,\n\nThe second proof is ready. Will it reach you by Wednesday?\n\nIris")
+        copied.to = [Fixture.rufus]
+        copied.cc = [.init(name: "Bai Lu", address: Fixture.own)]
+        let explanation = try await fakes.service().explain(copied)
+        #expect(explanation.reply == .noReply(.notAddressed))
+        #expect(explanation.draft == .noReply(.notAddressed))
+        #expect(explanation.draftCheck == nil)
+
+        var named = copied
+        named.text = "Hi Rufus and Bai Lu,\n\nThe second proof is ready. Will it reach you both by Wednesday?\n\nIris"
+        named.visibleText = named.text
+        #expect(try await fakes.service().explain(named).reply == .reply(.en))
+        var inTo = copied
+        (inTo.to, inTo.cc) = (copied.cc, copied.to)
+        #expect(try await fakes.service().explain(inTo).reply == .reply(.en))
+    }
+
     @Test func mailInAnotherLanguageGetsNoDraft() async throws {
         let fakes = Fakes(answer: .success(Fixture.englishAnswer))
         let explanation = try await fakes.service().explain(Fixture.email("白露さん、二回目の校正刷りができました。水曜日までに届きますか。"))
