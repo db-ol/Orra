@@ -492,6 +492,8 @@ final class MailScan {
                 pass.skipped = stop.reason
                 break
             } catch let error as MailBridgeError where Self.isSlow(error) {
+                // After `stop()` the scan forgot the mailbox, and notes no wait for it again.
+                guard !Task.isCancelled else { break }
                 // Only this mailbox waits, so an account that is offline holds up no other,
                 // unless Mail itself does not answer.
                 pass.error = error
@@ -509,6 +511,9 @@ final class MailScan {
                     pass.stoppedBy = error
                     break
                 }
+                // Mail answered for it, so it waits no more.
+                progress[mailbox]?.retry = nil
+                unanswered = 0
             } catch {
                 break
             }
