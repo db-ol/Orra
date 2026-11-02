@@ -105,9 +105,11 @@ struct SortingPolicyTests {
         let seen = SortingSignals(peopleSeen: [Self.a: ["mei.tan@orchard.example"]], listMail: .listID, hasProjectPeople: true, ranked: Self.all)
         #expect(decide(seen) == unsure([.waitingForModel]))
         #expect(decide(seen, .project(Self.a)) == SortingDecision(project: Self.a, level: .likely, reasons: [.peopleSeen, .model]))
+        // A project person in Cc points to no project, so the mail goes to Needs a Project.
         let copied = SortingSignals(listMail: .noReplySender, hasProjectPeople: true, ranked: Self.all)
-        #expect(decide(copied) == unsure([.waitingForModel, .noSignal]))
-        #expect(decide(copied, .noProject) == unsure([.modelSaidNone, .noSignal]))
+        #expect(!SortingPolicy.needsModel(copied))
+        #expect(decide(copied) == unsure([.noSignal]))
+        #expect(decide(copied, .project(Self.a)) == unsure([.noSignal]))
     }
 
     @Test func aRuleComesBeforeListMail() {
@@ -184,15 +186,41 @@ struct SortingPolicyTests {
         #expect(decide(signals, .project(Self.b)) == SortingDecision(project: Self.b, level: .likely, reasons: [.peopleSeen, .model]))
     }
 
-    @Test func withNoSignalTheModelMayChooseAndItsNoneGoesToNeedsAProject() {
-        let signals = SortingSignals(ranked: Self.all + [Self.d])
-        #expect(SortingPolicy.needsModel(signals))
-        #expect(decide(signals) == unsure([.waitingForModel, .noSignal]))
-        #expect(decide(signals, .project(Self.c)) == SortingDecision(project: Self.c, level: .likely, reasons: [.model]))
-        #expect(decide(signals, .noProject) == unsure([.modelSaidNone, .noSignal]))
-        #expect(decide(signals, .invalid) == unsure([.modelAnswerInvalid, .noSignal]))
+    /// Nothing points to a project, whatever full text scores rank the candidates: the model
+    /// is not asked, and the mail goes to Needs a Project.
+    @Test func withNoSignalTheMailGoesToNeedsAProjectWithoutTheModel() {
+        let signals = SortingSignals(scores: [Self.a: 2.5, Self.c: 0.8], ranked: [Self.a, Self.c, Self.b, Self.d])
+        #expect(!SortingPolicy.needsModel(signals))
+        #expect(decide(signals) == unsure([.noSignal]))
+        for answer in [SortingPrompt.Answer.project(Self.a), .project(Self.c), .noProject, .invalid] {
+            #expect(decide(signals, answer) == unsure([.noSignal]))
+        }
+    }
+
+    /// The only project of a user is never a choice the model takes out of habit: without a
+    /// signal the model is not asked, and with one it must agree.
+    @Test func aSingleProjectGetsNoMailOnTheModelsChoiceAlone() {
+        let alone = SortingSignals(scores: [Self.a: 3.1], ranked: [Self.a])
+        #expect(!SortingPolicy.needsModel(alone))
+        #expect(decide(alone, .project(Self.a)) == unsure([.noSignal]))
+        let words = SortingSignals(words: [Self.a: ["harbor"]], scores: [Self.a: 3.1], ranked: [Self.a])
+        #expect(SortingPolicy.needsModel(words))
+        #expect(decide(words, .project(Self.a)) == SortingDecision(project: Self.a, level: .likely, reasons: [.words, .model]))
+        #expect(decide(words, .noProject) == unsure([.modelSaidNone]))
+    }
+
+    /// When no single project has the vote, the model chooses among the projects a signal
+    /// points to, never one that only ranks among the top candidates.
+    @Test func theModelChoosesOnlyAmongProjectsASignalPointsTo() {
+        let disagree = SortingSignals(peopleSeen: [Self.a: ["mei.tan@orchard.example"]], attachments: [Self.b], ranked: Self.all)
+        #expect(decide(disagree, .project(Self.c)) == unsure([.modelDisagreed, .signalsDisagree]))
+        let close = SortingSignals(words: [Self.a: ["harbor", "museum"], Self.b: ["kitchen"]], ranked: Self.all)
+        #expect(decide(close, .project(Self.b)) == SortingDecision(project: Self.b, level: .likely, reasons: [.words, .model]))
+        #expect(decide(close, .project(Self.c)) == unsure([.modelDisagreed, .noSignal]))
+        let several = SortingSignals(peopleSeen: [Self.a: ["mei.tan@orchard.example"], Self.b: ["owen@pike-build.example"]], ranked: Self.all)
+        #expect(decide(several, .project(Self.c)) == unsure([.modelDisagreed, .peopleInSeveralProjects]))
         // The fourth project was not in the prompt.
-        #expect(decide(signals, .project(Self.d)) == unsure([.modelAnswerInvalid, .noSignal]))
+        #expect(decide(close, .project(Self.d)) == unsure([.modelAnswerInvalid, .noSignal]))
     }
 
     @Test func aVoteOutsideTheTopCandidatesGoesToNeedsAProject() {
@@ -227,8 +255,8 @@ struct SortingPolicyTests {
     /// After a change of the projects, the model is asked again only where its answer can
     /// change. Four candidates, so that one is out of the three the prompt shows.
     @Test func theModelIsAskedAgainOnlyWhenItsAnswerCanChange() {
-        let open = SortingSignals(ranked: Self.all + [Self.d])
-        let chose = SortingDecision(project: Self.a, level: .likely, reasons: [.model])
+        let open = SortingSignals(words: [Self.a: ["harbor"], Self.b: ["kitchen"], Self.c: ["annual"]], ranked: Self.all + [Self.d])
+        let chose = SortingDecision(project: Self.a, level: .likely, reasons: [.words, .model])
         // The rules decide alone.
         let sure = SortingSignals(rules: [Self.a: .person], ranked: Self.all + [Self.d])
         #expect(!SortingPolicy.asksAgain(sure, before: nil, changed: [Self.a]))
@@ -320,7 +348,7 @@ struct SortingPolicyTests {
         let found = await signals(input)
         #expect(found.words.isEmpty)
         #expect(found.rules.isEmpty)
-        #expect(decide(found) == unsure([.waitingForModel, .noSignal]))
-        #expect(decide(found, .noProject) == unsure([.modelSaidNone, .noSignal]))
+        #expect(!SortingPolicy.needsModel(found))
+        #expect(decide(found, .project(Self.maple)) == unsure([.noSignal]))
     }
 }

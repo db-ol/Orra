@@ -26,6 +26,12 @@ import Testing
 /// decisions, `{"id": "m001", "project": "<slug>", "none" or null}`, the report lists every
 /// mail where this run differs from phase 0. The report holds ids, project slugs, levels,
 /// reasons and the model's choices, never mail text, addresses or names.
+///
+/// With TEST_RUNNER_ORRA_PROJECTS_SORT_ONLY set to a project's slug, that project is the
+/// user's only one, as for a user who set up one project. Only its folder is indexed, and
+/// the mail of the other projects is mail of none, filed nowhere in the history. The report
+/// then counts how much of the project's mail sorting filed there, and how much other mail,
+/// which is wrong. The bar of the plan does not apply.
 @Suite(.serialized, .enabled(if: ["ORRA_PROJECTS_SET", "ORRA_PROJECTS_OWN_ADDRESSES", "ORRA_PROJECTS_OWN_NAME"].allSatisfy { ProcessInfo.processInfo.environment[$0] != nil } && RewriteTestModel.folder != nil))
 @MainActor
 struct SortingEvaluationTests {
@@ -39,12 +45,15 @@ struct SortingEvaluationTests {
         .split(separator: ",").compactMap { ProjectsAddress.normalized(String($0)) }
     nonisolated static let ownName = ProcessInfo.processInfo.environment["ORRA_PROJECTS_OWN_NAME"]
     nonisolated static let bar = (right: 88, wrong: 6)
+    /// The slug of the one project kept, or nil for all five.
+    nonisolated static let only = ProcessInfo.processInfo.environment["ORRA_PROJECTS_SORT_ONLY"]
 
     @Test func sortTheSyntheticSet() async throws {
         let root = try #require(Self.setFolder)
         let modelFolder = try #require(RewriteTestModel.folder)
         let set = try SyntheticSet(root: root)
         try #require(set.mails.count == 105)
+        try #require(set.projects.count == (Self.only == nil ? 5 : 1), "TEST_RUNNER_ORRA_PROJECTS_SORT_ONLY names no project of the set")
         try #require(!Self.ownAddresses.isEmpty, "TEST_RUNNER_ORRA_PROJECTS_OWN_ADDRESSES holds no address")
 
         // The index of the five folders, as FolderIndex keeps it.
@@ -64,7 +73,7 @@ struct SortingEvaluationTests {
             guard let project = row[0].text.flatMap(UUID.init(uuidString:)), let path = row[1].text else { continue }
             fileNames[project, default: []].append((path as NSString).lastPathComponent)
         }
-        try #require(fileNames.values.map(\.count).reduce(0, +) == 45, "the index holds \(fileNames.values.map(\.count).reduce(0, +)) files")
+        try #require(fileNames.values.map(\.count).reduce(0, +) == 9 * set.projects.count, "the index holds \(fileNames.values.map(\.count).reduce(0, +)) files")
         let search = ChunkSearch(database: database)
         let scores: @Sendable (String) async -> [UUID: Double] = { text in (try? await search.projectScores(text)) ?? [:] }
 
@@ -96,6 +105,7 @@ struct SortingEvaluationTests {
             indexTime: indexTime, modelTime: modelTime, files: fileNames.values.map(\.count).reduce(0, +))
         try Self.write(report.text, named: "sorting.md")
         try Self.write(report.rows, named: "sorting.jsonl")
+        guard Self.only == nil else { return }
         #expect(report.right >= Self.bar.right, "\(report.right) right")
         #expect(report.wrong <= Self.bar.wrong, "\(report.wrong) wrong")
     }
@@ -213,7 +223,7 @@ struct SortingEvaluationTests {
 
         init(root: URL) throws {
             let list = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("projects/projects.json"))) as? [[String: Any]] ?? []
-            for item in list {
+            for item in list where SortingEvaluationTests.only.map({ $0 == item["slug"] as? String }) ?? true {
                 let people = (item["people"] as? [String] ?? []).compactMap { entry -> SortingCandidate.Person? in
                     guard let address = ProjectsAddress.normalized(entry) else { return nil }
                     let name = entry.split(separator: "<").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
@@ -233,6 +243,9 @@ struct SortingEvaluationTests {
                 let from = object["from"] as? String ?? ""
                 let recipients = (object["to"] as? [String] ?? []) + (object["cc"] as? [String] ?? [])
                 let messageID = Self.bare(object["message_id"] as? String ?? id)
+                // With one project kept, the mail of the others is mail of none.
+                let label = labels["project"] as? String ?? "none"
+                let gold = projects.contains { $0.slug == label } ? label : "none"
                 let email = SortingService.Email(
                     messageID: messageID,
                     sender: from,
@@ -244,7 +257,7 @@ struct SortingEvaluationTests {
                     inReplyTo: (object["in_reply_to"] as? String).map { [Self.bare($0)] } ?? [],
                     references: (object["references"] as? [String] ?? []).map(Self.bare))
                 mails.append(Mail(
-                    id: id, thread: object["thread"] as? String ?? id, gold: labels["project"] as? String ?? "none",
+                    id: id, thread: object["thread"] as? String ?? id, gold: gold,
                     needsReply: labels["needs_reply"] as? Bool ?? false, kinds: labels["kinds"] as? [String] ?? [],
                     addresses: ([from] + recipients).compactMap(ProjectsAddress.normalized), email: email))
                 ids[messageID] = id
@@ -410,6 +423,24 @@ struct SortingEvaluationTests {
             """
         if !phase0.isEmpty {
             text += "| Phase 0, rules and the 4B, its none to Needs a Project | \(phase0Counts[.right] ?? 0) | \(phase0Counts[.needs] ?? 0) | \(phase0Counts[.wrong] ?? 0) |\n"
+        }
+        if let only {
+            let own = set.mails.filter { $0.gold == only }
+            let other = set.mails.filter { $0.gold != only }
+            func filed(_ mails: [SyntheticSet.Mail], _ run: Run) -> [SyntheticSet.Mail] {
+                mails.filter { placement(run.decisions[$0.id], set) == only }
+            }
+            let modelAlone = filed(other, model).filter { model.decisions[$0.id]?.reasons == [.model] }.count
+            text += """
+
+                \(only) is the only project. Filed there:
+
+                | Run | Its own mails | Other mails (wrong) |
+                |---|---|---|
+                | Rules alone (window closed) | \(filed(own, rules).count) of \(own.count) | \(filed(other, rules).count) of \(other.count) |
+                | Rules and the model | \(filed(own, model).count) of \(own.count) | \(filed(other, model).count) of \(other.count), \(modelAlone) on the model's choice alone |
+
+                """
         }
         text += """
 

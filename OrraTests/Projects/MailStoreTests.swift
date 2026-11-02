@@ -278,6 +278,30 @@ struct MailStoreTests {
         await store.close()
     }
 
+    /// A filing on the model's choice alone, which sorting no longer makes, comes back to be
+    /// sorted again, unless its explanation holds a draft or the user moved it.
+    @Test func aFilingOnTheModelsChoiceAloneIsSortedAgain() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([
+            Self.message("alone@test.example", from: "kim@quay.example"),
+            Self.message("drafted@test.example", from: "kim@quay.example", day: 1),
+            Self.message("signal@test.example", from: "kim@quay.example", day: 2),
+            Self.message("moved@test.example", from: "kim@quay.example", day: 3),
+        ], ownAddresses: [Self.work], at: Self.date(4))
+        let alone = SortingDecision(project: Self.harbor, level: .likely, reasons: [.model])
+        #expect(try await store.saveDecision(alone, for: "alone@test.example"))
+        #expect(try await store.saveDecision(alone, for: "drafted@test.example"))
+        #expect(try await store.save(Self.explanation("drafted@test.example"), at: Self.date(4)))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .likely, reasons: [.words, .model]), for: "signal@test.example"))
+        #expect(try await store.saveDecision(alone, for: "moved@test.example"))
+        #expect(try await store.move("moved@test.example", to: Self.harbor))
+        let waiting = try await store.waiting()
+        #expect(waiting.map(\.messageID) == ["alone@test.example"])
+        #expect(waiting.first?.decided == alone)
+        await store.close()
+    }
+
     /// A likely filing that the model cannot answer about yet waits in its project, with its
     /// decision and explanation, and comes back with the mail that waits.
     @Test func aLikelyFilingWaitsInItsPlace() async throws {

@@ -501,13 +501,13 @@ struct SortingServiceTests {
         let model = Model()
         store.emails = [
             email("reply@test.example", from: "lee@elsewhere.example", day: 1, inReplyTo: ["parent@test.example"], decided: SortingDecision(project: Self.maple, level: .sure, reasons: [.thread])),
-            email("parent@test.example", from: "kim@quay.example", decided: SortingDecision(project: Self.maple, level: .likely, reasons: [.model])),
+            email("parent@test.example", from: "kim@quay.example", subject: "Harbor", decided: SortingDecision(project: Self.maple, level: .likely, reasons: [.model])),
         ]
-        // No signal ranks a project first, so P1, which the model answers, is Harbor.
+        // Harbor's word leaves the parent to the model, which answers P1, Harbor.
         await service(store, model).sortAgain(["reply@test.example", "parent@test.example"], after: [Self.harbor], rulesOnly: false)
         #expect(model.requests.count == 1)
         #expect(store.decisions.map(\.id) == ["parent@test.example", "reply@test.example"])
-        #expect(store.decision("parent@test.example") == SortingDecision(project: Self.harbor, level: .likely, reasons: [.model]))
+        #expect(store.decision("parent@test.example") == SortingDecision(project: Self.harbor, level: .likely, reasons: [.words, .model]))
         #expect(store.decision("reply@test.example") == SortingDecision(project: Self.harbor, level: .sure, reasons: [.thread]))
     }
 
@@ -653,6 +653,18 @@ struct SortingServiceTests {
         #expect(store.decisions.isEmpty)
         #expect(store.filed["a@test.example"] == SortingService.Filed(project: Self.harbor, movedByUser: true))
         #expect(store.replies["a@test.example"] == .reply(.en))
+    }
+
+    /// A user with one project: mail that nothing points to stays in Needs a Project, and
+    /// the model, which would answer P1, is never asked.
+    @Test func aSingleProjectGetsNoMailNothingPointsTo() async {
+        let store = Store()
+        store.candidates = [Self.candidates[0]]
+        let model = Model()
+        let notice = email("clock@test.example", from: "Campus IT <it-desk@campus.example>", subject: "Clocks go back on Sunday", text: "The clocks go back one hour on Sunday. Office phones change on their own.")
+        await service(store, model, scores: [Self.harbor: 2.4]).sort([notice])
+        #expect(model.requests.isEmpty)
+        #expect(store.decision("clock@test.example") == SortingDecision(project: nil, level: .unsure, reasons: [.noSignal]))
     }
 
     @Test func listMailIsSetAsideWithoutAReplyDue() async {
