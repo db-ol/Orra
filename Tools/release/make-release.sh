@@ -131,7 +131,7 @@ shown="$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString)"
 # languages from Orra/InfoPlist.xcstrings, and the app has no en.lproj. So the catalog's
 # English needs the same text in the build setting, or English users see an older prompt.
 prompt="$(plutil -extract NSMicrophoneUsageDescription raw "$app/Contents/Info.plist")"
-catalog_prompt="$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["strings"]["NSMicrophoneUsageDescription"]["localizations"]["en"]["stringUnit"]["value"])' Orra/InfoPlist.xcstrings)"
+catalog_prompt="$(plutil -extract strings.NSMicrophoneUsageDescription.localizations.en.stringUnit.value raw Orra/InfoPlist.xcstrings)"
 [[ "$prompt" == "$catalog_prompt" ]] || {
     echo "The English microphone prompt differs from Orra/InfoPlist.xcstrings. Set INFOPLIST_KEY_NSMicrophoneUsageDescription to the catalog's English for Debug and Release." >&2
     exit 1
