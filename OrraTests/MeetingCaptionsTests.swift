@@ -136,13 +136,16 @@ struct MeetingCaptionsTests {
     /// Stands in for the caption microphone, named apart from PushToTalkControllerTests'
     /// FakeMicrophone. MeetingCaptions starts and stops it off the main actor, so its state
     /// is behind a lock. With `holdsStart`, a start waits until `releaseStart`, like a
-    /// Bluetooth microphone that takes seconds. `move` tells the captions that the device
-    /// moved, and `inputs` stands in for the watch of the devices.
+    /// Bluetooth microphone that takes seconds, and with `holdsStop`, a stop waits until
+    /// `releaseStop`. `move` tells the captions that the device moved, and `inputs` stands in
+    /// for the watch of the devices.
     private final class FakeCaptionMicrophone: Sendable {
         private struct State {
             var access = MicrophoneAccess.authorized
             var fails: MicrophoneCaptionProblem?
             var holdsStart = false
+            var holdsStop = false
+            var stopWaits = false
             var lidClosed = false
             var input = AudioInput(id: 7, uid: "usb-1", name: "USB Microphone", isInternalMicrophone: false)
             var deliver: (@Sendable ([Float]) -> Void)?
@@ -163,6 +166,7 @@ struct MeetingCaptionsTests {
 
         private let state = OSAllocatedUnfairLock(initialState: State())
         private let gate = DispatchSemaphore(value: 0)
+        private let stopGate = DispatchSemaphore(value: 0)
         let inputs = MainActor.assumeIsolated { Inputs() }
 
         var access: MicrophoneAccess {
@@ -178,6 +182,16 @@ struct MeetingCaptionsTests {
         var holdsStart: Bool {
             get { state.withLock { $0.holdsStart } }
             set { state.withLock { $0.holdsStart = newValue } }
+        }
+
+        var holdsStop: Bool {
+            get { state.withLock { $0.holdsStop } }
+            set { state.withLock { $0.holdsStop = newValue } }
+        }
+
+        /// True while a stop waits for `releaseStop`.
+        var stopWaits: Bool {
+            state.withLock { $0.stopWaits }
         }
 
         var lidClosed: Bool {
@@ -224,6 +238,10 @@ struct MeetingCaptionsTests {
             gate.signal()
         }
 
+        func releaseStop() {
+            stopGate.signal()
+        }
+
         /// The device went away or changed, as the capture reports it, on a background
         /// queue.
         func move() {
@@ -264,7 +282,17 @@ struct MeetingCaptionsTests {
                 }
                 return input
             }, stop: { [self] in
+                let holds = state.withLock {
+                    $0.stopWaits = $0.holdsStop
+                    return $0.holdsStop
+                }
+                if holds {
+                    // Like a Bluetooth microphone that takes a moment to let go. Bounded, as a
+                    // start that waits.
+                    _ = stopGate.wait(timeout: .now() + 120)
+                }
                 state.withLock {
+                    $0.stopWaits = false
                     $0.calls.append("stop")
                     $0.deliver = nil
                     $0.moved = nil
@@ -1238,6 +1266,58 @@ struct MeetingCaptionsTests {
         events.pause = .notPaused
         try await Task.sleep(for: .milliseconds(250))
         #expect(microphone.starts == 1)
+    }
+
+    /// A start again that waits behind the stop of the unit before it looks at the pause
+    /// once that stop is done, so a press that came meanwhile holds it too, and captions
+    /// start no unit during the dictation.
+    @Test func aStartBehindAStopWaitsForADictationThatBeganMeanwhile() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: events, microphone: microphone)
+        _ = try await listeningToTheMicrophone(captions)
+        microphone.holdsStop = true
+        captions.microphoneChosen("usb-2")
+        try await eventually { microphone.stopWaits }
+        events.pause = .paused
+        microphone.holdsStop = false
+        microphone.releaseStop()
+        try await eventually { microphone.stops == 1 }
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(microphone.starts == 1)
+        #expect(captions.capture == .starting)
+        events.pause = .notPaused
+        try await eventually { microphone.starts == 2 && captions.capture == .listening }
+        #expect(microphone.startedUIDs == [nil, "usb-2"])
+        captions.setOn(false)
+    }
+
+    /// A start already under way at the press completes, since a unit cannot stop halfway
+    /// through its start. The window shows that the microphone is on, and what it hears
+    /// during the dictation is left out.
+    @Test func aStartUnderWayAtThePressCompletesAndLeavesTheDictationOut() async throws {
+        let models = FakeCaptionModels(["Next slide please."])
+        let microphone = FakeCaptionMicrophone()
+        microphone.holdsStart = true
+        let events = Box()
+        let captions = makeCaptions(models, source: FakeSource(), events: events, microphone: microphone)
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        try await eventually { microphone.calls == ["start"] }
+        events.pause = .paused
+        microphone.holdsStart = false
+        microphone.releaseStart()
+        try await eventually { captions.capture == .listening }
+        #expect(captions.microphoneInUse == microphone.input)
+        let run = captions.currentRun
+        // The dictation, louder, so it shows if it ever reaches a model.
+        captions.receive(CaptionAudio.tone(1, amplitude: 0.3), run: run)
+        events.pause = .notPaused
+        captions.receive(CaptionAudio.silence(0.5) + CaptionAudio.tone(0.7) + CaptionAudio.silence(1), run: run)
+        try await eventually { captions.store.sentences.compactMap(\.translatedText) == ["请看下一张幻灯片。"] }
+        #expect(models.transcribed == 1)
+        #expect(models.heard.allSatisfy { samples in samples.allSatisfy { abs($0) <= 0.1 } })
+        captions.setOn(false)
     }
 
     @Test func microphoneCaptionsTranslateLikeTheMacs() async throws {

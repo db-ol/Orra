@@ -423,7 +423,8 @@ final class MeetingCaptions {
         var silenceCheck: Task<Void, Never>?
         /// Looks at microphone access while it is not given.
         var accessCheck: Task<Void, Never>?
-        /// A start of the microphone that waits for a pause to end.
+        /// A start of the microphone that waits for its queue and for a pause to end, see
+        /// `startMicrophone`.
         var waitingStart: Task<Void, Never>?
         /// A start again of the microphone, see `scheduleRestart`.
         var restart: Task<Void, Never>?
@@ -779,6 +780,12 @@ final class MeetingCaptions {
     /// window says so, nothing starts, and captions start once access is given. A start
     /// never asks: the prompt comes only from the user's choice of the microphone or a
     /// click in the window.
+    ///
+    /// The start first waits for what `microphoneQueue` still does, such as the stop of the
+    /// unit before a start again, and then while a dictation, a voice sample or Orra's
+    /// voice holds the microphone, whose audio captions would leave out anyway. So a press
+    /// that comes while an earlier stop still runs holds the start too. Only a start already
+    /// under way at the press completes, since a unit cannot stop halfway through its start.
     private func startMicrophone() {
         let access = microphone.access()
         guard access == .authorized else {
@@ -786,18 +793,18 @@ final class MeetingCaptions {
             return
         }
         capture = .starting
-        guard pausesMicrophone() == .notPaused else {
-            // Captions never set up their unit while a dictation, a voice sample or Orra's
-            // voice holds the microphone, whose audio they would leave out anyway.
-            let current = run
-            self.runState.waitingStart = Task { [weak self] in
-                await self?.waitWhileMicrophonePaused()
-                guard !Task.isCancelled, let self, self.isOn, self.run == current else { return }
-                self.launchMicrophone()
+        let current = run
+        let queue = microphoneQueue
+        self.runState.waitingStart = Task { [weak self] in
+            await withCheckedContinuation { continuation in
+                queue.async {
+                    continuation.resume()
+                }
             }
-            return
+            await self?.waitWhileMicrophonePaused()
+            guard !Task.isCancelled, let self, self.isOn, self.run == current else { return }
+            self.launchMicrophone()
         }
-        launchMicrophone()
     }
 
     /// Starts the microphone off the main actor, since a Bluetooth microphone can take
