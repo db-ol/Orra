@@ -10164,6 +10164,28 @@
         }
       }
     },
+    "Nothing is playing on the Mac. Captions show what the Mac plays, such as a call or a video, not what you say into your microphone." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se está reproduciendo nada en la Mac. Los subtítulos muestran lo que reproduce la Mac, como una llamada o un video, no lo que dices al micrófono."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macでは何も再生されていません。キャプションに表示されるのは、通話や動画などMacで再生中の音声で、マイクに向かって話した内容ではありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 上现在没有播放任何声音。字幕显示的是 Mac 播放的声音（比如通话或视频），不是你对着麦克风说的话。"
+          }
+        }
+      }
+    },
     "Nothing is read before you click Start Reading Mail." : {
       "localizations" : {
         "es-419" : {

@@ -6,7 +6,9 @@ import Testing
 @MainActor
 struct MeetingCaptionsTests {
     /// Stands in for the capture. MeetingCaptions calls it off the main actor, so its
-    /// state is behind a lock. With `holdsStart`, a start waits until `releaseStart`.
+    /// state is behind a lock. With `holdsStart`, a start waits until `releaseStart`, and
+    /// with `holdsPlayChecks`, a check whether something plays waits until
+    /// `releasePlayChecks`.
     private final class FakeSource: Sendable {
         private struct State {
             var fails: SystemAudioProblem?
@@ -14,10 +16,40 @@ struct MeetingCaptionsTests {
             var deliver: (@Sendable ([Float]) -> Void)?
             var calls: [String] = []
             var startedOnMain = false
+            var plays: [Bool?] = [false]
+            var holdsPlayChecks = false
+            var answers: [Bool?] = []
+            var checkedOnMain = false
         }
 
         private let state = OSAllocatedUnfairLock(initialState: State())
         private let gate = DispatchSemaphore(value: 0)
+        private let checkGate = DispatchSemaphore(value: 0)
+
+        /// What the checks whether something plays answer, one after the other, and the
+        /// last one for every check after it. Nothing plays unless a test says otherwise.
+        var plays: [Bool?] {
+            get { state.withLock { $0.plays } }
+            set { state.withLock { $0.plays = newValue } }
+        }
+
+        var holdsPlayChecks: Bool {
+            get { state.withLock { $0.holdsPlayChecks } }
+            set { state.withLock { $0.holdsPlayChecks = newValue } }
+        }
+
+        /// What the checks answered, in order.
+        var answers: [Bool?] {
+            state.withLock { $0.answers }
+        }
+
+        var checkedOnMain: Bool {
+            state.withLock { $0.checkedOnMain }
+        }
+
+        func releasePlayChecks() {
+            checkGate.signal()
+        }
 
         var fails: SystemAudioProblem? {
             get { state.withLock { $0.fails } }
@@ -82,18 +114,37 @@ struct MeetingCaptionsTests {
                     $0.calls.append("stop")
                     $0.deliver = nil
                 }
+            }, somethingPlays: { [self] in
+                let (holds, answer) = state.withLock {
+                    if Thread.isMainThread {
+                        $0.checkedOnMain = true
+                    }
+                    let answer = $0.plays.count > 1 ? $0.plays.removeFirst() : $0.plays.first ?? nil
+                    return ($0.holdsPlayChecks, answer)
+                }
+                if holds {
+                    // Like an audio server that does not answer. Bounded, as a start that
+                    // waits.
+                    _ = checkGate.wait(timeout: .now() + 120)
+                }
+                state.withLock { $0.answers.append(answer) }
+                return answer
             })
         }
     }
 
-    private func makeCaptions(_ models: FakeCaptionModels, source: FakeSource, events: Box, displayMode: CaptionDisplayMode = .translationOnly, silenceHint: Double = 2) -> MeetingCaptions {
+    /// The checks whether something plays come quickly in the tests, and their answers
+    /// may take long, since a busy runner can keep the queue they run on waiting.
+    private func makeCaptions(_ models: FakeCaptionModels, source: FakeSource, events: Box, displayMode: CaptionDisplayMode = .translationOnly, silenceHint: Double = 2, playCheckLimit: Double = 60) -> MeetingCaptions {
         let captions = MeetingCaptions(
             source: source.source,
             engines: models.engines(),
             started: { events.items.append("started") },
             stopped: { events.items.append("stopped") },
             displayMode: displayMode,
-            silenceHint: silenceHint
+            silenceHint: silenceHint,
+            playCheckInterval: 0.05,
+            playCheckLimit: playCheckLimit
         )
         captions.showWindow = { events.items.append("show") }
         captions.closeWindow = { events.items.append("close") }
@@ -104,6 +155,10 @@ struct MeetingCaptionsTests {
     private final class Box {
         var items: [String] = []
     }
+
+    private static let nothingPlays = "Nothing is playing on the Mac. Captions show what the Mac plays, such as a call or a video, not what you say into your microphone."
+    private static let permission = "No sound from the Mac yet. If something is playing, allow Orra under Screen & System Audio Recording in Privacy & Security settings."
+    private static let captureFailed = "Orra could not capture the sound the Mac plays. Turn Live Captions off and on again to try again."
 
     @Test func turningOnStartsTheCaptureAndShowsTheWindow() async throws {
         let source = FakeSource()
@@ -384,92 +439,255 @@ struct MeetingCaptionsTests {
         let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box())
         captions.setOn(true)
         captions.receive(CaptionAudio.silence(1.5))
-        #expect(!captions.hearsOnlySilence)
+        #expect(captions.silence == nil)
         captions.receive(CaptionAudio.silence(1))
-        #expect(captions.hearsOnlySilence)
+        #expect(captions.silence == .noSound)
         captions.receive(CaptionAudio.tone(0.1))
-        #expect(!captions.hearsOnlySilence)
+        #expect(captions.silence == nil)
         captions.receive(CaptionAudio.silence(5))
-        #expect(!captions.hearsOnlySilence)
+        #expect(captions.silence == nil)
     }
 
-    /// A capture that delivers nothing at all, as while nothing plays, suggests the
-    /// permission after the same time as one that delivers only zeros. Zeros that come
-    /// later keep the note, and the first sound takes it away.
-    @Test func aCaptureThatDeliversNothingSuggestsThePermission() async throws {
+    /// A capture that delivers nothing at all, as while nothing plays, says so after the
+    /// same time as one that delivers only zeros suggests the permission. Audio that comes
+    /// later takes the note away, zeros that add up to the hint suggest the permission,
+    /// and the first sound takes that away too.
+    @Test func aCaptureThatDeliversNothingSaysNothingPlays() async throws {
         let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 0.2)
         captions.setOn(true)
         try await eventually { captions.capture == .listening }
-        try await eventually { captions.hearsOnlySilence }
+        try await eventually { captions.silence != nil }
+        #expect(captions.silence == .noAudio)
         captions.receive(CaptionAudio.silence(0.1), run: captions.currentRun)
-        #expect(captions.hearsOnlySilence)
+        #expect(captions.silence == nil)
+        captions.receive(CaptionAudio.silence(0.1), run: captions.currentRun)
+        #expect(captions.silence == .noSound)
         captions.receive(CaptionAudio.tone(0.1), run: captions.currentRun)
-        #expect(!captions.hearsOnlySilence)
+        #expect(captions.silence == nil)
         captions.setOn(false)
     }
 
-    /// A start that still waits, as for the permission prompt or for the first sound the
-    /// Mac plays, suggests the permission after the same time.
-    @Test func aStartThatStillWaitsSuggestsThePermission() async throws {
+    /// Zeros that come before the hint, fewer than it, keep the note that nothing plays
+    /// away, and suggest the permission once they add up to it.
+    @Test func zerosBeforeTheHintNeverSayNothingPlays() async throws {
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 0.2)
+        captions.setOn(true)
+        captions.receive(CaptionAudio.silence(0.1), run: captions.currentRun)
+        // Captions turned on later with the same hint say that nothing plays only after
+        // these would have.
+        let probe = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 0.2)
+        probe.setOn(true)
+        try await eventually { probe.silence == .noAudio }
+        #expect(captions.silence == nil)
+        captions.receive(CaptionAudio.silence(0.1), run: captions.currentRun)
+        #expect(captions.silence == .noSound)
+        probe.setOn(false)
+        captions.setOn(false)
+    }
+
+    /// A start that still waits, as for the permission prompt or with tap auto start for
+    /// the first sound the Mac plays, says that nothing plays after the same time.
+    @Test func aStartThatStillWaitsSaysNothingPlays() async throws {
         let source = FakeSource()
         source.holdsStart = true
         defer { source.releaseStart() }
         let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), silenceHint: 0.2)
         captions.setOn(true)
         try await eventually { source.calls == ["start"] }
-        try await eventually { captions.hearsOnlySilence }
+        try await eventually { captions.silence == .noAudio }
         #expect(captions.capture == .starting)
         captions.setOn(false)
-        #expect(!captions.hearsOnlySilence)
+        #expect(captions.silence == nil)
     }
 
-    /// A start that failed has its own note, and nothing suggests the permission after
-    /// it, neither the window nor the log.
-    @Test func aFailedStartSuggestsNoPermission() async throws {
+    /// The window tells the two apart. No audio at all says that nothing plays and what
+    /// captions show, and samples of only zeros suggest the permission.
+    @Test func theWindowTellsNothingPlayingFromOnlyZeros() async throws {
+        let turns = EngineTurns()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 0.2)
+        captions.setOn(true)
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: turns).isEmpty)
+        try await eventually { captions.silence == .noAudio }
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: turns) == [Self.nothingPlays])
+        captions.receive(CaptionAudio.silence(0.2), run: captions.currentRun)
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: turns) == [Self.permission])
+        captions.receive(CaptionAudio.tone(0.1), run: captions.currentRun)
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: turns).isEmpty)
+        captions.setOn(false)
+    }
+
+    /// Something plays while the capture delivers no samples at all, as a refused
+    /// permission may give, so the window suggests the permission after the hint, as for
+    /// samples of only zeros. Core Audio is asked off the main thread, once. Zeros that
+    /// come later keep the note, and the first sound takes it away.
+    @Test func somethingPlayingWithNoAudioSuggestsThePermission() async throws {
+        let source = FakeSource()
+        source.holdsStart = true
+        source.plays = [true]
+        defer { source.releaseStart() }
+        let turns = EngineTurns()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), silenceHint: 0.2)
+        captions.setOn(true)
+        try await eventually { captions.silence != nil }
+        #expect(captions.silence == .noSound)
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: turns) == [Self.permission])
+        #expect(source.answers == [true])
+        #expect(!source.checkedOnMain)
+        captions.receive(CaptionAudio.silence(0.1), run: captions.currentRun)
+        #expect(captions.silence == .noSound)
+        captions.receive(CaptionAudio.tone(0.1), run: captions.currentRun)
+        #expect(captions.silence == nil)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(source.answers == [true])
+        captions.setOn(false)
+    }
+
+    /// When Core Audio cannot tell whether something plays, the window suggests the
+    /// permission after the hint, as it did before Orra asked.
+    @Test func noAnswerWhetherSomethingPlaysSuggestsThePermission() async throws {
+        let source = FakeSource()
+        source.plays = [nil]
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), silenceHint: 0.2)
+        captions.setOn(true)
+        try await eventually { captions.silence != nil }
+        #expect(captions.silence == .noSound)
+        #expect(source.answers == [nil])
+        captions.setOn(false)
+    }
+
+    /// A check that gets no answer within its limit counts as one that cannot tell, so
+    /// an audio server that hangs does not leave the window without a note.
+    @Test func aCheckWithoutAnAnswerInTimeSuggestsThePermission() async throws {
+        let source = FakeSource()
+        source.holdsPlayChecks = true
+        defer { source.releasePlayChecks() }
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), silenceHint: 0.2, playCheckLimit: 0.2)
+        captions.setOn(true)
+        try await eventually { captions.silence != nil }
+        #expect(captions.silence == .noSound)
+        #expect(source.answers.isEmpty)
+        captions.setOn(false)
+    }
+
+    /// While the window says that nothing plays, Orra asks again. Something that starts to
+    /// play while still no samples come suggests the permission once two checks in a row
+    /// find it playing, and no check follows.
+    @Test func somethingThatStartsToPlayWithNoAudioSuggestsThePermission() async throws {
+        let source = FakeSource()
+        source.plays = [false, false, true, true]
+        let turns = EngineTurns()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), silenceHint: 0.2)
+        captions.setOn(true)
+        try await eventually { captions.silence == .noAudio }
+        try await eventually { captions.silence == .noSound }
+        #expect(source.answers == [false, false, true, true])
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: turns) == [Self.permission])
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(source.answers.count == 4)
+        captions.setOn(false)
+    }
+
+    /// Something that plays for one check only keeps the note that nothing plays, and the
+    /// checks go on.
+    @Test func somethingThatPlaysForOneCheckKeepsTheNote() async throws {
+        let source = FakeSource()
+        source.plays = [false, true, false]
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), silenceHint: 0.2)
+        captions.setOn(true)
+        try await eventually { source.answers.count >= 5 }
+        #expect(captions.silence == .noAudio)
+        #expect(Array(source.answers.prefix(5)) == [false, true, false, false, false])
+        captions.setOn(false)
+    }
+
+    /// The first audio ends the checks, and so does turning captions off. A check under
+    /// way may still answer.
+    @Test func audioOrAStopEndsTheChecks() async throws {
+        let source = FakeSource()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), silenceHint: 0.2)
+        captions.setOn(true)
+        try await eventually { source.answers.count >= 2 }
+        captions.receive(CaptionAudio.silence(0.1), run: captions.currentRun)
+        #expect(captions.silence == nil)
+        var checks = source.answers.count
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(source.answers.count <= checks + 1)
+        captions.setOn(false)
+        captions.setOn(true)
+        try await eventually { source.answers.count >= checks + 3 }
+        captions.setOn(false)
+        checks = source.answers.count
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(source.answers.count <= checks + 1)
+    }
+
+    /// A start that fails once the window said that nothing plays leaves only the note
+    /// that the capture failed, and the checks end.
+    @Test func aStartThatFailsAfterTheNoteLeavesOnlyTheFailure() async throws {
+        let source = FakeSource()
+        source.holdsStart = true
+        source.fails = .failed(step: "start the device", status: -1)
+        let turns = EngineTurns()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), silenceHint: 0.2)
+        captions.setOn(true)
+        try await eventually { captions.silence == .noAudio }
+        source.releaseStart()
+        try await eventually { captions.capture == .unavailable(.failed(step: "start the device", status: -1)) }
+        #expect(captions.silence == nil)
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: turns) == [Self.captureFailed])
+        let checks = source.answers.count
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(source.answers.count <= checks + 1)
+        captions.setOn(false)
+    }
+
+    /// A start that failed has its own note, and no note about silence follows it, neither
+    /// in the window nor in the log.
+    @Test func aFailedStartGetsNoSilenceNote() async throws {
         let source = FakeSource()
         source.fails = .failed(step: "start the device", status: -1)
         let failed = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), silenceHint: 0.2)
         failed.setOn(true)
         try await eventually { failed.capture == .unavailable(.failed(step: "start the device", status: -1)) }
-        // Captions that start, turned on later with the same hint, suggest the permission
+        // Captions that start, turned on later with the same hint, say that nothing plays
         // only after the failed ones would have.
         let probe = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 0.2)
         probe.setOn(true)
-        try await eventually { probe.hearsOnlySilence }
-        #expect(!failed.hearsOnlySilence)
+        try await eventually { probe.silence == .noAudio }
+        #expect(failed.silence == nil)
         probe.setOn(false)
         failed.setOn(false)
     }
 
-    /// A sound before the hint keeps the note away, also once the hint has passed with no
-    /// sound since.
-    @Test func aSoundBeforeTheHintSuggestsNoPermission() async throws {
+    /// A sound before the hint keeps both notes away, also once the hint has passed with
+    /// no sound since.
+    @Test func aSoundBeforeTheHintGetsNoSilenceNote() async throws {
         let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 0.2)
         captions.setOn(true)
         captions.receive(CaptionAudio.tone(0.1), run: captions.currentRun)
-        // Captions turned on later with the same hint suggest the permission only after
+        // Captions turned on later with the same hint say that nothing plays only after
         // these would have.
         let probe = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 0.2)
         probe.setOn(true)
-        try await eventually { probe.hearsOnlySilence }
-        #expect(!captions.hearsOnlySilence)
+        try await eventually { probe.silence == .noAudio }
+        #expect(captions.silence == nil)
         probe.setOn(false)
         captions.setOn(false)
     }
 
     /// Off and on again starts the hint over. The stop ends the check of the first run at
-    /// once, and that check suggests nothing in the second run.
+    /// once, and that check says nothing in the second run.
     @Test func offAndOnAgainStartsTheSilenceHintOver() async throws {
         let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 60)
         captions.setOn(true)
         captions.setOn(false)
         captions.setOn(true)
-        // Captions turned on later with a short hint suggest the permission only after the
+        // Captions turned on later with a short hint say that nothing plays only after the
         // ended check has run.
         let probe = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 0.1)
         probe.setOn(true)
-        try await eventually { probe.hearsOnlySilence }
-        #expect(!captions.hearsOnlySilence)
+        try await eventually { probe.silence == .noAudio }
+        #expect(captions.silence == nil)
         probe.setOn(false)
         captions.setOn(false)
     }

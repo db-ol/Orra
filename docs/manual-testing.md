@@ -2989,25 +2989,52 @@ it shows starts, stops, counts and failures, never text.
   the menu.
 
 What Live Captions hear and when they wait, added on 2026-10-25, not verified yet.
-MeetingCaptionsTests checks the notes with a fake capture that delivers nothing, or whose
-start waits or fails, and with EngineTurns for a dictation. Watch the log with
+MeetingCaptionsTests checks the notes with a fake capture that delivers nothing or only
+zeros, or whose start waits or fails, with fake answers to whether an app plays, and with
+EngineTurns for a dictation. Since 2026-11-01 the window tells no audio at all from
+samples of only zeros, not verified yet either. With tap auto start, no audio while Core
+Audio lists no app that plays means that nothing plays. Samples of only zeros are what a
+refused permission looks like, and no audio at all while an app plays may be too. An app
+that keeps its audio output running, such as a call app in a call, counts as playing, so
+quit such apps for the checks with nothing playing. Watch the log with
 `log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "captions"'`.
 
 - [ ] Turn Live Captions on with nothing playing. The window says "Captions of what the
   Mac plays, such as a call or a video, appear here. What you say into your microphone is
-  not captioned." After about 8 s it adds "No sound from the Mac yet. If something is
-  playing, allow Orra under Screen & System Audio Recording in Privacy & Security
-  settings." Speaking into the microphone shows no caption.
+  not captioned." After about 8 s the note "Nothing is playing on the Mac. Captions show
+  what the Mac plays, such as a call or a video, not what you say into your microphone."
+  takes its place at the top, and the window does not mention the permission. Speaking
+  into the microphone shows no caption.
 - [ ] The log shows "Meeting captions turned on", then "System audio capture is starting
   its device, the tap at … Hz with … channels". Note whether "System audio capture
   started at …" and "Meeting captions started, showing …, after …" follow at once or only
   once something plays, which tells how the start waits with nothing playing. After about
-  8 s "Meeting captions got no sound for 8.0 s, with 0.0 s of audio, and suggest the
-  permission" shows, or with up to 8 s of audio when the tap delivers zeros.
-- [ ] Play a video with speech. The no sound note goes with the first sound, and captions
-  show within a few seconds of the end of each sentence. The log shows "Meeting captions
-  got the first audio … after they were turned on" and "Meeting captions got the first
-  sound …".
+  8 s "Meeting captions got no sound for 8.0 s, with 0.0 s of audio, and say that nothing
+  plays" shows. Orra then checks every 3 s whether an app plays, and logs nothing for it
+  while none does. If audio of only zeros comes instead, no line shows then, and once 8 s
+  of it came, "Meeting captions got no sound for 8.0 s, with 8.0 s of audio, and suggest
+  the permission" shows and the window has the permission note. If that line shows after
+  8 s with 0.0 s of audio, Core Audio listed an app that plays or could not tell. Then a
+  line before it says why, such as "System audio capture could not …" or "Meeting
+  captions could not tell within 2.0 s whether an app plays".
+- [ ] Play a video with speech. The note that nothing plays goes with the first audio, and
+  captions show within a few seconds of the end of each sentence. The log shows "Meeting
+  captions got the first audio … after they were turned on" and "Meeting captions got the
+  first sound …". "Meeting captions found an app playing …, with no audio yet" may show
+  just before them, but no line that suggests the permission follows.
+- [ ] Turn Orra off under Screen & System Audio Recording, then turn captions on with
+  nothing playing. After about 8 s the window says that nothing is playing. Play a video
+  with speech and note which of two things happens. If the tap delivers zeros, the note
+  goes, and about 8 s later the window shows "No sound from the Mac yet. If something is
+  playing, allow Orra under Screen & System Audio Recording in Privacy & Security
+  settings." The log has "and say that nothing plays", "got the first audio" and then
+  "and suggest the permission", and no "got the first sound". If the tap delivers
+  nothing, the same permission note takes the place of the note that nothing plays 3 to
+  6 s after the video starts. The log has "found an app playing …, with no audio yet" and
+  then "got no sound for … s, with 0.0 s of audio, and suggest the permission". Then turn
+  captions off and on again while the video plays. After about 8 s the window shows the
+  permission note, and never the note that nothing plays. Turn Orra on there again
+  afterwards.
 - [ ] With the video playing, start a dictation with the talk key and then one with the
   translation key, also hands free. From about a second after the press until the paste
   or Escape the window shows "Captions wait while you dictate and catch up when you
@@ -3017,11 +3044,11 @@ start waits or fails, and with EngineTurns for a dictation. Watch the log with
 - [ ] Turning captions off logs "Meeting captions stopped after …, with … s of audio, … s
   of it with sound, … sentences cut, … reported, … without text and … dropped". No line
   of the captions category holds text.
-- [ ] In 简体中文, 日本語 and Español the placeholder and the note about a dictation read
-  well and wrap in the window at its first size.
+- [ ] In 简体中文, 日本語 and Español the placeholder, the note that nothing is playing and
+  the note about a dictation read well and wrap in the window at its first size.
 - [ ] Make the window as small as it goes, in English and in Español, with nothing
-  playing. Once the no sound note shows, start a hands free dictation. The notes still
-  read, the first words of the placeholder stay in view, and the list keeps some room.
+  playing. Once the note that nothing is playing shows, start a hands free dictation. The
+  notes still read and the list keeps some room.
 
 The Live Captions shortcut, added on 2026-10-19, not verified yet in the running app. It
 is a Carbon hot key, see docs/hotkey-options.md, ⌃ ⌥ ⌘ C unless changed in Settings,
