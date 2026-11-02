@@ -30,9 +30,10 @@ import os
 ///   give, or gives with no source, is not saved, and a later pass reads it again.
 /// - Dictation goes first: parsing a message and reading each of its attachments wait
 ///   while the user dictates, and a pass runs at utility priority, as background work.
-/// - It saves the new messages of each range through a closure, and asks which messages
-///   are known through another, so it never waits for the store and tests pass fakes.
-///   Each throws when the store fails.
+/// - It saves the new messages through a closure every `saveBatch` messages and at the end
+///   of each range, so the window lists mail while a long range is still read. It asks
+///   which messages are known through another closure, so it never waits for the store and
+///   tests pass fakes. Each throws when the store fails.
 /// - It polls every minute. When Orra may not control Mail, the pass ends and the scan waits
 ///   twice as long each time, up to 30 minutes. It does the same when the store fails.
 /// - When Mail does not answer in time (-1712) or does not take an event twice (-600 or
@@ -163,6 +164,9 @@ final class MailScan {
 
     /// The positions a range covers (plan section 5).
     nonisolated static let rangeSize = 200
+    /// How many messages are saved at once while a range is read (a guess). The window
+    /// lists them at each save, so the first ten show after ten sources, not after a range.
+    nonisolated static let saveBatch = 10
     /// How many new messages in a row Mail may not give in time before the scan leaves
     /// their mailbox for later, as one of an account that is offline, and how many
     /// mailboxes in a row before the pass ends, as Mail itself does not answer then.
@@ -242,6 +246,8 @@ final class MailScan {
     private var lastMailboxes: [MailMailbox] = []
     /// The user as Mail's accounts gave it, read once while the scan runs.
     private var accountsOwner: SortingService.Owner?
+    /// The time the loop had waited when Mail last did not give the accounts.
+    private var accountsFailed: Duration?
     private var loop: Task<Void, Never>?
     /// The pass under way. Two passes at once would read the same mail twice.
     private var current: Task<Pass, Never>?
@@ -319,6 +325,7 @@ final class MailScan {
         waited = .zero
         lastMailboxes = []
         accountsOwner = nil
+        accountsFailed = nil
         Logger.projectsMail.notice("Mail scan: stopped")
     }
 
@@ -372,6 +379,8 @@ final class MailScan {
     /// The user's own addresses and name: the override of a Debug build, else Mail's
     /// accounts, read once while the scan runs. Nil while Projects is off, before the user
     /// confirmed the mailbox choice, while Mail does not run, or when Mail does not answer.
+    /// After Mail did not give the accounts, they are asked for again only once the loop
+    /// waited, so the saves of one pass, ten messages each, do not ask again and again.
     func owner() async -> SortingService.Owner? {
         if let ownerOverride {
             return ownerOverride
@@ -379,7 +388,7 @@ final class MailScan {
         if let accountsOwner {
             return accountsOwner
         }
-        guard isOn(), choice.isConfirmed, bridge.isRunning() else { return nil }
+        guard isOn(), choice.isConfirmed, bridge.isRunning(), accountsFailed != waited else { return nil }
         do {
             let accounts = try await bridge.accounts()
             var seen = Set<String>()
@@ -389,6 +398,7 @@ final class MailScan {
             Logger.projectsMail.notice("Mail scan: \(accounts.count, privacy: .public) accounts with \(addresses.count, privacy: .public) addresses")
             return owner
         } catch {
+            accountsFailed = waited
             Logger.projectsMail.error("Mail scan: reading the accounts failed: \(String(describing: error), privacy: .public)")
             return nil
         }
@@ -718,6 +728,11 @@ final class MailScan {
                     found.append(try await message(listing, pass: &pass))
                     seen.insert(listing.messageID)
                     unanswered = 0
+                    if found.count >= Self.saveBatch {
+                        let batch = found
+                        found = []
+                        try await keep(batch, pass: &pass)
+                    }
                 } catch let error as MailBridgeError where Self.endsOnlyItsMessage(error) {
                     unanswered = 0
                     if error == .notFound {

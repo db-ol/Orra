@@ -130,14 +130,15 @@ struct MailScanTests {
     }
 
     /// Each range shares its first 10 positions with the one before, and reads none of
-    /// them twice.
+    /// them twice. The mail is saved ten at a time, so the window lists it while a range
+    /// is still read.
     @Test func aMailboxIsReadInRangesOf200NewestFirst() async {
         defer { cleanUp() }
         mail.put(Self.hourly(450), in: .inbox)
         let pass = await scan(choice([.inbox])).scan()
         #expect(mail.listings == [1...200, 191...390, 381...450])
         #expect(mail.sourcesRead == Array(1...450))
-        #expect(store.batches.map(\.count) == [200, 190, 60])
+        #expect(store.batches.map(\.count) == Array(repeating: MailScan.saveBatch, count: 45))
         #expect(store.saved.first?.messageID == "m1@harbor.example")
         #expect(pass.read == 450)
         #expect(pass.saved == 450)
@@ -241,16 +242,16 @@ struct MailScanTests {
         let scan = scan(choice([.inbox]))
         let first = await scan.scan()
         #expect(first.skipped == .storeFailed)
-        #expect(first.read == 390)
-        #expect(first.saved == 200)
-        #expect(store.saved.count == 200)
+        #expect(first.read == 20)
+        #expect(first.saved == 10)
+        #expect(store.saved.count == 10)
 
         mail.clearCalls()
         let second = await scan.scan()
         #expect(second.skipped == nil)
         #expect(mail.listings == [1...200, 191...390, 381...580, 571...600])
-        #expect(mail.sourcesRead == Array(201...600))
-        #expect(second.saved == 400)
+        #expect(mail.sourcesRead == Array(11...600))
+        #expect(second.saved == 590)
         #expect(Set(store.saved.map(\.messageID)).count == 600)
 
         // Now it polls.
@@ -555,9 +556,14 @@ struct MailScanTests {
     @Test func moreMailRemovedThanTheSharedPositionsIsReadAtTheNextPass() async {
         defer { cleanUp() }
         mail.put(Self.hourly(1_000, hoursApart: 3), in: .inbox)
-        store.afterSave = {
-            mail.put(Array(mail.messages(in: .inbox).dropFirst(50)), in: .inbox)
+        // Once the first range is saved.
+        func removeAfterTheFirstRange() {
+            store.afterSave = {
+                guard store.saved.count >= 200 else { return removeAfterTheFirstRange() }
+                mail.put(Array(mail.messages(in: .inbox).dropFirst(50)), in: .inbox)
+            }
         }
+        removeAfterTheFirstRange()
         let scan = scan(choice([.inbox], days: 30))
         await scan.scan()
         #expect(store.saved.count == 200)
@@ -717,8 +723,8 @@ struct MailScanTests {
         let pass = await scan(choice, isOn: { projects.isOn }).scan()
         #expect(pass.skipped == reason)
         #expect(mail.listings == [1...200])
-        #expect(mail.sourcesRead == Array(1...200))
-        #expect(store.saved.count == 200)
+        #expect(mail.sourcesRead == Array(1...MailScan.saveBatch))
+        #expect(store.saved.count == MailScan.saveBatch)
     }
 
     /// `stop()` ends a pass that it did not start too, and that pass saves nothing more.
@@ -729,11 +735,11 @@ struct MailScanTests {
         store.afterSave = { scan.stop() }
         await scan.scan()
         #expect(mail.listings == [1...200])
-        #expect(mail.sourcesRead == Array(1...200))
-        #expect(store.saved.count == 200)
+        #expect(mail.sourcesRead == Array(1...MailScan.saveBatch))
+        #expect(store.saved.count == MailScan.saveBatch)
         // The next pass runs, and reads the rest.
         mail.clearCalls()
-        #expect(await scan.scan().saved == 250)
+        #expect(await scan.scan().saved == 450 - MailScan.saveBatch)
     }
 
     // MARK: Mail not answering
@@ -957,6 +963,53 @@ struct MailScanTests {
         scan.stop()
         #expect(await scan.owner() == owner)
         #expect(mail.calls.filter { $0 == .accounts }.count == 2)
+    }
+
+    /// Mail that does not give the accounts is not asked again at each save of a pass, ten
+    /// messages each, only once the loop waited, or after a stop.
+    @Test func accountsMailDidNotGiveAreAskedForAgainOnlyAfterAWait() async throws {
+        defer { cleanUp() }
+        mail.put(Self.hourly(25), in: .inbox)
+        mail.failure = { call in call == .accounts ? .timedOut : nil }
+        let clock = TestClock()
+        let waits = Waits()
+        var asked = 0
+        var scanRef: MailScan?
+        let store = store
+        let scan = MailScan(
+            bridge: mail.bridge,
+            choice: choice([.inbox]),
+            lookups: store.lookups,
+            save: { messages in
+                if await scanRef?.owner() == nil {
+                    asked += 1
+                }
+                try store.save(messages)
+            },
+            isOn: { true },
+            now: { Self.now },
+            sleep: { duration in
+                waits.add(duration)
+                try await clock.sleep(for: duration)
+            }
+        )
+        scanRef = scan
+        scan.start()
+        defer { scan.stop() }
+        try await waitUntil { waits.all.count == 1 && clock.sleeping == 1 }
+        #expect(store.saved.count == 25)
+        #expect(asked == 3)
+        #expect(mail.calls.filter { $0 == .accounts }.count == 1)
+        mail.receive([FakeMail.mail(100, in: .inbox, received: Self.now - 60)], in: .inbox)
+        clock.advance(by: .seconds(60))
+        try await waitUntil { waits.all.count == 2 && clock.sleeping == 1 }
+        #expect(store.saved.count == 26)
+        #expect(mail.calls.filter { $0 == .accounts }.count == 2)
+        scan.stop()
+        mail.failure = { _ in nil }
+        #expect(await scan.owner() != nil)
+        #expect(mail.calls.filter { $0 == .accounts }.count == 3)
+        scanRef = nil
     }
 
     // MARK: Parsing
