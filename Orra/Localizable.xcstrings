@@ -6127,6 +6127,72 @@
         }
       }
     },
+    "For dictation, Orra records only after you press the talk key, until you press it again." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Para dictar, Orra solo graba desde que presionas la tecla para hablar hasta que la vuelves a presionar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声入力でOrraが録音するのは、音声入力キーを押してから、もう一度押すまでの間だけです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听写时，Orra 只在你按下说话键后录音，再按一下就停止。"
+          }
+        }
+      }
+    },
+    "For dictation, Orra records only while you hold the talk key, or after you press it twice quickly, until you press it once more." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Para dictar, Orra solo graba mientras mantienes presionada la tecla para hablar, o desde que la presionas rápido dos veces hasta que la vuelves a presionar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声入力でOrraが録音するのは、音声入力キーを押している間と、すばやく2回押してからもう一度押すまでの間だけです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听写时，Orra 只在你按住说话键时录音，或在你快速连按两下说话键后录音，直到你再按一下。"
+          }
+        }
+      }
+    },
+    "For dictation, Orra records only while you hold the talk key." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Para dictar, Orra solo graba mientras mantienes presionada la tecla para hablar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声入力でOrraが録音するのは、音声入力キーを押している間だけです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听写时，Orra 只在你按住说话键时录音。"
+          }
+        }
+      }
+    },
     "For meetings across languages. Read what others say in your language, and let them hear you in theirs, even in your own voice." : {
       "localizations" : {
         "es-419" : {
@@ -8268,6 +8334,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "实时字幕的语言在“会议同传”页面单独设置。"
+          }
+        }
+      }
+    },
+    "Live Captions listen to the microphone only when you choose it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subtítulos en vivo solo escucha el micrófono si lo eliges."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブキャプションがマイクを聞き取るのは、マイクを選んだときだけです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有在你选择麦克风后，实时字幕才会收听麦克风。"
           }
         }
       }
@@ -11879,72 +11967,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 只在“邮件” App 打开时读取其中的邮件。"
-          }
-        }
-      }
-    },
-    "Orra records only after you press the talk key, until you press it again." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra solo graba desde que presionas la tecla para hablar hasta que la vuelves a presionar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orraが録音するのは、音声入力キーを押してから、もう一度押すまでの間だけです。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 只在你按下说话键后录音，再按一下就停止。"
-          }
-        }
-      }
-    },
-    "Orra records only while you hold the talk key, or after you press it twice quickly, until you press it once more." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra solo graba mientras mantienes presionada la tecla para hablar, o desde que la presionas rápido dos veces hasta que la vuelves a presionar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orraが録音するのは、音声入力キーを押している間と、すばやく2回押してからもう一度押すまでの間だけです。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 只在你按住说话键时录音，或在你快速连按两下说话键后录音，直到你再按一下。"
-          }
-        }
-      }
-    },
-    "Orra records only while you hold the talk key." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra solo graba mientras mantienes presionada la tecla para hablar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orraが録音するのは、音声入力キーを押している間だけです。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 只在你按住说话键时录音。"
           }
         }
       }

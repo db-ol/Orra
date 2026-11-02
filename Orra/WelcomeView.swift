@@ -384,14 +384,17 @@ private struct MicrophoneStepDetail: View {
                 Text("Orra can use the microphone.")
                     .foregroundStyle(.secondary)
             case .notDetermined:
+                // When Orra records for dictation, and that Live Captions use the microphone
+                // only once the user chooses it.
                 Group {
                     if pushToTalk.talkMode == .hold, pushToTalk.handsFreeOn {
-                        Text("Orra records only while you hold the talk key, or after you press it twice quickly, until you press it once more.")
+                        Text("For dictation, Orra records only while you hold the talk key, or after you press it twice quickly, until you press it once more.")
                     } else if pushToTalk.talkMode == .hold {
-                        Text("Orra records only while you hold the talk key.")
+                        Text("For dictation, Orra records only while you hold the talk key.")
                     } else {
-                        Text("Orra records only after you press the talk key, until you press it again.")
+                        Text("For dictation, Orra records only after you press the talk key, until you press it again.")
                     }
+                    Text("Live Captions listen to the microphone only when you choose it.")
                 }
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
