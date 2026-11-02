@@ -3110,6 +3110,9 @@ a headset that gives exactly zero while you are quiet, if there is one.
   the microphone again: wake" in the log.
 - [ ] With captions on the microphone, `pmset -g assertions` shows whether Core Audio keeps
   the Mac from idle sleep. Write down what it shows, since the user guide says it may.
+- [ ] Lock the screen with captions on the microphone, talk for a moment and unlock it:
+  what you said while the screen was locked shows as captions, as the user guide and the
+  privacy page say.
 - [ ] Mute yourself in a call app while captions listen to the same microphone: Orra still
   captions you, as the user guide says.
 - [ ] Copy All Captions, Copy Captions and Copy Previous Captions hold only text, also for a
