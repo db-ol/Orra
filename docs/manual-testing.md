@@ -3062,11 +3062,8 @@ choice, the starts, the starts again and the stops, the pause for dictation and 
 with a fake microphone, CaptionMicrophoneTests the rules for which microphone captions use
 and when they start it again, and TapConversionTests the conversion of mono audio at the
 device's own rate. No test opens a microphone or takes a unit apart, so the checks of the
-indicator below are the only ones of the stop. Make the build for these checks only after
-INFOPLIST_KEY_NSMicrophoneUsageDescription in the project names Live Captions, as
-LocalizationTests.theEnglishMicrophonePromptMatchesTheCatalog asks: a build from Xcode
-before that change takes the old English prompt back into Orra/InfoPlist.xcstrings.
-Check in a build from Xcode with the log open:
+indicator below are the only ones of the stop. Check in a build from Xcode with the log
+open:
 `log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND (category == "captions" OR category == "push-to-talk" OR category == "audio")'`.
 Write down which microphones were tried: the MacBook's own, a USB microphone, AirPods, and
 a headset that gives exactly zero while you are quiet, if there is one.
@@ -3863,8 +3860,6 @@ Welcome window above, then choose Hold for the talk key in the welcome window:
   Chinese, Japanese and Spanish. The English comes from the build setting
   INFOPLIST_KEY_NSMicrophoneUsageDescription, which
   LocalizationTests.theEnglishMicrophonePromptMatchesTheCatalog compares with the catalog.
-  English shows this text only after the maintainer has put it into the build setting,
-  and the test marks the old text as a known issue until then.
 - [ ] Settings > About reads "Orra goes online only to download the models you ask for,
   and to check for updates when you allow it."
 
