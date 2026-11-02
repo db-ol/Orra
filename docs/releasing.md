@@ -104,7 +104,9 @@ with every release. The script:
 2. archives the Release configuration for arm64 with that version,
 3. exports it with the Developer ID and checks the signature: Developer ID, hardened
    runtime, a secure timestamp, the audio input and Apple Events entitlements and nothing
-   else, arm64 only,
+   else, arm64 only, and that the English microphone prompt, which comes from
+   INFOPLIST_KEY_NSMicrophoneUsageDescription in the project, is the English of
+   Orra/InfoPlist.xcstrings,
 4. notarizes the app and staples it, so it opens offline once copied out of the DMG,
 5. puts it in a DMG with a link to Applications, signs the DMG, notarizes and staples it,
 6. checks both with Gatekeeper,
