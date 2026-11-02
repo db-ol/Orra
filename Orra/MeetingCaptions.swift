@@ -414,6 +414,10 @@ final class MeetingCaptions {
         /// The microphone's audio while a key that waits is down, kept until its press
         /// counts or is dropped.
         var armingAudio: [[Float]] = []
+        /// Seconds of `armingAudio`.
+        var heldSeconds: Double {
+            Double(armingAudio.reduce(0) { $0 + $1.count }) / Double(RecordingLimits.sampleRate)
+        }
         /// The microphone's audio that arrives before this is still left out after a
         /// pause, see `microphoneHold`.
         var holdUntil: ContinuousClock.Instant?
@@ -684,11 +688,13 @@ final class MeetingCaptions {
     }
 
     /// Stops the current capture. Its stop is queued at once behind a start of the same
-    /// capture that still runs, and samples still on their way are ignored.
+    /// capture that still runs, and samples still on their way are ignored. What the start
+    /// kept goes, also what a key that waits held back, so no audio stays in memory.
     private func stopCapture() {
         run += 1
         runState.cancelTasks()
-        runState.inputWatch = nil
+        meeting.leftOutSeconds += runState.heldSeconds
+        runState = CaptureRun()
         switch capturing {
         case .systemAudio:
             let systemAudio = systemAudio
@@ -1057,9 +1063,8 @@ final class MeetingCaptions {
             }
             runState.holdUntil = nil
             runState.endsSentence = true
-            let held = runState.armingAudio.reduce(0) { $0 + $1.count }
+            meeting.leftOutSeconds += seconds + runState.heldSeconds
             runState.armingAudio = []
-            meeting.leftOutSeconds += seconds + Double(held) / Double(RecordingLimits.sampleRate)
             return false
         case .notPaused:
             if runState.paused {
@@ -1180,5 +1185,10 @@ final class MeetingCaptions {
     /// The run of the latest start, for tests that feed samples like the capture does.
     var currentRun: Int {
         run
+    }
+
+    /// Seconds of the microphone's audio that a key that waits holds back now, for tests.
+    var heldMicrophoneSeconds: Double {
+        runState.heldSeconds
     }
 }

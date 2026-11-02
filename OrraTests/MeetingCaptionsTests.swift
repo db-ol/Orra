@@ -1231,6 +1231,20 @@ struct MeetingCaptionsTests {
         captions.setOn(false)
     }
 
+    /// Turning captions off while a key that waits is down, as with the Live Captions
+    /// shortcut or the window's close button, drops what the key held back, so no audio of
+    /// the microphone stays in memory after a stop.
+    @Test func aStopDropsWhatAKeyThatWaitsHeldBack() async throws {
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: events, microphone: FakeCaptionMicrophone())
+        let run = try await listeningToTheMicrophone(captions)
+        events.pause = .arming
+        captions.receive(CaptionAudio.tone(0.3), run: run)
+        #expect(abs(captions.heldMicrophoneSeconds - 0.3) < 0.01)
+        captions.setOn(false)
+        #expect(captions.heldMicrophoneSeconds == 0)
+    }
+
     /// A dictation pauses captions of the microphone only. What the Mac plays waits and
     /// catches up, see EngineTurns, and nothing of it is left out.
     @Test func thePauseHoldsOnlyMicrophoneCaptions() async throws {
