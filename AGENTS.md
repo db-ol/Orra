@@ -20,6 +20,7 @@ This file is the guide for anyone, human or agent, who changes this repository.
 
 ## Intended flow
 Hotkey -> Audio Capture -> TranscriptionEngine -> optional RewriteEngine -> Text Injection
+Live Captions (off at every launch): what the Mac plays (SystemAudioTap), or the microphone when the user chooses it (CaptionMicrophone) -> CaptionSegmenter -> speech model -> optional translation -> caption window
 Projects (optional, a preview): Mail app (Apple Events) and project folders -> local index -> cleanup model -> Projects window -> Mail's reply window and the clipboard, on the user's click
 
 Keep it simple. Do not add a protocol, layer, or abstraction without a concrete need in the code today.
@@ -146,6 +147,21 @@ trusted once in Xcode. docs/dependencies.md has the details.
   ~/Library/Application Support/io.github.db-ol.Orra/Voice (folder 0700, file 0600, left out
   of backups) until the user removes the sample or turns the switch off. VoiceSampleFile is
   the only code that writes it.
+- Live Captions listen to what the Mac plays, or to the microphone only when the user
+  chooses it, approved by the maintainer on 2026-11-01. One source at a time, and every
+  launch starts with what the Mac plays. Captions ask for microphone access only when the
+  user chooses the microphone or clicks the button in the caption window, never when they
+  start. They record through their own unit in CaptionMicrophone, never through
+  AudioRecorder, and keep nothing of it set up after they stop. While they listen to the
+  microphone the caption window says so, and turning captions off, closing the window or
+  choosing what the Mac plays lets go of it at once. From the press of the talk key or the
+  translation key, in any mode, until the dictation is pasted or cancelled, while a voice
+  sample records and while Orra speaks a translation, microphone captions take in no audio
+  and set up no unit, and they go on afterwards. Their model calls go through EngineTurns
+  as all caption calls do, so a dictation waits at most for the end of one caption call
+  already running at the press, and usually not at all. They keep only what captions of
+  the Mac keep: the text in memory until Orra quits, no audio, and nothing in the log but
+  counts, timings and states.
 - Orra goes online only for the speech model download the user starts from the menu or the
   welcome window, the cleanup model download the user agrees to in Settings, for Clean Up
   Text, Translation or Projects, or starts in the welcome window (with the speech model
@@ -193,6 +209,9 @@ docs/privacy.md, as docs/website.md describes.
 - Never run the tests from an unsigned build on a Mac where a person is logged in without that
   skip in place. Setting up an audio unit asks for microphone access, and answering the prompt
   rewrites Orra's microphone permission for the unsigned build.
+- MeetingCaptions gets the microphone as closures, MicrophoneCaptionSource, as it gets
+  SystemAudioSource, and tests pass fakes. No test starts CaptionMicrophone, sets up its unit
+  or asks for microphone access.
 - Tests never send Apple Events. Projects code must keep the Mail bridge behind closures, and
   tests pass fakes, as they do for the models.
 
