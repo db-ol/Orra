@@ -144,8 +144,11 @@ nonisolated final class CaptionMicrophone: @unchecked Sendable {
         var instance: AudioUnit?
         try Self.check(AudioComponentInstanceNew(component, &instance), "create the input unit")
         guard let unit = instance else { throw Self.failure("create the input unit", kAudioUnitErr_FailedInitialization) }
-        var initialized = false
         let rate: Double
+        let context: CaptionInputContext
+        let chunker: Chunker
+        // Initializing the unit is the last step that can fail before the start, so a unit
+        // whose setup failed was never initialized and is only disposed of.
         do {
             let format: AudioStreamBasicDescription
             do {
@@ -154,7 +157,7 @@ nonisolated final class CaptionMicrophone: @unchecked Sendable {
                 throw Self.failure(step, status)
             }
             rate = format.mSampleRate
-            guard let input = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: format.mSampleRate, channels: 1, interleaved: false),
+            guard let input = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: 1, interleaved: false),
                   let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(RecordingLimits.sampleRate), channels: 1, interleaved: false),
                   let converter = AVAudioConverter(from: input, to: target) else {
                 throw Self.failure("make the converter", 0)
@@ -162,9 +165,10 @@ nonisolated final class CaptionMicrophone: @unchecked Sendable {
             let writer = TapWriter(ring: AudioFrameRing(
                 planes: 1,
                 bytesPerFrame: MemoryLayout<Float>.size,
-                capacity: Int(format.mSampleRate * Self.ringSeconds)
+                capacity: Int(rate * Self.ringSeconds)
             ))
-            let context = CaptionInputContext(unit: unit, writer: writer, maximumFrames: InputUnit.maximumFrames(of: unit))
+            context = CaptionInputContext(unit: unit, writer: writer, maximumFrames: InputUnit.maximumFrames(of: unit))
+            chunker = Chunker(writer: writer, converter: converter, input: input, output: target, deliver: deliver)
             var callback = AURenderCallbackStruct(
                 inputProc: { refCon, flags, timestamp, bus, frames, _ in
                     Unmanaged<CaptionInputContext>.fromOpaque(refCon).takeUnretainedValue().render(flags, timestamp, bus, frames)
@@ -176,32 +180,27 @@ nonisolated final class CaptionMicrophone: @unchecked Sendable {
                 "set the input callback"
             )
             try Self.check(AudioUnitInitialize(unit), "initialize the input unit")
-            initialized = true
-            let check = MicrophoneMoveCheck(listensTo: device, preferredInput: preferredInput, moved: moved)
-            let chunker = Chunker(writer: writer, converter: converter, input: input, output: target, deliver: deliver)
-            let timer = DispatchSource.makeTimerSource(queue: queue)
-            timer.schedule(deadline: .now() + Self.drainInterval, repeating: Self.drainInterval, leeway: .milliseconds(5))
-            timer.setEventHandler {
-                chunker.drain()
-                check.look()
-            }
-            let running = Running(
-                unit: unit,
-                context: context,
-                timer: timer,
-                watch: DeviceWatch(device: device.id, sampleRate: format.mSampleRate, flag: check.interrupted),
-                inputs: InputListWatch(queue: queue, changed: check),
-                started: .now
-            )
-            lock.withLock { self.running = running }
-            timer.resume()
         } catch {
-            if initialized {
-                AudioUnitUninitialize(unit)
-            }
             AudioComponentInstanceDispose(unit)
             throw error
         }
+        let check = MicrophoneMoveCheck(listensTo: device, preferredInput: preferredInput, moved: moved)
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + Self.drainInterval, repeating: Self.drainInterval, leeway: .milliseconds(5))
+        timer.setEventHandler {
+            chunker.drain()
+            check.look()
+        }
+        let running = Running(
+            unit: unit,
+            context: context,
+            timer: timer,
+            watch: DeviceWatch(device: device.id, sampleRate: rate, flag: check.interrupted),
+            inputs: InputListWatch(queue: queue, changed: check),
+            started: .now
+        )
+        lock.withLock { self.running = running }
+        timer.resume()
         do {
             try Self.check(AudioOutputUnitStart(unit), "start the input unit")
         } catch {
