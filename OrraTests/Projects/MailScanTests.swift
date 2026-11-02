@@ -635,24 +635,66 @@ struct MailScanTests {
         #expect(store.saved.allSatisfy { $0.visible?.text.isEmpty == false })
     }
 
-    /// A poll that Mail stops midway leaves the next pass to read back to the days, so the
-    /// rest of the new mail is not lost behind the messages it saved.
-    @Test func aPollThatStoppedMidwayReadsBackNextTime() async {
+    /// A message of a poll that Mail does not give in time waits, and the rest of the new
+    /// mail is read past it. A later pass reads the mailbox back to it.
+    @Test func aMessageOfAPollThatMailDoesNotGiveInTimeWaits() async {
         defer { cleanUp() }
         mail.put(Self.hourly(10), in: .inbox)
         let scan = scan(choice([.inbox]))
         await scan.scan()
         mail.receive((0..<25).map { FakeMail.mail(200 + $0, in: .inbox, received: Self.now - Double($0 + 1)) }, in: .inbox)
         mail.failure = { call in call == .source(205) ? .notAnswered(code: -609) : nil }
-        let stopped = await scan.scan()
-        #expect(stopped.error == .notAnswered(code: -609))
-        #expect(stopped.saved == 5)
+        let poll = await scan.scan()
+        #expect(poll.error == .notAnswered(code: -609))
+        #expect(poll.stoppedBy == nil)
+        #expect(poll.slow == 1)
+        #expect(poll.saved == 24)
         mail.failure = { _ in nil }
         mail.clearCalls()
         await scan.scan()
         #expect(mail.listings == [1...35])
-        #expect(mail.sourcesRead == Array(205...224))
+        #expect(mail.sourcesRead == [205])
         #expect(store.saved.count == 35)
+    }
+
+    /// Two new messages in a row that Mail does not give in time end their mailbox, as for
+    /// an account that is offline, and the pass goes on with the next mailbox.
+    @Test func twoMessagesInARowWithoutAnAnswerEndOnlyTheirMailbox() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(30), in: .inbox)
+        mail.put(Self.hourly(3, from: 50, in: Self.archive), in: Self.archive)
+        mail.failure = { call in [.source(3), .source(4)].contains(call) ? .timedOut : nil }
+        let pass = await scan(choice([.inbox, Self.archive])).scan()
+        #expect(mail.sourcesRead == [1, 2, 3, 4, 50, 51, 52])
+        #expect(pass.slow == 2)
+        #expect(pass.error == .timedOut)
+        #expect(pass.stoppedBy == nil)
+        #expect(store.saved.map(\.reference.id) == [1, 2, 50, 51, 52])
+    }
+
+    /// Messages that waited come after the others of their range, so two that Mail never
+    /// gives hold up no other mail, also when they come one after the other.
+    @Test func messagesThatWaitedComeAfterTheOthersOfTheirRange() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(30), in: .inbox)
+        mail.failure = { call in [.source(5), .source(6)].contains(call) ? .timedOut : nil }
+        let scan = scan(choice([.inbox]))
+        let first = await scan.scan()
+        #expect(first.slow == 2)
+        #expect(store.saved.map(\.reference.id) == [1, 2, 3, 4])
+
+        mail.clearCalls()
+        let second = await scan.scan()
+        #expect(mail.listings == [1...30])
+        #expect(mail.sourcesRead == Array(7...30) + [5, 6])
+        #expect(second.slow == 2)
+        #expect(store.saved.count == 28)
+
+        mail.failure = { _ in nil }
+        mail.clearCalls()
+        await scan.scan()
+        #expect(mail.sourcesRead == [5, 6])
+        #expect(store.saved.count == 30)
     }
 
     // MARK: Stopping
@@ -696,16 +738,48 @@ struct MailScanTests {
 
     // MARK: Mail not answering
 
-    /// A timeout or no answer ends the pass at once, so Mail is not asked again and again.
-    @Test(arguments: [MailBridgeError.timedOut, .notAnswered(code: -600), .denied])
-    func anErrorOfMailEndsThePass(error: MailBridgeError) async {
+    /// Orra not allowed to control Mail ends the pass at once, so Mail is not asked again
+    /// and again.
+    @Test(arguments: [MailBridgeError.denied, .notAsked])
+    func aRefusalEndsThePass(error: MailBridgeError) async {
         defer { cleanUp() }
         mail.put(Self.hourly(2), in: .inbox)
         mail.put(Self.hourly(2, from: 10, in: Self.archive), in: Self.archive)
         mail.failure = { call in call == .count(.inbox) ? error : nil }
         let pass = await scan(choice([.inbox, Self.archive])).scan()
         #expect(pass.error == error)
+        #expect(pass.stoppedBy == error)
         #expect(mail.counted == [.inbox])
+        #expect(store.saved.isEmpty)
+    }
+
+    /// A mailbox that Mail does not answer for in time holds up no other, as one of an
+    /// account that is offline: the pass goes on with the next mailbox.
+    @Test(arguments: [MailBridgeError.timedOut, .notAnswered(code: -600)])
+    func aMailboxWithoutAnAnswerHoldsUpNoOther(error: MailBridgeError) async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(2), in: .inbox)
+        mail.put(Self.hourly(2, from: 10, in: Self.archive), in: Self.archive)
+        mail.failure = { call in call == .count(.inbox) ? error : nil }
+        let pass = await scan(choice([.inbox, Self.archive])).scan()
+        #expect(pass.error == error)
+        #expect(pass.stoppedBy == nil)
+        #expect(mail.counted == [.inbox, Self.archive, Self.archive])
+        #expect(store.saved.map(\.reference.id) == [10, 11])
+    }
+
+    /// Two mailboxes in a row that Mail does not answer for in time mean that Mail itself
+    /// does not answer, and the pass ends.
+    @Test func twoMailboxesInARowWithoutAnAnswerEndThePass() async {
+        defer { cleanUp() }
+        for mailbox in [MailMailbox.inbox, Self.archive, Self.clients] {
+            mail.put(Self.hourly(2, in: mailbox), in: mailbox)
+        }
+        let archive = Self.archive
+        mail.failure = { call in [.count(.inbox), .count(archive)].contains(call) ? .timedOut : nil }
+        let pass = await scan(choice([.inbox, Self.archive, Self.clients])).scan()
+        #expect(pass.stoppedBy == .timedOut)
+        #expect(mail.counted == [.inbox, Self.archive])
         #expect(store.saved.isEmpty)
     }
 
@@ -754,8 +828,9 @@ struct MailScanTests {
         try await waitUntil { clock.sleeping == 0 }
     }
 
-    /// The loop polls every minute, waits longer while Mail times out, and goes back to a
-    /// minute once Mail answers.
+    /// The loop polls every minute. A mailbox that Mail does not answer for waits on its
+    /// own, a minute and then twice as long each time, and while every mailbox waits, the
+    /// loop sleeps until the first may be read. It goes back to a minute once Mail answers.
     @Test func theLoopBacksOffAndRecovers() async throws {
         defer { cleanUp() }
         mail.put(Self.hourly(2), in: .inbox)
@@ -769,18 +844,66 @@ struct MailScanTests {
         scan.start()
         defer { scan.stop() }
         try await waitUntil { waits.all.count == 1 && clock.sleeping == 1 }
-        #expect(waits.all == [.seconds(120)])
-        clock.advance(by: .seconds(120))
+        #expect(waits.all == [.seconds(60)])
+        clock.advance(by: .seconds(60))
         try await waitUntil { waits.all.count == 2 && clock.sleeping == 1 }
-        #expect(waits.all == [.seconds(120), .seconds(240)])
+        #expect(waits.all == [.seconds(60), .seconds(120)])
+        clock.advance(by: .seconds(120))
+        try await waitUntil { waits.all.count == 3 && clock.sleeping == 1 }
+        #expect(waits.all == [.seconds(60), .seconds(120), .seconds(240)])
         mail.failure = { _ in nil }
         clock.advance(by: .seconds(240))
-        try await waitUntil { waits.all.count == 3 && clock.sleeping == 1 }
+        try await waitUntil { waits.all.count == 4 && clock.sleeping == 1 }
         #expect(waits.all.last == .seconds(60))
         #expect(store.saved.count == 2)
         scan.stop()
         try await waitUntil { clock.sleeping == 0 }
         #expect(clock.sleeping == 0)
+    }
+
+    /// While a mailbox that Mail does not answer for waits, the loop reads the others every
+    /// minute and asks nothing for it, and a message Mail does not give in time waits the
+    /// same way. Each is asked for again once its wait is over.
+    @Test func whatMailDoesNotAnswerForWaitsWhileTheLoopReadsTheRest() async throws {
+        defer { cleanUp() }
+        mail.put(Self.hourly(2), in: .inbox)
+        mail.put(Self.hourly(30, from: 10, in: Self.archive), in: Self.archive)
+        mail.failure = { call in [.count(.inbox), .source(14)].contains(call) ? .timedOut : nil }
+        let clock = TestClock()
+        let waits = Waits()
+        let scan = scan(choice([.inbox, Self.archive]), sleep: { duration in
+            waits.add(duration)
+            try await clock.sleep(for: duration)
+        })
+        scan.start()
+        defer { scan.stop() }
+        try await waitUntil { waits.all.count == 1 && clock.sleeping == 1 }
+        #expect(mail.counted == [.inbox, Self.archive, Self.archive])
+        #expect(store.saved.count == 29)
+        // A minute on, both are asked for again, and neither answers.
+        mail.clearCalls()
+        clock.advance(by: .seconds(60))
+        try await waitUntil { waits.all.count == 2 && clock.sleeping == 1 }
+        #expect(mail.counted == [.inbox, Self.archive, Self.archive])
+        #expect(mail.sourcesRead == [14])
+        // Now each waits two minutes: the next pass only polls the archive.
+        mail.clearCalls()
+        clock.advance(by: .seconds(60))
+        try await waitUntil { waits.all.count == 3 && clock.sleeping == 1 }
+        #expect(mail.counted == [Self.archive])
+        #expect(mail.listings == [1...20])
+        #expect(mail.sourcesRead.isEmpty)
+        // Their wait is over, and Mail answers.
+        mail.failure = { _ in nil }
+        mail.clearCalls()
+        clock.advance(by: .seconds(60))
+        try await waitUntil { waits.all.count == 4 && clock.sleeping == 1 }
+        #expect(Set(mail.counted) == [.inbox, Self.archive])
+        #expect(Set(mail.sourcesRead) == [1, 2, 14])
+        #expect(store.saved.count == 32)
+        #expect(waits.all == Array(repeating: .seconds(60), count: 4))
+        scan.stop()
+        try await waitUntil { clock.sleeping == 0 }
     }
 
     /// A scan let go without `stop()` ends its loop at the next wake, and reads nothing

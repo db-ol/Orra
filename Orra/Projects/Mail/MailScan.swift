@@ -33,9 +33,17 @@ import os
 /// - It saves the new messages of each range through a closure, and asks which messages
 ///   are known through another, so it never waits for the store and tests pass fakes.
 ///   Each throws when the store fails.
-/// - It polls every minute. When Mail does not answer (-600 while it runs), times out
-///   (-1712), or Orra may not control it, the pass ends and the scan waits twice as long
-///   each time, up to 30 minutes. It does the same when the store fails.
+/// - It polls every minute. When Orra may not control Mail, the pass ends and the scan waits
+///   twice as long each time, up to 30 minutes. It does the same when the store fails.
+/// - When Mail does not answer in time (-1712) or does not take an event twice (-600 or
+///   -609 while it runs), only what was asked for waits: a message is left for later and
+///   the mailbox goes on, and a mailbox whose count or listing gets no answer, or that gets
+///   none for two new messages in a row, is left for later and the pass goes on with the
+///   next one. So an account that is offline holds up no other. Each is asked for again at
+///   the next pass, then after twice the last wait each time, up to 30 minutes. A message
+///   that waited comes after the others of its range. The loop sleeps longer only while
+///   every mailbox waits. When two mailboxes in a row get no answer, Mail itself does not
+///   answer: the pass ends and the scan waits as after a refusal.
 /// - It tells the window when a pass begins, whether that pass reads a mailbox back to the
 ///   days, and how it ended, see `Report`.
 ///
@@ -130,8 +138,18 @@ final class MailScan {
         /// Messages Mail failed to give, or gave with no source. A later pass reads them
         /// again.
         var unreadable = 0
-        /// The error that ended the pass, or else the last one that ended a mailbox.
+        /// Messages Mail did not give in time. Each waits, and a later pass asks for it
+        /// again.
+        var slow = 0
+        /// Mailboxes and messages that wait after Mail did not answer for them in time
+        /// lately, so the pass did not ask for them.
+        var waiting = 0
+        /// The error that ended the pass, or else the last one that ended a mailbox or left
+        /// a mailbox or a message for later.
         var error: MailBridgeError?
+        /// The error that ended the pass before it read every mailbox: Mail quit, Orra may
+        /// not control it, or Mail did not answer for two mailboxes in a row.
+        var stoppedBy: MailBridgeError?
     }
 
     /// What a pass tells the window. A pass that `stop()` ended, or one that found another
@@ -145,6 +163,10 @@ final class MailScan {
 
     /// The positions a range covers (plan section 5).
     nonisolated static let rangeSize = 200
+    /// How many new messages in a row Mail may not give in time before the scan leaves
+    /// their mailbox for later, as one of an account that is offline, and how many
+    /// mailboxes in a row before the pass ends, as Mail itself does not answer then.
+    nonisolated static let slowInARow = 2
     /// The positions the first range of a poll covers, since new mail is usually little.
     nonisolated static let pollRangeSize = 20
     /// The positions each range shares with the one before. Mail removed above the scan
@@ -180,6 +202,20 @@ final class MailScan {
         var readDays: Int?
         /// Passes in a row that left a message unread, or may have missed one.
         var incomplete = 0
+        /// Set while the mailbox waits after Mail did not answer for it in time.
+        var retry: Retry?
+        /// The messages Mail did not give in time, by Message-ID. A pass that reaches one
+        /// after its wait asks for it again, so the mailbox is read back to it then.
+        var slow: [String: Retry] = [:]
+    }
+
+    /// When a mailbox or a message that Mail did not answer for in time is asked for again,
+    /// on the clock of the loop's waits, so a pass that takes long never shortens it.
+    private struct Retry {
+        var at: Duration
+        /// The wait before `at`, which the next one doubles.
+        var wait: Duration
+        var error: MailBridgeError
     }
 
     /// Why a pass reads nothing more.
@@ -198,6 +234,12 @@ final class MailScan {
     private let now: () -> Date
     private let sleep: (Duration) async throws -> Void
     private var progress: [MailMailbox: Progress] = [:]
+    /// The time the loop waited between its passes since the scan started, the clock of
+    /// `Retry`.
+    private var waited = Duration.zero
+    /// The mailboxes of the last pass, of which the loop wakes for the first that may be
+    /// read when all wait.
+    private var lastMailboxes: [MailMailbox] = []
     /// The user as Mail's accounts gave it, read once while the scan runs.
     private var accountsOwner: SortingService.Owner?
     private var loop: Task<Void, Never>?
@@ -252,25 +294,30 @@ final class MailScan {
         // ends its loop at the next wake.
         loop = Task(priority: .utility) { [weak self] in
             var wait = MailScan.pollInterval
-            while !Task.isCancelled, let pass = await self?.scan() {
-                wait = MailScan.wait(after: pass.error, storeFailed: pass.skipped == .storeFailed, previous: wait)
+            while !Task.isCancelled, let pass = await self?.scan(leavesWaiting: true), let next = self?.wait(after: pass, previous: wait) {
+                wait = next
                 do {
                     try await sleep(wait)
                 } catch {
                     return
                 }
+                guard !Task.isCancelled else { return }
+                self?.waited += wait
             }
         }
         Logger.projectsMail.notice("Mail scan: started")
     }
 
     /// Stops polling and the pass under way, which reads and saves nothing more, and
-    /// forgets what the scan learned about the mailboxes and the user.
+    /// forgets what the scan learned about the mailboxes and the user, so mailboxes and
+    /// messages that waited are asked for again at once.
     func stop() {
         loop?.cancel()
         loop = nil
         current?.cancel()
         progress = [:]
+        waited = .zero
+        lastMailboxes = []
         accountsOwner = nil
         Logger.projectsMail.notice("Mail scan: stopped")
     }
@@ -286,6 +333,38 @@ final class MailScan {
         default: storeFailed
         }
         return waitsLonger ? min(max(previous * 2, pollInterval * 2), longestWait) : pollInterval
+    }
+
+    /// The loop's wait after a pass: as `wait(after:storeFailed:previous:)` for the error
+    /// that stopped the pass, or once every mailbox waits, until the first may be read.
+    private func wait(after pass: Pass, previous: Duration) -> Duration {
+        let wait = Self.wait(after: pass.stoppedBy, storeFailed: pass.skipped == .storeFailed, previous: previous)
+        guard wait == Self.pollInterval, pass.skipped == nil, !lastMailboxes.isEmpty else { return wait }
+        let retries = lastMailboxes.map { progress[$0]?.retry?.at }
+        guard !retries.contains(nil), let first = retries.compactMap(\.self).min() else { return wait }
+        return max(first - waited, Self.pollInterval)
+    }
+
+    /// Whether Mail did not answer in time (-1712), or did not take the event while it runs
+    /// (-600 or -609), which may pass.
+    private nonisolated static func isSlow(_ error: MailBridgeError) -> Bool {
+        switch error {
+        case .timedOut, .notAnswered: true
+        default: false
+        }
+    }
+
+    /// When a mailbox or message that Mail did not answer for in time is asked for again:
+    /// at the next pass of the loop, then after twice the last wait each time, up to
+    /// `longestWait`.
+    private func retry(after error: MailBridgeError, previous: Retry?) -> Retry {
+        let wait = previous.map { min($0.wait * 2, Self.longestWait) } ?? Self.pollInterval
+        return Retry(at: waited + wait, wait: wait, error: error)
+    }
+
+    /// Whether a mailbox or message waits now, after Mail did not answer for it in time.
+    private func waits(_ retry: Retry?) -> Bool {
+        retry.map { $0.at > waited } ?? false
     }
 
     // MARK: The user
@@ -318,10 +397,17 @@ final class MailScan {
     // MARK: A pass
 
     /// Reads the new mail of every chosen and linked mailbox once, as the loop of `start()`
-    /// does. While another pass is under way it returns at once. That covers a `start()`
-    /// right after `stop()`, while the stopped pass still waits for Mail's answer.
+    /// does, but also asks for the mailboxes and messages that wait, as on the user's click.
+    /// While another pass is under way it returns at once. That covers a `start()` right
+    /// after `stop()`, while the stopped pass still waits for Mail's answer.
     @discardableResult
     func scan() async -> Pass {
+        await scan(leavesWaiting: false)
+    }
+
+    /// A pass. With `leavesWaiting`, as the loop runs it, it asks nothing for the mailboxes
+    /// and messages that wait after Mail did not answer for them in time.
+    private func scan(leavesWaiting: Bool) async -> Pass {
         // A pass that `stop()` cancelled ends at its next step. A pass after `start()`, such
         // as when Mail opens again, waits for it rather than skip as busy for a poll interval.
         if let previous = current, previous.isCancelled {
@@ -333,7 +419,7 @@ final class MailScan {
         guard current == nil else {
             return Pass(skipped: .busy)
         }
-        let task = Task(priority: .utility) { await self.readMailboxes() }
+        let task = Task(priority: .utility) { await self.readMailboxes(leavesWaiting: leavesWaiting) }
         current = task
         let pass = await withTaskCancellationHandler {
             await task.value
@@ -350,7 +436,7 @@ final class MailScan {
         return pass
     }
 
-    private func readMailboxes() async -> Pass {
+    private func readMailboxes(leavesWaiting: Bool) async -> Pass {
         var pass = Pass()
         guard isOn() else {
             pass.skipped = .off
@@ -370,25 +456,47 @@ final class MailScan {
         // of all accounts lists too, is then saved with the mailbox that files it.
         let mailboxes = ((await lookups.linkedMailboxes()) + choice.mailboxes).filter { unique.insert($0).inserted }
         let days = choice.days
+        lastMailboxes = mailboxes
         if !Task.isCancelled {
-            // As `read(_:cutoff:days:seen:pass:)` decides whether it polls a mailbox.
-            report(.began(readsBack: mailboxes.contains { (progress[$0]?.readDays ?? 0) < days }))
+            report(.began(readsBack: mailboxes.contains { mailbox in
+                !(leavesWaiting && waits(progress[mailbox]?.retry)) && !polls(mailbox, days: days, leavesWaiting: leavesWaiting)
+            }))
         }
         let cutoff = now().addingTimeInterval(-Double(days) * 86_400)
         var seen = Set<String>()
+        // Mailboxes in a row that Mail did not answer for in time.
+        var unanswered = 0
         for mailbox in mailboxes {
+            if leavesWaiting, let retry = progress[mailbox]?.retry, waits(retry) {
+                pass.waiting += 1
+                pass.error = retry.error
+                continue
+            }
             do {
                 try checkMayRead()
                 pass.mailboxes += 1
-                try await read(mailbox, cutoff: cutoff, days: days, seen: &seen, pass: &pass)
+                try await read(mailbox, cutoff: cutoff, days: days, leavesWaiting: leavesWaiting, seen: &seen, pass: &pass)
+                progress[mailbox]?.retry = nil
+                unanswered = 0
             } catch let stop as Stop {
                 pass.skipped = stop.reason
                 break
+            } catch let error as MailBridgeError where Self.isSlow(error) {
+                // Only this mailbox waits, so an account that is offline holds up no other,
+                // unless Mail itself does not answer.
+                pass.error = error
+                progress[mailbox, default: Self.progress(of: mailbox)].retry = retry(after: error, previous: progress[mailbox]?.retry)
+                unanswered += 1
+                if unanswered >= Self.slowInARow {
+                    pass.stoppedBy = error
+                    break
+                }
             } catch let error as MailBridgeError {
                 pass.error = error
-                // Mail quit, does not answer, or Orra may not read it: the pass ends. A
-                // mailbox that is gone or changed only skips that mailbox.
+                // Mail quit, or Orra may not read it: the pass ends. A mailbox that is gone
+                // or changed only skips that mailbox.
                 if !Self.endsOnlyItsMailbox(error) {
+                    pass.stoppedBy = error
                     break
                 }
             } catch {
@@ -397,6 +505,18 @@ final class MailScan {
         }
         log(pass, since: started)
         return pass
+    }
+
+    /// What the scan knows of a mailbox before it read it: the Inbox is newest first.
+    private static func progress(of mailbox: MailMailbox) -> Progress {
+        Progress(order: mailbox.kind == .inbox ? .newestFirst : nil)
+    }
+
+    /// Whether a pass only polls the mailbox: one read it back to the days before, and no
+    /// message that Mail did not give in time may be asked for again yet.
+    private func polls(_ mailbox: MailMailbox, days: Int, leavesWaiting: Bool) -> Bool {
+        guard let state = progress[mailbox], (state.readDays ?? 0) >= days else { return false }
+        return !state.slow.values.contains { !leavesWaiting || !waits($0) }
     }
 
     /// Throws when the pass may read nothing more: it was cancelled, Projects went off, or
@@ -426,21 +546,28 @@ final class MailScan {
 
     /// Reads one mailbox, range by range from its newest message, until the days or its
     /// end. Once a pass read it back to the days, the next ones only poll it: they end
-    /// after the first range that holds a message known before the pass.
-    private func read(_ mailbox: MailMailbox, cutoff: Date, days: Int, seen: inout Set<String>, pass: inout Pass) async throws {
+    /// after the first range that holds a message known before the pass. A message that
+    /// Mail did not give in time has the mailbox read back to it once its wait is over.
+    private func read(_ mailbox: MailMailbox, cutoff: Date, days: Int, leavesWaiting: Bool, seen: inout Set<String>, pass: inout Pass) async throws {
         var total = try await bridge.count(mailbox)
         try checkMayRead()
-        var state = progress[mailbox] ?? Progress(order: mailbox.kind == .inbox ? .newestFirst : nil)
+        let polls = self.polls(mailbox, days: days, leavesWaiting: leavesWaiting)
+        var state = progress[mailbox] ?? Self.progress(of: mailbox)
         let readBefore = state.readDays
-        let polls = (readBefore ?? 0) >= days
         // Until this pass is done, the next one reads back to the days, so a pass that ends
         // midway misses nothing.
         state.readDays = nil
         progress[mailbox] = state
+        // The messages that wait stay noted when Mail stops answering midway, unless the
+        // scan stopped and forgot the mailbox.
+        defer {
+            progress[mailbox]?.slow = state.slow
+        }
         let unreadable = pass.unreadable
         var complete = true
-        // Mail's ids of the messages this pass listed in this mailbox.
+        // Mail's ids of the messages this pass listed in this mailbox, and their Message-IDs.
         var listed = Set<Int>()
+        var met = Set<String>()
         // Counted from the newest message: the first not listed yet.
         var next = 1
         var size = polls ? Self.pollRangeSize : Self.rangeSize
@@ -483,11 +610,18 @@ final class MailScan {
             }
             next = last + 1
             size = Self.rangeSize
-            if try await take(listings, cutoff: cutoff, polls: polls, listed: &listed, seen: &seen, pass: &pass) {
+            let done = try await take(
+                listings, cutoff: cutoff, polls: polls, leavesWaiting: leavesWaiting,
+                listed: &listed, met: &met, slow: &state.slow, seen: &seen, pass: &pass)
+            if done {
                 break
             }
         }
         try checkMayRead()
+        if !polls {
+            // A message that waits and that a pass back to the days did not meet is gone.
+            state.slow = state.slow.filter { met.contains($0.key) }
+        }
         if pass.unreadable > unreadable {
             complete = false
         }
@@ -520,12 +654,17 @@ final class MailScan {
     /// Reads and saves the new messages of a range, newest first, and skips those listed
     /// before in this pass. True when the mailbox is done: the oldest message of the range
     /// came before the days, or, while the mailbox is polled, the range held a message
-    /// known before the pass.
+    /// known before the pass. A message that Mail does not give in time waits in `slow`,
+    /// and the range goes on, unless `slowInARow` in a row do not come, which ends the
+    /// mailbox.
     private func take(
         _ listings: [MailListing],
         cutoff: Date,
         polls: Bool,
+        leavesWaiting: Bool,
         listed: inout Set<Int>,
+        met: inout Set<String>,
+        slow: inout [String: Retry],
         seen: inout Set<String>,
         pass: inout Pass
     ) async throws -> Bool {
@@ -539,8 +678,16 @@ final class MailScan {
         }
         var found: [Message] = []
         var knownBefore = false
+        // Slow answers in a row, and whether messages that waited are asked for again. They
+        // come after the others of the range, so two that never come hold up no other mail.
+        var unanswered = 0
+        var asksAgain = true
+        let ordered = fresh.filter { slow[$0.messageID] == nil } + fresh.filter { slow[$0.messageID] != nil }
         do {
-            for listing in fresh {
+            for listing in ordered {
+                // Noted again below only while it still waits.
+                let retry = slow.removeValue(forKey: listing.messageID)
+                met.insert(listing.messageID)
                 if let date = listing.dateReceived, date < cutoff {
                     pass.older += 1
                     continue
@@ -560,15 +707,35 @@ final class MailScan {
                     knownBefore = true
                     continue
                 }
+                if let retry, !asksAgain || (leavesWaiting && waits(retry)) {
+                    slow[listing.messageID] = retry
+                    pass.waiting += 1
+                    pass.error = retry.error
+                    continue
+                }
                 try checkMayRead()
                 do {
                     found.append(try await message(listing, pass: &pass))
                     seen.insert(listing.messageID)
+                    unanswered = 0
                 } catch let error as MailBridgeError where Self.endsOnlyItsMessage(error) {
+                    unanswered = 0
                     if error == .notFound {
                         pass.gone += 1
                     } else {
                         pass.unreadable += 1
+                    }
+                } catch let error as MailBridgeError where Self.isSlow(error) {
+                    slow[listing.messageID] = self.retry(after: error, previous: retry)
+                    pass.slow += 1
+                    pass.error = error
+                    unanswered += 1
+                    if unanswered >= Self.slowInARow {
+                        // Mail gives nothing in time here now, as for an account that is
+                        // offline. Mail not asked for yet ends the mailbox, and a message
+                        // that waited before leaves the others that waited for later.
+                        guard retry != nil else { throw error }
+                        asksAgain = false
                     }
                 }
             }
@@ -690,7 +857,7 @@ final class MailScan {
 
     private func log(_ pass: Pass, since started: ContinuousClock.Instant) {
         let milliseconds = Int(started.duration(to: .now) / .milliseconds(1))
-        let counts = "\(pass.mailboxes) mailboxes, \(pass.read) read, \(pass.tooLarge) too large, \(pass.saved) saved, \(pass.known) known, \(pass.older) older, \(pass.withoutMessageID) without a Message-ID, \(pass.gone) gone, \(pass.unreadable) unreadable, in \(milliseconds) ms"
+        let counts = "\(pass.mailboxes) mailboxes, \(pass.read) read, \(pass.tooLarge) too large, \(pass.saved) saved, \(pass.known) known, \(pass.older) older, \(pass.withoutMessageID) without a Message-ID, \(pass.gone) gone, \(pass.unreadable) unreadable, \(pass.slow) slow, \(pass.waiting) waiting, in \(milliseconds) ms"
         if let skipped = pass.skipped {
             Logger.projectsMail.notice("Mail scan: \(counts, privacy: .public), stopped: \(String(describing: skipped), privacy: .public)")
         } else if let error = pass.error {
