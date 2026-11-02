@@ -674,7 +674,7 @@ final class ProjectsRuntime {
                 known: { [store] ids in try await Self.known(ids, in: store) },
                 linkedMailboxes: { [weak self] in await self?.linkedMailboxes() ?? [] }
             ),
-            save: { [weak self] messages in try await self?.saveScanned(messages) },
+            save: { [weak self] messages, owner in try await self?.saveScanned(messages, owner: owner) },
             report: { [weak self] report in self?.scanReported(report) },
             ownerOverride: dependencies.ownerOverride(),
             isOn: { [projects] in projects.isOn },
@@ -999,22 +999,26 @@ final class ProjectsRuntime {
     /// scan may read them, else none. Sorting prepares again when they change.
     func owner() async -> SortingService.Owner {
         guard let running else { return SortingService.Owner(addresses: []) }
-        if let owner = await running.scan.owner() {
-            if owner != lastOwner {
-                lastOwner = owner
-                running.sorting.projectsChanged()
-            }
-            return owner
-        }
-        return lastOwner ?? SortingService.Owner(addresses: [])
+        return kept(await running.scan.owner(), running: running)
     }
 
-    /// Saves what the scan read, lists it in the window at once as not sorted yet, and sorts
-    /// the mail that waits. A batch sorting still works on, such as while the model is paused
-    /// or slow, does not hold the new mail back from the window. A failed save is logged with
-    /// its code and thrown, so the scan reads that mail again in its next pass, and the window
-    /// says so.
-    private func saveScanned(_ messages: [MailScan.Message]) async throws {
+    /// The user as the scan gave it, else the last one it gave, such as while Mail does not
+    /// give the accounts. Sorting prepares again when it changed.
+    private func kept(_ owner: SortingService.Owner?, running: Running) -> SortingService.Owner {
+        guard let owner else { return lastOwner ?? SortingService.Owner(addresses: []) }
+        if owner != lastOwner {
+            lastOwner = owner
+            running.sorting.projectsChanged()
+        }
+        return owner
+    }
+
+    /// Saves what the scan read, with the user as the scan gave it, lists it in the window
+    /// at once as not sorted yet, and sorts the mail that waits. A batch sorting still works
+    /// on, such as while the model is paused or slow, does not hold the new mail back from
+    /// the window. A failed save is logged with its code and thrown, so the scan reads that
+    /// mail again in its next pass, and the window says so.
+    private func saveScanned(_ messages: [MailScan.Message], owner scanned: SortingService.Owner?) async throws {
         guard let running, !messages.isEmpty else { return }
         // Kept before the first wait, so a stop or Mail's quit meanwhile lets them go. Handles
         // from before Mail quit are not kept.
@@ -1023,7 +1027,7 @@ final class ProjectsRuntime {
                 remember(message.reference, for: message.messageID)
             }
         }
-        let owner = await owner()
+        let owner = kept(scanned, running: running)
         let now = dependencies.now()
         do {
             let saved = try await running.store.save(messages.map { Self.storeMessage($0, now: now) }, ownAddresses: owner.addresses, at: now)

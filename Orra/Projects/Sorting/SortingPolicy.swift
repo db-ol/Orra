@@ -5,8 +5,8 @@ nonisolated enum SortingLevel: String, Sendable, Codable, CaseIterable {
     /// Filed without a mark, still shown and reversible: the same thread, a rule, person or
     /// domain the user set, or a linked Mail mailbox.
     case sure
-    /// Filed with a "suggested" mark: the model chose the project, and agreed with the
-    /// rules when they pointed to one.
+    /// Filed with a "suggested" mark: the model chose a project that a signal points to,
+    /// and agreed with the rules when they pointed to one.
     case likely
     /// In Needs a Project. Its explanation may cite passages of the user's projects that
     /// its search terms match, each named with its project, and its draft takes nothing
@@ -99,7 +99,9 @@ nonisolated struct SortingDecision: Sendable, Equatable, Codable {
 ///   message the user moved, vote. A project that has the only vote is likely, and the
 ///   model must agree before the mail is filed there.
 /// - When the rules have no single project, the model may choose one of the top
-///   candidates.
+///   candidates that a signal points to. When none has a signal, the mail goes to Needs a
+///   Project and the model is not asked, so a project never gets mail on the model's choice
+///   alone, and a user's only project is never the one choice the model takes by habit.
 /// - The model's "none" sends the mail to Needs a Project, never out of the project.
 ///
 /// On the synthetic set of phase 0 the prototype of this policy (match.py) filed 91 of 105
@@ -157,7 +159,7 @@ nonisolated enum SortingPolicy {
                 return unsure([.modelAnswerInvalid])
             }
         case .open(let why, let among):
-            let choices = Self.choices(among: among, top: top)
+            let choices = Self.choices(among: among, signals)
             guard !choices.isEmpty else { return unsure([why]) }
             switch model {
             case nil:
@@ -180,8 +182,8 @@ nonisolated enum SortingPolicy {
         case decided(SortingDecision)
         /// One project has the only vote, and the model must agree.
         case likely(UUID)
-        /// No single project, and the model may choose one of the top candidates, or of
-        /// those among them in `among` when it is not empty.
+        /// No single project, and the model may choose one of the top candidates that a
+        /// signal points to, or of those among them in `among` when it is not empty.
         case open(SortingReason, among: Set<UUID>)
     }
 
@@ -241,14 +243,16 @@ nonisolated enum SortingPolicy {
         switch outcome(signals) {
         case .decided: []
         case .likely(let project): [project]
-        case .open(_, let among): choices(among: among, top: signals.topCandidates)
+        case .open(_, let among): choices(among: among, signals)
         }
     }
 
     /// The top candidates the model may choose when no single project has the vote: those
-    /// among `among` when it is not empty.
-    private static func choices(among: Set<UUID>, top: [UUID]) -> [UUID] {
-        among.isEmpty ? top : top.filter(among.contains)
+    /// that a signal points to, and of them those in `among` when it is not empty. A
+    /// project that only ranks among them, by its full text score or its place in the list,
+    /// is no choice.
+    private static func choices(among: Set<UUID>, _ signals: SortingSignals) -> [UUID] {
+        signals.topCandidates.filter { (among.isEmpty || among.contains($0)) && !support($0, signals).isEmpty }
     }
 
     /// The user's own settings that name the project, for the chip: a rule, person or

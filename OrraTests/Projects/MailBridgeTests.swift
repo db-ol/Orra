@@ -35,9 +35,45 @@ struct MailBridgeTests {
             let mail = FakeMail()
             mail.isRunning = item.running
             mail.answer(.get(.property(Code.source, of: Self.message.reference)), with: .failure(.init(code: item.code)))
-            let bridge = MailBridge(events: mail.events())
+            let bridge = MailBridge(events: mail.events(), pause: { _ in })
             await #expect(throws: item.error) { try await bridge.source(Self.message) }
         }
+    }
+
+    /// A get or a count that Mail did not take (-600 or -609 while it runs) goes once more
+    /// after a pause, since both only read. A second refusal is the answer.
+    @Test(arguments: [-600, -609])
+    func aRefusedReadGoesOnceMore(code: Int) async throws {
+        let mail = FakeMail()
+        let source = Request.get(.property(Code.source, of: Self.message.reference))
+        mail.answer(source, with: .failure(.init(code: code)), .success(.text("Subject: Q4")))
+        let pauses = Pauses()
+        let bridge = MailBridge(events: mail.events(), pause: { pauses.add($0) })
+        #expect(try await bridge.source(Self.message) == "Subject: Q4")
+        #expect(mail.asked == [source, source])
+        #expect(pauses.all == [MailBridge.refusalPause])
+
+        let count = Request.count(Code.message, in: Self.mailbox.reference)
+        mail.answer(count, with: .failure(.init(code: code)), .failure(.init(code: code)), .success(.integer(3)))
+        await #expect(throws: MailBridgeError.notAnswered(code: code)) { try await bridge.count(Self.mailbox) }
+        #expect(mail.asked.filter { $0 == count }.count == 2)
+    }
+
+    /// A reply opens a window, so it never goes twice. Neither does a read that timed out,
+    /// which would only wait as long again, nor one sent while Mail does not run.
+    @Test func aReplyATimeoutOrAQuitMailGetsOneEvent() async {
+        let mail = FakeMail()
+        let bridge = MailBridge(events: mail.events(), pause: { _ in Issue.record("Nothing is sent twice") })
+        let reply = Request.reply(to: Self.message.reference, all: false)
+        mail.answer(reply, with: .failure(.init(code: -609)), .success(.missing))
+        await #expect(throws: MailBridgeError.notAnswered(code: -609)) { try await bridge.reply(Self.message, false) }
+        let headers = Request.get(.property(Code.allHeaders, of: Self.message.reference))
+        mail.answer(headers, with: .failure(.init(code: -1712)), .success(.text("Subject: Q4")))
+        await #expect(throws: MailBridgeError.timedOut) { try await bridge.headers(Self.message) }
+        mail.isRunning = false
+        mail.answer(headers, with: .failure(.init(code: -600)), .success(.text("Subject: Q4")))
+        await #expect(throws: MailBridgeError.mailNotRunning) { try await bridge.headers(Self.message) }
+        #expect(mail.asked == [reply, headers, headers])
     }
 
     @Test func eventsTellThePermissionAndOtherFailuresKeepIt() async throws {
@@ -338,6 +374,19 @@ struct MailBridgeTests {
     }
 
     // MARK: The fake
+
+    /// The pauses a bridge waited.
+    private final class Pauses: Sendable {
+        private let pauses = Mutex<[Duration]>([])
+
+        var all: [Duration] {
+            pauses.withLock { $0 }
+        }
+
+        func add(_ pause: Duration) {
+            pauses.withLock { $0.append(pause) }
+        }
+    }
 
     /// Mail as a test plays it. Each request gets the answers set for it in turn, the last
     /// one again and again, and an empty list when none is set. Records what was asked.

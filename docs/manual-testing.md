@@ -3734,7 +3734,8 @@ mail, as in the test guide, and with Mail open unless a check says otherwise:
 - [ ] Quit Mail. A list with no mail says Mail is not open. Projects reads new mail while
   Mail runs. Open Mail again: Reading mail… shows while Projects reads back, then nothing.
   If Mail is slow to answer. shows right after Mail opens, note it, since Projects then
-  waits two minutes before it asks Mail again.
+  asks again for what Mail did not answer only after a minute or two, and twice as long
+  each time Mail is still slow, up to 30 minutes.
 - [ ] Turn Mail off for Orra in Privacy & Security, Automation. Within a few minutes the
   window says Orra is not allowed to read Mail yet. Allow it in Settings., and Settings…
   opens the Projects page. Turn Mail on again and open that page: the line goes, and
@@ -3873,7 +3874,9 @@ the Mac, the window open and the synthetic mail imported, as in the test guide:
 - [ ] A reply in a thread of a project from a person the project lists, or one you sent
   to such a person, shows both reasons in its chip: the same thread and the person.
 - [ ] Remove a person from a project. Their mail leaves it at once unless another setting
-  or a thread files it, and the model may file it again as suggested.
+  or a thread files it. The model may file it again as suggested only where something else
+  points to a project, such as its words or people who wrote in it before. Otherwise it
+  waits in Needs a Project.
 - [ ] Explain an email whose sender is not one of its project's people. Once it has a
   draft, add the sender to another project. That email stays where it is with its draft,
   and the sender's other mail moves.
@@ -4245,6 +4248,40 @@ as with a mouse, and once as it was.
   right edge. With scroll bars always shown, Compare with Original keeps its whole name in
   the email view at 760 by 420, and at the default size Change Draft stays beside its field
   while comparing.
+
+Sorting only where a signal points, and Needs reply only for mail that asks the user, added
+on 2026-11-01, not verified yet. MailStoreTests, SortingPolicyTests, SortingServiceTests,
+ReplyRuleTests, ExplainServiceTests and ProjectsRuntimeTests check the parts with made up
+mail and a fake model. Check in a Debug build with the cleanup model on the Mac, the window
+open and the synthetic mail imported, as in the test guide, with Mail's accounts holding
+the addresses and the name the set's README gives the user:
+
+- [ ] Delete All Projects Data and make one project only, as the synthetic set gives it,
+  then read the synthetic mail. Once Sorting mail… is gone, the project holds no email
+  whose chip names The model chose the project as its only reason. Mail of the other four
+  projects waits in Needs a Project, unless the project's words, a file name or a thread
+  point to the one project.
+- [ ] An email to someone else with you only in Cc shows no Needs reply, and Explain says
+  "No reply needed. You are not in To, and it does not name you." with no draft. The same
+  email needs a reply when it names you, also with your Chinese name in pinyin as one
+  word.
+- [ ] An email to a group address with no name of yours in it shows no Needs reply. Note
+  whether a group email that asks everyone something, such as "Please reply with your
+  availability by Friday", should need a reply.
+- [ ] A forward with no note, or with FYI or 供参考 above the forwarded message, shows no
+  Needs reply, and Explain says "No reply needed. It forwards a message and asks you
+  nothing." A forward whose note asks, such as 你看下 or "Can you check the dates?", needs
+  a reply.
+- [ ] Mail to one of your addresses with a tag after +, such as name+test@, needs a reply.
+  Mail to an alias that Mail's accounts do not list shows no Needs reply unless it names
+  you.
+- [ ] Open the window on a store of 0.6.2 that holds mail filed as Unsure project on the
+  model's choice alone, with a reply filed under it by its thread. That mail goes to Needs
+  a Project once, unless something in it now points to the project, and the reply follows
+  it. Their Needs reply marks follow the rule as it is now. For mail that nothing points
+  to, the Sorting line in the log says the model was asked 0 times. Close and open the
+  window again: nothing moves. Mail in a project whose chip names another reason stays
+  where it is.
 
 ## Not implemented
 

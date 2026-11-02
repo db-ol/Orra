@@ -194,7 +194,11 @@ nonisolated struct QuotedHistory: Sendable, Equatable {
     /// reply rule reads its language and the list mail check its footer there, since a
     /// reply goes to the sender and not to the writer of a forwarded message.
     static func sendersWords(in text: String, subject: String) -> String {
-        let split = QuotedHistory(splitting: text, subject: subject)
+        sendersWords(in: text, split: QuotedHistory(splitting: text, subject: subject))
+    }
+
+    /// The same words of a text that is already split with its subject.
+    static func sendersWords(in text: String, split: QuotedHistory) -> String {
         guard !split.forwards.isEmpty, split.note.unicodeScalars.contains(where: \.properties.isAlphabetic) else { return text }
         return split.note
     }

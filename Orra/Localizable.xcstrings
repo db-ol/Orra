@@ -9504,6 +9504,28 @@
         }
       }
     },
+    "No reply needed. It forwards a message and asks you nothing." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hace falta responder. Reenvía un mensaje y no te pide nada."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返信は不要です。メッセージを転送しただけで、あなたへの質問や依頼はありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无需回复。这封邮件只是转发了一条消息，没有问你什么。"
+          }
+        }
+      }
+    },
     "No reply needed. It went to a list or came from a machine." : {
       "localizations" : {
         "es-419" : {
@@ -9544,6 +9566,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无需回复。你在之后的往来邮件中已经回复过。"
+          }
+        }
+      }
+    },
+    "No reply needed. You are not in To, and it does not name you." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hace falta responder. No estás en Para y el correo no te nombra."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返信は不要です。あなたは宛先に含まれておらず、本文にもあなたの名前はありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无需回复。你不在收件人中，邮件里也没有提到你的名字。"
           }
         }
       }
