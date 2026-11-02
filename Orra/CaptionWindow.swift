@@ -460,7 +460,7 @@ struct CaptionNotes: View {
             lines.append(String(localized: "No microphone is connected. Captions start once you connect one."))
         case .microphoneUnavailable(.access(.authorized)), .microphoneUnavailable(.failed):
             lines.append(String(localized: "Orra could not start the microphone. Turn Live Captions off and on again to try again."))
-        case .off, .starting, .listening:
+        case .off, .starting, .listening, .pausedWhileLocked:
             switch captions.silence {
             case .noAudio:
                 lines.append(String(localized: "Nothing is playing on the Mac. Captions show what the Mac plays, such as a call or a video. To caption what you say, choose Microphone in the menu at the top left of the window."))

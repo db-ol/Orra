@@ -254,6 +254,12 @@ nonisolated enum CaptionSource: String, CaseIterable, Sendable {
 /// pause is over, see `startMicrophone`. Their model calls go through EngineTurns as all
 /// caption calls do.
 ///
+/// While the screen is locked, or the user's session is switched away, microphone captions
+/// let go of the microphone as a stop does, and start it again once the screen unlocks, if
+/// they are still on and still listen to it, see `screenLockChanged(_:)`. The sentence
+/// being heard ends at the lock, and nothing said meanwhile is captioned. Captions of what
+/// the Mac plays go on.
+///
 /// Turning it off stops the capture, lets go of the microphone and closes the window. The
 /// sentences stay in memory until Orra quits, so they can still be copied, and the next
 /// start keeps them as the previous transcript. Nothing is logged or saved but counts,
@@ -270,6 +276,10 @@ final class MeetingCaptions {
         case unavailable(SystemAudioProblem)
         /// The microphone cannot be used, see MicrophoneCaptionProblem.
         case microphoneUnavailable(MicrophoneCaptionProblem)
+        /// Captions listen to the microphone, but the screen is locked or the user's
+        /// session is switched away, so nothing of it runs until the unlock, see
+        /// `screenLocked`.
+        case pausedWhileLocked
     }
 
     /// What came in place of sound, see `silence`.
@@ -320,7 +330,9 @@ final class MeetingCaptions {
         }
     }
 
-    /// Why captions start the microphone again, for the log.
+    /// Why captions start the microphone again, for the log. The start at the unlock of the
+    /// screen is none of these: it starts at once and never counts toward `restartLimit`,
+    /// see `screenLockChanged(_:)`.
     nonisolated enum RestartReason: String, Sendable {
         /// The device went away, changed its rate or lost its inputs, or the microphone to
         /// listen to is now another one.
@@ -394,9 +406,13 @@ final class MeetingCaptions {
     /// at every launch.
     private(set) var source: CaptionSource = .systemAudio
     /// The microphone captions listen to, for the window's sign. Set only while they
-    /// listen to it: nil while it starts or cannot be used, and once captions stop or
-    /// listen to what the Mac plays again.
+    /// listen to it: nil while it starts or cannot be used, while the screen is locked,
+    /// and once captions stop or listen to what the Mac plays again.
     private(set) var microphoneInUse: AudioInput?
+    /// Whether the screen is locked or the user's session is switched away, as captions
+    /// last learned it, see ScreenLockSource. Microphone captions let go of the microphone
+    /// meanwhile, see `screenLockChanged(_:)`.
+    private(set) var screenLocked = false
     /// What came in place of sound for `silenceHint` since the capture started, for the
     /// window's note. Nil until then and from the first sound on. No audio at all from the
     /// Mac becomes no sound when an app starts to play and still no audio comes, see
@@ -474,6 +490,7 @@ final class MeetingCaptions {
 
     @ObservationIgnored private let systemAudio: SystemAudioSource
     @ObservationIgnored private let microphone: MicrophoneCaptionSource
+    @ObservationIgnored private let screenLock: ScreenLockSource
     @ObservationIgnored private let engines: CaptionEngines
     @ObservationIgnored private let started: () -> Void
     @ObservationIgnored private let stopped: () -> Void
@@ -503,7 +520,8 @@ final class MeetingCaptions {
     /// ignored.
     @ObservationIgnored private var run = 0
     /// What the current start of the capture listens to, so its stop reaches it after
-    /// `source` changed. Nil while captions are off.
+    /// `source` changed. Nil while captions are off, and while microphone captions wait
+    /// for the screen to unlock.
     @ObservationIgnored private var capturing: CaptionSource?
     /// The microphone chosen under Microphone, nil for the system default, see
     /// `microphoneChosen(_:)`.
@@ -521,11 +539,18 @@ final class MeetingCaptions {
     /// True once this meeting called `started`, so a switch to a mode that translates
     /// calls it once, and a switch back does not undo it until captions stop.
     @ObservationIgnored private var wantsModel = false
+    /// Keeps the watch of the screen lock, see ScreenLockSource.watch.
+    @ObservationIgnored private var screenLockWatch: AnyObject?
+    /// True once a read of the session said locked since captions took the screen as
+    /// locked, see `sessionShowsTheUnlock()`.
+    @ObservationIgnored private var sessionSaidLocked = false
 
     /// - Parameters:
     ///   - systemAudio: The capture of the sound the Mac plays. Tests pass a fake.
     ///   - microphone: The capture of the microphone. Tests pass a fake, and captions
     ///     without one listen only to what the Mac plays.
+    ///   - screenLock: Whether the screen is locked, see ScreenLockSource. Tests pass a fake,
+    ///     and captions without one take the screen as never locked.
     ///   - engines: The models, see CaptionEngines.live.
     ///   - started: Called once captions run in a mode that translates, so the cleanup
     ///     model loads, see TextCleanup.captionsStarted. Not in Original only, until the
@@ -548,6 +573,7 @@ final class MeetingCaptions {
     init(
         systemAudio: SystemAudioSource,
         microphone: MicrophoneCaptionSource = .unavailable,
+        screenLock: ScreenLockSource = .unlocked,
         engines: CaptionEngines,
         started: @escaping () -> Void = {},
         stopped: @escaping () -> Void = {},
@@ -568,6 +594,7 @@ final class MeetingCaptions {
     ) {
         self.systemAudio = systemAudio
         self.microphone = microphone
+        self.screenLock = screenLock
         self.engines = engines
         self.started = started
         self.stopped = stopped
@@ -585,6 +612,13 @@ final class MeetingCaptions {
         self.restartDelay = restartDelay
         self.restartWindow = restartWindow
         self.accessCheckInterval = accessCheckInterval
+        // As the session says now, which covers a launch while the screen is locked or the
+        // session is switched away, and after that as the watch reports.
+        screenLocked = screenLock.isLocked()
+        sessionSaidLocked = screenLocked
+        screenLockWatch = screenLock.watch { [weak self] locked in
+            self?.screenLockNoted(locked)
+        }
     }
 
     func setOn(_ on: Bool) {
@@ -595,6 +629,7 @@ final class MeetingCaptions {
     /// Chooses what captions listen to. While they are on, the capture changes at once,
     /// and the meeting, its window and its sentences go on. Choosing the microphone while
     /// access is not decided yet shows the prompt, which so follows the user's own click.
+    /// While the screen is locked, the microphone waits for the unlock.
     func setSource(_ choice: CaptionSource) {
         guard choice != source else { return }
         source = choice
@@ -604,6 +639,7 @@ final class MeetingCaptions {
         }
         guard isOn else { return }
         Logger.captions.notice("Meeting captions now listen to \(choice.rawValue, privacy: .public)")
+        lookAtTheScreenLockBeforeAStart()
         restartCapture()
     }
 
@@ -617,8 +653,9 @@ final class MeetingCaptions {
     }
 
     /// The Mac woke from sleep. Captions that listen to the microphone start it again,
-    /// since its IO may come back silent or its device under a new ID. The capture of what
-    /// the Mac plays goes on as it is.
+    /// since its IO may come back silent or its device under a new ID. While the screen is
+    /// locked nothing starts, and the unlock starts the microphone. The capture of what the
+    /// Mac plays goes on as it is.
     func macDidWake() {
         scheduleRestart(.wake, after: restartDelay)
     }
@@ -653,6 +690,7 @@ final class MeetingCaptions {
     }
 
     private func start() {
+        lookAtTheScreenLockBeforeAStart()
         isOn = true
         turnedOn = .now
         meeting = MeetingCounts()
@@ -700,13 +738,20 @@ final class MeetingCaptions {
         Logger.captions.notice("Meeting captions stopped after \(self.turnedOn.duration(to: .now), privacy: .public), listening to \(listenedTo.rawValue, privacy: .public), with \(self.meeting.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio, \(self.meeting.soundSeconds, format: .fixed(precision: 1), privacy: .public) s of it with sound, \(sentences.cut, privacy: .public) sentences cut, \(sentences.reported, privacy: .public) reported, \(sentences.empty, privacy: .public) without text and \(sentences.dropped, privacy: .public) dropped\(pauses, privacy: .public)")
     }
 
-    /// Starts the capture of what captions listen to, under a new run.
+    /// Starts the capture of what captions listen to, under a new run. While the screen is
+    /// locked, microphone captions start nothing and wait for the unlock.
     private func startCapture() {
         run += 1
         runState = CaptureRun()
         captureStarted = .now
         silence = nil
         microphoneInUse = nil
+        if source == .microphone, screenLocked {
+            capturing = nil
+            capture = .pausedWhileLocked
+            Logger.captions.notice("Meeting captions wait for the screen to unlock to start the microphone")
+            return
+        }
         capturing = source
         switch source {
         case .systemAudio:
@@ -998,8 +1043,8 @@ final class MeetingCaptions {
 
     /// The microphone kept moving, so captions let go of it, as a stop does, and the window
     /// says that it could not start. The sentence that was open ends. They still listen to
-    /// the microphone, so turning them off and on, a choice of a microphone and a wake start
-    /// it again, and a change of the devices does not.
+    /// the microphone, so turning them off and on, a choice of a microphone, a wake and the
+    /// unlock of the screen start it again, and a change of the devices does not.
     private func stopFollowingTheMicrophone() {
         Logger.captions.error("Meeting captions let go of the microphone after \(Self.restartLimit, privacy: .public) starts again within \(self.restartWindow, format: .fixed(precision: 0), privacy: .public) s")
         stopCapture()
@@ -1007,6 +1052,54 @@ final class MeetingCaptions {
         capturing = .microphone
         capture = .microphoneUnavailable(.failed(step: "follow the microphone", status: 0))
         silence = nil
+    }
+
+    /// The watch's report, see ScreenLockSource.watch. It comes after each note, so only a
+    /// change counts.
+    private func screenLockNoted(_ locked: Bool) {
+        guard locked != screenLocked else { return }
+        screenLockChanged(locked)
+    }
+
+    /// Takes the screen as locked or unlocked. Microphone captions that are on let go of
+    /// the microphone at a lock, as a stop does, and the sentence being heard ends, see
+    /// `restartCapture`. They start it again at the unlock, at once and through
+    /// `startMicrophone`, so the start waits for a dictation as any start does, and it never
+    /// counts toward `restartLimit`. Captions of what the Mac plays go on.
+    private func screenLockChanged(_ locked: Bool) {
+        screenLocked = locked
+        if locked {
+            sessionSaidLocked = screenLock.isLocked()
+        }
+        guard isOn, source == .microphone else { return }
+        if locked {
+            Logger.captions.notice("Meeting captions let go of the microphone while the screen is locked")
+        } else {
+            Logger.captions.notice("Meeting captions start the microphone again after the screen unlocked")
+        }
+        restartCapture()
+    }
+
+    /// Whether a read of the session shows that a lock captions still keep is over: it
+    /// says unlocked now, and a read since the lock said locked. So on a Mac whose session
+    /// does not tell a lock only the unlock note ends it, and the microphone never starts
+    /// at the lock screen. A read that says locked is noted, and a read never locks.
+    private func sessionShowsTheUnlock() -> Bool {
+        guard screenLocked else { return false }
+        guard !screenLock.isLocked() else {
+            sessionSaidLocked = true
+            return false
+        }
+        return sessionSaidLocked
+    }
+
+    /// Captions are turned on, or choose what they listen to, so a lock whose unlock note
+    /// never came ends here once the session shows it, see `sessionShowsTheUnlock()`. Only
+    /// the flag changes, since the caller starts the capture next.
+    private func lookAtTheScreenLockBeforeAStart() {
+        guard sessionShowsTheUnlock() else { return }
+        Logger.captions.notice("Meeting captions found the screen unlocked without its note")
+        screenLocked = false
     }
 
     /// Returns once nothing holds the microphone back, looking every

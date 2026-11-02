@@ -91,11 +91,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         voiceFile: .live
     )
     /// Meeting captions, off at every launch, listening to what the Mac plays until the
-    /// user chooses the microphone. Lazy, because they read the controller's speech model
-    /// state.
+    /// user chooses the microphone. They watch the screen lock, except in the copy of Orra
+    /// that hosts the tests, since the menu bar menu reads them before launching is done.
+    /// Lazy, because they read the controller's speech model state.
     lazy var captions = MeetingCaptions(
         systemAudio: .live(),
         microphone: .live(),
+        screenLock: Self.isHostedByXcode ? .unlocked : .live(),
         engines: .live(
             transcription: transcription,
             isSpeechReady: { [pushToTalk] in pushToTalk.modelState == .ready },
