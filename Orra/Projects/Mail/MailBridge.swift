@@ -10,7 +10,8 @@ import Synchronization
 ///
 /// The calls run their events on MailEvents' send thread, one at a time, so none blocks the
 /// caller's thread. They throw MailBridgeError. A call never launches Mail. While Mail does
-/// not run, each throws `mailNotRunning` without asking it anything.
+/// not run, each throws `mailNotRunning` without asking it anything. A get or a count that
+/// Mail did not take (-600 or -609 while it runs) is sent once more after a short pause.
 nonisolated struct MailBridge: Sendable {
     /// Whether Mail runs.
     var isRunning: @Sendable () -> Bool
@@ -213,10 +214,19 @@ nonisolated extension MailBridge {
         ask ? .seconds(120) : .seconds(5)
     }
 
+    /// How long a get or a count waits before it is sent once more after Mail did not take
+    /// it (-600 or -609 while Mail runs), which Mail on macOS 26 gives now and then (a guess).
+    static let refusalPause = Duration.milliseconds(500)
+
     /// The bridge over a sender of Mail's events. `permissionLimit` gives the time limit of
-    /// a permission check, by whether it asks.
-    init(events: MailEvents, permissionLimit: @escaping @Sendable (Bool) -> Duration = Self.permissionLimit(ask:)) {
-        let reader = Reader(events: events, remembered: Remembered())
+    /// a permission check, by whether it asks, and `pause` waits before a get or a count
+    /// that Mail did not take is sent once more.
+    init(
+        events: MailEvents,
+        permissionLimit: @escaping @Sendable (Bool) -> Duration = Self.permissionLimit(ask:),
+        pause: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) {
+        let reader = Reader(events: events, remembered: Remembered(), pause: pause)
         self.init(
             isRunning: events.isRunning,
             permission: { ask in await reader.permission(ask: ask, within: permissionLimit(ask)) },
@@ -251,6 +261,7 @@ nonisolated extension MailBridge {
     private nonisolated struct Reader: Sendable {
         let events: MailEvents
         let remembered: Remembered
+        let pause: @Sendable (Duration) async throws -> Void
 
         /// The most mailboxes the picker lists, and how deep it looks.
         static let mostMailboxes = 1_000
@@ -272,8 +283,19 @@ nonisolated extension MailBridge {
             return permission
         }
 
-        /// Sends a request and remembers what it tells about the permission.
+        /// Sends a request and remembers what it tells about the permission. A get or a count
+        /// that Mail did not take goes once more after `refusalPause`, since both only read.
+        /// A reply never goes twice.
         func value(_ request: MailEvents.Request) async throws -> Value {
+            do {
+                return try await sent(request)
+            } catch MailBridgeError.notAnswered where request.event != .reply {
+                try await pause(MailBridge.refusalPause)
+                return try await sent(request)
+            }
+        }
+
+        private func sent(_ request: MailEvents.Request) async throws -> Value {
             do {
                 let value = try await events.send(request)
                 remembered.remember(.allowed)
