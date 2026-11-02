@@ -1028,6 +1028,8 @@ nonisolated struct ExplainPrompt: Sendable {
                     case .sentByUser: "这是\(nameZH)自己发出的邮件"
                     case .answeredLater: "\(nameZH)之后已经在这个邮件串里回复过"
                     case .listMail: "这是群发通知或订阅邮件"
+                    case .notAddressed: "\(nameZH)不在收件人里，邮件也没有点\(nameZH)的名"
+                    case .forwardedNotice: "这封邮件只是转发了一条消息，没有问\(nameZH)什么"
                     }
                     text += "这封邮件不需要回复，因为\(because)。“\(headings.draft.dropLast())”只写“\(headings.noReply)”。"
                 case .reply(.zh) where draftApart, .reply(.en) where draftApart:
@@ -1048,6 +1050,8 @@ nonisolated struct ExplainPrompt: Sendable {
                 case .sentByUser: "\(nameEN) sent it"
                 case .answeredLater: "\(nameEN) already answered it later in the thread"
                 case .listMail: "it is list mail or a notice"
+                case .notAddressed: "\(nameEN) is not in To and the email does not name \(nameEN)"
+                case .forwardedNotice: "it only forwards a message and asks \(nameEN) nothing"
                 }
                 text += "this email needs no reply, because \(because). Under \"\(headings.draft)\" write only \"\(headings.noReply)\"."
             case .reply(.zh) where draftApart, .reply(.en) where draftApart:

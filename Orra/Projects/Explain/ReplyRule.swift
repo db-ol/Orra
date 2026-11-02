@@ -4,11 +4,14 @@ import Foundation
 /// written. Code step 1 of phase 0, its largest single gain: the reply decision went from
 /// 62 to 88 right of 105, and the reply language from 42 to 49 right of 50.
 ///
-/// No reply is due when the user sent the email, when the user answered it later in its
-/// thread, or for list mail. Otherwise the draft is in the language of the email's own
-/// text, Chinese or English, read with `ProjectsLanguage.reading(_:)` without the lines that
-/// PromptHygiene takes out, so a fake English system line in a Chinese email does not turn
-/// the reply into English. An email in another language needs a reply but gets no draft.
+/// A reply is due only when the email plausibly asks the user for something. None is due
+/// when the user sent the email, when the user answered it later in its thread, for list
+/// mail, for mail that none of the user's addresses gets in To and that does not name the
+/// user, and for a forward whose sender asks the user nothing. Otherwise the draft is in the
+/// language of the email's own text, Chinese or English, read with
+/// `ProjectsLanguage.reading(_:)` without the lines that PromptHygiene takes out, so a fake
+/// English system line in a Chinese email does not turn the reply into English. An email in
+/// another language needs a reply but gets no draft.
 /// Of an email that forwards a message, only the sender's own words count, see
 /// `QuotedHistory.sendersWords(in:subject:)`, so a Chinese note over a forwarded English
 /// mail gets a Chinese draft, and the footer of a forwarded newsletter makes it no list
@@ -28,6 +31,11 @@ nonisolated struct ReplyRule: Sendable, Equatable {
         case answeredLater
         /// It went out to a list or came from a machine.
         case listMail
+        /// None of the user's addresses is in To, and the text does not name the user: the
+        /// user is only in Cc, or the email went to other people or to a group.
+        case notAddressed
+        /// It forwards a message, and the sender's own note asks the user nothing.
+        case forwardedNotice
     }
 
     nonisolated enum Decision: Sendable, Equatable, Codable {
@@ -47,21 +55,28 @@ nonisolated struct ReplyRule: Sendable, Equatable {
 
     /// The user's own addresses, normalized.
     let ownAddresses: Set<String>
+    /// The forms of the user's name that a text addresses the user by, see
+    /// `nameForms(_:)`.
+    let ownNames: [String]
 
-    init(ownAddresses: [String]) {
+    /// - Parameter ownName: the user's name, as Mail's accounts give it, or nil.
+    init(ownAddresses: [String], ownName: String? = nil) {
         self.ownAddresses = Set(ownAddresses.compactMap(ProjectsAddress.normalized))
+        ownNames = ownName.map(Self.nameForms) ?? []
     }
 
     /// The decision for one email.
     /// - Parameters:
     ///   - sender: the email's sender, an address or "Name <address>".
+    ///   - to: its To addresses, in the same forms.
+    ///   - cc: its Cc addresses.
     ///   - date: when the email was sent or received.
     ///   - thread: the other messages of its thread.
     ///   - list: its list headers.
     ///   - text: its own text, raw or already through PromptHygiene. It is cleaned here,
     ///     which changes nothing in text that was cleaned before.
     ///   - subject: its subject, read for the language when the text has no letters.
-    func decision(sender: String, date: Date, thread: [Message], list: ListMail, text: String, subject: String) -> Decision {
+    func decision(sender: String, to: [String], cc: [String], date: Date, thread: [Message], list: ListMail, text: String, subject: String) -> Decision {
         let address = ProjectsAddress.normalized(sender)
         if isOwn(address) {
             return .noReply(.sentByUser)
@@ -69,10 +84,16 @@ nonisolated struct ReplyRule: Sendable, Equatable {
         if thread.contains(where: { $0.date > date && isOwn(ProjectsAddress.normalized($0.sender)) }) {
             return .noReply(.answeredLater)
         }
-        let words = QuotedHistory.sendersWords(in: text, subject: subject)
-        let readable = PromptHygiene.withoutMarkers(PromptHygiene(words, source: .mail).text)
+        let split = QuotedHistory(splitting: text, subject: subject)
+        let readable = Self.readable(QuotedHistory.sendersWords(in: text, split: split))
         if list.sign(sender: address ?? "", text: readable) != nil {
             return .noReply(.listMail)
+        }
+        if !isAddressed(to: to, cc: cc, text: readable) {
+            return .noReply(.notAddressed)
+        }
+        if !split.forwards.isEmpty, !Self.asks(Self.readable(split.note)) {
+            return .noReply(.forwardedNotice)
         }
         return .reply(Self.language(text: readable, subject: subject))
     }
@@ -83,12 +104,104 @@ nonisolated struct ReplyRule: Sendable, Equatable {
         if hasLetters(text) {
             return ProjectsLanguage.reading(text)
         }
-        let subject = PromptHygiene.withoutMarkers(PromptHygiene(subject, source: .mail).text)
+        let subject = readable(subject)
         return hasLetters(subject) ? ProjectsLanguage.reading(subject) : .other
+    }
+
+    /// Whether the email is meant for the user: one of the user's addresses is in To, or
+    /// the text names the user. Without the user's addresses, or with neither To nor Cc,
+    /// such as mail to undisclosed recipients, it cannot tell, and says yes.
+    private func isAddressed(to: [String], cc: [String], text: String) -> Bool {
+        let to = to.compactMap(ProjectsAddress.normalized)
+        let cc = cc.compactMap(ProjectsAddress.normalized)
+        guard !ownAddresses.isEmpty, !(to.isEmpty && cc.isEmpty) else { return true }
+        return to.contains(where: ownAddresses.contains) || names(text)
+    }
+
+    /// Whether the text holds a form of the user's name: a Latin form as a word of its own,
+    /// in any case, and a Chinese form anywhere.
+    private func names(_ text: String) -> Bool {
+        let text = text.precomposedStringWithCompatibilityMapping.lowercased()
+        return ownNames.contains { name in
+            name.contains(where: \.isHan) ? text.contains(name) : Self.containsWord(text, name)
+        }
     }
 
     private func isOwn(_ address: String?) -> Bool {
         address.map(ownAddresses.contains) ?? false
+    }
+
+    /// The forms of a name that address its bearer, lowercased: each part of two letters
+    /// or more, and for a Chinese name its pinyin, which English mail writes, its given
+    /// name when it has three characters or more, and its family name with a title, as in
+    /// 白老师.
+    static func nameForms(_ name: String) -> [String] {
+        var forms: [String] = []
+        let parts = name.precomposedStringWithCompatibilityMapping.lowercased()
+            .split { !$0.isLetter }.map(String.init)
+        for part in parts where part.count >= 2 {
+            forms.append(part)
+            guard part.contains(where: \.isHan) else { continue }
+            if part.allSatisfy(\.isHan), part.count <= 4 {
+                if part.count >= 3 {
+                    forms.append(String(part.dropFirst()))
+                }
+                forms += titles.map { String(part.prefix(1)) + $0 }
+            }
+            let pinyin = part.applyingTransform(.mandarinToLatin, reverse: false)?
+                .applyingTransform(.stripDiacritics, reverse: false) ?? ""
+            forms += pinyin.lowercased().split { !$0.isASCIILetter }.map(String.init).filter { $0.count >= 2 }
+        }
+        var seen = Set<String>()
+        return forms.filter { seen.insert($0).inserted }
+    }
+
+    /// Titles that follow a Chinese family name when people address its bearer.
+    private static let titles = ["老师", "教授", "博士", "先生", "女士", "小姐", "总", "经理", "主任", "同学"]
+
+    /// Whether the text asks its reader something: a question mark, or wording that asks
+    /// for an answer, a decision or an action, in English, Chinese, Japanese or Spanish.
+    /// Wording that only passes something on, such as "please see below" or 请查收, does
+    /// not ask.
+    static func asks(_ text: String) -> Bool {
+        text.contains { "?？¿".contains($0) } || requestWording.contains { text.firstMatch(of: $0) != nil }
+    }
+
+    // Built once rather than for every email.
+    nonisolated(unsafe) private static let requestWording: [Regex<Substring>] = [
+        /\b(?:can|could|would|will)\s+you\b/.ignoresCase(),
+        /\blet\s+(?:me|us)\s+know\b/.ignoresCase(),
+        /\bplease\b(?!\s+(?:see|find|note|read)\b)/.ignoresCase(),
+        /\b(?:kindly|reply|respond|confirm|rsvp|approve|sign|decide)\b/.ignoresCase(),
+        /\b(?:need|want)s?\s+(?:you|your)\b/.ignoresCase(),
+        /\byour\s+(?:thoughts|feedback|input|comments?|opinion|views?|decision|approval|answer|help)\b/.ignoresCase(),
+        /请(?!知悉|参考|查收|查阅|见|看下面|看以下|看附件)/,
+        /麻烦|劳驾|拜托|烦请|务必|能否|可否|能不能|可不可以|帮忙|帮我|看看|看一下|过目|定夺|回复|答复|回信|告知|确认|反馈/,
+        /ください|下さい|お願い|いただけ|頂け|ますか|でしょうか/,
+        /\bpor\s+favor\b|\bpodr[ií]as?\b|\bpuedes\b|\bfavor\s+de\b|\bconfirm[ae]\b|\bresp[oó]nde\b|\bav[ií]same\b|\bme\s+avisas\b/.ignoresCase(),
+    ]
+
+    /// The text through PromptHygiene, without its markers.
+    private static func readable(_ text: String) -> String {
+        PromptHygiene.withoutMarkers(PromptHygiene(text, source: .mail).text)
+    }
+
+    /// Whether the text holds the word with no letter or digit joined to it.
+    private static func containsWord(_ text: String, _ word: String) -> Bool {
+        var start = text.startIndex
+        while let range = text.range(of: word, range: start..<text.endIndex) {
+            let joinedBefore = range.lowerBound > text.startIndex && isLetterOrDigit(text[text.index(before: range.lowerBound)])
+            let joinedAfter = range.upperBound < text.endIndex && isLetterOrDigit(text[range.upperBound])
+            if !joinedBefore && !joinedAfter {
+                return true
+            }
+            start = text.index(after: range.lowerBound)
+        }
+        return false
+    }
+
+    private static func isLetterOrDigit(_ character: Character) -> Bool {
+        character.isLetter || character.isNumber
     }
 
     private static func hasLetters(_ text: String) -> Bool {

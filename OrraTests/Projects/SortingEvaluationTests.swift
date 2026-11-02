@@ -249,7 +249,8 @@ struct SortingEvaluationTests {
                 let email = SortingService.Email(
                     messageID: messageID,
                     sender: from,
-                    recipients: recipients,
+                    to: object["to"] as? [String] ?? [],
+                    cc: object["cc"] as? [String] ?? [],
                     date: date,
                     subject: object["subject"] as? String ?? "",
                     text: QuotedHistory(splitting: object["body"] as? String ?? "").ownText,

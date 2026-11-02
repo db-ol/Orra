@@ -217,7 +217,8 @@ struct SortingServiceTests {
     private func email(
         _ id: String,
         from sender: String,
-        to recipients: [String] = [Self.work],
+        to: [String] = [Self.work],
+        cc: [String] = [],
         day: Double = 0,
         subject: String = "Hello",
         text: String = "Could you send the plan?",
@@ -226,7 +227,7 @@ struct SortingServiceTests {
         decided: SortingDecision? = nil
     ) -> SortingService.Email {
         SortingService.Email(
-            messageID: id, sender: sender, recipients: recipients, date: Self.start.addingTimeInterval(day * 86_400),
+            messageID: id, sender: sender, to: to, cc: cc, date: Self.start.addingTimeInterval(day * 86_400),
             subject: subject, text: text, inReplyTo: inReplyTo, references: inReplyTo, list: list, decided: decided)
     }
 
@@ -665,6 +666,17 @@ struct SortingServiceTests {
         await service(store, model, scores: [Self.harbor: 2.4]).sort([notice])
         #expect(model.requests.isEmpty)
         #expect(store.decision("clock@test.example") == SortingDecision(project: nil, level: .unsure, reasons: [.noSignal]))
+    }
+
+    /// Mail to a colleague with the user in Cc asks the user nothing, unless it names them.
+    @Test func mailThatOnlyCopiesTheUserNeedsNoReply() async {
+        let store = Store()
+        let sorting = service(store)
+        let outline = email("outline@test.example", from: "iris@printworks.example", to: ["theo@printworks.example"], cc: [Self.work], text: "Theo, here is the chapter outline. Can you check it?")
+        let named = email("named@test.example", from: "iris@printworks.example", to: ["theo@printworks.example"], cc: [Self.work], day: 1, text: "Theo and 白露, can you check the outline?")
+        await sorting.sort([outline, named])
+        #expect(store.replies["outline@test.example"] == .noReply(.notAddressed))
+        #expect(store.replies["named@test.example"] == .reply(.en))
     }
 
     @Test func listMailIsSetAsideWithoutAReplyDue() async {

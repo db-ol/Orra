@@ -49,8 +49,10 @@ final class SortingService {
         var messageID: String
         /// The sender, an address or "Name <address>".
         var sender: String
-        /// The To and Cc addresses. Sorting reads the first `maximumRecipients`.
-        var recipients: [String] = []
+        /// The To addresses.
+        var to: [String] = []
+        /// The Cc addresses.
+        var cc: [String] = []
         var date: Date
         var subject: String
         /// The email's own text: its visible text without quoted history, see VisibleText
@@ -69,6 +71,11 @@ final class SortingService {
         var decided: SortingDecision? = nil
         /// Whether it waits for sorting to run for it again, see MailStore.waiting().
         var waits = false
+
+        /// The To and Cc addresses. Sorting reads the first `maximumRecipients`.
+        var recipients: [String] {
+            to + cc
+        }
     }
 
     /// The user, from Mail's accounts or the override of a Debug build.
@@ -617,8 +624,8 @@ final class SortingService {
         let signals = await SortingSignals.gather(for: input, among: projects, score: scores)
         let decision = SortingPolicy.decide(signals, model: nil)
         let prompt = decision.waitsForModel ? SortingPrompt(input: input, signals: signals, projects: projects, ownName: owner.name) : nil
-        let reply = ReplyRule(ownAddresses: owner.addresses).decision(
-            sender: email.sender, date: email.date,
+        let reply = ReplyRule(ownAddresses: owner.addresses, ownName: owner.name).decision(
+            sender: email.sender, to: email.to, cc: email.cc, date: email.date,
             thread: thread.map { ReplyRule.Message(sender: $0.sender, date: $0.date) },
             list: email.list, text: email.text, subject: email.subject)
         return Ruled(signals: signals, decision: decision, prompt: prompt, reply: reply)
@@ -640,12 +647,13 @@ final class SortingService {
         ProjectsAddress.normalized(text) ?? SortingText.address(cleaned(text))
     }
 
-    /// The email with at most `maximumRecipients` To and Cc addresses, so a header with
-    /// thousands costs little.
+    /// The email with at most `maximumRecipients` To and Cc addresses, To first, so a header
+    /// with thousands costs little.
     private nonisolated static func limited(_ email: Email) -> Email {
-        guard email.recipients.count > maximumRecipients else { return email }
+        guard email.to.count + email.cc.count > maximumRecipients else { return email }
         var email = email
-        email.recipients = Array(email.recipients.prefix(maximumRecipients))
+        email.to = Array(email.to.prefix(maximumRecipients))
+        email.cc = Array(email.cc.prefix(maximumRecipients - email.to.count))
         return email
     }
 

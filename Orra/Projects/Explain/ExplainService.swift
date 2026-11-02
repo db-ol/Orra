@@ -843,8 +843,10 @@ final class ExplainService {
         let email = gathered.email
         let known = gathered.known
         let ownAddresses = Set(known.ownAddresses.compactMap(ProjectsAddress.normalized))
-        let reply = ReplyRule(ownAddresses: known.ownAddresses).decision(
+        let reply = ReplyRule(ownAddresses: known.ownAddresses, ownName: known.ownName).decision(
             sender: email.sender.address,
+            to: email.to.map(\.address),
+            cc: email.cc.map(\.address),
             date: email.date,
             thread: gathered.thread.map { ReplyRule.Message(sender: $0.sender.address, date: $0.date) },
             list: email.list,

@@ -1282,7 +1282,7 @@ nonisolated struct MailStore: Sendable {
 
         var sortingEmail: SortingService.Email {
             SortingService.Email(
-                messageID: messageID, sender: sender.address, recipients: (to + cc).map(\.address),
+                messageID: messageID, sender: sender.address, to: to.map(\.address), cc: cc.map(\.address),
                 date: date, subject: subject, text: text ?? "", attachmentNames: attachments.map(\.name),
                 mailbox: mailbox, inReplyTo: inReplyTo, references: references, list: list,
                 decided: level.map { SortingDecision(project: project, level: $0, reasons: reasons) }, waits: waits)

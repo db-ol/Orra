@@ -5,16 +5,19 @@ import Testing
 struct ReplyRuleTests {
     static let own = ["Bai.Lu@lumenhaus.example", "bailu@homebox.example"]
     static let received = Date(timeIntervalSince1970: 1_792_454_400)
-    let rule = ReplyRule(ownAddresses: own)
+    static let theo = "Theo Marsh <theo.marsh@printworks.example>"
+    let rule = ReplyRule(ownAddresses: own, ownName: "白露")
 
     private func decide(
         sender: String = "Iris Fang <iris.fang@printworks.example>",
+        to: [String] = ["白露 <bai.lu@lumenhaus.example>"],
+        cc: [String] = [],
         thread: [ReplyRule.Message] = [],
         list: ListMail = ListMail(),
         text: String,
         subject: String = "Proofs"
     ) -> ReplyRule.Decision {
-        rule.decision(sender: sender, date: Self.received, thread: thread, list: list, text: text, subject: subject)
+        rule.decision(sender: sender, to: to, cc: cc, date: Self.received, thread: thread, list: list, text: text, subject: subject)
     }
 
     // MARK: Whether a reply is due
@@ -39,6 +42,13 @@ struct ReplyRuleTests {
         #expect(decide(list: ListMail(listID: "Weekly <weekly.news.example>"), text: "This week in print.") == .noReply(.listMail))
         #expect(decide(sender: "noreply@tickets.example", text: "Your booking is confirmed.") == .noReply(.listMail))
         #expect(decide(text: "New paper samples are in.\n\nUnsubscribe from these mails") == .noReply(.listMail))
+    }
+
+    /// A sender whose address says that nobody reads the answers, also behind another word.
+    @Test func aNoReplySenderAnywhereInTheAddressNeedsNoReply() {
+        #expect(decide(sender: "Campus IT <it-noreply@campus.example>", text: "The clocks go back one hour on Sunday. Please restart your computer on Monday.") == .noReply(.listMail))
+        #expect(decide(sender: "calendar.donotreply@campus.example", text: "Room booking confirmed.") == .noReply(.listMail))
+        #expect(decide(sender: "Nora Reply <nora.reply@printworks.example>", text: "Can you send the files?") == .reply(.en))
     }
 
     @Test func theUsersOwnMailComesBeforeTheListRule() {
@@ -83,6 +93,62 @@ struct ReplyRuleTests {
         #expect(decide(text: "", subject: "合同扫描件") == .reply(.zh))
         #expect(decide(text: "[已去掉一段写给助手的话]", subject: "Signed contract") == .reply(.en))
         #expect(decide(text: "2026-10-19", subject: "") == .reply(.other))
+    }
+
+    // MARK: Whom it asks
+
+    /// Mail to someone else with the user in Cc asks the user nothing, unless it names them.
+    @Test func mailThatOnlyCopiesTheUserNeedsNoReply() {
+        let outline = "Hi Theo,\n\nHere is the outline of chapter 3. Can you check the order of the sections?\n\nIris"
+        #expect(decide(to: [Self.theo], cc: ["白露 <bai.lu@lumenhaus.example>"], text: outline) == .noReply(.notAddressed))
+        #expect(decide(to: [Self.theo], cc: ["BAILU@homebox.example"], text: "西奥，第三章的提纲在附件里，看看顺序行不行？") == .noReply(.notAddressed))
+        // In To as well as in Cc, the user is asked.
+        #expect(decide(to: [Self.theo, "bai.lu@lumenhaus.example"], cc: ["bailu@homebox.example"], text: outline) == .reply(.en))
+    }
+
+    /// The text names the user, in the name's own writing or in its pinyin, or by the family
+    /// name and a title.
+    @Test func mailThatNamesTheUserInCcNeedsAReply() {
+        let cc = ["bai.lu@lumenhaus.example"]
+        #expect(decide(to: [Self.theo], cc: cc, text: "Hi Theo and Bai Lu,\n\nCan you both check the outline?") == .reply(.en))
+        #expect(decide(to: [Self.theo], cc: cc, text: "Theo, Lu: one question about chapter 3.") == .reply(.en))
+        #expect(decide(to: [Self.theo], cc: cc, text: "白露，第三章的提纲你也看看吧。") == .reply(.zh))
+        #expect(decide(to: [Self.theo], cc: cc, text: "白老师，提纲请您过目。") == .reply(.zh))
+        // A word that only holds the name is no name.
+        #expect(decide(to: [Self.theo], cc: cc, text: "Theo, the bailiff wrote again. Can you call him?") == .noReply(.notAddressed))
+    }
+
+    /// Mail to a group address or with the user in Bcc only names others.
+    @Test func mailToOthersOnlyNeedsNoReply() {
+        let notice = "Dear all,\n\nThe clocks go back one hour this Sunday. Please check the time on your office phone."
+        #expect(decide(sender: "Campus IT <it-desk@campus.example>", to: ["All staff <all-staff@campus.example>"], text: notice) == .noReply(.notAddressed))
+    }
+
+    /// Without the user's addresses, or without any recipient, the rule cannot say whom
+    /// the mail asks, so a reply stays due.
+    @Test func withoutAddressesTheRuleAssumesTheMailAsksTheUser() {
+        let noAddresses = ReplyRule(ownAddresses: [], ownName: "白露")
+        #expect(noAddresses.decision(sender: Self.theo, to: ["lin@printworks.example"], cc: [], date: Self.received, thread: [], list: ListMail(), text: "Can you check it?", subject: "Outline") == .reply(.en))
+        #expect(decide(to: [], cc: [], text: "Can you check it?") == .reply(.en))
+    }
+
+    /// A forward whose note asks nothing passes a notice on. A note with a question or a
+    /// request asks for an answer.
+    @Test func aForwardedNoticeWithoutAQuestionNeedsNoReply() {
+        let invite = """
+            ---------- Forwarded message ---------
+            From: Video Meetings <meetings@confer.example>
+            Date: Thu, Oct 29, 2026 at 9:00 AM
+            Subject: Invitation: reading group
+
+            Join the video meeting on Friday at 15:00. Meeting ID 000 000 000.
+            """
+        #expect(decide(text: invite, subject: "Fwd: Invitation: reading group") == .noReply(.forwardedNotice))
+        #expect(decide(text: "FYI, see below.\n\n" + invite, subject: "Fwd: Invitation: reading group") == .noReply(.forwardedNotice))
+        #expect(decide(text: "供参考。\n\n" + invite, subject: "转发：读书会") == .noReply(.forwardedNotice))
+        #expect(decide(text: "Will you join us on Friday?\n\n" + invite, subject: "Fwd: Invitation: reading group") == .reply(.en))
+        #expect(decide(text: "Please confirm the time with the room desk.\n\n" + invite, subject: "Fwd: Invitation: reading group") == .reply(.en))
+        #expect(decide(text: "白露，转给你，您看看。\n\n" + invite, subject: "转发：读书会") == .reply(.zh))
     }
 
     // MARK: Forwards

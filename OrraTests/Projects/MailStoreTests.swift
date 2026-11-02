@@ -273,7 +273,7 @@ struct MailStoreTests {
         #expect(waiting.map(\.messageID) == ["waits@test.example", "new@test.example"])
         let new = try #require(waiting.last)
         #expect(new == SortingService.Email(
-            messageID: "new@test.example", sender: "kim@quay.example", recipients: [Self.work], date: Self.date(4),
+            messageID: "new@test.example", sender: "kim@quay.example", to: [Self.work], date: Self.date(4),
             subject: "Hello", text: "First text", mailbox: "Work/INBOX"))
         await store.close()
     }
