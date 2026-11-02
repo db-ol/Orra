@@ -258,8 +258,9 @@ nonisolated enum CaptionSource: String, CaseIterable, Sendable {
 /// let go of the microphone as a stop does, and start it again once the screen unlocks, if
 /// they are still on and still listen to it, see `screenLockChanged(_:)`. The sentence
 /// being heard ends at the lock, and nothing said meanwhile is captioned. Captions of what
-/// the Mac plays go on. The note of a lock makes it, and a read of the window server's
-/// session that says locked does only at a wake, see `macDidWake()`.
+/// the Mac plays go on. A lock counts from its note, or at a wake from a read of the window
+/// server's session that says locked, see `macDidWake()`. Microphone captions let go of the
+/// microphone at a sleep too, and the wake starts it again, see `macWillSleep()`.
 ///
 /// While captions start or listen and their window can be seen, they keep the display on,
 /// as a video player does, see `keepsDisplayOn`.
@@ -273,7 +274,9 @@ final class MeetingCaptions {
     nonisolated enum CaptureState: Equatable, Sendable {
         case off
         /// The capture is being set up off the main actor. The first time, macOS may
-        /// show the permission prompt meanwhile.
+        /// show the permission prompt meanwhile. Microphone captions also show as
+        /// starting from a sleep until the wake starts the microphone again, see
+        /// `macWillSleep()`.
         case starting
         case listening
         /// What the Mac plays cannot be captured.
@@ -669,6 +672,20 @@ final class MeetingCaptions {
         chosenMicrophone = uid
         deviceRestarts = []
         scheduleRestart(.choice, after: 0)
+    }
+
+    /// The Mac goes to sleep. Captions that listen to the microphone let go of it, as a stop
+    /// does, so no unit runs through the sleep into a lock screen, and the sentence being
+    /// heard ends. They still listen to it and show as starting, and the wake starts it
+    /// again, see `macDidWake()`. The capture of what the Mac plays goes on as it is.
+    func macWillSleep() {
+        guard isOn, capturing == .microphone else { return }
+        Logger.captions.notice("Meeting captions let go of the microphone while the Mac sleeps")
+        stopCapture()
+        pipeline?.endSentence()
+        capturing = .microphone
+        capture = .starting
+        silence = nil
     }
 
     /// The Mac woke from sleep. Captions that listen to the microphone start it again,

@@ -161,18 +161,19 @@ trusted once in Xcode. docs/dependencies.md has the details.
   process can post the note of an unlock, so captions take one only while the window
   server's session agrees, and they look at the session while the screen is locked, since
   a note may come late or not at all. A lock counts from its note, or at a wake from a
-  read of the session that says locked, since that note may come after the wake. Nothing
-  said meanwhile is captioned, and captions of what the Mac plays go on while the screen
-  is locked. From the press of the talk key or the translation key, in any mode, until the
-  dictation is pasted or cancelled, while a voice sample records and while Orra speaks a
-  translation, microphone captions drop what the microphone hears before it reaches the
-  captions, and they go on afterwards. Their unit keeps running meanwhile, so the window
-  still says that the microphone is on. A start of their unit waits until the pause is
-  over, and only a start already under way at the press completes. Their model calls go
-  through EngineTurns as all caption calls do, so a dictation waits at most for the end of
-  one caption call already running at the press, and usually not at all. They keep only
-  what captions of the Mac keep: the text in memory until Orra quits, no audio, and
-  nothing in the log but counts, timings and states.
+  read of the session that says locked, since that note may come after the wake. A sleep
+  of the Mac lets go of the microphone too, and the wake starts it again unless the screen
+  is locked then. Nothing said meanwhile is captioned, and captions of what the Mac plays
+  go on while the screen is locked. From the press of the talk key or the translation key,
+  in any mode, until the dictation is pasted or cancelled, while a voice sample records
+  and while Orra speaks a translation, microphone captions drop what the microphone hears
+  before it reaches the captions, and they go on afterwards. Their unit keeps running
+  meanwhile, so the window still says that the microphone is on. A start of their unit
+  waits until the pause is over, and only a start already under way at the press
+  completes. Their model calls go through EngineTurns as all caption calls do, so a
+  dictation waits at most for the end of one caption call already running at the press,
+  and usually not at all. They keep only what captions of the Mac keep: the text in memory
+  until Orra quits, no audio, and nothing in the log but counts, timings and states.
 - While Live Captions are on and start or listen, their window can be seen (ordered in, not
   minimized or hidden, not covered whole, on displays that are awake) and the screen is not
   locked, Orra keeps the display on through one process activity with

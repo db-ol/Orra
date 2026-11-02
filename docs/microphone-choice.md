@@ -94,17 +94,17 @@ without a buffer, such as a shortcut during the wait of the translation key, kee
 unit. When AudioOutputUnitStop fails, its status goes to the log and the unit is
 uninitialized and disposed at once, so its IO does not go on until the next press.
 
-No IO runs between holds only while Live Captions do not listen to the microphone. Once the
-user chooses the microphone for them, CaptionMicrophone sets up a unit of its own on the
-microphone a dictation would record from, with the steps above, and its IO runs until
-captions stop, listen to what the Mac plays again, or the screen locks or the user's
-session is switched away. A new unit starts once the screen unlocks or the session is
-back. Core Audio serves both, so dictation's unit or engine starts and stops as before.
-The caption unit is stopped, uninitialized and disposed at once when captions let go of
-the microphone, so nothing of it stays set up. A caption unit that runs at the press of a
-key keeps running through the dictation, and captions drop what it hears. One that does
-not run yet starts only after the dictation, unless its start was already under way at
-the press.
+No IO runs between holds only while Live Captions do not listen to the microphone. Once
+the user chooses the microphone for them, CaptionMicrophone sets up a unit of its own on
+the microphone a dictation would record from, with the steps above, and its IO runs until
+captions stop, listen to what the Mac plays again, the Mac goes to sleep, or the screen
+locks or the user's session is switched away. A new unit starts at the wake unless the
+screen is locked then, and once the screen unlocks or the session is back. Core Audio
+serves both, so dictation's unit or engine starts and stops as before. The caption unit is
+stopped, uninitialized and disposed at once when captions let go of the microphone, so
+nothing of it stays set up. A caption unit that runs at the press of a key keeps running
+through the dictation, and captions drop what it hears. One that does not run yet starts
+only after the dictation, unless its start was already under way at the press.
 
 The input callback runs on Core Audio's real time thread. It renders into scratch
 memory set aside in advance and copies into a buffer for the whole recording, which is

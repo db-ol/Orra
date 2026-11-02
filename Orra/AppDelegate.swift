@@ -217,7 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.learnedNotice.offerKeyboardTip(key)
     }
     private var menuObserver: (any NSObjectProtocol)?
-    private var wakeObserver: (any NSObjectProtocol)?
+    private var sleepObservers: [any NSObjectProtocol] = []
     /// Keeps the display on while captions show, see `followCaptionDisplay()`.
     private var captionDisplayActivity: (any NSObjectProtocol)?
     private var mailObservers: [any NSObjectProtocol] = []
@@ -397,18 +397,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         })
     }
 
-    /// Tells the captions when the Mac wakes, so captions that listen to the microphone
-    /// start it again.
-    private func followWake() {
-        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didWakeNotification,
-            object: nil,
-            queue: .main
-        ) { [captions] _ in
-            MainActor.assumeIsolated {
-                captions.macDidWake()
-            }
-        }
+    /// Tells the captions when the Mac goes to sleep and when it wakes, so captions that
+    /// listen to the microphone let go of it for the sleep and start it again.
+    private func followSleepAndWake() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        sleepObservers = [
+            workspace.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [captions] _ in
+                MainActor.assumeIsolated {
+                    captions.macWillSleep()
+                }
+            },
+            workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [captions] _ in
+                MainActor.assumeIsolated {
+                    captions.macDidWake()
+                }
+            },
+        ]
     }
 
     /// Keeps the display on while captions start or listen and their window can be seen,
@@ -546,7 +550,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         captions.closeWindow = { [captionWindow] in captionWindow.close() }
         pushToTalk.onLiveCaptionsShortcut = { [weak self] in self?.toggleCaptionsFromShortcut() }
         followMicrophoneChoice()
-        followWake()
+        followSleepAndWake()
         followCaptionDisplay()
         // The steps that keep a user's settings across versions. A version that changes
         // what a setting starts as adds its step inside, not here.

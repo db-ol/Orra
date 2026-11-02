@@ -1570,6 +1570,95 @@ struct MeetingCaptionsTests {
         captions.setOn(false)
     }
 
+    /// Microphone captions let go of the microphone when the Mac goes to sleep, as a stop
+    /// does, so no unit runs through the sleep into a lock screen, and the wake starts it
+    /// again in the same meeting. Samples still on their way are ignored. The capture of
+    /// what the Mac plays goes on.
+    @Test func aSleepLetsGoOfTheMicrophoneAndTheWakeStartsItAgain() async throws {
+        let source = FakeSource()
+        let microphone = FakeCaptionMicrophone()
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels(["Hello everyone."]), source: source, events: events, microphone: microphone)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        captions.macWillSleep()
+        #expect(captions.capture == .listening)
+        captions.macDidWake()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(source.calls == ["start", "started"])
+        captions.setSource(.microphone)
+        try await eventually { captions.capture == .listening && microphone.starts == 1 }
+        let run = captions.currentRun
+        captions.macWillSleep()
+        #expect(captions.capture == .starting)
+        #expect(captions.microphoneInUse == nil)
+        #expect(captions.isOn)
+        try await eventually { microphone.stops == 1 }
+        #expect(!microphone.isCapturing)
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: run)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(captions.store.sentences.isEmpty)
+        captions.macDidWake()
+        try await eventually { captions.capture == .listening && microphone.starts == 2 }
+        #expect(captions.microphoneInUse == microphone.input)
+        #expect(events.items == ["show", "started"])
+        captions.setOn(false)
+    }
+
+    /// A start under way at the sleep, such as on a Bluetooth microphone that takes seconds,
+    /// cannot stop halfway. The stop queued behind it tears down what it made, its outcome
+    /// is ignored, and the wake starts the microphone.
+    @Test func aSleepDuringAStartTearsDownWhatTheStartMade() async throws {
+        let microphone = FakeCaptionMicrophone()
+        microphone.holdsStart = true
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone)
+        captions.setSource(.microphone)
+        captions.setOn(true)
+        try await eventually { microphone.calls == ["start"] }
+        captions.macWillSleep()
+        microphone.holdsStart = false
+        microphone.releaseStart()
+        try await eventually { microphone.calls == ["start", "started", "stop"] }
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(captions.capture == .starting)
+        #expect(captions.microphoneInUse == nil)
+        #expect(!microphone.isCapturing)
+        captions.macDidWake()
+        try await eventually { captions.capture == .listening && microphone.starts == 2 }
+        captions.setOn(false)
+    }
+
+    /// A sleep that locks the screen: whether the note of the lock comes before the wake, or
+    /// after it while the session already says locked, the microphone let go at the sleep
+    /// stays off at the lock screen, and the unlock starts it.
+    @Test func aSleepIntoALockedScreenKeepsTheMicrophoneOffUntilTheUnlock() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let screen = FakeScreenLock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone, screenLock: screen)
+        _ = try await listeningToTheMicrophone(captions)
+        captions.macWillSleep()
+        try await eventually { microphone.stops == 1 }
+        screen.lock()
+        #expect(captions.capture == .pausedWhileLocked)
+        captions.macDidWake()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(microphone.starts == 1)
+        #expect(captions.capture == .pausedWhileLocked)
+        screen.unlock()
+        try await eventually { captions.capture == .listening && microphone.starts == 2 }
+        captions.macWillSleep()
+        screen.locked = true
+        captions.macDidWake()
+        #expect(captions.capture == .pausedWhileLocked)
+        screen.note(true)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(microphone.starts == 2)
+        #expect(!microphone.isCapturing)
+        screen.unlock()
+        try await eventually { captions.capture == .listening && microphone.starts == 3 }
+        captions.setOn(false)
+    }
+
     @Test func aMicrophoneThatFailsToStartSaysSo() async throws {
         let microphone = FakeCaptionMicrophone()
         microphone.fails = .failed(step: "start the input unit", status: -1)
