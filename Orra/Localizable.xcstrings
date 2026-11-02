@@ -9317,7 +9317,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "マイクがオン:%@"
+            "value" : "マイクがオン: %@"
           }
         },
         "zh-Hans" : {
