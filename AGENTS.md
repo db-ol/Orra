@@ -177,10 +177,12 @@ trusted once in Xcode. docs/dependencies.md has the details.
   and usually not at all. They keep only what captions of the Mac keep: the text in memory
   until Orra quits, no audio, and nothing in the log but counts, timings and states.
 - While Live Captions are on and start or listen, their window can be seen (ordered in, not
-  minimized or hidden, not covered whole, on displays that are awake) and the screen is not
-  locked, Orra keeps the display on through one process activity with
-  idleDisplaySleepDisabled, the way a video player does, for both sources, approved by the
-  maintainer on 2026-11-02. AppDelegate holds it while MeetingCaptions.keepsDisplayOn is
+  minimized or hidden, not covered whole, on displays that are awake), the screen is not
+  locked and they heard sound in the last 5 minutes, Orra keeps the display on through one
+  process activity with idleDisplaySleepDisabled, the way a video player does, for both
+  sources, approved by the maintainer on 2026-11-02, with the 5 minutes on 2026-11-05.
+  Sound is what the caption segmenter takes for speech, so the steady noise of a room
+  counts as none. AppDelegate holds it while MeetingCaptions.keepsDisplayOn is
   true and ends it as soon as it is not, and macOS drops it when Orra quits. The activity
   never keeps the Mac awake with its displays off, and never holds back a lock the user
   asks for, Sleep or a closed lid.

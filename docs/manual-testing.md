@@ -3198,8 +3198,9 @@ a headset that gives exactly zero while you are quiet, if there is one.
   smallest.
 
 The screen while Live Captions show, added on 2026-11-02, not verified yet.
-MeetingCaptionsTests checks when captions keep the display on, and
-CaptionWindowVisibilityTests when the window counts as seen. Nothing tests the activity
+MeetingCaptionsTests checks when captions keep the display on, since 2026-11-05 also the
+5 minutes without sound with a clock the tests move, and CaptionWindowVisibilityTests when
+the window counts as seen. Nothing tests the activity
 itself or the notes the window follows. In Lock Screen settings set Start Screen Saver
 when inactive to 1 minute, Turn display off when inactive to 2 minutes (on a MacBook on
 its power adapter, Turn display off on power adapter when inactive), and Require password
@@ -3227,6 +3228,16 @@ after screen saver begins or display is turned off to Immediately. Watch
   and a wake of the display. Within a second of the unlock the assertion is back.
 - [ ] With microphone access off, or on a Mac without a microphone, the window shows its
   note and pmset lists no assertion of Orra's.
+- [ ] With captions on What the Mac Plays and the window in view, play a video for a minute,
+  pause it and leave the Mac alone. About 5 minutes after the last sound the log says
+  "Meeting captions heard no sound for 300 s and let go of the display" and "Meeting
+  captions no longer keep the display on", pmset no longer lists "Showing Live Captions",
+  and soon after, the screen saver starts or the screen dims and turns off, as without
+  Orra, unless another app keeps it on. Then move the mouse, unlock if the screen locked,
+  and play the video: within a second the log says "Meeting captions hear sound again"
+  and "Meeting captions keep the display on", and pmset lists the assertion again. The
+  same with Microphone: stay quiet for 5 minutes, then speak. Write down whether the noise
+  of the room, a fan, music or typing near the microphone kept the assertion.
 - [ ] A dictation, a voice sample and Orra speaking a translation keep the assertion, and so
   does choosing another microphone under Microphone, which starts the microphone again. The
   display never dims meanwhile.
