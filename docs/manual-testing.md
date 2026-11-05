@@ -3060,7 +3060,8 @@ quit such apps for the checks with nothing playing. Watch the log with
 Microphone captions, added on 2026-11-01, not verified yet. MeetingCaptionsTests checks
 the choice, the starts, the starts again and the stops, the pause for dictation and the
 notes with a fake microphone, and since 2026-11-02 the pause while the screen is locked
-and the stop at a sleep with a fake screen lock. ScreenLockTests checks how the window
+and the stop at a sleep with a fake screen lock, since 2026-11-05 also a lock whose note
+was lost and that the session shows. ScreenLockTests checks how the window
 server's session and the notes of a lock tell that the screen is locked,
 CaptionMicrophoneTests the rules for which microphone captions use and when they start it
 again, and TapConversionTests the conversion of mono audio at the device's own rate. No
@@ -3124,7 +3125,9 @@ a headset that gives exactly zero while you are quiet, if there is one.
   minutes, sleep the Mac for longer than that and wake it: the same as with the password
   asked right after sleep. A "Caption microphone started" at the lock screen fails the
   check, so write down the lines around it, since it means that neither the note of the
-  lock nor the session told the lock within half a second of the wake.
+  lock nor the session told the lock by the wake's start of the microphone, which reads
+  the session right before the unit starts. Write down too whether "found the screen
+  locked at a look at the session" follows within about 2 seconds.
 - [ ] Connect AirPods while captions listen to System Default and macOS makes them the
   default input: captions move to them and keep going. Write down how many "start the
   microphone again" lines the log shows. A start that fails says "Orra could not start the
@@ -3158,10 +3161,13 @@ a headset that gives exactly zero while you are quiet, if there is one.
   and count as a move.
 - [ ] The same as the first lock check with Lock Screen in the Apple menu, with a screen
   saver that asks for the password at once, and with Put Display to Sleep from a hot
-  corner. Write down any way to lock that leaves the microphone on, by the log. Captions
-  find a lock whose note never comes only at a wake, so such a way keeps the microphone on
-  for the whole lock. Write down too whether `pmset -g assertions` still lists "Showing
-  Live Captions" at the lock screen then.
+  corner. Write down any way to lock whose note does not come, by the log. Captions on the
+  microphone find such a lock within about 2 seconds when the session shows it, with
+  "found the screen locked at a look at the session", so the microphone stays on at most
+  that long. A way that neither posts the note nor shows in the session keeps the
+  microphone on for the whole lock, so write it down. With What the Mac Plays a read
+  finds a lock only at a wake, so write down too whether `pmset -g assertions` still lists
+  "Showing Live Captions" at the lock screen then.
 - [ ] With a second user account, switch to it from the menu bar and back: the log says
   "Screen lock note: the session was switched away" and "let go of the microphone" while
   the other user is in front, and microphone captions go on once you are back.
@@ -3175,8 +3181,9 @@ a headset that gives exactly zero while you are quiet, if there is one.
   the assertion of the display.
 - [ ] At the lock screen, press the Live Captions shortcut. Write down whether it turns
   captions on or off there. If it turns them on with Microphone chosen earlier, the log
-  says "wait for the screen to unlock to start the microphone" and has no "Caption
-  microphone started" until the unlock.
+  says "wait for the screen to unlock to start the microphone", or "found the screen
+  locked before a start of the microphone" when the note of the lock did not come, and has
+  no "Caption microphone started" until the unlock.
 - [ ] Mute yourself in a call app while captions listen to the same microphone: Orra still
   captions you, as the user guide says.
 - [ ] Copy All Captions, Copy Captions and Copy Previous Captions hold only text, also for a

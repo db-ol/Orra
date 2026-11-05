@@ -159,11 +159,12 @@ trusted once in Xcode. docs/dependencies.md has the details.
   start it again once the screen unlocks or the session is back, if they are still on and
   still listen to it. That start does not count toward the limit of starts again. Any
   process can post the note of an unlock, so captions take one only while the window
-  server's session agrees, and they look at the session while the screen is locked, since
-  a note may come late or not at all. A lock counts from its note, or at a wake from a
-  read of the session that says locked, since that note may come after the wake. A sleep
-  of the Mac lets go of the microphone too, and the wake starts it again unless the screen
-  is locked then. Nothing said meanwhile is captioned, and captions of what the Mac plays
+  server's session agrees, and they look at the session every 2 s while the screen is
+  locked and while they listen to the microphone, since a note may come late or not at
+  all. A lock counts from its note, or from a read of the session that says locked at a
+  wake, at that look while captions listen to the microphone and right before every start
+  of the microphone, approved by the maintainer on 2026-11-05. A sleep of the Mac lets go
+  of the microphone too, and the wake starts it again unless the screen is locked then. Nothing said meanwhile is captioned, and captions of what the Mac plays
   go on while the screen is locked. From the press of the talk key or the translation key,
   in any mode, until the dictation is pasted or cancelled, while a voice sample records
   and while Orra speaks a translation, microphone captions drop what the microphone hears
