@@ -164,8 +164,9 @@ trusted once in Xcode. docs/dependencies.md has the details.
   all. A lock counts from its note, or from a read of the session that says locked at a
   wake, at that look while captions listen to the microphone and right before every start
   of the microphone, approved by the maintainer on 2026-11-05. A sleep of the Mac lets go
-  of the microphone too, and the wake starts it again unless the screen is locked then. Nothing said meanwhile is captioned, and captions of what the Mac plays
-  go on while the screen is locked. From the press of the talk key or the translation key,
+  of the microphone too, and the wake starts it again unless the screen is locked then.
+  Nothing said meanwhile is captioned, and captions of what the Mac plays go on while the
+  screen is locked. From the press of the talk key or the translation key,
   in any mode, until the dictation is pasted or cancelled, while a voice sample records
   and while Orra speaks a translation, microphone captions drop what the microphone hears
   before it reaches the captions, and they go on afterwards. Their unit keeps running
