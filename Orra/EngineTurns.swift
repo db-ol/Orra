@@ -18,6 +18,10 @@ import os
 ///   recorded meanwhile. So a dictation waits at most for the end of one short caption
 ///   call, and usually not at all.
 ///
+/// Transcribe File takes its turns the same way, one call for each segment of the file,
+/// see FileTranscription. It waits while captions run, so the two rarely run at once,
+/// and a press cancels every call under way.
+///
 /// Main actor state, since the controller reports dictations on the main actor.
 @Observable
 final class EngineTurns {
@@ -28,9 +32,11 @@ final class EngineTurns {
     /// it such as right Control+C, is a dictation for a moment too, and a note at each
     /// would flash.
     private(set) var dictationNoteDue = false
-    /// The caption call running now, cancelled when a dictation starts.
-    @ObservationIgnored private var running: CancellableTask?
-    /// Counts dictations, so a caption call can tell it was cancelled for one.
+    /// The calls running now, by their number, each cancelled when a dictation starts.
+    @ObservationIgnored private var running: [Int: any CancellableTask] = [:]
+    /// Counts the calls, for their numbers in `running`.
+    @ObservationIgnored private var calls = 0
+    /// Counts dictations, so a call can tell it was cancelled for one.
     @ObservationIgnored private var dictations = 0
     /// How often a waiting caption call looks again whether the dictation is over.
     @ObservationIgnored private let pollInterval: Duration
@@ -52,7 +58,9 @@ final class EngineTurns {
     func dictationStarted() {
         isDictating = true
         dictations += 1
-        running?.cancel()
+        for call in running.values {
+            call.cancel()
+        }
         let dictation = dictations
         noteTimer?.cancel()
         noteTimer = Task { [weak self, noteDelay] in
@@ -81,11 +89,24 @@ final class EngineTurns {
         noteTimer = nil
     }
 
+    /// Who makes a call through `turn(for:retries:_:)`, for the log.
+    nonisolated enum Caller: String, Sendable {
+        case caption
+        case file
+    }
+
     /// Runs a caption call on a model once no dictation is under way. When a dictation
     /// cancels it, it runs again after that dictation, at most `retries` times. Throws
     /// CancellationError when the caller is cancelled, such as when captions are turned
     /// off.
     func captionTurn<T: Sendable>(retries: Int = 3, _ work: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await turn(for: .caption, retries: retries, work)
+    }
+
+    /// Runs a call on a model once no dictation is under way, the way `captionTurn` does
+    /// for captions, for `caller`. Several calls may run at once, such as a caption and a
+    /// segment of Transcribe File, and a press cancels all of them.
+    func turn<T: Sendable>(for caller: Caller, retries: Int = 3, _ work: @escaping @Sendable () async throws -> T) async throws -> T {
         var attempt = 0
         while true {
             while isDictating {
@@ -93,14 +114,16 @@ final class EngineTurns {
             }
             try Task.checkCancellation()
             let dictation = dictations
+            calls += 1
+            let call = calls
             let task = Task { try await work() }
-            running = task
+            running[call] = task
             let result = await withTaskCancellationHandler {
                 await task.result
             } onCancel: {
                 task.cancel()
             }
-            running = nil
+            running[call] = nil
             try Task.checkCancellation()
             switch result {
             case .success(let value):
@@ -109,7 +132,7 @@ final class EngineTurns {
                 // Cancelled for a dictation: once more after it.
                 if dictation != dictations, attempt < retries {
                     attempt += 1
-                    Logger.captions.notice("A caption call gave way to a dictation, running it again after it")
+                    Logger.captions.notice("A \(caller.rawValue, privacy: .public) call gave way to a dictation, running it again after it")
                     continue
                 }
                 throw error
