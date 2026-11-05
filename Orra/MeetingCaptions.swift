@@ -265,7 +265,8 @@ nonisolated enum CaptionSource: String, CaseIterable, Sendable {
 /// `macWillSleep()`.
 ///
 /// While captions start or listen and their window can be seen, they keep the display on,
-/// as a video player does, see `keepsDisplayOn`.
+/// as a video player does, until they hear no sound for `displayQuietLimit`, see
+/// `keepsDisplayOn`.
 ///
 /// Turning it off stops the capture, lets go of the microphone and closes the window. The
 /// sentences stay in memory until Orra quits, so they can still be copied, and the next
@@ -413,6 +414,11 @@ final class MeetingCaptions {
     /// DistributedNotificationCenter says that a note may come late or be dropped, see
     /// `followTheScreenLock()`. A look reads one dictionary of the window server.
     static let screenLockCheckInterval = 2.0
+    /// Seconds without sound after which captions let go of the display, for both sources,
+    /// as when the window is left open after a call, see `quietTooLong`. Sound is what the
+    /// segmenter takes for speech, see CaptionPipeline.isInSpeech, so the steady noise of a
+    /// quiet room or a line counts as none, as it does in the pauses of a call.
+    static let displayQuietLimit = 300.0
 
     private(set) var isOn = false
     private(set) var capture: CaptureState = .off
@@ -430,6 +436,9 @@ final class MeetingCaptions {
     /// Whether the caption window can be seen, as CaptionWindow reports it, see
     /// `keepsDisplayOn`.
     private(set) var windowVisible = false
+    /// True once captions heard no sound for `displayQuietLimit`, from their start or from
+    /// the last sound, until sound comes back or they stop, see `keepsDisplayOn`.
+    private(set) var quietTooLong = false
     /// What came in place of sound for `silenceHint` since the capture started, for the
     /// window's note. Nil until then and from the first sound on. No audio at all from the
     /// Mac becomes no sound when an app starts to play and still no audio comes, see
@@ -524,6 +533,10 @@ final class MeetingCaptions {
     @ObservationIgnored private let restartWindow: Double
     @ObservationIgnored private let accessCheckInterval: Double
     @ObservationIgnored private let screenLockCheckInterval: Double
+    /// The time and a wait, only for how long captions heard no sound, see
+    /// `displayQuietLimit`. Tests pass a clock they move.
+    @ObservationIgnored private let now: () -> ContinuousClock.Instant
+    @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
     @ObservationIgnored private var pipeline: CaptionPipeline?
     /// Starts and stops the capture of what the Mac plays, one after the other, off the
     /// main actor. Since it is serial, a stop that comes while a start still runs tears
@@ -565,6 +578,11 @@ final class MeetingCaptions {
     /// Looks at the session while captions are on and the screen is locked or they listen
     /// to the microphone, see `followTheScreenLock()`.
     @ObservationIgnored private var screenLockCheck: Task<Void, Never>?
+    /// When captions last heard sound, or started, by `now`, see `displayQuietLimit`.
+    @ObservationIgnored private var lastSound = ContinuousClock.now
+    /// Waits for `displayQuietLimit` without sound while captions are on, see
+    /// `followTheQuiet()`.
+    @ObservationIgnored private var quietCheck: Task<Void, Never>?
 
     /// - Parameters:
     ///   - systemAudio: The capture of the sound the Mac plays. Tests pass a fake.
@@ -592,6 +610,9 @@ final class MeetingCaptions {
     ///   - restartWindow: See `MeetingCaptions.restartWindow`.
     ///   - accessCheckInterval: See `MeetingCaptions.accessCheckInterval`.
     ///   - screenLockCheckInterval: See `MeetingCaptions.screenLockCheckInterval`.
+    ///   - now: The time, for how long captions heard no sound, see
+    ///     `MeetingCaptions.displayQuietLimit`. Tests pass a clock they move.
+    ///   - sleep: Waits for a time, for the same. Tests pass that clock.
     init(
         systemAudio: SystemAudioSource,
         microphone: MicrophoneCaptionSource = .unavailable,
@@ -613,7 +634,9 @@ final class MeetingCaptions {
         restartDelay: Double = MeetingCaptions.restartDelay,
         restartWindow: Double = MeetingCaptions.restartWindow,
         accessCheckInterval: Double = MeetingCaptions.accessCheckInterval,
-        screenLockCheckInterval: Double = MeetingCaptions.screenLockCheckInterval
+        screenLockCheckInterval: Double = MeetingCaptions.screenLockCheckInterval,
+        now: @escaping () -> ContinuousClock.Instant = { .now },
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.systemAudio = systemAudio
         self.microphone = microphone
@@ -636,6 +659,8 @@ final class MeetingCaptions {
         self.restartWindow = restartWindow
         self.accessCheckInterval = accessCheckInterval
         self.screenLockCheckInterval = screenLockCheckInterval
+        self.now = now
+        self.sleep = sleep
         // As the session says now, which covers a launch while the screen is locked or the
         // session is switched away, and after that as the watch reports.
         screenLocked = screenLock.isLocked()
@@ -705,13 +730,15 @@ final class MeetingCaptions {
     }
 
     /// Whether captions keep the display on now, the way a video player does: while they
-    /// are on and start or listen, their window can be seen and the screen is not locked,
-    /// for both sources. AppDelegate holds a process activity while this is true. A capture
-    /// that cannot start lets the display sleep, since its window then only says why, and
-    /// so does the pause while the screen is locked. A dictation does not change it, and a
-    /// start again stops and starts within one turn of the main actor, so it stays true.
+    /// are on and start or listen, their window can be seen, the screen is not locked and
+    /// they heard sound within `displayQuietLimit`, for both sources. AppDelegate holds a
+    /// process activity while this is true. A capture that cannot start lets the display
+    /// sleep, since its window then only says why, and so do the pause while the screen is
+    /// locked and a long quiet, as after a call, until sound comes back. A dictation does
+    /// not change it, and a start again stops and starts within one turn of the main actor,
+    /// so it stays true.
     var keepsDisplayOn: Bool {
-        guard isOn, windowVisible, !screenLocked else { return false }
+        guard isOn, windowVisible, !screenLocked, !quietTooLong else { return false }
         return switch capture {
         case .starting, .listening: true
         case .off, .unavailable, .microphoneUnavailable, .pausedWhileLocked: false
@@ -775,6 +802,9 @@ final class MeetingCaptions {
         })
         self.pipeline = pipeline
         showWindow()
+        lastSound = now()
+        quietTooLong = false
+        followTheQuiet()
         startCapture()
         followTheScreenLock()
     }
@@ -782,6 +812,9 @@ final class MeetingCaptions {
     private func stop() {
         isOn = false
         followTheScreenLock()
+        quietCheck?.cancel()
+        quietCheck = nil
+        quietTooLong = false
         let listenedTo = capturing ?? source
         stopCapture()
         let sentences = pipeline?.counts ?? CaptionPipeline.Counts()
@@ -1281,6 +1314,43 @@ final class MeetingCaptions {
             noteSystemAudio(samples)
         }
         pipeline.feed(samples)
+        if pipeline.isInSpeech {
+            noteSound()
+        }
+    }
+
+    /// Captions hear sound, see `displayQuietLimit`. Called for each piece of audio while
+    /// the segmenter hears a sentence, so it only notes the time until the display was let
+    /// go, and then keeps it on again.
+    private func noteSound() {
+        lastSound = now()
+        guard quietTooLong else { return }
+        quietTooLong = false
+        Logger.captions.notice("Meeting captions hear sound again")
+        followTheQuiet()
+    }
+
+    /// Lets go of the display once captions heard no sound for `displayQuietLimit`, see
+    /// `quietTooLong`. Each wait lasts until the limit would pass from the last sound, so
+    /// sound only notes its time and the wait starts again from there. Ends when captions
+    /// stop, and starts again when sound comes back.
+    private func followTheQuiet() {
+        quietCheck?.cancel()
+        quietCheck = nil
+        guard isOn, !quietTooLong else { return }
+        quietCheck = Task { [weak self, sleep] in
+            var wait = MeetingCaptions.displayQuietLimit
+            while true {
+                guard (try? await sleep(.seconds(wait))) != nil, !Task.isCancelled, let self, self.isOn else { return }
+                let quiet = self.lastSound.duration(to: self.now()) / .seconds(1)
+                if quiet >= MeetingCaptions.displayQuietLimit {
+                    self.quietTooLong = true
+                    Logger.captions.notice("Meeting captions heard no sound for \(quiet, format: .fixed(precision: 0), privacy: .public) s and let go of the display")
+                    return
+                }
+                wait = MeetingCaptions.displayQuietLimit - quiet
+            }
+        }
     }
 
     /// What the Mac plays: the first audio and the first sound, and samples of only zeros

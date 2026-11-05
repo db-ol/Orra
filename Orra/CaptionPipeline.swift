@@ -244,6 +244,13 @@ final class CaptionPipeline {
         Counts(cut: cutCount, reported: reportedCount, empty: emptyCount, dropped: droppedCount)
     }
 
+    /// True while the segmenter hears a sentence, which is when the stream rose above the
+    /// noise of its pauses, see CaptionSegmenter. Live Captions take it for sound, see
+    /// MeetingCaptions.displayQuietLimit.
+    var isInSpeech: Bool {
+        segmenter.isInSpeech
+    }
+
     /// Takes the next samples of the stream.
     func feed(_ samples: [Float]) {
         guard !isStopped else { return }

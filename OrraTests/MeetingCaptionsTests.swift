@@ -380,7 +380,8 @@ struct MeetingCaptionsTests {
     /// and looks at access come quickly. The limit of starts again counts over ten minutes,
     /// since a busy runner can spread a test's moves over more than the app's 20 s. The
     /// screen never locks unless a test passes a fake lock, and the looks at its session
-    /// come quickly.
+    /// come quickly. The time without sound that lets go of the display passes only when a
+    /// test moves `clock`.
     private func makeCaptions(
         _ models: FakeCaptionModels,
         source: FakeSource,
@@ -393,8 +394,10 @@ struct MeetingCaptionsTests {
         microphoneHold: Double = 0,
         microphoneQuietLimit: Double = 60,
         restartDelay: Double = 0.01,
-        screenLockCheckInterval: Double = 0.01
+        screenLockCheckInterval: Double = 0.01,
+        clock: TestClock = TestClock()
     ) -> MeetingCaptions {
+        let origin = ContinuousClock.now
         let captions = MeetingCaptions(
             systemAudio: source.source,
             microphone: microphone?.source ?? .unavailable,
@@ -413,7 +416,9 @@ struct MeetingCaptionsTests {
             restartDelay: restartDelay,
             restartWindow: 600,
             accessCheckInterval: 0.01,
-            screenLockCheckInterval: screenLockCheckInterval
+            screenLockCheckInterval: screenLockCheckInterval,
+            now: { origin + clock.now },
+            sleep: { try await clock.sleep(for: $0) }
         )
         captions.showWindow = { events.items.append("show") }
         captions.closeWindow = { events.items.append("close") }
@@ -2667,6 +2672,101 @@ struct MeetingCaptionsTests {
         #expect(follower.values == [false, true])
         captions.setOn(false)
         try await eventually { follower.values == [false, true, false] }
+    }
+
+    /// Captions let go of the display once they heard no sound for about 5 minutes, as when
+    /// the window is left open after a call, and keep it on again as soon as sound comes
+    /// back, as AppDelegate follows it. The quiet counts from the start and then from the
+    /// last sound, and samples of only zeros are no sound.
+    @Test func captionsLetGoOfTheDisplayAfterFiveMinutesWithoutSound() async throws {
+        let clock = TestClock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), clock: clock)
+        captions.setWindowVisible(true)
+        let follower = DisplayFollower(captions)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening && clock.sleeping == 1 }
+        let run = captions.currentRun
+        try await eventually { follower.values == [false, true] }
+        clock.advance(by: .seconds(MeetingCaptions.displayQuietLimit - 1))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(captions.keepsDisplayOn)
+        clock.advance(by: .seconds(1))
+        try await eventually { !captions.keepsDisplayOn }
+        #expect(captions.quietTooLong)
+        #expect(captions.capture == .listening)
+        try await eventually { follower.values == [false, true, false] }
+        captions.receive(CaptionAudio.silence(1), run: run)
+        #expect(!captions.keepsDisplayOn)
+        captions.receive(CaptionAudio.tone(0.3), run: run)
+        #expect(captions.keepsDisplayOn)
+        #expect(!captions.quietTooLong)
+        try await eventually { follower.values == [false, true, false, true] }
+        try await eventually { clock.sleeping == 1 }
+        clock.advance(by: .seconds(100))
+        captions.receive(CaptionAudio.tone(0.3), run: run)
+        clock.advance(by: .seconds(MeetingCaptions.displayQuietLimit - 100))
+        try await eventually { clock.sleeping == 1 }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(captions.keepsDisplayOn)
+        clock.advance(by: .seconds(100))
+        try await eventually { !captions.keepsDisplayOn }
+        captions.setOn(false)
+        #expect(!captions.quietTooLong)
+    }
+
+    /// The same for the microphone. A quiet room gives samples above the silence of a
+    /// microphone that is off, so the window says nothing about silence, but what the
+    /// segmenter takes for no speech is no sound, and so is a switch from what the Mac
+    /// plays.
+    @Test func microphoneCaptionsLetGoOfTheDisplayInAQuietRoom() async throws {
+        let clock = TestClock()
+        let microphone = FakeCaptionMicrophone()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone, silenceHint: 0.5, clock: clock)
+        captions.setWindowVisible(true)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening && clock.sleeping == 1 }
+        clock.advance(by: .seconds(MeetingCaptions.displayQuietLimit / 2))
+        captions.setSource(.microphone)
+        try await eventually { captions.capture == .listening && microphone.starts == 1 }
+        let run = captions.currentRun
+        #expect(captions.keepsDisplayOn)
+        let room = CaptionAudio.tone(1, amplitude: 0.001)
+        captions.receive(room, run: run)
+        clock.advance(by: .seconds(MeetingCaptions.displayQuietLimit / 2))
+        try await eventually { !captions.keepsDisplayOn }
+        captions.receive(room, run: run)
+        #expect(captions.silence == nil)
+        #expect(!captions.keepsDisplayOn)
+        captions.receive(CaptionAudio.tone(0.3), run: run)
+        #expect(captions.keepsDisplayOn)
+        captions.setOn(false)
+    }
+
+    /// Sound that comes back while the window cannot be seen keeps the display on once the
+    /// window can be seen again. Turning captions off ends the wait, and turning them on
+    /// starts the quiet over.
+    @Test func soundBackWhileTheWindowCannotBeSeenKeepsTheDisplayOnOnceItCanBe() async throws {
+        let clock = TestClock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), clock: clock)
+        captions.setWindowVisible(true)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening && clock.sleeping == 1 }
+        clock.advance(by: .seconds(MeetingCaptions.displayQuietLimit))
+        try await eventually { !captions.keepsDisplayOn }
+        captions.setWindowVisible(false)
+        captions.receive(CaptionAudio.tone(0.3), run: captions.currentRun)
+        #expect(!captions.keepsDisplayOn)
+        captions.setWindowVisible(true)
+        #expect(captions.keepsDisplayOn)
+        try await eventually { clock.sleeping == 1 }
+        clock.advance(by: .seconds(MeetingCaptions.displayQuietLimit))
+        try await eventually { !captions.keepsDisplayOn }
+        captions.setOn(false)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening && clock.sleeping == 1 }
+        #expect(captions.keepsDisplayOn)
+        captions.setOn(false)
+        try await eventually { clock.sleeping == 0 }
     }
 
     /// The window shows no note while the screen is locked, which nobody can see, and the

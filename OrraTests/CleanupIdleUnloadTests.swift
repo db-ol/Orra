@@ -24,6 +24,11 @@ final class TestClock: Sendable {
         state.withLock { $0.sleepers.count }
     }
 
+    /// How far the test moved the clock.
+    var now: Duration {
+        state.withLock { $0.now }
+    }
+
     func sleep(for duration: Duration) async throws {
         let id = state.withLock { state in
             state.next += 1
