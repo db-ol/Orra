@@ -16,6 +16,8 @@ struct StatusMenu: View {
     let showWelcome: () -> Void
     let reportProblem: () -> Void
     let showProjects: () -> Void
+    /// Opens the Transcribe File window.
+    var showTranscribeFile: () -> Void = {}
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -140,6 +142,15 @@ struct StatusMenu: View {
             }
         }
 
+        // Transcribe File, a window for an audio or video file, with a symbol next to its
+        // text like the Projects item below it. Also while the speech model is missing,
+        // since the window says what it needs.
+        Button {
+            showTranscribeFile()
+        } label: {
+            Label("Transcribe File…", systemImage: "waveform")
+        }
+
         // Projects, only while it is on, with the count of mail waiting for a reply. It
         // names the window it opens and carries the outline of the icon of Projects in
         // Settings, as a symbol next to text, so it stands out among the lines of text. A
@@ -151,7 +162,6 @@ struct StatusMenu: View {
             } label: {
                 Label(ProjectsWindowText.menuTitle(replyDue: projects.replyDueCount), systemImage: "briefcase")
             }
-            Divider()
         } else if Self.offersProjectsSetup(projects.projects) {
             // Where Open Projects Window stands while Projects is on. It opens Settings on
             // Projects, as Change Talk Key… opens it on the keys.
@@ -162,8 +172,8 @@ struct StatusMenu: View {
             } label: {
                 Label("Set Up Projects…", systemImage: "briefcase")
             }
-            Divider()
         }
+        Divider()
 
         Menu("Talk Key") {
             // A menu shows text as a line that cannot be clicked. The key is chosen by

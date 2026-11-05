@@ -135,6 +135,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     } openMail: {
         MailApp.open()
     }
+    /// The Transcribe File window, from Transcribe File… in the menu bar menu. It reads the
+    /// file the user drops or picks with the speech model and settings of dictation, and
+    /// takes its turns with dictation and captions, see FileTranscription.
+    lazy var transcribeFileWindow = TranscribeFileWindow { [transcription, turns, pushToTalk, captions] in
+        .live(transcription: transcription, turns: turns, pushToTalk: pushToTalk, captions: captions)
+    } speechModelLine: { [models, pushToTalk] in
+        TranscribeFileView.speechModelLine(installer: models.state, model: pushToTalk.modelState)
+    } willShow: { [dockIcon] in
+        dockIcon.willShowWindow()
+    }
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()
     let dockIcon = DockIcon.live()
