@@ -125,7 +125,9 @@ for code in "$sparkle_framework" "$sparkle_framework/Versions/B/Autoupdate" "$sp
     signer="$(codesign -dvv "$code" 2>&1)"
     grep -qF "Authority=$IDENTITY" <<<"$signer" || { echo "$code is not signed with $IDENTITY" >&2; exit 1; }
 done
-shown="$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString)"
+# plutil reads the file itself. defaults asks cfprefsd, which said Domain not found here on
+# 2026-11-01 while it was out of file descriptors.
+shown="$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")"
 [[ "$shown" == "$version" ]] || { echo "The app says version $shown" >&2; exit 1; }
 echo "Signed: Developer ID, hardened runtime, audio input and Apple Events only, arm64, version $version"
 
