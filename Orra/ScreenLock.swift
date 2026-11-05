@@ -123,8 +123,10 @@ nonisolated struct ScreenLockFlags: Equatable, Sendable {
 /// the main thread, and that they may come late or be dropped, which is why MeetingCaptions
 /// also reads the session: while it takes the screen as locked, which finds only an unlock
 /// whose note came late, never came or came while the session still said locked, and at a
-/// wake, which finds a lock whose note comes after the wake. A note of a lock that is
-/// dropped at any other time is not found. A switch of the session comes from NSWorkspace.
+/// wake, every 2 s while microphone captions are on and right before every start of the
+/// microphone, which find a lock whose note comes late or never comes. A note of a lock
+/// that is dropped while captions are off or listen to what the Mac plays is found only at
+/// a wake. A switch of the session comes from NSWorkspace.
 final class ScreenLockWatch: NSObject {
     private let onChange: @MainActor (Bool) -> Void
     private var flags: ScreenLockFlags
