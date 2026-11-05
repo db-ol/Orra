@@ -179,6 +179,17 @@ struct CorrectionFinderTests {
         #expect(find("send it on Monday", "send it on Monday", "send it on Sunday") == nil)
     }
 
+    @Test func aChangeToWordsWithChineseNumeralsIsNotACorrection() {
+        // These were learned while 十, 万 and 一 counted as digits of a name.
+        #expect(find("明天开会", "明天开会", "明天十点") == nil)
+        #expect(find("这个项目不错", "这个项目不错", "这个万科不错") == nil)
+        #expect(find("我们明天去", "我们明天去", "我们一起去") == nil)
+        // A single letter has no English key either.
+        #expect(find("go with plan A", "go with plan A", "go with plan B") == nil)
+        // A misheard name with a numeral in it is still learned.
+        #expect(find("我们去完克看房", "我们去完克看房", "我们去万科看房") == Correction(heard: "完克", corrected: "万科"))
+    }
+
     @Test func deletionsAdditionsAndEditsOutsideThePasteAreIgnored() {
         #expect(find("今天天气很好", "今天天气很好", "今天天气好") == nil)
         #expect(find("今天天气很好", "今天天气很好", "今天天气很好啊") == nil)
@@ -254,6 +265,39 @@ struct SoundAlikeTests {
         #expect(!SoundAlike.soundsAlike("form", "from"))
         #expect(!SoundAlike.soundsAlike("Anna", "Emma"))
         #expect(!SoundAlike.soundsAlike("明天", "今天"))
+    }
+
+    @Test func wordsWithoutAnEnglishKeyNeverMatchOnIt() {
+        // No Latin letters, so neither word has a key. 十, 万, 三 and 一 count as numbers in
+        // Swift, which made each second word look like a name.
+        #expect(!SoundAlike.soundsAlike("开会", "十点"))
+        #expect(!SoundAlike.soundsAlike("项目", "万科"))
+        #expect(!SoundAlike.soundsAlike("明天", "三天"))
+        #expect(!SoundAlike.soundsAlike("我们", "一起"))
+        // One letter is too short for a key.
+        #expect(!SoundAlike.soundsAlike("A", "B"))
+        #expect(!SoundAlike.soundsAlike("I", "We"))
+    }
+
+    @Test func onlyACapitalOrAnASCIIDigitMakesAName() {
+        #expect(SoundAlike.soundsAlike("aura 3", "orra3"))
+        #expect(SoundAlike.soundsAlike("aura三号", "Orra三号"))
+        // 三 is a Chinese word here, not a digit of a name.
+        #expect(!SoundAlike.soundsAlike("aura三号", "orra三号"))
+    }
+
+    @Test func misheardNamesStillSoundAlike() {
+        #expect(SoundAlike.soundsAlike("Ora", "Orra"))
+        #expect(SoundAlike.soundsAlike("Kubernettes", "Kubernetes"))
+        // Names with digits.
+        #expect(SoundAlike.soundsAlike("quen 3", "Qwen3"))
+        #expect(SoundAlike.soundsAlike("gpt 4o", "GPT-4o"))
+        // Chinese names with one wrong character, some with a numeral.
+        #expect(SoundAlike.soundsAlike("王亦博", "王一博"))
+        #expect(SoundAlike.soundsAlike("万克", "万科"))
+        #expect(SoundAlike.soundsAlike("三醒", "三星"))
+        #expect(SoundAlike.soundsAlike("迪力热吧", "迪丽热巴"))
+        #expect(SoundAlike.soundsAlike("亦", "一"))
     }
 }
 
