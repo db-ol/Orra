@@ -244,11 +244,13 @@ final class CaptionPipeline {
         Counts(cut: cutCount, reported: reportedCount, empty: emptyCount, dropped: droppedCount)
     }
 
-    /// True while the segmenter hears a sentence, which is when the stream rose above the
-    /// noise of its pauses, see CaptionSegmenter. Live Captions take it for sound, see
+    /// True while the segmenter hears speech: a sentence is being heard, which is when the
+    /// stream rose above the noise of its pauses, see CaptionSegmenter, and it is not
+    /// pausing, by `interimPauseLimit`. So a sentence that stays open when the audio stops
+    /// does not count once silence follows it. Live Captions take it for sound, see
     /// MeetingCaptions.displayQuietLimit.
-    var isInSpeech: Bool {
-        segmenter.isInSpeech
+    var hearsSpeech: Bool {
+        segmenter.isInSpeech && segmenter.openSilenceSeconds < Self.interimPauseLimit
     }
 
     /// Takes the next samples of the stream.

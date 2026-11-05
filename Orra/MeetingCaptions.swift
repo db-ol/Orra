@@ -416,7 +416,7 @@ final class MeetingCaptions {
     static let screenLockCheckInterval = 2.0
     /// Seconds without sound after which captions let go of the display, for both sources,
     /// as when the window is left open after a call, see `quietTooLong`. Sound is what the
-    /// segmenter takes for speech, see CaptionPipeline.isInSpeech, so the steady noise of a
+    /// segmenter takes for speech, see CaptionPipeline.hearsSpeech, so the steady noise of a
     /// quiet room or a line counts as none, as it does in the pauses of a call.
     static let displayQuietLimit = 300.0
 
@@ -1314,14 +1314,14 @@ final class MeetingCaptions {
             noteSystemAudio(samples)
         }
         pipeline.feed(samples)
-        if pipeline.isInSpeech {
+        if pipeline.hearsSpeech {
             noteSound()
         }
     }
 
-    /// Captions hear sound, see `displayQuietLimit`. Called for each piece of audio while
-    /// the segmenter hears a sentence, so it only notes the time until the display was let
-    /// go, and then keeps it on again.
+    /// Captions hear sound, see `displayQuietLimit`. Called for each piece of audio after
+    /// which the segmenter hears speech, so it only notes the time until the display was
+    /// let go, and then keeps it on again.
     private func noteSound() {
         lastSound = now()
         guard quietTooLong else { return }

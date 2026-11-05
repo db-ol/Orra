@@ -2742,6 +2742,26 @@ struct MeetingCaptionsTests {
         captions.setOn(false)
     }
 
+    /// Only speech that goes on is sound. A sentence still open when the Mac stopped sending
+    /// audio, as when a call ends in the middle of a word, is no sound once silence follows
+    /// it, so the display stays let go until someone speaks again.
+    @Test func silenceAfterASentenceCutOffIsNoSound() async throws {
+        let clock = TestClock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), clock: clock)
+        captions.setWindowVisible(true)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening && clock.sleeping == 1 }
+        let run = captions.currentRun
+        captions.receive(CaptionAudio.tone(0.3), run: run)
+        clock.advance(by: .seconds(MeetingCaptions.displayQuietLimit))
+        try await eventually { !captions.keepsDisplayOn }
+        captions.receive(CaptionAudio.silence(0.2), run: run)
+        #expect(!captions.keepsDisplayOn)
+        captions.receive(CaptionAudio.tone(0.3), run: run)
+        #expect(captions.keepsDisplayOn)
+        captions.setOn(false)
+    }
+
     /// Sound that comes back while the window cannot be seen keeps the display on once the
     /// window can be seen again. Turning captions off ends the wait, and turning them on
     /// starts the quiet over.
