@@ -130,7 +130,9 @@ struct FileAudioSourceTests {
 
     /// A file of several hours is read segment by segment, with no more memory than a
     /// short one. It writes about 40 MB, so it runs only with
-    /// TEST_RUNNER_ORRA_TRANSCRIBE_LONG=1, and then reports the time it took.
+    /// TEST_RUNNER_ORRA_TRANSCRIBE_LONG=1, and then attaches the time it took and the
+    /// memory as transcribe-file-long.txt. Run it on its own: memory that the speech model
+    /// of an earlier test in the same run gives back and takes again shows as growth here.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_TRANSCRIBE_LONG"] != nil))
     func aFileOfThreeHoursIsReadInBoundedMemory() async throws {
         let folder = try TestMedia.folder()
@@ -175,6 +177,6 @@ struct FileAudioSourceTests {
         // Far less than the 690 MB of the samples of three hours.
         let grown = Int64(peak) - Int64(before)
         #expect(grown < 100_000_000, "grew \(grown / 1_000_000) MB")
-        print("Read \(count) segments of \(hours) h in \(took), memory grew \(grown / 1_000_000) MB")
+        Attachment.record("Read \(count) segments of \(hours) h in \(took), memory grew \(grown / 1_000_000) MB at the most", named: "transcribe-file-long.txt")
     }
 }

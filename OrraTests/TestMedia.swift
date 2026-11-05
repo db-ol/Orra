@@ -36,7 +36,7 @@ enum TestMedia {
     static func writeAudio(_ samples: [Float], rate: Double, channels: Int = 1, to url: URL) throws {
         let settings: [String: Any] = switch url.pathExtension {
         case "m4a":
-            [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: rate, AVNumberOfChannelsKey: channels, AVEncoderBitRateKey: 96_000]
+            [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: rate, AVNumberOfChannelsKey: channels]
         default:
             [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: rate, AVNumberOfChannelsKey: channels, AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: url.pathExtension == "aif"]
         }
@@ -86,7 +86,6 @@ enum TestMedia {
                 AVFormatIDKey: kAudioFormatMPEG4AAC,
                 AVSampleRateKey: rate,
                 AVNumberOfChannelsKey: 1,
-                AVEncoderBitRateKey: 96_000,
             ])
             input.expectsMediaDataInRealTime = false
             writer.add(input)
