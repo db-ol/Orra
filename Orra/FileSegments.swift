@@ -11,6 +11,15 @@ import Foundation
 /// its first 2 s, and a segment shorter than 2 s joins the next one when that follows
 /// within a second, see FileSegmentJoiner. The pause that ends a sentence, the least
 /// speech a segment needs and the audio kept around it are those of captions.
+///
+/// A file can be far quieter than what the Mac plays. Most English clips of FLEURS stay
+/// below the levels captions start and go on at, 0.003 and 0.002 RMS, so on 10 minutes of
+/// them joined with pauses the speech model missed 63% of the words. Speech still has to
+/// stand 4 times above the noise of the pauses to start and 2 times to go on, so a file
+/// lowers the two levels to 0.0004 and 0.0003, which only matter above digital silence.
+/// The error rate on those 10 minutes fell to 4.3%, against 3.7% for the same clips each
+/// transcribed whole, and on 10 minutes of Chinese clips it was 3.2% against 3.8%,
+/// measured on 2026-11-05 with FileTranscriptionMeasurementTests.
 nonisolated enum FileSegments {
     /// The shortest segment Transcribe File aims at.
     static let shortest = 2.0
@@ -19,12 +28,15 @@ nonisolated enum FileSegments {
     /// The longest pause a short segment is joined across.
     static let joinedPause = 1.0
 
-    /// The segmenter's settings for a file: those of captions, with a longer limit and a
-    /// cut anywhere after the first `shortest` seconds of a long stretch.
+    /// The segmenter's settings for a file: those of captions, with a longer limit, a cut
+    /// anywhere after the first `shortest` seconds of a long stretch, and lower levels for
+    /// quiet files.
     static var settings: CaptionSegmenter.Settings {
         var settings = CaptionSegmenter.Settings()
         settings.maximumLength = longest
         settings.cutWindow = longest - shortest
+        settings.startLevel = 0.0004
+        settings.continueLevel = 0.0003
         return settings
     }
 }

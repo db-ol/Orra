@@ -59,11 +59,13 @@ struct FileSegmentJoinerTests {
     }
 
     /// The segmenter's settings for files: those of captions, with segments of up to 15 s
-    /// cut at the quietest frame after their first 2 s.
+    /// cut at the quietest frame after their first 2 s, and lower levels.
     @Test func filesAreCutIntoSegmentsOfAtMostFifteenSeconds() throws {
         let settings = FileSegments.settings
         #expect(settings.maximumLength == 15)
         #expect(settings.cutWindow == 13)
+        #expect(settings.startLevel == 0.0004)
+        #expect(settings.continueLevel == 0.0003)
         #expect(settings.pause == CaptionSegmenter.Settings().pause)
         #expect(settings.minimumSpeech == CaptionSegmenter.Settings().minimumSpeech)
         // 38 s of speech without a pause, quieter at 9 s and at 23.5 s.
@@ -85,5 +87,35 @@ struct FileSegmentJoinerTests {
         // The cuts land in the quiet moments, half a second later in the stream.
         #expect(abs(segments[0].end - 9.5) < 0.1)
         #expect(abs(segments[1].end - 24.0) < 0.1)
+    }
+
+    /// Speech far quieter than what the Mac plays, such as a recording from across a room,
+    /// still makes segments, while digital silence and the hiss under it do not.
+    @Test func quietSpeechMakesSegmentsAndQuietNoiseDoesNot() {
+        let rate = 16_000
+        var samples = [Float](repeating: 0, count: rate)
+        // Hiss at about -76 dBFS for 2 s, then speech at about -60 dBFS for 3 s over it.
+        var seed: UInt64 = 7
+        func noise() -> Float {
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return Float(Int64(bitPattern: seed >> 11) % 2_000 - 1_000) / 1_000 * 0.00025
+        }
+        samples += (0..<(2 * rate)).map { _ in noise() }
+        samples += (0..<(3 * rate)).map { index in noise() + 0.0014 * sin(Float(index) * 0.2) }
+        samples += [Float](repeating: 0, count: rate)
+        var quiet = CaptionSegmenter(settings: FileSegments.settings)
+        var segments = quiet.append(samples)
+        if let last = quiet.finish() {
+            segments.append(last)
+        }
+        #expect(segments.count == 1)
+        #expect(abs((segments.first?.start ?? 0) - 2.8) < 0.15)
+        // The levels of captions hear nothing in it.
+        var captions = CaptionSegmenter()
+        var captioned = captions.append(samples)
+        if let last = captions.finish() {
+            captioned.append(last)
+        }
+        #expect(captioned.isEmpty)
     }
 }
