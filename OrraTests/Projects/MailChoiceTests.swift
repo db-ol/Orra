@@ -14,19 +14,20 @@ struct MailChoiceTests {
         account: "Studio"
     )
 
-    let suite = "io.github.db-ol.OrraTests.mail-choice-\(UUID().uuidString)"
+    let suite: TestDefaults
     let defaults: UserDefaults
 
     init() throws {
-        defaults = try #require(UserDefaults(suiteName: suite))
+        suite = try TestDefaults("mail-choice")
+        defaults = suite.defaults
     }
 
     private func cleanUp() {
-        defaults.removePersistentDomain(forName: suite)
+        suite.remove()
     }
 
     private var saved: [String: Any] {
-        defaults.persistentDomain(forName: suite) ?? [:]
+        defaults.persistentDomain(forName: suite.name) ?? [:]
     }
 
     /// Release builds suggest the inbox and the sent mailbox, Debug builds nothing, and

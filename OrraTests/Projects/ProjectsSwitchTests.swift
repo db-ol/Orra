@@ -11,17 +11,18 @@ struct ProjectsSwitchTests {
     static let sixteenGB: UInt64 = 16 << 30
     static let eightGB: UInt64 = 8 << 30
 
-    let suite = "io.github.db-ol.OrraTests.projects-\(UUID().uuidString)"
+    let suite: TestDefaults
     let defaults: UserDefaults
     let storage = ProjectsStorage(root: FileManager.default.temporaryDirectory
         .appendingPathComponent("ProjectsSwitchTests-\(UUID().uuidString)", isDirectory: true))
 
     init() throws {
-        defaults = try #require(UserDefaults(suiteName: suite))
+        suite = try TestDefaults("projects")
+        defaults = suite.defaults
     }
 
     private func cleanUp() {
-        defaults.removePersistentDomain(forName: suite)
+        suite.remove()
         // A test may have left the index unwritable.
         try? FileManager.default.setAttributes([.posixPermissions: ProjectsStorage.folderPermissions], ofItemAtPath: storage.indexFolder.path)
         try? FileManager.default.removeItem(at: storage.root)
@@ -33,7 +34,7 @@ struct ProjectsSwitchTests {
 
     /// The saved value itself, nil while nothing is saved.
     private var saved: Bool? {
-        defaults.persistentDomain(forName: suite)?[ProjectsSwitch.key] as? Bool
+        defaults.persistentDomain(forName: suite.name)?[ProjectsSwitch.key] as? Bool
     }
 
     /// A file of `bytes` bytes in the index, as an index would leave.
@@ -94,10 +95,10 @@ struct ProjectsSwitchTests {
         defer { cleanUp() }
         let projects = makeSwitch()
         #expect(projects.revisesAfterDictation)
-        #expect(defaults.persistentDomain(forName: suite)?[ProjectsSwitch.revisesAfterDictationKey] == nil)
+        #expect(defaults.persistentDomain(forName: suite.name)?[ProjectsSwitch.revisesAfterDictationKey] == nil)
         projects.setRevisesAfterDictation(false)
         #expect(!projects.revisesAfterDictation)
-        #expect(defaults.persistentDomain(forName: suite)?[ProjectsSwitch.revisesAfterDictationKey] as? Bool == false)
+        #expect(defaults.persistentDomain(forName: suite.name)?[ProjectsSwitch.revisesAfterDictationKey] as? Bool == false)
         #expect(!makeSwitch().revisesAfterDictation)
         projects.setRevisesAfterDictation(true)
         #expect(projects.revisesAfterDictation)

@@ -15,6 +15,12 @@ struct StatusMenuTests {
     let dictation = FakeSpeech()
     let inserter = FakeInserter()
     let temporary = TemporaryModelFolders()
+    /// Preferences of its own for Projects while it is off, which nothing writes.
+    let offDefaults: TestDefaults
+
+    init() throws {
+        offDefaults = try TestDefaults("status-menu-off")
+    }
 
     @Test func liveCaptionsIsAtTheTopLevelUnderItsHeading() throws {
         let lines = lines(translationOn: false, speakingOn: false)
@@ -82,11 +88,11 @@ struct StatusMenuTests {
     /// offers the same item at the same times. While Projects is off, Set Up Projects…
     /// stands in its place with the same icon, on a Mac where Projects can be turned on.
     @Test func projectsShowsOnlyWhileItIsOnWithTheMailWaitingForAReply() async throws {
-        let suite = "io.github.db-ol.OrraTests.status-menu-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
+        let suite = try TestDefaults("status-menu")
+        let defaults = suite.defaults
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("StatusMenuTests-\(UUID().uuidString)", isDirectory: true)
         defer {
-            defaults.removePersistentDomain(forName: suite)
+            suite.remove()
             try? FileManager.default.removeItem(at: root)
         }
         let storage = ProjectsStorage(root: root)
@@ -240,10 +246,6 @@ struct StatusMenuTests {
 
     /// The menu SwiftUI makes of StatusMenu. No Live Captions shortcut unless one is given.
     private func menu(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true, store: CaptionStore = CaptionStore(), shortcut: KeyCombination? = nil, projects: ProjectsRuntime? = nil) -> NSMenu {
-        // Projects off, in preferences of its own that nothing writes, removed at the end.
-        let offSuite = "io.github.db-ol.OrraTests.status-menu-off-\(UUID().uuidString)"
-        let offDefaults = UserDefaults(suiteName: offSuite)!
-        defer { offDefaults.removePersistentDomain(forName: offSuite) }
         let pushToTalk = PushToTalkController(capture: mic.capture, transcription: dictation.transcription, insert: inserter.insert, liveCaptionsShortcut: shortcut)
         pushToTalk.setTranslationKeyOn(translationOn)
         let speech = TranslationSpeech(
@@ -271,9 +273,9 @@ struct StatusMenuTests {
             updater: AppUpdater(),
             speech: speech,
             projects: projects ?? Self.projects(
-                ProjectsSwitch(defaults: offDefaults, isVisible: false),
+                ProjectsSwitch(defaults: offDefaults.defaults, isVisible: false),
                 storage: ProjectsStorage(root: FileManager.default.temporaryDirectory.appendingPathComponent("StatusMenuTests-off", isDirectory: true)),
-                defaults: offDefaults
+                defaults: offDefaults.defaults
             ),
             showWelcome: {},
             reportProblem: {},

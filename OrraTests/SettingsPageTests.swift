@@ -32,9 +32,9 @@ struct SettingsPageTests {
     /// for Projects opens its page there, and General everywhere else. Every other page opens
     /// as asked either way.
     @Test func projectsOpensItsPageOnlyWhereItShows() throws {
-        let suite = "io.github.db-ol.OrraTests.settings-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let suite = try TestDefaults("settings")
+        defer { suite.remove() }
+        let defaults = suite.defaults
         let storage = ProjectsStorage(root: FileManager.default.temporaryDirectory.appendingPathComponent("SettingsPageTests-\(UUID().uuidString)", isDirectory: true))
         let shown = SettingsView.tabs(projects: ProjectsSwitch(defaults: defaults, isVisible: true, storage: storage))
         let hidden = SettingsView.tabs(projects: ProjectsSwitch(defaults: defaults, isVisible: false, storage: storage))
@@ -339,9 +339,9 @@ struct SettingsPageTests {
             try storage.create()
             try Data(count: projectsData).write(to: storage.indexFolder.appendingPathComponent("projects.sqlite"))
         }
-        let suite = "io.github.db-ol.OrraTests.settings-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let suite = try TestDefaults("settings")
+        defer { suite.remove() }
+        let defaults = suite.defaults
         let projects = ProjectsSwitch(defaults: defaults, isVisible: true, physicalMemory: physicalMemory, storage: storage)
         if projectsData > 0 || projectsOn {
             projects.turnOn()

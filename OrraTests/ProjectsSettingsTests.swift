@@ -18,16 +18,17 @@ struct ProjectsSettingsTests {
     nonisolated static let drafts = MailMailbox(kind: .mailbox, reference: .name(MailEvents.Code.mailbox, "Drafts", of: account), name: "Drafts", account: "Studio")
     nonisolated static let deniedLine = "Orra is not allowed to control Mail. Turn on Mail under Orra in Privacy & Security, Automation."
 
-    let suite = "io.github.db-ol.OrraTests.projects-settings-\(UUID().uuidString)"
+    let suite: TestDefaults
     let defaults: UserDefaults
     let mail = FakeMail()
 
     init() throws {
-        defaults = try #require(UserDefaults(suiteName: suite))
+        suite = try TestDefaults("projects-settings")
+        defaults = suite.defaults
     }
 
     private func cleanUp() {
-        defaults.removePersistentDomain(forName: suite)
+        suite.remove()
     }
 
     private func access(
