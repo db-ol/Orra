@@ -5,7 +5,7 @@ import Testing
 
 /// Runs the real model on the translation cases of Tools/rewrite-eval: the 182 regular
 /// cases, the 70 adversarial ones, which ask, order or try to steer the model, the 116
-/// translation probes, 6 of them long, and the 37 replies and 19 adversarial replies of the
+/// translation probes, 6 of them long, and the 39 replies and 26 adversarial replies of the
 /// Chinese pair in translation-replies.jsonl and adversarial-replies.jsonl, which open
 /// with words such as 可以 or 不好意思. Only when asked for, with
 /// TEST_RUNNER_ORRA_TRANSLATION_EVAL=1, and only when the model is on this Mac, see

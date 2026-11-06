@@ -35,6 +35,8 @@
 {"id": "rz35", "pair": "zh", "kind": "sure", "input": "Absolutely, count me in.", "label": "en", "ref": "当然，算我一个。"}
 {"id": "rz36", "pair": "zh", "kind": "sure", "input": "No worries, take your time.", "label": "en", "ref": "没关系，慢慢来。"}
 {"id": "rz37", "pair": "zh", "kind": "sorry", "input": "My bad, I forgot to send it.", "label": "en", "ref": "我的错，我忘了发。"}
+{"id": "rz38", "pair": "zh", "kind": "sure", "input": "没事儿，我自己来就行。", "label": "zh", "ref": "No problem, I can handle it myself."}
+{"id": "rz39", "pair": "zh", "kind": "hello", "input": "嘿~好久不见，最近怎么样？", "label": "zh", "ref": "Hey, long time no see, how have you been?"}
 {"id": "rj01", "pair": "ja", "kind": "sure", "input": "いいですよ、水曜日までにテストを終わらせます。", "label": "ja", "ref": "Sure, I'll finish testing by Wednesday."}
 {"id": "rj02", "pair": "ja", "kind": "sure", "input": "いいよ、手伝うよ。", "label": "ja", "ref": "Sure, I'll help."}
 {"id": "rj03", "pair": "ja", "kind": "sure", "input": "オッケー、じゃあ三時にね。", "label": "ja", "ref": "OK, see you at three then."}
@@ -49,3 +51,4 @@
 {"id": "rs05", "pair": "es", "kind": "sorry", "input": "Perdona, no vi tu mensaje.", "label": "es", "ref": "Sorry, I didn't see your message."}
 {"id": "rs06", "pair": "es", "kind": "hello", "input": "Qué onda, ¿ya llegaste?", "label": "es", "ref": "Hey, are you there yet?"}
 {"id": "rs07", "pair": "es", "kind": "sorry", "input": "Sorry, I can't make it tonight.", "label": "en", "ref": "Perdón, no puedo ir esta noche."}
+{"id": "rs08", "pair": "es", "kind": "sure", "input": "Sale sale, nos vemos mañana.", "label": "es", "ref": "OK, OK, see you tomorrow."}

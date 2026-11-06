@@ -174,7 +174,7 @@ struct TranslationGuardTests {
                 }
             }
         }
-        #expect(checked == 51 + 2 * 25)
+        #expect(checked == 54 + 2 * 33)
         #expect(held.isEmpty, "\(held)")
     }
 
