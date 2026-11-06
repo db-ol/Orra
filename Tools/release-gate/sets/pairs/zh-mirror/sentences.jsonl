@@ -1,0 +1,60 @@
+{"id": "m01", "language": "mixed", "say": "下午 meeting 之前能帮我 review 一下 PR 吗？", "reference": "下午 meeting 之前能帮我 review 一下 PR 吗？", "expect_terms": ["meeting", "review", "PR"], "forbid_terms": []}
+{"id": "m02", "language": "mixed", "say": "deadline 是周五，所以今天必须 deploy。", "reference": "deadline 是周五，所以今天必须 deploy。", "expect_terms": ["deadline", "deploy"], "forbid_terms": []}
+{"id": "m03", "language": "mixed", "say": "细节我在 Slack 上同步给你。", "reference": "细节我在 Slack 上同步给你。", "expect_terms": ["Slack"], "forbid_terms": []}
+{"id": "m04", "language": "mixed", "say": "deploy 完了记得把 Jira 的 ticket 关掉。", "reference": "deploy 完了记得把 Jira 的 ticket 关掉。", "expect_terms": ["deploy", "Jira", "ticket"], "forbid_terms": []}
+{"id": "m05", "language": "mixed", "say": "这个 sprint 我们先把 API 文档整理一下。", "reference": "这个 sprint 我们先把 API 文档整理一下。", "expect_terms": ["sprint", "API"], "forbid_terms": []}
+{"id": "m06", "language": "mixed", "say": "今天下班之前 push 到 GitHub 上。", "reference": "今天下班之前 push 到 GitHub 上。", "expect_terms": ["push", "GitHub"], "forbid_terms": []}
+{"id": "m07", "language": "mixed", "say": "Excel 文件我放在邮件附件里了。", "reference": "Excel 文件我放在邮件附件里了。", "expect_terms": ["Excel"], "forbid_terms": []}
+{"id": "m08", "language": "mixed", "say": "把 dashboard 上的数据放进周报里吧。", "reference": "把 dashboard 上的数据放进周报里吧。", "expect_terms": ["dashboard"], "forbid_terms": []}
+{"id": "m09", "language": "mixed", "say": "客户的 feedback 都在共享的 Google Drive 文件夹里。", "reference": "客户的 feedback 都在共享的 Google Drive 文件夹里。", "expect_terms": ["feedback", "Google Drive"], "forbid_terms": []}
+{"id": "m10", "language": "mixed", "say": "CI 又挂了，你能看一下 log 吗？", "reference": "CI 又挂了，你能看一下 log 吗？", "expect_terms": ["CI", "log"], "forbid_terms": []}
+{"id": "m11", "language": "mixed", "say": "review 完了把这个 branch merge 到 main 上。", "reference": "review 完了把这个 branch merge 到 main 上。", "expect_terms": ["review", "branch", "merge", "main"], "forbid_terms": []}
+{"id": "m12", "language": "mixed", "say": "新的 UI 设计稿已经传到 Figma 上了。", "reference": "新的 UI 设计稿已经传到 Figma 上了。", "expect_terms": ["UI", "Figma"], "forbid_terms": []}
+{"id": "m13", "language": "mixed", "say": "login 页面发现了一个 bug，release 先暂停。", "reference": "login 页面发现了一个 bug，release 先暂停。", "expect_terms": ["login", "bug", "release"], "forbid_terms": []}
+{"id": "m14", "language": "mixed", "say": "把明天 kickoff 的 agenda 加到共享文档里。", "reference": "把明天 kickoff 的 agenda 加到共享文档里。", "expect_terms": ["kickoff", "agenda"], "forbid_terms": []}
+{"id": "m15", "language": "mixed", "say": "昨晚 server 挂了，我们做了 rollback。", "reference": "昨晚 server 挂了，我们做了 rollback。", "expect_terms": ["server", "rollback"], "forbid_terms": []}
+{"id": "m16", "language": "mixed", "say": "吃完午饭我们 brainstorm 一下。", "reference": "吃完午饭我们 brainstorm 一下。", "expect_terms": ["brainstorm"], "forbid_terms": []}
+{"id": "m17", "language": "mixed", "say": "demo 之前把 slides 更新一下。", "reference": "demo 之前把 slides 更新一下。", "expect_terms": ["demo", "slides"], "forbid_terms": []}
+{"id": "m18", "language": "mixed", "say": "我们这个季度的 KPI 是新用户数。", "reference": "我们这个季度的 KPI 是新用户数。", "expect_terms": ["KPI"], "forbid_terms": []}
+{"id": "m19", "language": "mixed", "say": "能给这个 feature 加几个 test case 吗？", "reference": "能给这个 feature 加几个 test case 吗？", "expect_terms": ["feature", "test case"], "forbid_terms": []}
+{"id": "m20", "language": "mixed", "say": "onboarding 文档太旧了，这周更新一下吧。", "reference": "onboarding 文档太旧了，这周更新一下吧。", "expect_terms": ["onboarding"], "forbid_terms": []}
+{"id": "m21", "language": "mixed", "say": "把这张发票转给 Jennifer。", "reference": "把这张发票转给 Jennifer。", "expect_terms": ["Jennifer"], "forbid_terms": []}
+{"id": "m22", "language": "mixed", "say": "伦敦办公室的 Michael 也会参加这个 call。", "reference": "伦敦办公室的 Michael 也会参加这个 call。", "expect_terms": ["Michael", "call"], "forbid_terms": []}
+{"id": "m23", "language": "mixed", "say": "问一下 Daniel 合同签了没有。", "reference": "问一下 Daniel 合同签了没有。", "expect_terms": ["Daniel"], "forbid_terms": []}
+{"id": "m24", "language": "mixed", "say": "Emily 下周之前都在休假。", "reference": "Emily 下周之前都在休假。", "expect_terms": ["Emily"], "forbid_terms": []}
+{"id": "m25", "language": "mixed", "say": "这家意大利餐厅是 Chris 推荐的。", "reference": "这家意大利餐厅是 Chris 推荐的。", "expect_terms": ["Chris"], "forbid_terms": []}
+{"id": "m26", "language": "mixed", "say": "我们和 Salesforce 签了合同。", "reference": "我们和 Salesforce 签了合同。", "expect_terms": ["Salesforce"], "forbid_terms": []}
+{"id": "m27", "language": "mixed", "say": "住的地方我是在 Airbnb 上订的。", "reference": "住的地方我是在 Airbnb 上订的。", "expect_terms": ["Airbnb"], "forbid_terms": []}
+{"id": "m28", "language": "mixed", "say": "你能在 LinkedIn 上把链接发给我吗？", "reference": "你能在 LinkedIn 上把链接发给我吗？", "expect_terms": ["LinkedIn"], "forbid_terms": []}
+{"id": "m29", "language": "mixed", "say": "marketing 团队用 HubSpot 发 newsletter。", "reference": "marketing 团队用 HubSpot 发 newsletter。", "expect_terms": ["marketing", "HubSpot", "newsletter"], "forbid_terms": []}
+{"id": "m30", "language": "mixed", "say": "roadmap 由 Sarah 和 Kevin 来讲。", "reference": "roadmap 由 Sarah 和 Kevin 来讲。", "expect_terms": ["roadmap", "Sarah", "Kevin"], "forbid_terms": []}
+{"id": "m31", "language": "mixed", "say": "明天的 meeting 改到下午三点半了。", "reference": "明天的 meeting 改到下午3点半了。", "expect_terms": ["meeting", "3点半"], "forbid_terms": []}
+{"id": "m32", "language": "mixed", "say": "server 每个月要一千二百美元。", "reference": "server 每个月要1200美元。", "expect_terms": ["server", "1200美元"], "forbid_terms": []}
+{"id": "m33", "language": "mixed", "say": "release 之后转化率涨了百分之十五。", "reference": "release 之后转化率涨了15%。", "expect_terms": ["release", "15%"], "forbid_terms": []}
+{"id": "m34", "language": "mixed", "say": "我的 MacBook 内存是十六GB。", "reference": "我的 MacBook 内存是16GB。", "expect_terms": ["MacBook", "16GB"], "forbid_terms": []}
+{"id": "m35", "language": "mixed", "say": "请把 app 更新到 2.4.1 版本。", "reference": "请把 app 更新到 2.4.1 版本。", "expect_terms": ["app", "2.4.1"], "forbid_terms": []}
+{"id": "m36", "language": "mixed", "say": "我们的 API 每秒能扛两千个 request。", "reference": "我们的 API 每秒能扛两千个 request。", "expect_terms": ["API", "两千个", "request"], "forbid_terms": []}
+{"id": "m37", "language": "mixed", "say": "demo 定在十一月十四号。", "reference": "demo 定在11月14号。", "expect_terms": ["demo", "11月14号"], "forbid_terms": []}
+{"id": "m38", "language": "mixed", "say": "我的手机号是幺三九幺二三四五六七八，有事 call 我。", "reference": "我的手机号是13912345678，有事 call 我。", "expect_terms": ["13912345678", "call"], "forbid_terms": []}
+{"id": "m39", "language": "mixed", "say": "latency 从两百毫秒降到了五十毫秒。", "reference": "latency 从两百毫秒降到了五十毫秒。", "expect_terms": ["latency", "两百毫秒", "五十毫秒"], "forbid_terms": []}
+{"id": "m40", "language": "mixed", "say": "campaign 的预算是五万美元，不是五千。", "reference": "campaign 的预算是5万美元，不是五千。", "expect_terms": ["campaign", "5万美元", "不是五千"], "forbid_terms": []}
+{"id": "m41", "language": "mixed", "say": "OK，没问题。", "reference": "OK，没问题。", "expect_terms": ["OK"], "forbid_terms": []}
+{"id": "m42", "language": "mixed", "say": "Thank you，收到。", "reference": "Thank you，收到。", "expect_terms": ["Thank you"], "forbid_terms": []}
+{"id": "m43", "language": "mixed", "say": "LGTM，可以 merge 了。", "reference": "LGTM，可以 merge 了。", "expect_terms": ["LGTM", "merge"], "forbid_terms": []}
+{"id": "m44", "language": "mixed", "say": "FYI，周五办公室不开门。", "reference": "FYI，周五办公室不开门。", "expect_terms": ["FYI"], "forbid_terms": []}
+{"id": "m45", "language": "mixed", "say": "Nice，干得漂亮！", "reference": "Nice，干得漂亮！", "expect_terms": ["Nice"], "forbid_terms": []}
+{"id": "m46", "language": "mixed", "say": "Sorry，能再发一下链接吗？", "reference": "Sorry，能再发一下链接吗？", "expect_terms": ["Sorry"], "forbid_terms": []}
+{"id": "m47", "language": "mixed", "say": "好的，我 ASAP 看一下。", "reference": "好的，我 ASAP 看一下。", "expect_terms": ["ASAP"], "forbid_terms": []}
+{"id": "m48", "language": "mixed", "say": "搞定了，fix 已经 push 了。", "reference": "搞定了，fix 已经 push 了。", "expect_terms": ["fix", "push"], "forbid_terms": []}
+{"id": "m49", "language": "mixed", "say": "收到，我来 update 一下文档。", "reference": "收到，我来 update 一下文档。", "expect_terms": ["update"], "forbid_terms": []}
+{"id": "m50", "language": "mixed", "say": "明天见，bye bye！", "reference": "明天见，bye bye！", "expect_terms": [["bye bye", "拜拜"]], "forbid_terms": []}
+{"id": "m51", "language": "mixed", "say": "meeting 定在周二，哦不对，周三。", "reference": "meeting 定在周二，哦不对，周三。", "expect_terms": ["meeting"], "forbid_terms": []}
+{"id": "m52", "language": "mixed", "say": "发给 Jennifer，不好意思，我是说 Emily。", "reference": "发给 Jennifer，不好意思，我是说 Emily。", "expect_terms": ["Jennifer", "Emily"], "forbid_terms": []}
+{"id": "m53", "language": "mixed", "say": "deadline 是周五，算了，改成周一吧。", "reference": "deadline 是周五，算了，改成周一吧。", "expect_terms": ["deadline"], "forbid_terms": []}
+{"id": "m54", "language": "mixed", "say": "帮我订一个三个人的 meeting room，不对，四个人。", "reference": "帮我订一个三个人的 meeting room，不对，四个人。", "expect_terms": ["meeting room", "三个人", "四个人"], "forbid_terms": []}
+{"id": "m55", "language": "mixed", "say": "push 到 develop 分支，我是说 staging。", "reference": "push 到 develop 分支，我是说 staging。", "expect_terms": ["push", "develop", "staging"], "forbid_terms": []}
+{"id": "m56", "language": "mixed", "say": "用那个 Excel 文件，不对，用 Google Sheets 那个。", "reference": "用那个 Excel 文件，不对，用 Google Sheets 那个。", "expect_terms": ["Excel", "Google Sheets"], "forbid_terms": []}
+{"id": "m57", "language": "mixed", "say": "meeting 是两点，不好意思，两点半。", "reference": "meeting 是两点，不好意思，两点半。", "expect_terms": ["meeting", "两点半"], "forbid_terms": []}
+{"id": "m58", "language": "mixed", "say": "发到 Slack 上，算了，直接发邮件吧。", "reference": "发到 Slack 上，算了，直接发邮件吧。", "expect_terms": ["Slack"], "forbid_terms": []}
+{"id": "m59", "language": "mixed", "say": "今天就要，算了，明天早上也 OK。", "reference": "今天就要，算了，明天早上也 OK。", "expect_terms": ["OK"], "forbid_terms": []}
+{"id": "m60", "language": "mixed", "say": "把 PR merge 了吧，等一下，先别 merge。", "reference": "把 PR merge 了吧，等一下，先别 merge。", "expect_terms": ["PR", "merge", "别"], "forbid_terms": []}

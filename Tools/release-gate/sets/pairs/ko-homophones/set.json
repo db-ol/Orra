@@ -1,0 +1,7 @@
+{
+  "description": "Vocabulary words that sound like common Korean words, for the Korean pair. Some clips say the common word (the vocabulary word is in forbid_terms), the rest say the vocabulary word (in expect_terms). Every clip runs with the whole vocabulary as context.",
+  "pair": "ko",
+  "variants": [
+    {"suffix": "", "context": ["Cursor", "Notion", "Miro", "Excel", "Vim", "서윤", "예준", "민준", "도현", "시현"]}
+  ]
+}

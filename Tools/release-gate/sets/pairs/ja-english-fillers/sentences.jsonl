@@ -1,0 +1,6 @@
+{"id": "ja_um_1", "language": "ja", "say": [["Samantha", "Um,"], ["Kyoko", "明日の会議は午後からです。"]], "reference": "明日の会議は午後からです。", "expect_terms": [], "forbid_terms": []}
+{"id": "ja_uh_2", "language": "ja", "say": [["Kyoko", "この資料、"], ["Samantha", "uh,"], ["Kyoko", "金曜日までに確認してもらえますか？"]], "reference": "この資料、金曜日までに確認してもらえますか？", "expect_terms": [], "forbid_terms": []}
+{"id": "ja_uh_3", "language": "ja", "say": [["Samantha", "Uh,"], ["Kyoko", "すみません、もう一回言ってもらえますか？"]], "reference": "すみません、もう一回言ってもらえますか？", "expect_terms": [], "forbid_terms": []}
+{"id": "ja_um_4", "language": "ja", "say": [["Kyoko", "ピーアールは、"], ["Samantha", "um,"], ["Kyoko", "まだレビュー中です。"]], "reference": "PRは、まだレビュー中です。", "expect_terms": [], "forbid_terms": []}
+{"id": "ja_um_5", "language": "ja", "say": [["Samantha", "Um,"], ["Kyoko", "スラックで送っておきます。"]], "reference": "Slackで送っておきます。", "expect_terms": [], "forbid_terms": []}
+{"id": "en_uh_6", "language": "en", "say": "Uh, sure.", "reference": "Sure.", "expect_terms": [], "forbid_terms": []}

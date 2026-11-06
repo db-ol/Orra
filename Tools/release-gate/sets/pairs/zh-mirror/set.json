@@ -1,0 +1,4 @@
+{
+  "description": "Chinese sentences with English words, the 60 situations of mirror-template.jsonl, for the Chinese pair. Every clip runs without context.",
+  "pair": "zh"
+}
