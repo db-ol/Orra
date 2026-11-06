@@ -67,9 +67,12 @@ struct FileAudioSourceTests {
         }
     }
 
-    /// Writes a movie with a picture, or ends the test as skipped on a Mac that cannot
-    /// write H.264 video, such as a virtual machine without a video encoder.
+    /// Writes a movie with a picture, or ends the test as skipped in a virtual machine and
+    /// on a Mac that cannot write H.264 video.
     private static func writeMovie(_ samples: [Float]?, seconds: Double, to url: URL) async throws {
+        if TestMedia.isVirtualMachine {
+            try Test.cancel("A virtual machine writes no H.264 movie for this test")
+        }
         do {
             try await TestMedia.writeMovie(samples, rate: 48_000, seconds: seconds, video: true, to: url)
         } catch let error as TestMedia.MovieNotWritten {

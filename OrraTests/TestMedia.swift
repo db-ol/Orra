@@ -63,6 +63,16 @@ enum TestMedia {
         var underlying: (any Error)?
     }
 
+    /// Whether this Mac is a virtual machine, such as the runner of CI. A run of CI stopped
+    /// making progress, every test at once, while the tests that write H.264 movies ran, and
+    /// a video encoder that holds its threads in a virtual machine is the likely cause, so
+    /// those tests leave the movies out there.
+    static var isVirtualMachine: Bool {
+        var value: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        return sysctlbyname("kern.hv_vmm_present", &value, &size, nil, 0) == 0 && value == 1
+    }
+
     /// Writes an MPEG-4 or QuickTime movie, by the extension of `url`, with a small H.264
     /// picture at 2 frames a second when `video`, and an AAC track of `samples` when they
     /// are given, `seconds` long. Throws MovieNotWritten when the writer fails, so a test
