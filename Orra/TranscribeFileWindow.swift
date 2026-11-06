@@ -477,9 +477,10 @@ struct TranscribeFileView: View {
 }
 
 extension TranscribeFileView {
-    /// What the window says while the speech model cannot take a file: the download until
-    /// the model is in place, then the load. Nil once it is loaded.
-    static func speechModelLine(installer: ModelInstaller.State, model: PushToTalkController.ModelState) -> String? {
+    /// What the window says while the speech model cannot take a file: where to download
+    /// it, the download under way as the menu says it, then the load. Nil once it is
+    /// loaded. `total` is the size of the download, as in the menu.
+    static func speechModelLine(installer: ModelInstaller.State, total: Int64, model: PushToTalkController.ModelState) -> String? {
         switch installer {
         case .installed:
             switch model {
@@ -489,7 +490,9 @@ extension TranscribeFileView {
             }
         case .checking:
             String(localized: "Loading the speech model…")
-        case .downloading, .verifying, .missing, .failed:
+        case .downloading, .verifying:
+            installer.menuLines(total: total).first
+        case .missing, .failed:
             String(localized: "Orra needs its speech model first. Download it from Orra’s menu in the menu bar.")
         }
     }

@@ -3309,6 +3309,8 @@ the list follows the newest sentence. FileTranscriptionEndToEndTests transcribes
 - [ ] A file in iCloud Drive that shows the cloud in Finder (Remove Download first), dropped
   on the window and picked with Choose File…: each time the window says that it is not on
   this Mac yet, and Finder shows no download.
+- [ ] Open the window while the speech model downloads: it says how far the download is, as
+  the menu does, and not to download it from the menu.
 - [ ] Press the talk key while a file runs: the dictation pastes as quickly as without a
   file, the window says that it waits for the dictation once it has gone on for a second,
   and the file goes on after the paste. A quick tap of the talk key does not flash that

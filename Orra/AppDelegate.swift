@@ -141,7 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var transcribeFileWindow = TranscribeFileWindow { [transcription, turns, pushToTalk, captions] in
         .live(transcription: transcription, turns: turns, pushToTalk: pushToTalk, captions: captions)
     } speechModelLine: { [models, pushToTalk] in
-        TranscribeFileView.speechModelLine(installer: models.state, model: pushToTalk.modelState)
+        TranscribeFileView.speechModelLine(installer: models.state, total: models.manifest.totalBytes, model: pushToTalk.modelState)
     } willShow: { [dockIcon] in
         dockIcon.willShowWindow()
     }

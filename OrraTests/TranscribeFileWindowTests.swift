@@ -25,11 +25,20 @@ struct TranscribeFileWindowTests {
 
     @Test func theWindowSaysWhatTheSpeechModelNeeds() {
         let folder = URL(fileURLWithPath: "/tmp/model")
-        #expect(TranscribeFileView.speechModelLine(installer: .installed(folder), model: .ready) == nil)
-        #expect(TranscribeFileView.speechModelLine(installer: .installed(folder), model: .loading) == "Loading the speech model…")
-        #expect(TranscribeFileView.speechModelLine(installer: .checking, model: .notLoaded) == "Loading the speech model…")
-        #expect(TranscribeFileView.speechModelLine(installer: .missing(bytesPresent: 0), model: .notLoaded) == "Orra needs its speech model first. Download it from Orra’s menu in the menu bar.")
-        #expect(TranscribeFileView.speechModelLine(installer: .installed(folder), model: .unavailable(.failedToLoad)) == "The speech model could not be loaded")
+        let total: Int64 = 2_470_000_000
+        let download = "Orra needs its speech model first. Download it from Orra’s menu in the menu bar."
+        #expect(TranscribeFileView.speechModelLine(installer: .installed(folder), total: total, model: .ready) == nil)
+        #expect(TranscribeFileView.speechModelLine(installer: .installed(folder), total: total, model: .loading) == "Loading the speech model…")
+        #expect(TranscribeFileView.speechModelLine(installer: .checking, total: total, model: .notLoaded) == "Loading the speech model…")
+        #expect(TranscribeFileView.speechModelLine(installer: .missing(bytesPresent: 0), total: total, model: .notLoaded) == download)
+        #expect(TranscribeFileView.speechModelLine(installer: .failed(.offline), total: total, model: .notLoaded) == download)
+        #expect(TranscribeFileView.speechModelLine(installer: .installed(folder), total: total, model: .unavailable(.failedToLoad)) == "The speech model could not be loaded")
+        // A download under way, which the menu offers to cancel, is not sent to the menu
+        // to start one. The window says how far it is, as the menu does.
+        let downloading = ModelInstaller.State.downloading(bytes: total / 2, source: nil)
+        #expect(TranscribeFileView.speechModelLine(installer: downloading, total: total, model: .notLoaded) == "Downloading the speech model: 50% of 2.47 GB")
+        #expect(TranscribeFileView.speechModelLine(installer: downloading, total: total, model: .notLoaded) == downloading.menuLines(total: total).first)
+        #expect(TranscribeFileView.speechModelLine(installer: .verifying, total: total, model: .notLoaded) == "Checking the downloaded files…")
     }
 
     /// What the window says once a file is done: no speech, text with or without parts
@@ -132,7 +141,7 @@ struct TranscribeFileWindowTests {
 
         // Before a file, with the speech model loaded, and without it.
         try await render(FileTranscription(engines: engines(FakeFileSource(starts: [], duration: 0), FakeFileSpeech())), name: "\(language)-1-empty", to: folder)
-        try await render(FileTranscription(engines: engines(FakeFileSource(starts: [], duration: 0), FakeFileSpeech())), modelLine: TranscribeFileView.speechModelLine(installer: .missing(bytesPresent: 0), model: .notLoaded), name: "\(language)-2-no-model", to: folder)
+        try await render(FileTranscription(engines: engines(FakeFileSource(starts: [], duration: 0), FakeFileSpeech())), modelLine: TranscribeFileView.speechModelLine(installer: .missing(bytesPresent: 0), total: 2_470_000_000, model: .notLoaded), name: "\(language)-2-no-model", to: folder)
 
         // Partway, with the time left after a few segments.
         let source = FakeFileSource(starts: starts, seconds: 6, duration: 1_834)
