@@ -82,7 +82,8 @@ nonisolated enum FileTranscript {
     /// subtitle shorter than `shortestSubtitle`, such as a short answer, stays up into the
     /// pause after it, up to that long and never past the start of the next one.
     static func subtitleList(of segments: [FileTranscriptSegment]) -> [Subtitle] {
-        var subtitles = segments.flatMap(subtitles(of:))
+        let words = WordFinder()
+        var subtitles = segments.flatMap { subtitles(of: $0, words: words) }
         for index in subtitles.indices where subtitles[index].end - subtitles[index].start < shortestSubtitle {
             let next = index + 1 < subtitles.count ? subtitles[index + 1].start : .infinity
             subtitles[index].end = max(subtitles[index].end, min(subtitles[index].start + shortestSubtitle, next))
@@ -93,7 +94,11 @@ nonisolated enum FileTranscript {
     /// The subtitles of one segment, as few as its text needs, see `Layout`, which share
     /// the segment's time in proportion to the width of their lines, see `shares(of:by:)`.
     static func subtitles(of segment: FileTranscriptSegment) -> [Subtitle] {
-        let layout = Layout(segment.text)
+        subtitles(of: segment, words: WordFinder())
+    }
+
+    private static func subtitles(of segment: FileTranscriptSegment, words: WordFinder) -> [Subtitle] {
+        let layout = Layout(segment.text, words: words)
         let lines = layout.subtitles().map(layout.lines(of:))
         let durations = shares(of: max(segment.end - segment.start, 0), by: lines.map { $0.reduce(0) { $0 + width(of: $1) } })
         var start = segment.start
@@ -157,7 +162,7 @@ nonisolated enum FileTranscript {
 
     /// The lines of the subtitles of a text, in order, see `Layout`.
     static func lines(of text: String) -> [String] {
-        let layout = Layout(text)
+        let layout = Layout(text, words: WordFinder())
         return layout.subtitles().flatMap(layout.lines(of:))
     }
 
@@ -191,9 +196,11 @@ nonisolated enum FileTranscript {
         private var lineEnds: [Int] = []
         /// For each piece, the end of the longest run from it that fits in one subtitle.
         private var subtitleEnds: [Int] = []
+        /// What a break after each piece costs, see `breakCost(before:)`.
+        private var costsAfter: [Double] = []
 
-        init(_ text: String) {
-            pieces = FileTranscript.pieces(of: text)
+        init(_ text: String, words: WordFinder) {
+            pieces = FileTranscript.pieces(of: text, words: words)
             for piece in pieces {
                 widthsBefore.append(widthsBefore[widthsBefore.count - 1] + FileTranscript.thirds(of: piece.text))
                 spacesBefore.append(spacesBefore[spacesBefore.count - 1] + (piece.spaceBefore ? FileTranscript.thirdsPerLatinCharacter : 0))
@@ -208,6 +215,7 @@ nonisolated enum FileTranscript {
                 }
                 lineEnds.append(end)
             }
+            costsAfter = pieces.map(Self.costOfBreak(after:))
             subtitleEnds = pieces.indices.map { start in
                 var end = start
                 for _ in 0..<FileTranscript.linesPerSubtitle where end < pieces.count {
@@ -282,11 +290,15 @@ nonisolated enum FileTranscript {
             return [joined(run.lowerBound..<at), joined(at..<run.upperBound)]
         }
 
-        /// What a break before piece `index` costs: nothing after the end of a sentence, a
-        /// little after a comma or another mark that ends a clause, more between two words,
-        /// and more still after a word that leads into the next, such as “the” or “de”.
+        /// What a break before piece `index` costs.
         private func breakCost(before index: Int) -> Double {
-            let piece = pieces[index - 1]
+            costsAfter[index - 1]
+        }
+
+        /// What a break after `piece` costs: nothing after the end of a sentence, a little
+        /// after a comma or another mark that ends a clause, more between two words, and
+        /// more still after a word that leads into the next, such as “the” or “de”.
+        private static func costOfBreak(after piece: Piece) -> Double {
             if let mark = piece.lastMark, FileTranscript.sentenceEnds.contains(mark) {
                 return 0
             }
@@ -339,8 +351,8 @@ nonisolated enum FileTranscript {
         case ending
     }
 
-    private static func pieces(of text: String) -> [Piece] {
-        let words = wordStarts(in: text)
+    private static func pieces(of text: String, words finder: WordFinder) -> [Piece] {
+        let words = finder.starts(in: text)
         var pieces: [Piece] = []
         var current = Piece()
         var sawSpace = false
@@ -396,25 +408,41 @@ nonisolated enum FileTranscript {
         }
     }
 
-    /// Where the words of a text start, as CFStringTokenizer finds them. In the root
+    /// Finds where the words of a text start, as CFStringTokenizer finds them. In the root
     /// locale, which it uses without one, it finds the words of both Chinese and Japanese,
     /// where a Chinese or a Japanese locale breaks the words of the other apart.
-    private static func wordStarts(in text: String) -> [String.Index: WordStart] {
-        guard text.contains(where: isWide) else { return [:] }
-        let length = (text as NSString).length
-        let tokenizer = CFStringTokenizerCreate(nil, text as CFString, CFRange(location: 0, length: length), kCFStringTokenizerUnitWordBoundary, nil)
-        var starts: [String.Index: WordStart] = [:]
-        var previous: Substring?
-        while !CFStringTokenizerAdvanceToNextToken(tokenizer).isEmpty {
-            let token = CFStringTokenizerGetCurrentTokenRange(tokenizer)
-            guard let range = Range(NSRange(location: token.location, length: token.length), in: text) else { continue }
-            let word = text[range]
-            let afterWord = previous?.last.map { isWide($0) && !$0.isPunctuation } ?? false
-            let isEnding = afterWord && (word.allSatisfy(isHiragana) || chineseEndings.contains(String(word)))
-            starts[range.lowerBound] = isEnding ? .ending : .word
-            previous = word
+    ///
+    /// It keeps one tokenizer for the texts it is given, since making a tokenizer takes more
+    /// than 10 times as long as giving it another text, which adds up over the thousands of
+    /// segments of a long file. Each call that lays out text makes its own finder, so none
+    /// is used by two threads.
+    private final class WordFinder {
+        private var tokenizer: CFStringTokenizer?
+
+        func starts(in text: String) -> [String.Index: WordStart] {
+            guard text.contains(where: FileTranscript.isWide) else { return [:] }
+            let whole = CFRange(location: 0, length: (text as NSString).length)
+            let tokenizer: CFStringTokenizer
+            if let reused = self.tokenizer {
+                CFStringTokenizerSetString(reused, text as CFString, whole)
+                tokenizer = reused
+            } else {
+                tokenizer = CFStringTokenizerCreate(nil, text as CFString, whole, kCFStringTokenizerUnitWordBoundary, nil)
+                self.tokenizer = tokenizer
+            }
+            var starts: [String.Index: WordStart] = [:]
+            var previous: Substring?
+            while !CFStringTokenizerAdvanceToNextToken(tokenizer).isEmpty {
+                let token = CFStringTokenizerGetCurrentTokenRange(tokenizer)
+                guard let range = Range(NSRange(location: token.location, length: token.length), in: text) else { continue }
+                let word = text[range]
+                let afterWord = previous?.last.map { FileTranscript.isWide($0) && !$0.isPunctuation } ?? false
+                let isEnding = afterWord && (word.allSatisfy(FileTranscript.isHiragana) || FileTranscript.chineseEndings.contains(String(word)))
+                starts[range.lowerBound] = isEnding ? .ending : .word
+                previous = word
+            }
+            return starts
         }
-        return starts
     }
 
     private static func thirds(of text: String) -> Int {
