@@ -100,6 +100,13 @@ def edit_distance(reference: list[str], hypothesis: list[str]) -> int:
     return previous[-1]
 
 
+def output_tokens(text: str) -> list[str]:
+    """Tokens of every script, to count output on a clip without speech: one per Han
+    character, kana and Hangul syllable or jamo, and one per run of any other letters and
+    digits."""
+    return tokens(text, "ko")
+
+
 def scoring_lang(lang: str | None) -> str:
     """How a clip in this language is scored. Japanese, Spanish and Korean mixed with English
     (ja_en, es_en and ko_en) go their language's way, which keeps English words whole.
@@ -162,7 +169,7 @@ def metrics(manifest: dict[str, dict], texts: dict[str, str]) -> dict[str, float
 
 def strata(manifest: dict[str, dict], texts: dict[str, str]) -> dict[str, tuple[float, int]]:
     """Error rate and clip count per stratum. Silence and noise give the number of clips
-    with any output instead, since they have no reference."""
+    with any output in any script instead, since they have no reference."""
     result = {}
     for stratum in STRATA + LANGUAGE_STRATA:
         errors = total = clips = 0
@@ -174,7 +181,7 @@ def strata(manifest: dict[str, dict], texts: dict[str, str]) -> dict[str, tuple[
             result[stratum] = (errors / total if total else 0.0, clips)
     for stratum in EMPTY_STRATA:
         ids = [clip_id for clip_id in texts if manifest[clip_id]["stratum"] == stratum]
-        result[stratum] = (sum(1 for clip_id in ids if tokens(texts[clip_id], "zh")), len(ids))
+        result[stratum] = (sum(1 for clip_id in ids if output_tokens(texts[clip_id])), len(ids))
     return result
 
 
@@ -248,7 +255,7 @@ def diff(manifest: dict[str, dict], first: tuple[str, dict], second: tuple[str, 
             a, total = clip_errors(clip, a_text)
             b, _ = clip_errors(clip, b_text)
         else:
-            a, b, total = len(tokens(a_text, "zh")), len(tokens(b_text, "zh")), 0
+            a, b, total = len(output_tokens(a_text)), len(output_tokens(b_text)), 0
         if a != b:
             rows.append((a - b, clip_id, a, b, total, clip, a_text, b_text))
     rows.sort(key=lambda row: (-abs(row[0]), row[1]))

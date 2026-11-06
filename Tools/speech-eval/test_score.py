@@ -106,6 +106,21 @@ class KoreanTokenTests(unittest.TestCase):
         # and mer_mixed stay as they were.
         self.assertEqual(score.tokens("안녕 ㅋㅋ 東京へ hello", "zh"), ["안", "녕", "東", "京", "hello"])
 
+    def test_output_tokens_see_every_script(self) -> None:
+        for text, count in (("こんにちは", 5), ("ㅋㅋ", 2), ("Привет мир", 2), ("谢谢", 2), ("안녕", 2), ("¿Qué?", 1), ("...", 0), ("", 0)):
+            self.assertEqual(len(score.output_tokens(text)), count, text)
+        # The Chinese tokens, which counted output before, see none of these.
+        self.assertEqual(score.tokens("こんにちは ㅋㅋ Привет", "zh"), [])
+
+    def test_silence_with_output_in_any_script(self) -> None:
+        manifest = {
+            "s1": {"id": "s1", "stratum": "silence", "lang": "none", "duration": 5.0, "reference": ""},
+            "s2": {"id": "s2", "stratum": "silence", "lang": "none", "duration": 5.0, "reference": ""},
+            "n1": {"id": "n1", "stratum": "noise", "lang": "none", "duration": 5.0, "reference": ""},
+        }
+        rates = score.strata(manifest, {"s1": "ありがとう", "s2": "", "n1": "Спасибо."})
+        self.assertEqual((rates["silence"], rates["noise"]), ((1, 2), (1, 1)))
+
 
 class ManifestTests(unittest.TestCase):
     def test_the_manifest_holds_the_392_clips(self) -> None:

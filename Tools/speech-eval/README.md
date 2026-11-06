@@ -78,7 +78,9 @@ exactly as before:
 
 Errors are summed over a group and divided by its reference tokens. score.py also gives
 the rate per stratum, the number of silence and noise clips with any output, and, for
-Orra's runs, decode time and real time factor (decode time over audio time).
+Orra's runs, decode time and real time factor (decode time over audio time). Output on
+silence and noise counts in any script: one token per Han character, kana and Hangul
+syllable, and one per run of any other letters and digits.
 
 ## Steps
 

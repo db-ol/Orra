@@ -20,7 +20,7 @@ since release builds show Projects, so the projects variables below must be set.
 
 | Suite | Test | What it measures, per case |
 |---|---|---|
-| corpus | SpeechCorpusEvaluationTests | The 392 clips of the speech corpus (#40): errors per clip on the transcript and on the text after the filler and number rules, scored with Tools/speech-eval/score.py, so wer_en, cer_zh and mer_mixed |
+| corpus | SpeechCorpusEvaluationTests | The 392 clips of the speech corpus (#40): errors per clip on the transcript and on the text after the filler and number rules, scored with Tools/speech-eval/score.py, so wer_en, cer_zh and mer_mixed. Any output on silence and noise counts, one error per token in any script |
 | context | RealModelTests/ContextEvaluationTests | 100 ContextASR clips per language, each without and with its terms and ten distractors as context: terms found, distractors inserted, errors and the time of each pass, plus ascend_mixed with unrelated terms and three clips without speech |
 | cleanup | CleanupModelEvaluationTests/cleanupCases() | The 182 regular, 70 adversarial and 20 meaning cases of Tools/rewrite-eval in three modes: exact match, outcome, time, and whether an adversarial case looks obeyed (pasted text more than 1.6 times as long as expected plus 4, as in the translation evaluation) |
 | latency | LatencyMeasurementTests/dictations() | Release to paste (#51) for the say clips of the latency-say set and 15 corpus clips, cleanup off and on: median and p90 of every step, and each clip's median |

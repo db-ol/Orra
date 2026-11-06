@@ -74,6 +74,21 @@ class ScoringTests(unittest.TestCase):
         scored = gate.score_set_clip({"language": "ko_en", "reference": "Slack에 올려 주세요"}, "슬랙에 올려 주세요")
         self.assertEqual((scored["errors"], scored["tokens"]), (2, 7))
 
+    def test_output_on_silence_counts_in_every_script(self):
+        manifest = {
+            "s1": {"id": "s1", "stratum": "silence", "lang": "none", "reference": ""},
+            "n1": {"id": "n1", "stratum": "noise", "lang": "none", "reference": ""},
+            "z1": {"id": "z1", "stratum": "zh_short", "lang": "zh", "reference": "你好"},
+        }
+        raw = {"clips": {
+            "s1": {"text": "ありがとう", "ruled_text": "ありがとう", "decode_seconds": 0.1},
+            "n1": {"text": "Спасибо.", "ruled_text": "", "decode_seconds": 0.1},
+            "z1": {"text": "你好", "ruled_text": "你好", "decode_seconds": 0.1},
+        }}
+        summary = gate.summarize_corpus(raw, manifest)
+        self.assertEqual([summary["clips"][clip][key] for clip in ("s1", "n1") for key in ("errors", "ruled_errors")], [5, 5, 1, 0])
+        self.assertEqual(summary["groups"]["text"], {"wer_en": 0.0, "cer_zh": 0.0, "mer_mixed": 0.0})
+
 
 class CompareTests(unittest.TestCase):
     def run_compare(self, suite: str, base: dict, cand: dict) -> gate.Result:

@@ -109,8 +109,8 @@ def summarize_corpus(raw: dict, manifest: dict[str, dict]) -> dict:
                 errors, count = speech_score.clip_errors(clip, text)
                 entry["tokens"] = count
             else:
-                # Silence and noise: any output is an error.
-                errors, count = len(speech_score.tokens(text, "zh")), 0
+                # Silence and noise: any output is an error, in any script.
+                errors, count = len(speech_score.output_tokens(text)), 0
                 entry["tokens"] = 0
             entry["errors" if field == "text" else "ruled_errors"] = errors
             for name, keep in speech_score.GROUPS.items():
