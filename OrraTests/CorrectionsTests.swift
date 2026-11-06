@@ -186,6 +186,8 @@ struct CorrectionFinderTests {
         #expect(find("我们明天去", "我们明天去", "我们一起去") == nil)
         // A single letter has no English key either.
         #expect(find("go with plan A", "go with plan A", "go with plan B") == nil)
+        // An ASCII digit makes 10点钟 look like a name, but it has no key either.
+        #expect(find("明天开会", "明天开会", "明天10点钟") == nil)
         // A misheard name with a numeral in it is still learned.
         #expect(find("我们去完克看房", "我们去完克看房", "我们去万科看房") == Correction(heard: "完克", corrected: "万科"))
     }
@@ -277,6 +279,8 @@ struct SoundAlikeTests {
         // One letter is too short for a key.
         #expect(!SoundAlike.soundsAlike("A", "B"))
         #expect(!SoundAlike.soundsAlike("I", "We"))
+        // An ASCII digit makes 10点钟 look like a name, but it has no key either.
+        #expect(!SoundAlike.soundsAlike("开会", "10点钟"))
     }
 
     @Test func onlyACapitalOrAnASCIIDigitMakesAName() {
