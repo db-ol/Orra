@@ -73,6 +73,9 @@ HAN_AND_KANA = "\u3005\u3006\u3400-\u9fff\uf900-\ufaff\u3041-\u3096\u309d-\u309f
 # the extended jamo blocks. NFKC comes first, so decomposed syllables count as syllables and
 # half width jamo as jamo.
 HANGUL = "\uac00-\ud7a3\u1100-\u11ff\u3131-\u318e\ua960-\ua97f\ud7b0-\ud7ff"
+# A letter of an alphabet, Latin with or without accents or another, but not Hangul, kana or
+# Han, which count one token each. Accepted spellings use it to stay out of longer words.
+LETTER = rf"[^\W\d_{HAN_AND_KANA}{HANGUL}]"
 
 
 def tokens(text: str, lang: str) -> list[str]:
@@ -141,14 +144,27 @@ def folded(text: str) -> str:
     return unicodedata.normalize("NFKC", text).lower()
 
 
+def edge(character: str, before: bool) -> str:
+    """What may not stand right before or after a spelling that starts or ends with this
+    character: no letter next to a letter of an alphabet (LETTER) and no digit next to a
+    digit, so a spelling never takes part of a longer word or number. Nothing for any other
+    character, Hangul among them."""
+    for kind in (LETTER, r"\d"):
+        if re.fullmatch(kind, character):
+            return rf"(?<!{kind})" if before else rf"(?!{kind})"
+    return ""
+
+
 def lenient_text(text: str, lists: list[list[str]]) -> str:
     """The text with each accepted spelling in it written as the reference writes it, the
     longest spellings first, so with ["km", "킬로미터"] and ["m", "미터"] the text 5킬로미터
     becomes 5km, not 5킬로m. The form in the reference counts as a spelling too, so no
-    shorter spelling replaces part of it. As in the term check of the release gate, white
-    space inside a spelling is free, and a spelling with Latin letters matches only where no
-    Latin letter stands right before or after it. The text comes back in NFKC lower case,
-    which tokens() reads the same way."""
+    shorter spelling replaces part of it. White space inside a spelling is free. A spelling
+    never takes part of a longer word or number (see edge), so Slack is not found in Slacker,
+    30,000 not in 130,000 and es de 20 not in es de 200, while km is found in 80km. Hangul
+    has no such edge, since Korean writes particles right after a word and a missing space
+    must not count. The text comes back in NFKC lower case, which tokens() reads the same
+    way."""
     text = folded(text)
     spellings = sorted(((spelling, forms[0]) for forms in lists for spelling in forms), key=lambda pair: -len("".join(folded(pair[0]).split())))
     taken = [False] * len(text)
@@ -157,9 +173,7 @@ def lenient_text(text: str, lists: list[list[str]]) -> str:
         characters = [character for character in folded(spelling) if not character.isspace()]
         if not characters:
             continue
-        pattern = r"\s*".join(re.escape(character) for character in characters)
-        if any(character.isascii() and character.isalpha() for character in characters):
-            pattern = rf"(?<![a-z]){pattern}(?![a-z])"
+        pattern = edge(characters[0], True) + r"\s*".join(re.escape(character) for character in characters) + edge(characters[-1], False)
         compiled = re.compile(pattern)
         position = 0
         while match := compiled.search(text, position):

@@ -235,6 +235,30 @@ class AcceptedSpellingTests(unittest.TestCase):
         self.assertEqual(score.lenient_text("Slacker와 Slack에서", [["슬랙", "Slack"]]), "slacker와 슬랙에서")
         self.assertEqual(score.lenient_text("에이 피 아이 문서", [["API", "에이피아이"]]), "api 문서")
 
+    def test_no_spelling_takes_part_of_a_longer_word_or_number(self) -> None:
+        # A letter with an accent ends a word as much as an ASCII letter, and a digit ends a number.
+        for text, lists in (
+            ("Slacké와", [["슬랙", "Slack"]]),
+            ("el wifiño", [["Wi-Fi", "wifi"]]),
+            ("no son 130,000", [["treinta mil", "30,000"]]),
+            ("un disco de 11TB", [["1 TB", "1TB"]]),
+            ("en el edificio 20", [["edificio dos", "edificio 2"]]),
+        ):
+            self.assertEqual(score.lenient_text(text, lists), score.folded(text), text)
+        # es de 20 must not take part of es de 200, which 200 ms needs (es-numbers num37 of the
+        # pair sets).
+        clip = {
+            "id": "num37", "lang": "es", "reference": "La latencia del server no es de 200 milisegundos, es de 20.",
+            "accepted": [["200 milisegundos", "200 ms", "doscientos milisegundos"], ["es de 20", "es de veinte"]],
+        }
+        self.assertEqual(score.clip_errors(clip, "La latencia del server no es de 200 ms, es de 20.", lenient=True), (0, 12))
+        self.assertEqual(score.clip_errors(clip, "La latencia del server no es de 200 ms, es de veinte.", lenient=True), (0, 12))
+        # A digit next to a letter, or anything next to Hangul, still matches: km in 80km, and a
+        # spelling right after a particle without its space.
+        self.assertEqual(score.lenient_text("타임아웃을30초에서 80킬로미터", [["삼십 초", "30초"], ["km", "킬로미터"]]), "타임아웃을삼십 초에서 80km")
+        # Hangul has no edge, so 일 테라 is found in 십일 테라 too, and its 십 stays an error.
+        self.assertEqual(score.lenient_text("십일 테라", [["1TB", "일 테라"]]), "십1tb")
+
     def test_strict_and_lenient_rates(self) -> None:
         texts = {"k1": "약 80킬로미터 떨어진 곳", "k2": "슬랙에 올려 주세요", "k3": "점심 먹었어요"}
         self.assertEqual(score.clip_errors(self.MANIFEST["k1"], texts["k1"]), (5, 6))
