@@ -457,12 +457,18 @@ final class FileTranscription {
     /// simplified characters for Chinese, without fillers and with numbers as digits when
     /// the switches say so, which Japanese and Spanish skip, as in a dictation. Off the main
     /// actor, since the language check may run NLLanguageRecognizer.
+    ///
+    /// Unlike a dictation, a segment of nothing but fillers, such as “Um.” or “嗯。” between
+    /// two pauses, is left out while fillers are removed, see FillerRules.isOnlyFillers(_:).
     @concurrent
     nonisolated static func text(_ raw: String, seconds: Double, settings: FileTranscriptionSettings) async -> String {
         let guarded = TranscriptGuard.clean(raw, audioSeconds: seconds)
         var text = settings.language.simplifiesCharacters ? ChineseText.simplified(guarded) : guarded
         let takesSteps = settings.language == .chinese || LanguageGuard.takesChineseAndEnglishSteps(text, for: settings.language)
         if settings.removesFillers, takesSteps {
+            if FillerRules.isOnlyFillers(text) {
+                return ""
+            }
             text = FillerRules.removingFillers(from: text)
         }
         if settings.writesDigits, takesSteps {

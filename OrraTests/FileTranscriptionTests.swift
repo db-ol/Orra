@@ -164,6 +164,25 @@ struct FileTranscriptionTests {
         #expect(transcription.segments.map(\.text) == [japanese])
     }
 
+    /// A segment of nothing but fillers between two pauses, such as “Um.” or “嗯。”, is left
+    /// out while fillers are removed, where a dictation of nothing else keeps it as it is.
+    /// A hum that asks, a reply and a filler in a sentence are not left out.
+    @Test func aSegmentOfNothingButFillersIsLeftOut() async {
+        let settings = FileTranscriptionSettings()
+        for filler in ["Um.", "Uh.", "嗯。", "呃。", "额。", "Um, uh.", "嗯嗯。", "Erm…"] {
+            #expect(await FileTranscription.text(filler, seconds: 1, settings: settings) == "", "\(filler)")
+        }
+        #expect(FillerRules.removingFillers(from: "Um.") == "Um.")
+        #expect(FillerRules.removingFillers(from: "嗯。") == "嗯。")
+        for kept in ["嗯？", "Uh-huh.", "嗯哼。", "好的。", "UM."] {
+            #expect(await FileTranscription.text(kept, seconds: 1, settings: settings) == kept, "\(kept)")
+        }
+        #expect(await FileTranscription.text("Um, we can ship it.", seconds: 2, settings: settings) == "We can ship it.")
+        var keepingFillers = settings
+        keepingFillers.removesFillers = false
+        #expect(await FileTranscription.text("Um.", seconds: 1, settings: keepingFillers) == "Um.")
+    }
+
     /// The vocabulary and the language of dictation reach the speech model through the
     /// path the window uses, read once when the file starts.
     @Test func theSpeechModelGetsTheVocabularyAndTheLanguageOfDictation() async throws {
