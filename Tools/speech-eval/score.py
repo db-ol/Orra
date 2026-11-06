@@ -6,9 +6,9 @@
 # (https://github.com/sgl-project/sglang-omni, commit aac4b83), Copyright the sglang-omni
 # authors, licensed under the Apache License 2.0
 # (https://www.apache.org/licenses/LICENSE-2.0). The scores per stratum, the timing and
-# the comparison of two runs are Orra's, and so are the Japanese and Spanish groups for
-# other corpora with the same layout. Standard library only, so CI runs the tests on Linux
-# with any python3.
+# the comparison of two runs are Orra's, and so are the Japanese, Spanish and Korean groups
+# for other corpora with the same layout. Standard library only, so CI runs the tests on
+# Linux with any python3.
 #
 # Usage:
 #
@@ -34,43 +34,59 @@ HERE = Path(__file__).resolve().parent
 
 # Voxt's three numbers: WER over English (LibriSpeech, the 10 dB copies included), CER over
 # Chinese (FLEURS and the Chinese only ASCEND clips) and MER over code switched ASCEND.
-# Then CER over Japanese and WER over Spanish, for a corpus such as FLEURS ja_jp and es_419.
+# Then CER over Japanese, WER over Spanish and CER over Korean, for a corpus such as FLEURS
+# ja_jp, es_419 and ko_kr, and MER over each of the three mixed with English, for clips with
+# lang ja_en, es_en or ko_en.
 GROUPS = {
     "wer_en": lambda clip: clip["lang"] == "en" and clip["stratum"] not in ("silence", "noise"),
     "cer_zh": lambda clip: clip["lang"] == "zh",
     "mer_mixed": lambda clip: clip["stratum"] == "mixed",
     "cer_ja": lambda clip: clip["lang"] == "ja",
     "wer_es": lambda clip: clip["lang"] == "es",
+    "cer_ko": lambda clip: clip["lang"] == "ko",
+    "mer_ja_en": lambda clip: clip["lang"] == "ja_en",
+    "mer_es_en": lambda clip: clip["lang"] == "es_en",
+    "mer_ko_en": lambda clip: clip["lang"] == "ko_en",
 }
 # Groups that count only when a run has clips in them, so the speech corpus, which has none,
 # scores exactly as before they were added.
-LANGUAGE_GROUPS = {"cer_ja", "wer_es"}
+LANGUAGE_GROUPS = {"cer_ja", "wer_es", "cer_ko", "mer_ja_en", "mer_es_en", "mer_ko_en"}
 STRATA = ["en_short", "en_mid", "en_long", "snr10_en", "zh_short", "zh_numbers", "zh_mid", "zh_long", "snr10_zh", "mixed"]
 EMPTY_STRATA = ["silence", "noise"]
 # Shown only when a run has clips in them, like LANGUAGE_GROUPS.
-LANGUAGE_STRATA = ["ja", "es"]
+LANGUAGE_STRATA = ["ja", "es", "ko"]
 
 # Han characters, the marks 々 and 〆, and kana, one token each in Japanese and Spanish. The
 # kana blocks also hold the middle dot, the double hyphen and the voicing marks, which stay
 # out like punctuation. Escapes, because an editor that normalizes text turns U+F900 into
 # U+8C48, and the range would then take in Hangul and other scripts.
 HAN_AND_KANA = "\u3005\u3006\u3400-\u9fff\uf900-\ufaff\u3041-\u3096\u309d-\u309f\u30a1-\u30fa\u30fc-\u30ff\u31f0-\u31ff"
+# Hangul syllables and jamo, one token each in Korean: the jamo, the compatibility jamo and
+# the extended jamo blocks. NFKC comes first, so decomposed syllables count as syllables and
+# half width jamo as jamo.
+HANGUL = "\uac00-\ud7a3\u1100-\u11ff\u3131-\u318e\ua960-\ua97f\ud7b0-\ud7ff"
 
 
 def tokens(text: str, lang: str) -> list[str]:
     """English: lower case words of letters, digits and apostrophes. Japanese and Spanish: one
     token per Han character or kana and one per run of other letters and digits, accents
     kept, with apostrophes inside a word, so Japanese counts per character and Spanish per
-    word. Anything else: one token per CJK character and one per run of ASCII letters,
-    digits and apostrophes. NFKC first, so full width digits and letters count as ASCII.
-    Punctuation is never a token."""
+    word. Korean: the same, and one token per Hangul syllable or jamo, so Korean counts per
+    syllable with or without its spaces and an English word in it counts as a word.
+    Anything else: one token per CJK character and one per run of ASCII letters, digits and
+    apostrophes. NFKC first, so full width digits and letters count as ASCII and decomposed
+    Hangul as its syllables. Punctuation is never a token."""
     text = unicodedata.normalize("NFKC", text).lower()
     if lang == "en":
         text = re.sub(r"[^a-z0-9' ]+", " ", text)
         return [token.strip("'") for token in text.split() if token.strip("'")]
-    if lang in ("ja", "es"):
-        found = re.findall(rf"[{HAN_AND_KANA}]|(?:[^\W_{HAN_AND_KANA}]|')+", text)
+    if lang in ("ja", "es", "ko"):
+        characters = HAN_AND_KANA + HANGUL if lang == "ko" else HAN_AND_KANA
+        found = re.findall(rf"[{characters}]|(?:[^\W_{characters}]|')+", text)
         return [token.strip("'") for token in found if token.strip("'")]
+    # The second range starts at U+8C48, the NFC form of U+F900 (see HAN_AND_KANA), so this
+    # way also counts Hangul syllables and the other scripts up to U+FAFF one per character.
+    # The golden files score the same with U+F900. It stays, so that no stored rate moves.
     return re.findall(r"[㐀-鿿豈-﫿]|[a-z0-9']+", text)
 
 
@@ -85,9 +101,14 @@ def edit_distance(reference: list[str], hypothesis: list[str]) -> int:
 
 
 def scoring_lang(lang: str | None) -> str:
-    """How a clip in this language is scored. Chinese, the code switched clips and anything
-    unknown go the Chinese way."""
-    return lang if lang in ("en", "ja", "es") else "zh"
+    """How a clip in this language is scored. Japanese, Spanish and Korean mixed with English
+    (ja_en, es_en and ko_en) go their language's way, which keeps English words whole.
+    Chinese, the code switched clips and anything unknown go the Chinese way."""
+    if lang in ("en", "ja", "es", "ko"):
+        return lang
+    if lang in ("ja_en", "es_en", "ko_en"):
+        return lang[:2]
+    return "zh"
 
 
 def clip_errors(clip: dict, text: str) -> tuple[int, int]:
@@ -124,7 +145,7 @@ def load_run(spec: str, field: str = "text") -> tuple[str, dict[str, dict]]:
 
 def metrics(manifest: dict[str, dict], texts: dict[str, str]) -> dict[str, float]:
     """Voxt's three error rates, rounded as Voxt rounds them, and the Japanese and Spanish
-    ones when the run has such clips."""
+    ones, and the Korean and mixed ones, when the run has such clips."""
     result = {}
     for name, keep in GROUPS.items():
         errors = total = 0

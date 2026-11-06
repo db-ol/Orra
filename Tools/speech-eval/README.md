@@ -53,7 +53,11 @@ all three models on both chips (test_score.py checks it):
   so 2011 against 二零一一 is four errors.
 - mer_mixed: the same tokens over the 64 code switched ASCEND clips.
 
-Two more groups are Orra's, for a corpus of Japanese or Spanish clips (see Other
+The range of CJK characters in these tokens starts at U+8C48, the NFC form of U+F900, so
+they also count Hangul syllables one each. The golden files score the same with U+F900.
+It stays as it is, so that no stored rate moves.
+
+More groups are Orra's, for a corpus of Japanese, Spanish or Korean clips (see Other
 languages). They count only when a run has clips in them, so the speech corpus scores
 exactly as before:
 
@@ -64,6 +68,13 @@ exactly as before:
   digits with their accents, so año is one word and does not match ano. Han characters and
   kana count one each, as in cer_ja, so a transcript in Chinese or Japanese counts per
   character.
+- cer_ko: character error rate over the clips with lang ko. The tokens of cer_ja, and one
+  per Hangul syllable or jamo, so a space that is missing or added never counts and an
+  English word counts as one. NFKC turns decomposed Hangul (NFD) into its syllables and
+  compatibility jamo such as ㅋ into the jamo they stand for.
+- mer_ja_en, mer_es_en and mer_ko_en: the error rate over the clips with lang ja_en, es_en
+  or ko_en, Japanese, Spanish or Korean mixed with English, with the tokens of cer_ja,
+  wer_es or cer_ko, which keep English words whole.
 
 Errors are summed over a group and divided by its reference tokens. score.py also gives
 the rate per stratum, the number of silence and noise clips with any output, and, for
@@ -147,6 +158,11 @@ Score each text with the corpus's manifest:
     python3 Tools/speech-eval/score.py --manifest <corpus>/manifest.jsonl results/fleurs-ja.json
     python3 Tools/speech-eval/score.py --manifest <corpus>/manifest.jsonl --field text_unhinted results/fleurs-ja.json
     python3 Tools/speech-eval/score.py --manifest <corpus>/manifest.jsonl --field text_japanese results/fleurs-ja.json
+
+score.py scores Korean clips (lang `ko`) and clips mixed with English (`ja_en`, `es_en`
+and `ko_en`) in the same layout. The test does not run such a corpus yet. It knows only
+Japanese and Spanish as other languages, and expects 392 clips from a manifest without
+them.
 
 The table leaves out any group or stratum that no run has clips in, so a run of Spanish
 clips shows only wer_es and es, and a run without clips in a row shows n/a. The timing

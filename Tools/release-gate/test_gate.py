@@ -68,6 +68,12 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(gate.percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0.9), 9)
         self.assertEqual(gate.percentile([5], 0.9), 5)
 
+    def test_korean_counts_syllables_and_english_words(self):
+        scored = gate.score_set_clip({"language": "ko", "reference": "내일 회의가 있어요."}, "내일회의가 있어요")
+        self.assertEqual((scored["errors"], scored["tokens"]), (0, 8))
+        scored = gate.score_set_clip({"language": "ko_en", "reference": "Slack에 올려 주세요"}, "슬랙에 올려 주세요")
+        self.assertEqual((scored["errors"], scored["tokens"]), (2, 7))
+
 
 class CompareTests(unittest.TestCase):
     def run_compare(self, suite: str, base: dict, cand: dict) -> gate.Result:

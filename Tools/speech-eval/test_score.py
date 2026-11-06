@@ -8,6 +8,7 @@ import contextlib
 import io
 import json
 import tempfile
+import unicodedata
 import unittest
 from pathlib import Path
 
@@ -52,6 +53,7 @@ class TokenTests(unittest.TestCase):
 
     def test_scoring_language(self) -> None:
         self.assertEqual([score.scoring_lang(lang) for lang in ("en", "zh", "mixed", "none", "ja", "es", None)], ["en", "zh", "zh", "zh", "ja", "es", "zh"])
+        self.assertEqual([score.scoring_lang(lang) for lang in ("ko", "ja_en", "es_en", "ko_en")], ["ko", "ja", "es", "ko"])
 
     def test_numerals_and_digits_do_not_match(self) -> None:
         self.assertEqual(score.edit_distance(score.tokens("2011年", "zh"), score.tokens("二零一一年", "zh")), 4)
@@ -60,6 +62,49 @@ class TokenTests(unittest.TestCase):
         self.assertEqual(score.edit_distance(list("kitten"), list("sitting")), 3)
         self.assertEqual(score.edit_distance([], ["a"]), 1)
         self.assertEqual(score.edit_distance(["a"], []), 1)
+
+
+class KoreanTokenTests(unittest.TestCase):
+    def test_spaced_and_unspaced_hangul_count_per_syllable(self) -> None:
+        syllables = ["내", "일", "회", "의", "가", "있", "어", "요"]
+        self.assertEqual(score.tokens("내일 회의가 있어요.", "ko"), syllables)
+        self.assertEqual(score.tokens("내일회의가있어요", "ko"), syllables)
+        # A space never counts, a wrong syllable is one error.
+        self.assertEqual(score.edit_distance(score.tokens("내일 회의", "ko"), score.tokens("내일회이", "ko")), 1)
+
+    def test_nfc_and_nfd_give_the_same_tokens(self) -> None:
+        text = "한국어 받아쓰기"
+        decomposed = unicodedata.normalize("NFD", text)
+        self.assertEqual((len(text), len(decomposed)), (8, 18))
+        self.assertEqual(score.tokens(decomposed, "ko"), ["한", "국", "어", "받", "아", "쓰", "기"])
+        self.assertEqual(score.tokens(decomposed, "ko"), score.tokens(text, "ko"))
+
+    def test_each_jamo_is_one_token(self) -> None:
+        # Compatibility and half width jamo become conjoining jamo under NFKC.
+        khieukh = "ᄏ"
+        self.assertEqual(score.tokens("ㅋㅋ 좋아요", "ko"), [khieukh, khieukh, "좋", "아", "요"])
+        self.assertEqual(score.tokens("ﾻﾻ", "ko"), [khieukh, khieukh])
+        # Two leading consonants make no syllable.
+        self.assertEqual(score.tokens("ᄀᄀ", "ko"), ["ᄀ", "ᄀ"])
+
+    def test_hanja_kana_and_digits(self) -> None:
+        self.assertEqual(score.tokens("大韓民國은 2026년 3월에", "ko"), ["大", "韓", "民", "國", "은", "2026", "년", "3", "월", "에"])
+        self.assertEqual(score.tokens("10,000원, 15km", "ko"), ["10", "000", "원", "15km"])
+        self.assertEqual(score.tokens("カレー 먹자", "ko"), ["カ", "レ", "ー", "먹", "자"])
+
+    def test_korean_mixed_with_english_keeps_english_words_whole(self) -> None:
+        self.assertEqual(
+            score.tokens("Slack에서 PR 리뷰를 부탁해요. Deadline은 금요일!", "ko"),
+            ["slack", "에", "서", "pr", "리", "뷰", "를", "부", "탁", "해", "요", "deadline", "은", "금", "요", "일"],
+        )
+        self.assertEqual(score.tokens("O'Brien의 café", "ko"), ["o'brien", "의", "café"])
+        # 슬랙 for Slack: one substitution and one insertion.
+        self.assertEqual(score.edit_distance(score.tokens("Slack에", "ko"), score.tokens("슬랙에", "ko")), 2)
+
+    def test_the_chinese_way_keeps_hangul_syllables_but_not_jamo_or_kana(self) -> None:
+        # Its range starts at U+8C48, which takes in the Hangul syllables. Unchanged, so cer_zh
+        # and mer_mixed stay as they were.
+        self.assertEqual(score.tokens("안녕 ㅋㅋ 東京へ hello", "zh"), ["안", "녕", "東", "京", "hello"])
 
 
 class ManifestTests(unittest.TestCase):
@@ -105,6 +150,28 @@ class LanguageGroupTests(unittest.TestCase):
         self.assertIn("| cer_ja | 0.00% | 0.00% |", table)
         self.assertIn("| wer_es | 0.00% | n/a |", table)
         self.assertIn("| es (1) | 0.00% | n/a |", table)
+
+
+class PairGroupTests(unittest.TestCase):
+    MANIFEST = {
+        "k1": {"id": "k1", "stratum": "ko", "lang": "ko", "duration": 2.0, "reference": "내일 회의가 있어요."},
+        "j1": {"id": "j1", "stratum": "ja_en", "lang": "ja_en", "duration": 2.0, "reference": "このPRを確認して"},
+        "e1": {"id": "e1", "stratum": "es_en", "lang": "es_en", "duration": 2.0, "reference": "Mándame el deadline."},
+        "m1": {"id": "m1", "stratum": "ko_en", "lang": "ko_en", "duration": 2.0, "reference": "Slack에 올려 주세요."},
+    }
+
+    def test_korean_and_the_groups_mixed_with_english(self) -> None:
+        texts = {"k1": "내일 회이가 있어요", "j1": "このPRを確認して", "e1": "Mándame el dedlain", "m1": "슬랙에 올려 주세요"}
+        rates = score.metrics(self.MANIFEST, texts)
+        self.assertEqual(rates, {"wer_en": 0.0, "cer_zh": 0.0, "mer_mixed": 0.0, "cer_ko": round(1 / 8, 5), "mer_ja_en": 0.0, "mer_es_en": round(1 / 3, 5), "mer_ko_en": round(2 / 7, 5)})
+        self.assertEqual(score.strata(self.MANIFEST, texts)["ko"], (1 / 8, 1))
+
+    def test_a_run_of_korean_clips_shows_only_korean(self) -> None:
+        table = score.table({"k1": self.MANIFEST["k1"]}, [("run", {"k1": {"text": "내일회의가 있어요"}})])
+        self.assertIn("| cer_ko | 0.00% |", table)
+        self.assertIn("| ko (1) | 0.00% |", table)
+        for name in ["wer_en", "cer_zh", "mer_mixed", "cer_ja", "wer_es", "mer_ko_en"] + score.STRATA:
+            self.assertNotIn(f"| {name} ", table)
 
 
 class VoxtReproductionTests(unittest.TestCase):

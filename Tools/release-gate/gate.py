@@ -117,7 +117,7 @@ def summarize_corpus(raw: dict, manifest: dict[str, dict]) -> dict:
                 if keep(clip):
                     totals[name][0] += errors
                     totals[name][1] += count
-        # The Japanese and Spanish groups only for a corpus with such clips.
+        # The groups of other languages only for a corpus with such clips.
         groups[field] = {name: rate(*values) for name, values in totals.items() if values[1] or name not in speech_score.LANGUAGE_GROUPS}
     decode = [row["decode_seconds"] for row in raw["clips"].values() if not row.get("skipped_silent")]
     return {
