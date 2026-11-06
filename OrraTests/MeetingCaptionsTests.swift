@@ -2762,6 +2762,29 @@ struct MeetingCaptionsTests {
         captions.setOn(false)
     }
 
+    /// The capture hands on pieces of about 100 ms, which seldom end where a frame of the
+    /// segmenter ends. So the first frame of the silence after a sentence cut off still holds
+    /// the last samples of the sentence and is loud. That silence is no sound either.
+    @Test func silenceAfterASentenceCutOffInsideAFrameIsNoSound() async throws {
+        let clock = TestClock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), clock: clock)
+        captions.setWindowVisible(true)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening && clock.sleeping == 1 }
+        let run = captions.currentRun
+        // 15 frames of 320 samples and 100 samples more.
+        captions.receive(Array(CaptionAudio.tone(0.4).prefix(4_900)), run: run)
+        clock.advance(by: .seconds(MeetingCaptions.displayQuietLimit))
+        try await eventually { !captions.keepsDisplayOn }
+        captions.receive(CaptionAudio.silence(0.1), run: run)
+        #expect(!captions.keepsDisplayOn)
+        captions.receive(CaptionAudio.silence(0.1), run: run)
+        #expect(!captions.keepsDisplayOn)
+        captions.receive(CaptionAudio.tone(0.3), run: run)
+        #expect(captions.keepsDisplayOn)
+        captions.setOn(false)
+    }
+
     /// Sound that comes back while the window cannot be seen keeps the display on once the
     /// window can be seen again. Turning captions off ends the wait, and turning them on
     /// starts the quiet over.

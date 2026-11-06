@@ -245,12 +245,14 @@ final class CaptionPipeline {
     }
 
     /// True while the segmenter hears speech: a sentence is being heard, which is when the
-    /// stream rose above the noise of its pauses, see CaptionSegmenter, and it is not
-    /// pausing, by `interimPauseLimit`. So a sentence that stays open when the audio stops
-    /// does not count once silence follows it. Live Captions take it for sound, see
+    /// stream rose above the noise of its pauses, see CaptionSegmenter, and the last frame
+    /// it judged was voiced. So a sentence that stays open when the audio stops does not
+    /// count once silence follows it, also when the first frame of that silence still holds
+    /// the last samples of the sentence, as the pieces of about 100 ms the captures hand on
+    /// seldom end where a frame ends. Live Captions take it for sound, see
     /// MeetingCaptions.displayQuietLimit.
     var hearsSpeech: Bool {
-        segmenter.isInSpeech && segmenter.openSilenceSeconds < Self.interimPauseLimit
+        segmenter.isInSpeech && segmenter.openSilenceSeconds == 0
     }
 
     /// Takes the next samples of the stream.
