@@ -63,6 +63,19 @@ struct TranscribeFileWindowTests {
         #expect(panel.allowedContentTypes == [.audiovisualContent])
     }
 
+    /// The save panel offers the file's name with the extension of the kind and starts in
+    /// the folder of the file, so the subtitles of a video land next to it. The panel is
+    /// made, never shown.
+    @Test func theSavePanelStartsNextToTheFile() throws {
+        let folder = try TestMedia.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let panel = TranscribeFileWindow.savePanel(as: .subtitles, name: "Lecture.srt", in: folder)
+        #expect(panel.nameFieldStringValue == "Lecture.srt")
+        #expect(panel.directoryURL?.standardizedFileURL.path == folder.standardizedFileURL.path)
+        #expect(panel.allowedContentTypes.map(\.preferredFilenameExtension) == ["srt"])
+        #expect(TranscribeFileWindow.savePanel(as: .text, name: "Lecture.txt", in: folder).allowedContentTypes == [.plainText])
+    }
+
     @Test func eachProblemHasItsMessage() {
         let messages = [FileAudioProblem.unreadable, .noAudio, .protected, .notOnThisMac, .readFailed].map(TranscribeFileView.message(for:))
         #expect(Set(messages).count == 5)

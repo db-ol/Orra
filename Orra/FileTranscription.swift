@@ -143,6 +143,8 @@ final class FileTranscription {
     nonisolated struct File: Equatable, Sendable {
         /// The name the window shows and the save panel starts from. Never logged.
         var name: String
+        /// The folder it is in, where the save panel starts. Nothing in it is read.
+        var folder: URL
         /// Its length in seconds, 0 until it is open.
         var duration: Double
     }
@@ -272,7 +274,7 @@ final class FileTranscription {
         stopJob()
         jobNumber += 1
         let number = jobNumber
-        file = File(name: url.lastPathComponent, duration: 0)
+        file = File(name: url.lastPathComponent, folder: url.deletingLastPathComponent(), duration: 0)
         segments = []
         doneSeconds = 0
         secondsLeft = nil

@@ -124,7 +124,8 @@ struct FileTranscriptionTests {
         #expect(transcription.isRunning)
         try await finished(transcription)
         #expect(transcription.phase == .finished)
-        #expect(transcription.file == FileTranscription.File(name: "Interview.m4a", duration: 14))
+        #expect(transcription.file == FileTranscription.File(name: "Interview.m4a", folder: url.deletingLastPathComponent(), duration: 14))
+        #expect(transcription.file?.folder.path == "/Users/someone/Recordings")
         #expect(transcription.segments == [
             FileTranscriptSegment(id: 1, start: 0.2, end: 3.2, text: "Segment 1."),
             FileTranscriptSegment(id: 2, start: 4.0, end: 7.0, text: "Segment 2."),

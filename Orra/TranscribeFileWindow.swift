@@ -123,17 +123,11 @@ final class TranscribeFileWindow: NSObject, NSWindowDelegate {
         return panel
     }
 
-    /// Save as Text… and Save as Subtitles…: the save panel, starting with the file's name
-    /// and the extension of `kind`. The file it gives is the only one Transcribe File writes.
+    /// Save as Text… and Save as Subtitles…: the save panel. The file it gives is the only
+    /// one Transcribe File writes.
     private func save(as kind: FileTranscript.Kind) {
         guard let window, let transcription else { return }
-        let panel = NSSavePanel()
-        // A subtitle file is text that macOS has no type of its own for.
-        let type = UTType(filenameExtension: kind.pathExtension, conformingTo: .plainText) ?? .plainText
-        panel.allowedContentTypes = [type]
-        panel.nameFieldStringValue = transcription.suggestedName(as: kind)
-        panel.canCreateDirectories = true
-        panel.isExtensionHidden = false
+        let panel = Self.savePanel(as: kind, name: transcription.suggestedName(as: kind), in: transcription.file?.folder)
         panel.beginSheetModal(for: window) { response in
             guard response == .OK, let url = panel.url else { return }
             do {
@@ -143,6 +137,21 @@ final class TranscribeFileWindow: NSObject, NSWindowDelegate {
                 NSAlert(error: error).beginSheetModal(for: window)
             }
         }
+    }
+
+    /// The save panel for `kind`, starting with `name` in `folder`, the folder of the file
+    /// the text comes from, so subtitles land next to their video, where players look for
+    /// them. The panel only starts there, and Orra reads nothing in it.
+    static func savePanel(as kind: FileTranscript.Kind, name: String, in folder: URL?) -> NSSavePanel {
+        let panel = NSSavePanel()
+        // A subtitle file is text that macOS has no type of its own for.
+        let type = UTType(filenameExtension: kind.pathExtension, conformingTo: .plainText) ?? .plainText
+        panel.allowedContentTypes = [type]
+        panel.nameFieldStringValue = name
+        panel.directoryURL = folder
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        return panel
     }
 }
 
