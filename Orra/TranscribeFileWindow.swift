@@ -159,7 +159,7 @@ struct TranscribeFileView: View {
                 Divider()
                 segmentList(file)
                 Divider()
-                footer(modelLine: modelLine)
+                footer
             } else {
                 dropArea(modelLine: modelLine)
             }
@@ -263,10 +263,17 @@ struct TranscribeFileView: View {
                     }
                 }
                 Spacer(minLength: 8)
+                // Stop while a file runs, and the next file once it is over. A file can also
+                // be dropped on the window at any time.
                 if transcription.isRunning {
                     Button("Stop") {
                         transcription.stop()
                     }
+                } else {
+                    Button("Choose File…") {
+                        chooseFile()
+                    }
+                    .disabled(modelLine != nil)
                 }
             }
             if transcription.isRunning, file.duration > 0 {
@@ -318,14 +325,10 @@ struct TranscribeFileView: View {
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
     }
 
-    private func footer(modelLine: String?) -> some View {
+    private var footer: some View {
         let canExport = !transcription.segments.isEmpty && !transcription.isRunning
         return HStack(spacing: 8) {
-            Button("Choose File…") {
-                chooseFile()
-            }
-            .disabled(modelLine != nil)
-            Spacer(minLength: 8)
+            Spacer(minLength: 0)
             Button("Copy") {
                 ConcealedClipboard.copy(transcription.text, to: .general)
             }
