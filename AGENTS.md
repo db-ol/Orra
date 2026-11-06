@@ -181,8 +181,8 @@ trusted once in Xcode. docs/dependencies.md has the details.
   locked and they heard sound in the last 5 minutes, Orra keeps the display on through one
   process activity with idleDisplaySleepDisabled, the way a video player does, for both
   sources, approved by the maintainer on 2026-11-02, with the 5 minutes on 2026-11-05.
-  Sound is what the caption segmenter takes for speech, so the steady noise of a room
-  counts as none. AppDelegate holds it while MeetingCaptions.keepsDisplayOn is
+  Sound is what the caption segmenter takes for speech, so the steady noise of a quiet
+  room counts as none. AppDelegate holds it while MeetingCaptions.keepsDisplayOn is
   true and ends it as soon as it is not, and macOS drops it when Orra quits. The activity
   never keeps the Mac awake with its displays off, and never holds back a lock the user
   asks for, Sleep or a closed lid.
