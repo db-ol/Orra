@@ -4,8 +4,8 @@ import NaturalLanguage
 /// The checks of the Japanese and Spanish routes. They do what the Chinese checks do, with
 /// the words, numbers and scripts of the pair:
 /// - Units count kana and words with accents, see `pairUnits`.
-/// - Openers, short replies, correction cues and instructions before a colon have Japanese
-///   and Spanish forms.
+/// - Openers, the words a reply opens with, short replies, correction cues and
+///   instructions before a colon have Japanese and Spanish forms.
 /// - Numbers read 億, 兆 and the Japanese eras, Spanish number words, and Spanish formats,
 ///   in which 2.500 may be 2500 and 3,5 may be 3.5.
 /// - Each target has a check that the translation is in its language, such as no kana
@@ -31,7 +31,7 @@ nonisolated extension TranslationGuard {
         if output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return .empty
         }
-        switch RewriteGuard.checkOpeners(source: source, output: output, openers: pairOpeners, excuses: pairExcuses, anywhere: pairAnywhere, latinBoundaries: true) {
+        switch checkOpeners(source: source, output: output, openers: pairOpeners, excuses: pairExcuses, anywhere: pairAnywhere, replies: pairReplies, leads: leads, latinBoundaries: true) {
         case .assistantOpener(let phrase): return .assistantOpener(phrase)
         case .assistantPhrase(let phrase): return .assistantPhrase(phrase)
         default: break
@@ -529,6 +529,16 @@ nonisolated extension TranslationGuard {
         "hello": ["えーと", "eh", "oye", "hey"],
         "i can't": ["ない", "ません", "無理", "no", "can't", "cannot"],
         "as an ai": ["として", "como"],
+    ], uniquingKeysWith: +)
+
+    /// TranslationGuard.replies with the Japanese and Spanish words a reply opens with. The
+    /// model wrote "Sure" for いいよ, "Okay" for オッケー, va, sale and está bien, "Sorry" for
+    /// perdona, "Excuse me" for 失礼します, "Hello" for もしもし and "Hey" for qué onda.
+    /// いいですよ is said as いいよ is, and speech recognition may drop the accents.
+    static let pairReplies: [String: [String]] = replies.merging([
+        "sure": ["いいよ", "いいですよ", "オッケー", "va", "sale", "está bien", "esta bien"],
+        "i'm sorry": ["失礼します", "perdona"],
+        "hello": ["もしもし", "qué onda", "que onda"],
     ], uniquingKeysWith: +)
 
     /// RewriteGuard.anywhere with Japanese and Spanish forms added to each group, keyed by
