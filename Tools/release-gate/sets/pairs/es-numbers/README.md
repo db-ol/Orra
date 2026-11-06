@@ -9,12 +9,13 @@ numbers.
 
 Orra has no number rules for Spanish, so the reference is the text a user would want: digits for
 years, dates, money, percentages, times and codes, with a comma for thousands and a colon for
-minutes (14 de octubre de 2026, 35,000 pesos, 3:30), and words for ordinals, small counts and
-the bare amounts of no son treinta mil, which mirror the Chinese 不是三万. Each number is an
-expected term with its spelling in words as an accepted spelling, such as ["35,000 pesos",
-"35000 pesos", "35 mil pesos", "treinta y cinco mil pesos"]. The strict rate then shows how the
-model writes numbers, and the lenient rate whether it heard them right. The negation words are
-expected terms too, so a lost negation shows even when the error rate barely moves.
+minutes (14 de octubre de 2026, 35,000 pesos, 3:30), and words for ordinals, counts of things
+(veinticinco bugs) and the bare amounts of no son treinta mil, which mirror the Chinese 不是三万.
+Each number is an expected term, most with their spelling in words as an accepted spelling, such
+as ["35,000 pesos", "35000 pesos", "35 mil pesos", "treinta y cinco mil pesos"]. The strict rate
+then shows how the model writes numbers, and the lenient rate whether it heard them right. The
+negation words are expected terms too, so a lost negation shows even when the error rate barely
+moves.
 
 `say` writes every number in words as it is read, and the phone number in pairs of digits as
 Mexican speakers say it.

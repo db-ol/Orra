@@ -21,7 +21,7 @@ companies and acronyms in Latin letters (Slack, PR, API), common loanwords in ka
 デプロイ) and names of people in katakana (ジェニファー). Each English word is an expected term with its
 other spellings as accepted spellings, such as ["Slack", "スラック"] and ["デプロイ", "deploy"]. Long
 vowel variants such as サーバー and サーバ count as the same word. Numbers are digits, with 万 for ten
-thousands (5万ドル), and each number lists its kanji spelling.
+thousands (5万ドル), and most list their kanji spelling.
 
 The Japanese text of this set was written and reviewed by an AI process, not by a native
 speaker, and waits for a native reader. Until one has read it, its references, its accepted

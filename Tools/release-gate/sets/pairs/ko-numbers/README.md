@@ -8,9 +8,9 @@ zh-numbers-negation, which do not occur in the sentences, so the gate shows what
 numbers.
 
 Orra has no number rules for Korean yet, so the reference is the text a user would want: digits
-for years, dates, times, money, percentages, codes and floors (2026년 10월 14일, 3시 반, 3만 5천 원),
-with the unit right after the digits, and words for counts with native numbers and for ages (세
-번째, 스물다섯 개, 서른 살). Each number is an expected term with its spelling in words as an accepted
+for years, dates, times, money, percentages and codes (2026년 10월 14일, 3시 반, 3만 5천 원), with the
+unit right after the digits, and words for counts with native numbers and for ages (세 번째, 스물다섯
+개, 서른 살). Each number is an expected term, most with their spelling in words as an accepted
 spelling, such as ["3만 5천 원", "삼만 오천 원", "35,000원"], and a count in words lists its digits. The
 strict rate then shows how the model writes numbers, and the lenient rate whether it heard them
 right. The negation words are expected terms too, so a lost negation shows even when the error

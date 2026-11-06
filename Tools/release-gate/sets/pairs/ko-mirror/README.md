@@ -22,7 +22,7 @@ of people in Hangul (제니퍼). Each English word is an expected term with its 
 accepted spellings, such as ["Slack", "슬랙"] and ["데드라인", "deadline"]. Particles follow how the
 word is said (Slack으로, API는, ASAP로). Numbers are digits for dates, times, money and percentages
 (3시 반, 1,200달러), with 만 for ten thousands (5만 달러), and words for counts with native numbers (세
-명). Each number lists the spelling in words.
+명). Most numbers list their spelling in words.
 
 The Korean text of this set was written and reviewed by an AI process, not by a native speaker,
 and waits for a native reader. Until one has read it, its references, its accepted spellings and

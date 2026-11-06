@@ -9,11 +9,11 @@ numbers.
 
 Orra has no number rules for Japanese yet, so the reference is the text a user would want:
 digits for years, dates, times, money, percentages, codes and counts (2026年10月14日, 3時半, 3万5000円,
-3回目) and kanji in fixed words (一度). Each number is an expected term with its kanji spelling, and
-at times other digit spellings, as accepted spellings, such as ["3万5000円", "三万五千円", "35,000円",
-"35000円"]. The strict rate then shows how the model writes numbers, and the lenient rate whether
-it heard them right. The negation words are expected terms too, so a lost negation shows even
-when the error rate barely moves.
+3回目) and kanji in fixed words (一度). Each number is an expected term, most with their kanji
+spelling, and at times other digit spellings, as accepted spellings, such as ["3万5000円",
+"三万五千円", "35,000円", "35000円"]. The strict rate then shows how the model writes numbers, and the
+lenient rate whether it heard them right. The negation words are expected terms too, so a lost
+negation shows even when the error rate barely moves.
 
 `say` writes numbers in kanji, and phone numbers, codes and room numbers in kana as they are
 read (ゼロハチゼロ, はちまるろく).
