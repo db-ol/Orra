@@ -792,10 +792,10 @@ let transcribeSentences: [(start: String, text: L)] = [
 /// The first two subtitles of the saved file, as FileTranscript writes them with the times
 /// 0.4 to 4.3 s and 4.8 to 8.4 s.
 let transcribeSubtitles = L(
-    "1\n00:00:00,400 --> 00:00:04,300\nThanks everyone for joining.\nLet's start with the budget.\n\n2\n00:00:04,800 --> 00:00:08,400\nWe spent a little less than planned on\ntravel.",
+    "1\n00:00:00,400 --> 00:00:04,300\nThanks everyone for joining.\nLet's start with the budget.\n\n2\n00:00:04,800 --> 00:00:08,400\nWe spent a little less\nthan planned on travel.",
     "1\n00:00:00,400 --> 00:00:04,300\n谢谢大家参加，我们先看一下预算。\n\n2\n00:00:04,800 --> 00:00:08,400\n差旅费比计划少花了一点。",
     "1\n00:00:00,400 --> 00:00:04,300\n皆さん、ありがとうございます。\nまず予算から始めましょう。\n\n2\n00:00:04,800 --> 00:00:08,400\n出張費は予定より少なく済みました。",
-    "1\n00:00:00,400 --> 00:00:04,300\nGracias a todos por venir.\nEmpecemos con el presupuesto.\n\n2\n00:00:04,800 --> 00:00:08,400\nGastamos un poco menos de lo previsto en\nviajes."
+    "1\n00:00:00,400 --> 00:00:04,300\nGracias a todos por venir.\nEmpecemos con el presupuesto.\n\n2\n00:00:04,800 --> 00:00:08,400\nGastamos un poco menos\nde lo previsto en viajes."
 )
 
 /// When the file is dropped, when each sentence shows, when the file is done, and when the
