@@ -91,6 +91,26 @@ does mer_mixed. Digits never match number words, so a transcript that writes a n
 way the reader said it counts errors that say little about what was heard. On the speech
 corpus, 44 of the 143 FLEURS clips hold digits and no LibriSpeech clip does.
 
+### Accepted spellings
+
+A clip of a manifest may list other spellings of a word in its reference that count as
+right, such as a loanword in Hangul or a unit said in full, each list with the form in the
+reference first:
+
+    "accepted": [["km", "킬로미터"], ["Slack", "슬랙"]]
+
+The lists among a clip's `expect_terms` count too, which is how a gate set gives a term
+other spellings. A group whose clips have lists gets a lenient row below its rate, and so
+does its rate without digits. The lenient rate scores the text with each accepted spelling
+written as the reference writes it, the longest spellings first, so 킬로미터 becomes km
+before 미터 can become m, and no shorter spelling replaces part of the reference's own
+form. White space inside a spelling is free, and a spelling with Latin letters matches only
+where no Latin letter stands right before or after it, so Slack is not found in Slacker.
+The replaced form joins the letters and digits next to it as they were written: 80킬로미터
+becomes 80km, one token, which counts against a reference that writes 80 km as an output
+of 80km would. The strict rate is the rate as before. A clip without lists scores the same
+both ways, and a run without lists shows no lenient row.
+
 ## Steps
 
 1. Build the corpus, about 1 GB of downloads and 140 MB of clips, in a virtual environment

@@ -50,7 +50,10 @@ the top of the file:
   baseline, with cleanup off or on. Clips whose median grew that much are listed.
 - sets: a set's error rate more than 0.5 points higher, any clip with no error that has
   one now, any clip that lost an expected term, or any clip with a forbidden term that
-  the baseline did not have. A new set or clip only fails on a forbidden term.
+  the baseline did not have. A new set or clip only fails on a forbidden term. These rules
+  take the strict numbers. The lenient numbers of a set with accepted spellings (see Test
+  sets) are shown beside them and fail nothing, and a clip that is only worse in them is
+  listed under "cases got worse".
 - projects: the bar below, baseline or not, and against a baseline any item that lost a
   warning the checks in code showed before.
 - retrieval: search terms for fewer than 95 % of the mails, baseline or not, and against a
@@ -84,7 +87,15 @@ A set is a folder `<sets>/<name>/` with `clips/<id>.wav` (16 kHz mono) and
 - expect_terms: terms the text must hold. forbid_terms: terms it must not hold. Spaces
   inside a term are free (N P C matches NPC). A term with Latin letters matches with its
   case and not inside a longer word, so the plain word cursor is not the term Cursor and
-  trust does not hold Rust. Other terms match anywhere in the text.
+  trust does not hold Rust. Other terms match anywhere in the text. An expected term may
+  be a list of spellings, the form in the reference first, then the other spellings that
+  count as right, such as ["Slack", "슬랙"]. The strict check takes the first form and
+  the lenient check any form. A term is named by its first form.
+- accepted, optional: lists in the same form for words of the reference that are not
+  expected terms, such as ["km", "킬로미터"]. The lenient error rate scores the text with
+  every accepted spelling, those of expect_terms included, written as the reference
+  writes it, as Tools/speech-eval/README.md describes. A set without lists has no
+  lenient numbers, since they would equal the strict ones.
 
 The sentences, voices and references of each set are in
 `Tools/release-gate/sets/<name>/sentences.jsonl`, and

@@ -217,6 +217,56 @@ class WithoutDigitsTests(unittest.TestCase):
         self.assertEqual(score.without_digits(manifest, texts), {"wer_en": (0.0, 147), "cer_zh": (0.0, 99)})
 
 
+class AcceptedSpellingTests(unittest.TestCase):
+    MANIFEST = {
+        "k1": {"id": "k1", "stratum": "ko", "lang": "ko", "source": "fleurs-ko_kr-test", "duration": 5.0, "reference": "약 80km 떨어진 곳", "accepted": [["km", "킬로미터"]]},
+        "k2": {"id": "k2", "stratum": "ko", "lang": "ko", "source": "fleurs-ko_kr-test", "duration": 5.0, "reference": "Slack에 올려 주세요", "expect_terms": [["Slack", "슬랙"]]},
+        "k3": {"id": "k3", "stratum": "ko", "lang": "ko", "source": "fleurs-ko_kr-test", "duration": 5.0, "reference": "점심 먹었어요"},
+    }
+
+    def test_longest_spellings_go_first(self) -> None:
+        self.assertEqual(score.lenient_text("약 15킬로미터 떨어진 곳에서 3미터", [["km", "킬로미터"], ["m", "미터"]]), "약 15km 떨어진 곳에서 3m")
+        self.assertEqual(score.lenient_text("3미터와 15킬로미터", [["m", "미터"], ["km", "킬로미터"]]), "3m와 15km")
+
+    def test_a_shorter_spelling_never_cuts_the_form_of_the_reference(self) -> None:
+        self.assertEqual(score.lenient_text("킬로그램과 킬로", [["킬로그램", "kg"], ["km", "킬로"]]), "킬로그램과 km")
+
+    def test_latin_spellings_match_whole_words_and_spaces_are_free(self) -> None:
+        self.assertEqual(score.lenient_text("Slacker와 Slack에서", [["슬랙", "Slack"]]), "slacker와 슬랙에서")
+        self.assertEqual(score.lenient_text("에이 피 아이 문서", [["API", "에이피아이"]]), "api 문서")
+
+    def test_strict_and_lenient_rates(self) -> None:
+        texts = {"k1": "약 80킬로미터 떨어진 곳", "k2": "슬랙에 올려 주세요", "k3": "점심 먹었어요"}
+        self.assertEqual(score.clip_errors(self.MANIFEST["k1"], texts["k1"]), (5, 6))
+        self.assertEqual(score.clip_errors(self.MANIFEST["k1"], texts["k1"], lenient=True), (0, 6))
+        self.assertEqual(score.clip_errors(self.MANIFEST["k2"], texts["k2"], lenient=True), (0, 7))
+        self.assertEqual(score.metrics(self.MANIFEST, texts)["cer_ko"], round(7 / 19, 5))
+        self.assertEqual(score.metrics(self.MANIFEST, texts, lenient=True)["cer_ko"], 0.0)
+        # k1 holds digits, so the rate without digits counts k2 and k3.
+        self.assertEqual(score.without_digits(self.MANIFEST, texts), {"cer_ko": (round(2 / 13, 5), 2)})
+        self.assertEqual(score.without_digits(self.MANIFEST, texts, lenient=True), {"cer_ko": (0.0, 2)})
+        table = score.table(self.MANIFEST, [("run", {clip_id: {"text": text} for clip_id, text in texts.items()})])
+        for line in ("| cer_ko | 36.84% |", "| cer_ko, lenient | 0.00% |", "| cer_ko, read speech without digits (2) | 15.38% |", "| cer_ko, read speech without digits, lenient (2) | 0.00% |"):
+            self.assertIn(line, table)
+
+    def test_without_lists_both_rates_are_the_same(self) -> None:
+        manifest = score.load_manifest()
+        golden = json.loads((GOLDEN / "qwen3-asr-1.7b-8bit.json").read_text(encoding="utf-8"))
+        texts = {clip_id: row["text"] for clip_id, row in golden["devices"]["Apple M5"]["clips"].items()}
+        self.assertEqual(score.metrics(manifest, texts, lenient=True), score.metrics(manifest, texts))
+        self.assertEqual(score.without_digits(manifest, texts, lenient=True), score.without_digits(manifest, texts))
+        for clip_id, text in texts.items():
+            self.assertEqual(score.clip_errors(manifest[clip_id], text, lenient=True), score.clip_errors(manifest[clip_id], text))
+        self.assertNotIn("lenient", score.table(manifest, [("golden", {clip_id: {"text": text} for clip_id, text in texts.items()})]))
+
+    def test_lists_must_hold_strings(self) -> None:
+        self.assertEqual(score.accepted_spellings(self.MANIFEST["k3"]), [])
+        self.assertEqual(score.accepted_spellings({"id": "x", "accepted": [["km", "킬로미터"]], "expect_terms": ["Jira", ["Slack", "슬랙"]]}), [["km", "킬로미터"], ["Slack", "슬랙"]])
+        for accepted in (["km"], [[]], [["km", 3]]):
+            with self.assertRaises(ValueError):
+                score.accepted_spellings({"id": "x", "accepted": accepted})
+
+
 class VoxtReproductionTests(unittest.TestCase):
     """Scoring Voxt's own hypotheses gives exactly the error rates its golden files hold."""
 

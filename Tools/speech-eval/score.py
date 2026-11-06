@@ -7,8 +7,8 @@
 # authors, licensed under the Apache License 2.0
 # (https://www.apache.org/licenses/LICENSE-2.0). The scores per stratum, the timing and
 # the comparison of two runs are Orra's, and so are the Japanese, Spanish and Korean groups
-# for other corpora with the same layout and the rates without digits. Standard library
-# only, so CI runs the tests on Linux with any python3.
+# for other corpora with the same layout, the rates without digits and the accepted
+# spellings. Standard library only, so CI runs the tests on Linux with any python3.
 #
 # Usage:
 #
@@ -18,6 +18,12 @@
 # A run is a JSON file with {"clips": {clip id: {"text": ...}}}: the file the Swift
 # evaluation writes, or a Voxt golden file, read as FILE@DEVICE (the first device when no
 # device is given). --field picks another text field of the clips, such as ruled_text.
+#
+# A clip of the manifest may list accepted spellings, other ways to write a word of its
+# reference that count as right: "accepted": [["km", "킬로미터"]], each list with the form
+# in the reference first. The lists among its "expect_terms" count too. A group whose clips
+# have such lists also shows a lenient rate, which scores the text with each accepted
+# spelling written as the reference writes it. Without lists the two rates are the same.
 
 from __future__ import annotations
 
@@ -120,10 +126,63 @@ def scoring_lang(lang: str | None) -> str:
     return "zh"
 
 
-def clip_errors(clip: dict, text: str) -> tuple[int, int]:
-    """Errors and reference tokens of one clip."""
+def accepted_spellings(clip: dict) -> list[list[str]]:
+    """The accepted spellings of a clip: the lists in its "accepted" field and the lists
+    among its "expect_terms". Each list holds the form written in the reference first, then
+    the other spellings that count as right, such as ["km", "킬로미터"]."""
+    lists = list(clip.get("accepted") or []) + [term for term in clip.get("expect_terms") or [] if isinstance(term, list)]
+    for forms in lists:
+        if not isinstance(forms, list) or not forms or not all(isinstance(form, str) for form in forms):
+            raise ValueError(f"{clip.get('id')}: accepted spellings must be lists of strings, not {forms!r}")
+    return lists
+
+
+def folded(text: str) -> str:
+    return unicodedata.normalize("NFKC", text).lower()
+
+
+def lenient_text(text: str, lists: list[list[str]]) -> str:
+    """The text with each accepted spelling in it written as the reference writes it, the
+    longest spellings first, so with ["km", "킬로미터"] and ["m", "미터"] the text 5킬로미터
+    becomes 5km, not 5킬로m. The form in the reference counts as a spelling too, so no
+    shorter spelling replaces part of it. As in the term check of the release gate, white
+    space inside a spelling is free, and a spelling with Latin letters matches only where no
+    Latin letter stands right before or after it. The text comes back in NFKC lower case,
+    which tokens() reads the same way."""
+    text = folded(text)
+    spellings = sorted(((spelling, forms[0]) for forms in lists for spelling in forms), key=lambda pair: -len("".join(folded(pair[0]).split())))
+    taken = [False] * len(text)
+    found = []
+    for spelling, form in spellings:
+        characters = [character for character in folded(spelling) if not character.isspace()]
+        if not characters:
+            continue
+        pattern = r"\s*".join(re.escape(character) for character in characters)
+        if any(character.isascii() and character.isalpha() for character in characters):
+            pattern = rf"(?<![a-z]){pattern}(?![a-z])"
+        compiled = re.compile(pattern)
+        position = 0
+        while match := compiled.search(text, position):
+            start, end = match.span()
+            if any(taken[start:end]):
+                position = start + 1
+                continue
+            taken[start:end] = [True] * (end - start)
+            found.append((start, end, folded(form)))
+            position = end
+    for start, end, form in sorted(found, reverse=True):
+        text = text[:start] + form + text[end:]
+    return text
+
+
+def clip_errors(clip: dict, text: str, lenient: bool = False) -> tuple[int, int]:
+    """Errors and reference tokens of one clip. Lenient scores the text with the clip's
+    accepted spellings written as the reference writes them."""
     lang = scoring_lang(clip["lang"])
     reference = tokens(clip["reference"], lang)
+    lists = accepted_spellings(clip) if lenient else []
+    if lists:
+        text = lenient_text(text, lists)
     return edit_distance(reference, tokens(text, lang)), len(reference)
 
 
@@ -159,16 +218,17 @@ def load_run(spec: str, field: str = "text") -> tuple[str, dict[str, dict]]:
     return label, {clip_id: {**row, "text": row[field], **({"decode_seconds": row[seconds]} if seconds in row else {})} for clip_id, row in clips.items()}
 
 
-def metrics(manifest: dict[str, dict], texts: dict[str, str]) -> dict[str, float]:
+def metrics(manifest: dict[str, dict], texts: dict[str, str], lenient: bool = False) -> dict[str, float]:
     """Voxt's three error rates, rounded as Voxt rounds them, and the Japanese and Spanish
-    ones, and the Korean and mixed ones, when the run has such clips."""
+    ones, and the Korean and mixed ones, when the run has such clips. Lenient scores with the
+    accepted spellings."""
     result = {}
     for name, keep in GROUPS.items():
         errors = total = 0
         for clip_id, text in texts.items():
             clip = manifest[clip_id]
             if keep(clip):
-                found, count = clip_errors(clip, text)
+                found, count = clip_errors(clip, text, lenient)
                 errors += found
                 total += count
         if total or name not in LANGUAGE_GROUPS:
@@ -176,7 +236,7 @@ def metrics(manifest: dict[str, dict], texts: dict[str, str]) -> dict[str, float
     return result
 
 
-def without_digits(manifest: dict[str, dict], texts: dict[str, str]) -> dict[str, tuple[float, int]]:
+def without_digits(manifest: dict[str, dict], texts: dict[str, str], lenient: bool = False) -> dict[str, tuple[float, int]]:
     """Each group's error rate, rounded as metrics() rounds, and clip count over its read
     speech without digits (read_without_digits). A group without such clips, such as
     mer_mixed, which is spontaneous speech, is left out."""
@@ -186,7 +246,7 @@ def without_digits(manifest: dict[str, dict], texts: dict[str, str]) -> dict[str
         for clip_id, text in texts.items():
             clip = manifest[clip_id]
             if keep(clip) and read_without_digits(clip):
-                found, count = clip_errors(clip, text)
+                found, count = clip_errors(clip, text, lenient)
                 errors, total, clips = errors + found, total + count, clips + 1
         if clips:
             result[name] = (round(errors / total, 5) if total else 0.0, clips)
@@ -241,19 +301,26 @@ def table(manifest: dict[str, dict], runs: list[tuple[str, dict[str, dict]]]) ->
             print(f"warning: {label} lacks {len(missing)} clips", file=sys.stderr)
     lines = ["| | " + " | ".join(label for label, _ in runs) + " |", "|---" * (len(runs) + 1) + "|"]
     # A group or stratum without clips in any run, such as cer_zh for a run of Spanish clips,
-    # is left out, and a run without clips in it shows n/a. Below each group, its rate on read
-    # speech without digits when it has such clips.
+    # is left out, and a run without clips in it shows n/a. Below each group, its lenient
+    # rate when its clips have accepted spellings, and its rate on read speech without digits
+    # when it has such clips.
     all_metrics = [metrics(manifest, run) for run in texts]
+    with_lists = {name for name, keep in GROUPS.items() if any(keep(manifest[clip_id]) and accepted_spellings(manifest[clip_id]) for run in texts for clip_id in run)}
+    all_lenient = [metrics(manifest, run, lenient=True) for run in texts] if with_lists else []
     all_read = [without_digits(manifest, run) for run in texts]
+    all_read_lenient = [without_digits(manifest, run, lenient=True) for run in texts] if with_lists else []
     for name, keep in GROUPS.items():
         present = [name in m and any(keep(manifest[clip_id]) for clip_id in run) for m, run in zip(all_metrics, texts)]
         if not any(present):
             continue
         lines.append(f"| {name} | " + " | ".join(f"{m[name]:.2%}" if has else "n/a" for m, has in zip(all_metrics, present)) + " |")
+        if name in with_lists:
+            lines.append(f"| {name}, lenient | " + " | ".join(f"{m[name]:.2%}" if has else "n/a" for m, has in zip(all_lenient, present)) + " |")
         counts = [rates[name][1] if name in rates else 0 for rates in all_read]
         if any(counts):
             count = next(filter(None, counts))
-            lines.append(f"| {name}, read speech without digits ({count}) | " + " | ".join(f"{rates[name][0]:.2%}" if name in rates else "n/a" for rates in all_read) + " |")
+            for title, runs_rates in [("", all_read)] + ([(", lenient", all_read_lenient)] if name in with_lists else []):
+                lines.append(f"| {name}, read speech without digits{title} ({count}) | " + " | ".join(f"{rates[name][0]:.2%}" if name in rates else "n/a" for rates in runs_rates) + " |")
     all_strata = [strata(manifest, run) for run in texts]
     for stratum in STRATA + LANGUAGE_STRATA + EMPTY_STRATA:
         counts = [s[stratum][1] if stratum in s else 0 for s in all_strata]

@@ -73,6 +73,24 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual((scored["errors"], scored["tokens"]), (0, 8))
         scored = gate.score_set_clip({"language": "ko_en", "reference": "Slack에 올려 주세요"}, "슬랙에 올려 주세요")
         self.assertEqual((scored["errors"], scored["tokens"]), (2, 7))
+        # Without accepted spellings a clip scores as it always did.
+        self.assertEqual(set(scored), {"errors", "tokens", "missing_terms", "expect_terms", "forbidden_found"})
+
+    def test_term_check_strict_and_lenient(self):
+        clip = {"language": "ko_en", "reference": "Slack이랑 Jira에 올려 주세요", "expect_terms": [["Slack", "슬랙"], "Jira"], "forbid_terms": []}
+        scored = gate.score_set_clip(clip, "슬랙이랑 지라에 올려 주세요")
+        self.assertEqual((scored["missing_terms"], scored["missing_terms_lenient"], scored["expect_terms"]), (["Slack", "Jira"], ["Jira"], 2))
+        # The lenient errors take 슬랙 for Slack, but not 지라 for Jira, which lists no other spelling.
+        self.assertEqual((scored["errors"], scored["lenient_errors"], scored["tokens"]), (4, 2, 10))
+        scored = gate.score_set_clip(clip, "Slack이랑 Jira에 올려 주세요")
+        self.assertEqual((scored["missing_terms"], scored["missing_terms_lenient"], scored["errors"], scored["lenient_errors"]), ([], [], 0, 0))
+        # The strict check takes the first form with its case, as for a term without a list.
+        self.assertEqual(gate.score_set_clip(clip, "slack이랑 Jira에")["missing_terms_lenient"], ["Slack"])
+
+    def test_accepted_spellings_that_are_no_terms_count_in_the_errors_only(self):
+        clip = {"language": "ko", "reference": "약 80km 떨어진 곳", "expect_terms": [], "forbid_terms": [], "accepted": [["km", "킬로미터"]]}
+        scored = gate.score_set_clip(clip, "약 80킬로미터 떨어진 곳")
+        self.assertEqual((scored["errors"], scored["lenient_errors"], scored["missing_terms_lenient"], scored["expect_terms"]), (5, 0, [], 0))
 
     def test_output_on_silence_counts_in_every_script(self):
         manifest = {
@@ -88,6 +106,21 @@ class ScoringTests(unittest.TestCase):
         summary = gate.summarize_corpus(raw, manifest)
         self.assertEqual([summary["clips"][clip][key] for clip in ("s1", "n1") for key in ("errors", "ruled_errors")], [5, 5, 1, 0])
         self.assertEqual(summary["groups"]["text"], {"wer_en": 0.0, "cer_zh": 0.0, "mer_mixed": 0.0})
+        self.assertNotIn("lenient_groups", summary)
+
+    def test_a_corpus_with_accepted_spellings_has_lenient_rates(self):
+        manifest = {
+            "k1": {"id": "k1", "stratum": "ko", "lang": "ko", "reference": "약 80km 떨어진 곳", "accepted": [["km", "킬로미터"]]},
+            "k2": {"id": "k2", "stratum": "ko", "lang": "ko", "reference": "점심 먹었어요"},
+        }
+        raw = {"clips": {
+            "k1": {"text": "약 80킬로미터 떨어진 곳", "ruled_text": "약 80킬로미터 떨어진 곳", "decode_seconds": 0.5},
+            "k2": {"text": "점심 먹었어", "ruled_text": "점심 먹었어", "decode_seconds": 0.3},
+        }}
+        summary = gate.summarize_corpus(raw, manifest)
+        self.assertEqual((summary["groups"]["text"]["cer_ko"], summary["lenient_groups"]["text"]["cer_ko"]), (gate.rate(6, 12), gate.rate(1, 12)))
+        self.assertEqual((summary["clips"]["k1"]["lenient_errors"], summary["clips"]["k1"]["ruled_lenient_errors"]), (0, 0))
+        self.assertNotIn("lenient_errors", summary["clips"]["k2"])
 
 
 class CompareTests(unittest.TestCase):
@@ -254,6 +287,54 @@ class CompareTests(unittest.TestCase):
             self.assertEqual(summary["clips"]["s/a"]["errors"], 0)
             self.assertEqual(summary["sets"]["s"]["exact_clips"], 1)
             self.assertEqual(summary["sets"]["s"]["expect_recall"], 100.0)
+            # A set without accepted spellings has no lenient numbers, which would equal the strict ones.
+            self.assertEqual(set(summary["sets"]["s"]), {"clips", "errors", "tokens", "expect_terms", "missing_terms", "forbidden_found", "exact_clips", "error_rate", "expect_recall"})
+
+    def lenient_set(self, folder: str, text: str) -> dict:
+        sets = Path(folder, "sets")
+        (sets / "ko").mkdir(parents=True, exist_ok=True)
+        lines = [
+            {"id": "a", "language": "ko_en", "reference": "Slack에 올려 주세요", "context": [], "expect_terms": [["Slack", "슬랙"]], "forbid_terms": [], "accepted": [["Slack", "슬랙"]]},
+            {"id": "b", "language": "ko", "reference": "내일 봐요", "context": [], "expect_terms": [], "forbid_terms": []},
+        ]
+        (sets / "ko" / "manifest.jsonl").write_text("".join(json.dumps(line, ensure_ascii=False) + "\n" for line in lines), encoding="utf-8")
+        return gate.summarize_sets({"clips": [{"set": "ko", "id": "a", "text": text}, {"set": "ko", "id": "b", "text": "내일 봐요"}]}, sets)
+
+    def test_summarize_a_set_with_accepted_spellings(self):
+        with tempfile.TemporaryDirectory() as folder:
+            summary = self.lenient_set(folder, "슬랙에 올려 주세요")
+        total = summary["sets"]["ko"]
+        self.assertEqual((total["error_rate"], total["lenient_error_rate"]), (gate.rate(2, 11), 0.0))
+        self.assertEqual((total["expect_recall"], total["expect_recall_lenient"], total["accepted_clips"]), (0.0, 100.0, 1))
+        self.assertNotIn("lenient_errors", summary["clips"]["ko/b"])
+
+    def test_compare_shows_lenient_rates_and_lists_what_only_they_lost(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = self.lenient_set(folder, "슬랙에 올려 주세요")
+            cand = self.lenient_set(folder, "스랙에 올려 주세요")
+        result = self.run_compare("sets", base, cand)
+        # The strict check missed Slack both times and counts 2 errors both times, so no rule fails.
+        self.assertEqual(result.failures, [])
+        self.assertIn("sets ko: error 18.18% -> 18.18%, exact clips 1 -> 1 of 2, terms 0.0% -> 0.0%, forbidden 0 -> 0, lenient error 0.00% -> 18.18%, lenient terms 100.0% -> 0.0% (1 clips with accepted spellings)", result.lines)
+        self.assertEqual(result.worse, ["sets/ko/a lenient terms lost: Slack", "sets/ko/a lenient_errors 0 -> 2"])
+        # Against a baseline without lists, the lenient numbers are new.
+        old = copy.deepcopy(base)
+        for key in ("accepted_clips", "lenient_errors", "missing_terms_lenient", "lenient_error_rate", "expect_recall_lenient"):
+            del old["sets"]["ko"][key]
+        del old["clips"]["ko/a"]["lenient_errors"], old["clips"]["ko/a"]["missing_terms_lenient"]
+        result = self.run_compare("sets", old, base)
+        self.assertEqual(result.failures, [])
+        self.assertTrue(result.lines[0].endswith("lenient error 0.00%, lenient terms 100.0% (1 clips with accepted spellings)"), result.lines[0])
+
+    def test_compare_corpus_shows_lenient_rates(self):
+        base = corpus({"a": 0})
+        base["lenient_groups"] = {"text": {"cer_ko": 1.0}, "ruled_text": {"cer_ko": 1.0}}
+        cand = copy.deepcopy(base)
+        cand["lenient_groups"]["text"]["cer_ko"] = 2.0
+        result = self.run_compare("corpus", base, cand)
+        self.assertEqual(result.failures, [])
+        self.assertIn("corpus text cer_ko lenient: 1.00% -> 2.00%", result.lines)
+        self.assertIn("corpus ruled_text cer_ko lenient: new, 1.00%", self.run_compare("corpus", corpus({"a": 0}), base).lines)
 
 
 def attack(item_id: str = "x1", kind: str = "email", **expected) -> dict:
