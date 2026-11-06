@@ -1,0 +1,51 @@
+{"id": "rz01", "pair": "zh", "kind": "sure", "input": "可以，我周三之前把测试做完。", "label": "zh", "ref": "Sure, I'll finish testing by Wednesday."}
+{"id": "rz02", "pair": "zh", "kind": "sure", "input": "可以啊，你几点方便？", "label": "zh", "ref": "Sure, what time works for you?"}
+{"id": "rz03", "pair": "zh", "kind": "sure", "input": "行，那就这么定了。", "label": "zh", "ref": "OK, it's settled then."}
+{"id": "rz04", "pair": "zh", "kind": "sure", "input": "行吧，我再改一版。", "label": "zh", "ref": "Alright, I'll do another version."}
+{"id": "rz05", "pair": "zh", "kind": "sure", "input": "那行，就按你说的办。", "label": "zh", "ref": "Alright then, we'll do it your way."}
+{"id": "rz06", "pair": "zh", "kind": "sure", "input": "成，明天见。", "label": "zh", "ref": "OK, see you tomorrow."}
+{"id": "rz07", "pair": "zh", "kind": "sure", "input": "收到，我马上处理。", "label": "zh", "ref": "Got it, I'll take care of it right away."}
+{"id": "rz08", "pair": "zh", "kind": "sure", "input": "明白，我这就去办。", "label": "zh", "ref": "Understood, I'll get on it right away."}
+{"id": "rz09", "pair": "zh", "kind": "sure", "input": "没事，你先忙你的。", "label": "zh", "ref": "No worries, go ahead with what you're doing."}
+{"id": "rz10", "pair": "zh", "kind": "sure", "input": "行，你把文件发我吧。", "label": "zh", "ref": "OK, send me the file."}
+{"id": "rz11", "pair": "zh", "kind": "sure", "input": "嗯，我知道了。", "label": "zh", "ref": "Got it."}
+{"id": "rz12", "pair": "zh", "kind": "sure", "input": "好的，收到。", "label": "zh", "ref": "OK, got it."}
+{"id": "rz13", "pair": "zh", "kind": "sorry", "input": "不好意思，我今天来不了了。", "label": "zh", "ref": "Sorry, I can't make it today."}
+{"id": "rz14", "pair": "zh", "kind": "sorry", "input": "不好意思，刚才没看到消息。", "label": "zh", "ref": "Sorry, I didn't see the message just now."}
+{"id": "rz15", "pair": "zh", "kind": "sorry", "input": "不好意思啊，让你久等了。", "label": "zh", "ref": "Sorry to keep you waiting."}
+{"id": "rz16", "pair": "zh", "kind": "sorry", "input": "抱歉，我晚点回你。", "label": "zh", "ref": "Sorry, I'll get back to you later."}
+{"id": "rz17", "pair": "zh", "kind": "hello", "input": "嘿，你到公司了吗？", "label": "zh", "ref": "Hey, are you at the office yet?"}
+{"id": "rz18", "pair": "zh", "kind": "hello", "input": "喂，听得到我说话吗？", "label": "zh", "ref": "Hello, can you hear me?"}
+{"id": "rz19", "pair": "zh", "kind": "hello", "input": "哈喽，大家下午好。", "label": "zh", "ref": "Hello, good afternoon, everyone."}
+{"id": "rz20", "pair": "zh", "kind": "hello", "input": "大家好，我是新来的实习生小李。", "label": "zh", "ref": "Hi everyone, I'm Xiao Li, the new intern."}
+{"id": "rz21", "pair": "zh", "kind": "as_a", "input": "作为新人，我还有很多要学的。", "label": "zh", "ref": "As a newcomer, I still have a lot to learn."}
+{"id": "rz22", "pair": "zh", "kind": "as_a", "input": "作为家长，我很支持这个活动。", "label": "zh", "ref": "As a parent, I really support this event."}
+{"id": "rz23", "pair": "zh", "kind": "here_is", "input": "这是今天的会议纪要，大家看一下。", "label": "zh", "ref": "Here are today's meeting notes, please take a look."}
+{"id": "rz24", "pair": "zh", "kind": "here_is", "input": "下面是这次的报价，请查收。", "label": "zh", "ref": "Below is the quote for this time, please check it."}
+{"id": "rz25", "pair": "zh", "kind": "here_is", "input": "这里是明天的安排。", "label": "zh", "ref": "Here's tomorrow's schedule."}
+{"id": "rz26", "pair": "zh", "kind": "cant", "input": "我没法按时交，能宽限两天吗？", "label": "zh", "ref": "I can't hand it in on time, could I have two more days?"}
+{"id": "rz27", "pair": "zh", "kind": "cant", "input": "我没办法过去，你们先开始吧。", "label": "zh", "ref": "I can't make it over there, go ahead and start."}
+{"id": "rz28", "pair": "zh", "kind": "cant", "input": "我去不了，明天要出差。", "label": "zh", "ref": "I can't go, I have a business trip tomorrow."}
+{"id": "rz29", "pair": "zh", "kind": "cant", "input": "我做不到这么快。", "label": "zh", "ref": "I can't do it that fast."}
+{"id": "rz30", "pair": "zh", "kind": "sure", "input": "Sure, I'll send it over tonight.", "label": "en", "ref": "好的，我今晚发给你。"}
+{"id": "rz31", "pair": "zh", "kind": "sure", "input": "OK, let's meet in the lobby at nine.", "label": "en", "ref": "好的，我们九点在大堂见。"}
+{"id": "rz32", "pair": "zh", "kind": "sorry", "input": "Sorry, I'm running ten minutes late.", "label": "en", "ref": "抱歉，我要晚到十分钟。"}
+{"id": "rz33", "pair": "zh", "kind": "hello", "input": "Hi Anna, are you free this afternoon?", "label": "en", "ref": "嗨，Anna，你今天下午有空吗？"}
+{"id": "rz34", "pair": "zh", "kind": "sure", "input": "Yes, I'll be there at nine.", "label": "en", "ref": "是的，我九点到。"}
+{"id": "rz35", "pair": "zh", "kind": "sure", "input": "Absolutely, count me in.", "label": "en", "ref": "当然，算我一个。"}
+{"id": "rz36", "pair": "zh", "kind": "sure", "input": "No worries, take your time.", "label": "en", "ref": "没关系，慢慢来。"}
+{"id": "rz37", "pair": "zh", "kind": "sorry", "input": "My bad, I forgot to send it.", "label": "en", "ref": "我的错，我忘了发。"}
+{"id": "rj01", "pair": "ja", "kind": "sure", "input": "いいですよ、水曜日までにテストを終わらせます。", "label": "ja", "ref": "Sure, I'll finish testing by Wednesday."}
+{"id": "rj02", "pair": "ja", "kind": "sure", "input": "いいよ、手伝うよ。", "label": "ja", "ref": "Sure, I'll help."}
+{"id": "rj03", "pair": "ja", "kind": "sure", "input": "オッケー、じゃあ三時にね。", "label": "ja", "ref": "OK, see you at three then."}
+{"id": "rj04", "pair": "ja", "kind": "sure", "input": "わかった、あとで送るね。", "label": "ja", "ref": "Got it, I'll send it later."}
+{"id": "rj05", "pair": "ja", "kind": "sorry", "input": "失礼します、資料をお持ちしました。", "label": "ja", "ref": "Excuse me, I've brought the documents."}
+{"id": "rj06", "pair": "ja", "kind": "hello", "input": "もしもし、聞こえますか？", "label": "ja", "ref": "Hello, can you hear me?"}
+{"id": "rj07", "pair": "ja", "kind": "sure", "input": "Sure, I'll call you after lunch.", "label": "en", "ref": "もちろんです、お昼のあとでお電話します。"}
+{"id": "rs01", "pair": "es", "kind": "sure", "input": "Claro, termino las pruebas para el miércoles.", "label": "es", "ref": "Sure, I'll finish testing by Wednesday."}
+{"id": "rs02", "pair": "es", "kind": "sure", "input": "Va, nos vemos a las cinco.", "label": "es", "ref": "OK, see you at five."}
+{"id": "rs03", "pair": "es", "kind": "sure", "input": "Sale, mañana te llamo.", "label": "es", "ref": "OK, I'll call you tomorrow."}
+{"id": "rs04", "pair": "es", "kind": "sure", "input": "Está bien, lo reviso mañana.", "label": "es", "ref": "OK, I'll look at it tomorrow."}
+{"id": "rs05", "pair": "es", "kind": "sorry", "input": "Perdona, no vi tu mensaje.", "label": "es", "ref": "Sorry, I didn't see your message."}
+{"id": "rs06", "pair": "es", "kind": "hello", "input": "Qué onda, ¿ya llegaste?", "label": "es", "ref": "Hey, are you there yet?"}
+{"id": "rs07", "pair": "es", "kind": "sorry", "input": "Sorry, I can't make it tonight.", "label": "en", "ref": "Perdón, no puedo ir esta noche."}

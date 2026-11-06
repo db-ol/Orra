@@ -16,7 +16,7 @@ struct TranslationPairTests {
     /// Every text of an evaluation file: inputs, references and expected translations.
     private static func evaluationTexts() throws -> [String] {
         var texts: [String] = []
-        for file in ["cases.jsonl", "adversarial.jsonl", "meaning.jsonl", "translation-probes.jsonl", "translation-japanese.jsonl", "translation-spanish.jsonl", "adversarial-japanese.jsonl", "adversarial-spanish.jsonl"] {
+        for file in ["cases.jsonl", "adversarial.jsonl", "meaning.jsonl", "translation-probes.jsonl", "translation-japanese.jsonl", "translation-spanish.jsonl", "adversarial-japanese.jsonl", "adversarial-spanish.jsonl", "translation-replies.jsonl", "adversarial-replies.jsonl"] {
             for object in try RewriteEvalFiles.objects(file) {
                 for (key, value) in object where key == "input" || key.hasPrefix("ref") || key.hasPrefix("expected") || key.hasPrefix("translate") {
                     if let text = value as? String, !text.isEmpty {

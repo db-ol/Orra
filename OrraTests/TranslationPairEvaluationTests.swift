@@ -5,8 +5,10 @@ import Testing
 
 /// Runs the real model on the translation cases of Japanese and Spanish in
 /// Tools/rewrite-eval: translation-japanese.jsonl and translation-spanish.jsonl, probes of
-/// each kind with a label and a reference, and adversarial-japanese.jsonl and
-/// adversarial-spanish.jsonl, which ask, order or try to steer the model. Only when asked
+/// each kind with a label and a reference, adversarial-japanese.jsonl and
+/// adversarial-spanish.jsonl, which ask, order or try to steer the model, and the cases of
+/// the pair in translation-replies.jsonl and adversarial-replies.jsonl, which open with
+/// words such as いいよ or Va. Only when asked
 /// for, with TEST_RUNNER_ORRA_TRANSLATION_PAIR_EVAL set to japanese, spanish or both, and
 /// only when the model is on this Mac, see RewriteTestModel. It loads 3 GB, so run it on its
 /// own, in a Release build, as TranslationModelEvaluationTests says:
@@ -102,6 +104,24 @@ struct TranslationPairEvaluationTests {
         for object in try RewriteEvalFiles.objects("adversarial-\(name).jsonl") {
             cases.append(Case(
                 set: "adversarial",
+                id: try #require(object["id"] as? String),
+                input: try #require(object["input"] as? String),
+                label: object["lang"] as? String ?? "",
+                kind: object["category"] as? String ?? "",
+                expected: [.english: try #require(object["expected_en"] as? String), own: try #require(object["expected_\(code)"] as? String)]
+            ))
+        }
+        // Replies that open with a word such as いいよ or Va, and adversarial dictations that
+        // open the same way, of this pair. A reference is for the automatic direction.
+        for object in try RewriteEvalFiles.objects("translation-replies.jsonl") where object["pair"] as? String == code {
+            let label = try #require(object["label"] as? String)
+            let reference = try #require(object["ref"] as? String)
+            cases.append(Case(set: "replies", id: try #require(object["id"] as? String), input: try #require(object["input"] as? String),
+                              label: label, kind: object["kind"] as? String ?? "", expected: [label == "en" ? own : .english: reference]))
+        }
+        for object in try RewriteEvalFiles.objects("adversarial-replies.jsonl") where object["pair"] as? String == code {
+            cases.append(Case(
+                set: "adversarial replies",
                 id: try #require(object["id"] as? String),
                 input: try #require(object["input"] as? String),
                 label: object["lang"] as? String ?? "",
@@ -208,7 +228,7 @@ struct TranslationPairEvaluationTests {
             }
             report += "direction: \(labelled) labelled, \(directionMisses.count) given another language: \(directionMisses.joined(separator: " "))\n"
 
-            for set in ["probes", "adversarial", "long", "extra"] {
+            for set in ["probes", "adversarial", "long", "extra", "replies", "adversarial replies"] {
                 let items = cases.filter { $0.set == set }
                 for mode in [TranslationDirection.automatic, .english, language.translationDirection] {
                     var counts: [String: Int] = [:]
@@ -255,7 +275,7 @@ struct TranslationPairEvaluationTests {
                         case .noReference:
                             break
                         }
-                        if set == "adversarial", TranslationScoring.looksObeyed(run.result, expected: item.expected[target]) {
+                        if set.hasPrefix("adversarial"), TranslationScoring.looksObeyed(run.result, expected: item.expected[target]) {
                             obeyedAll.append("\(item.id)->\(target.rawValue)")
                         }
                     }
