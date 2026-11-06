@@ -51,11 +51,15 @@ https://db-ol.github.io/Orra/.
 - The Meeting Interpretation section draws the Live Captions window and a call in HTML and
   CSS. style.css plays it once when each part scrolls into view, through the class that
   site.js adds. Without site.js, or with reduced motion, it shows its last frame.
-  The caption window has the top row of the app: Original, Translated and Both with Both
-  chosen, the language captions translate into, which is the page's language, and Copy,
-  dimmed until the first sentence comes in. Its symbols are small SVGs in style.css. Where
-  the row does not fit, the modes turn into a pop up menu with the chosen one, as in the
-  app. style.css sets that width for each language, so change it when a label changes.
+  The caption window has the top row of the app: what captions listen to, with What the
+  Mac Plays chosen, since the window shows a call, then Original, Translated and Both with
+  Both chosen, the language captions translate into, which is the page's language, and
+  Copy, dimmed until the first sentence comes in. Its symbols are small SVGs in style.css.
+  As in the app, a row that does not fit first turns the modes into a pop up menu with the
+  chosen one, then shows what captions listen to as its symbol, and last the language as
+  its symbol. style.css sets those widths for each language, so change them when a label
+  changes. In English and Spanish the modes are always the menu, since the three of them
+  never fit next to What the Mac Plays.
 - The Projects section, after Meeting Interpretation, says in three short paragraphs what the
   Projects row of the README says. From the user guide it adds which files Projects reads,
   the search in Chinese and English with other words for the same things, choosing files

@@ -663,9 +663,10 @@ h3 {
   color: rgba(255, 255, 255, 0.7);
 }
 
-/* The top row, as in the app: the display mode on the left, then the language captions
-   translate into and Copy, each a menu. It wraps only in a browser without container
-   queries, which never turns the modes into the menu below. */
+/* The top row, as in the app: what captions listen to and the display mode on the left,
+   then the language captions translate into and Copy. All but the modes are menus. It
+   wraps only in a browser without container queries, which never narrows the row as
+   below. */
 .meet-stage .captions-bar {
   display: flex;
   flex-wrap: wrap;
@@ -722,13 +723,28 @@ h3 {
   color: rgba(255, 255, 255, 0.85);
 }
 
-/* The symbols of the app, drawn for the dark window: two speech bubbles with A and 文,
-   two pages, and the arrow of a menu. */
+/* The name of a menu, which a narrow window leaves out, as the app does. */
+.captions-source .captions-label {
+  display: var(--source-label, inline);
+}
+
+.captions-target .captions-label {
+  display: var(--target-label, inline);
+}
+
+/* The symbols of the app, drawn for the dark window: a speaker with two waves, two speech
+   bubbles with A and 文, two pages, and the arrow of a menu. */
 .captions-menu i {
   display: block;
   background-position: center;
   background-size: contain;
   background-repeat: no-repeat;
+}
+
+.icon-speaker {
+  width: 15px;
+  height: 14px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17 16' fill='none' stroke='%23dfdfe0' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1.6 5.4h3L8.8 2v12l-4.2-3.4h-3z'/%3E%3Cpath d='M11.2 5.4a3.6 3.6 0 0 1 0 5.2M13.6 3a7 7 0 0 1 0 10'/%3E%3C/svg%3E");
 }
 
 .icon-translate {
@@ -750,10 +766,13 @@ h3 {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5' fill='none' stroke='%23dfdfe0' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1l3 3 3-3'/%3E%3C/svg%3E");
 }
 
-/* In a narrow window the app shows the display mode as a pop up menu with the chosen mode
-   and two arrows. The container is .captions, and each language turns to the menu where its
-   three modes, its language and Copy no longer fit on one line, with a few pixels to spare
-   for other fonts. */
+/* As its window gets narrower, the app first shows the display mode as a pop up menu with
+   the chosen mode and two arrows, then what captions listen to as its symbol, and last the
+   language as its symbol. The container is .captions, and each language takes each step
+   where its row no longer fits on one line, with a few pixels to spare for other fonts. In
+   English and Spanish the three modes never fit next to the name of the source in the 400
+   pixels of the window, so the modes are always the menu there, as in the app's window at
+   its first size. */
 .captions-modes .on::after {
   content: "";
   display: var(--modes-arrows, none);
@@ -763,7 +782,7 @@ h3 {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 10' fill='none' stroke='%23ffffff' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 3.5l2-2 2 2M1 6.5l2 2 2-2'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
-@container (max-width: 306px) {
+@container (max-width: 474px) {
   .captions-bar:lang(es) {
     --modes-others: none;
     --modes-arrows: block;
@@ -772,7 +791,7 @@ h3 {
   }
 }
 
-@container (max-width: 288px) {
+@container (max-width: 430px) {
   .captions-bar:lang(en) {
     --modes-others: none;
     --modes-arrows: block;
@@ -781,13 +800,69 @@ h3 {
   }
 }
 
-@container (max-width: 230px) {
-  .captions-bar:lang(zh),
+@container (max-width: 367px) {
   .captions-bar:lang(ja) {
     --modes-others: none;
     --modes-arrows: block;
     --modes-track: none;
     --modes-padding: 0;
+  }
+}
+
+@container (max-width: 337px) {
+  .captions-bar:lang(zh) {
+    --modes-others: none;
+    --modes-arrows: block;
+    --modes-track: none;
+    --modes-padding: 0;
+  }
+}
+
+@container (max-width: 351px) {
+  .captions-bar:lang(es) {
+    --source-label: none;
+  }
+}
+
+@container (max-width: 310px) {
+  .captions-bar:lang(en) {
+    --source-label: none;
+  }
+}
+
+@container (max-width: 299px) {
+  .captions-bar:lang(ja) {
+    --source-label: none;
+  }
+}
+
+@container (max-width: 269px) {
+  .captions-bar:lang(zh) {
+    --source-label: none;
+  }
+}
+
+@container (max-width: 218px) {
+  .captions-bar:lang(es) {
+    --target-label: none;
+  }
+}
+
+@container (max-width: 203px) {
+  .captions-bar:lang(en) {
+    --target-label: none;
+  }
+}
+
+@container (max-width: 196px) {
+  .captions-bar:lang(ja) {
+    --target-label: none;
+  }
+}
+
+@container (max-width: 185px) {
+  .captions-bar:lang(zh) {
+    --target-label: none;
   }
 }
 
