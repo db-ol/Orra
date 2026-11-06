@@ -53,7 +53,11 @@ all three models on both chips (test_score.py checks it):
   so 2011 against 二零一一 is four errors.
 - mer_mixed: the same tokens over the 64 code switched ASCEND clips.
 
-Two more groups are Orra's, for a corpus of Japanese or Spanish clips (see Other
+The range of CJK characters in these tokens starts at U+8C48, the NFC form of U+F900, so
+they also count Hangul syllables one each. The golden files score the same with U+F900.
+It stays as it is, so that no stored rate moves.
+
+More groups are Orra's, for a corpus of Japanese, Spanish or Korean clips (see Other
 languages). They count only when a run has clips in them, so the speech corpus scores
 exactly as before:
 
@@ -64,10 +68,56 @@ exactly as before:
   digits with their accents, so año is one word and does not match ano. Han characters and
   kana count one each, as in cer_ja, so a transcript in Chinese or Japanese counts per
   character.
+- cer_ko: character error rate over the clips with lang ko. The tokens of cer_ja, and one
+  per Hangul syllable or jamo, so a space that is missing or added never counts and an
+  English word counts as one. NFKC turns decomposed Hangul (NFD) into its syllables and
+  compatibility jamo such as ㅋ into the jamo they stand for.
+- mer_ja_en, mer_es_en and mer_ko_en: the error rate over the clips with lang ja_en, es_en
+  or ko_en, Japanese, Spanish or Korean mixed with English, with the tokens of cer_ja,
+  wer_es or cer_ko, which keep English words whole.
 
 Errors are summed over a group and divided by its reference tokens. score.py also gives
 the rate per stratum, the number of silence and noise clips with any output, and, for
-Orra's runs, decode time and real time factor (decode time over audio time).
+Orra's runs, decode time and real time factor (decode time over audio time). Output on
+silence and noise counts in any script: one token per Han character, kana and Hangul
+syllable, and one per run of any other letters and digits.
+
+### Rates without digits
+
+Below each group with read speech, the table gives its rate on the clips whose reference
+holds no digit, such as `cer_zh, read speech without digits (99)`. Read speech is a clip
+whose source is FLEURS or LibriSpeech, so the ASCEND and synthetic clips stay out, and so
+does mer_mixed. Digits never match number words, so a transcript that writes a number the
+way the reader said it counts errors that say little about what was heard. On the speech
+corpus, 44 of the 143 FLEURS clips hold digits and no LibriSpeech clip does.
+
+### Accepted spellings
+
+A clip of a manifest may list other spellings of a word in its reference that count as
+right, such as a loanword in Hangul or a unit said in full, each list with the form in the
+reference first:
+
+    "accepted": [["km", "킬로미터"], ["Slack", "슬랙"]]
+
+The lists among a clip's `expect_terms` count too, which is how a gate set gives a term
+other spellings. A group whose clips have lists gets a lenient row below its rate, and so
+does its rate without digits. The lenient rate scores the text with each accepted spelling
+written as the reference writes it, the longest spellings first, so 킬로미터 becomes km
+before 미터 can become m, and no shorter spelling replaces part of the reference's own
+form. A spelling that the reference holds outside the forms of its lists, such as 세 시 in
+세 시간 when 세 시 is a spelling of 3시, is a word of the reference and stays as it is, so a
+text equal to its reference keeps no error. White space inside a spelling is free. A
+spelling never takes part of a longer word or number: where it starts or ends with a
+letter of an alphabet, Latin with or without accents or another, no such letter may stand
+right next to it, and where it starts or ends with a digit, no digit may. So Slack is not
+found in Slacker, 30,000 not in 130,000 and es de 20 not in es de 200, while km is found
+in 80km. Hangul has no such edge, since Korean writes particles right after a word and a
+missing space must not count, so 일 테라 is found in 십일 테라 too, whose 십 stays an error. The
+term check of the release gate keeps its own rules (docs/release-gate.md).
+The replaced form joins the letters and digits next to it as they were written: 80킬로미터
+becomes 80km, one token, which counts against a reference that writes 80 km as an output
+of 80km would. The strict rate is the rate as before. A clip without lists scores the same
+both ways, and a run without lists shows no lenient row.
 
 ## Steps
 
@@ -148,8 +198,14 @@ Score each text with the corpus's manifest:
     python3 Tools/speech-eval/score.py --manifest <corpus>/manifest.jsonl --field text_unhinted results/fleurs-ja.json
     python3 Tools/speech-eval/score.py --manifest <corpus>/manifest.jsonl --field text_japanese results/fleurs-ja.json
 
-The table leaves out any group or stratum that no run has clips in, so a run of Spanish
-clips shows only wer_es and es, and a run without clips in a row shows n/a. The timing
+score.py scores Korean clips (lang `ko`) and clips mixed with English (`ja_en`, `es_en`
+and `ko_en`) in the same layout. The test does not run such a corpus yet. It knows only
+Japanese and Spanish as other languages, and expects 392 clips from a manifest without
+them.
+
+The table leaves out any group or stratum that no run has clips in, so a run of FLEURS
+Spanish clips shows only wer_es, its rate without digits and es, and a run without clips
+in a row shows n/a. The timing
 rows read the time of the pass that wrote the field when the run holds one, such as
 decode_seconds_japanese for text_japanese or decode_seconds_chinese for text_chinese.
 `text`, `ruled_text`, `text_unhinted` and the `text_pass` fields have none of their own
