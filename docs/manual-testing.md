@@ -3293,8 +3293,9 @@ the last 15 s. Use a Release build:
 Transcribe File, added on 2026-11-05, not verified yet in the running app. The unit tests
 cover the segments and their times, the text and the subtitles, the progress and the time
 left, Stop, the turns with dictation and captions with fakes, files that cannot be read and
-the names offered for saving. FileTranscriptionEndToEndTests transcribes spoken .m4a and
-.mp4 files with the real speech model. Check by hand:
+the names offered for saving, and a test shows the window off every screen to check that
+the list follows the newest sentence. FileTranscriptionEndToEndTests transcribes spoken
+.m4a and .mp4 files with the real speech model. Check by hand:
 - [ ] Transcribe File… stands below Meeting Interpretation in the menu with its symbol and
   opens the window, which brings Orra into the Dock while it is open.
 - [ ] Drop a voice memo (.m4a) from Finder on the window: it starts and shows the file's
@@ -3313,6 +3314,8 @@ the names offered for saving. FileTranscriptionEndToEndTests transcribes spoken 
   line. The same with the translation key, and with a dictation cancelled with Escape.
 - [ ] Turn on Live Captions while a file runs: the file stops after the sentence under way
   and says that it waits while Live Captions run. Turn them off, and it goes on.
+- [ ] During a file of several minutes, the list shows the newest sentence as it comes.
+  Scroll up: the list stays where you read. Scroll back to the end: it follows again.
 - [ ] Stop keeps the sentences so far. Copy pastes them without times into TextEdit.
 - [ ] Save as Text… and Save as Subtitles… start with the file's name and .txt or .srt. Open
   the .srt with the movie in a video player: each subtitle shows at its sentence, with at

@@ -160,6 +160,13 @@ struct TranscribeFileView: View {
     @State private var isTargeted = false
     /// Said under the drop area after a drop of several files.
     @State private var dropNote: String?
+    /// Where the list of segments is scrolled to.
+    @State private var scroll = ScrollPosition(edge: .top)
+    /// Whether the list shows the newest segment as it comes, which the user ends by
+    /// scrolling up and starts again by scrolling back to the end.
+    @State private var followsNewest = true
+    /// True while the user scrolls the list, which it then never scrolls itself.
+    @State private var userScrolls = false
 
     var body: some View {
         let modelLine = speechModelLine()
@@ -332,7 +339,29 @@ struct TranscribeFileView: View {
                 .padding(16)
             }
         }
-        .defaultScrollAnchor(.bottom, for: .sizeChanges)
+        .scrollPosition($scroll)
+        .onScrollPhaseChange { _, phase in
+            userScrolls = phase == .tracking || phase == .interacting || phase == .decelerating
+        }
+        .onScrollGeometryChange(for: ListGeometry.self) { geometry in
+            ListGeometry(contentHeight: geometry.contentSize.height, visibleHeight: geometry.visibleRect.height, showsEnd: geometry.visibleRect.maxY >= geometry.contentSize.height - 8)
+        } action: { old, new in
+            if new.contentHeight == old.contentHeight, new.visibleHeight == old.visibleHeight {
+                // The list scrolled, up to read or back down to the end.
+                followsNewest = new.showsEnd
+            } else if !userScrolls, followsNewest || new.showsEnd {
+                // A new segment, or another size of the window.
+                followsNewest = true
+                scroll.scrollTo(edge: .bottom)
+            }
+        }
+    }
+
+    /// How tall the list of segments is, how much of it shows, and whether its end shows.
+    private struct ListGeometry: Equatable {
+        var contentHeight: CGFloat
+        var visibleHeight: CGFloat
+        var showsEnd: Bool
     }
 
     private var footer: some View {

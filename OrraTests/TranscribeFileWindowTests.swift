@@ -51,6 +51,60 @@ struct TranscribeFileWindowTests {
         #expect(TranscribeFileView.message(for: .noAudio) == "This file has no audio.")
     }
 
+    // MARK: The list of segments
+
+    /// The list of segments shows the newest one as it comes, until the user scrolls up to
+    /// read, and again once they scroll back to the end. The window is the app's, shown
+    /// with orderFrontRegardless far off every screen, so the app is never activated and
+    /// nothing shows on the screen.
+    @Test func theListFollowsTheNewestSegmentUntilTheUserScrollsUp() async throws {
+        let count = 26
+        let source = FakeFileSource(starts: (0..<count).map { Double($0) * 7.5 + 0.4 }, seconds: 6, duration: Double(count) * 7.5 + 5)
+        let speech = FakeFileSpeech()
+        speech.texts = Dictionary(uniqueKeysWithValues: (1...count).map { ($0, "Sentence \($0) of a made up meeting, long enough to take most of a line.") })
+        speech.held = Set(1...count)
+        let transcription = FileTranscription(engines: engines(source, speech))
+        let window = TranscribeFileWindow.window(hosting: TranscribeFileView(transcription: transcription, speechModelLine: { nil }, chooseFile: {}, save: { _ in }, closeWindow: {}))
+        window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
+        window.orderFrontRegardless()
+        defer {
+            transcription.close()
+            window.close()
+        }
+        transcription.start(URL(fileURLWithPath: "/Users/someone/Recordings/Long meeting.m4a"))
+        func release(_ segments: ClosedRange<Int>) async throws {
+            for segment in segments {
+                try await waitUntil { speech.waiting.contains(segment) }
+                speech.release(segment)
+                try await waitUntil { transcription.segments.count >= segment }
+            }
+        }
+        try await release(1...16)
+        let content = try #require(window.contentView)
+        let list = try #require(Self.scrollViews(in: content).max { $0.documentHeight < $1.documentHeight })
+        // Taller than the window by a few segments, with the newest in view.
+        try await waitUntil { list.documentHeight > list.contentView.bounds.height + 60 && list.showsEnd }
+
+        // The user scrolls up to the first segments, and the list stays there.
+        list.scrollTo(top: true)
+        try await Task.sleep(for: .milliseconds(300))
+        try await release(17...18)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(list.showsTop)
+        #expect(!list.showsEnd)
+
+        // Back at the end, it follows again.
+        list.scrollTo(top: false)
+        try await Task.sleep(for: .milliseconds(300))
+        try await release(19...count)
+        try await waitUntil { !transcription.isRunning && list.showsEnd }
+    }
+
+    /// The scroll views in a window, deepest last.
+    private static func scrollViews(in view: NSView) -> [NSScrollView] {
+        view.subviews.flatMap { [$0].compactMap { $0 as? NSScrollView } + scrollViews(in: $0) }
+    }
+
     // MARK: Pictures
 
     /// Renders the window in each of its states to a PNG, for a look at the layout in each
@@ -205,4 +259,31 @@ struct TranscribeFileWindowTests {
             "Después de la reunión mando las notas.",
         ],
     ]
+}
+
+private extension NSScrollView {
+    var documentHeight: CGFloat {
+        documentView?.frame.height ?? 0
+    }
+
+    /// Whether the end of the document shows, within two points.
+    var showsEnd: Bool {
+        let visible = contentView.bounds
+        return documentView?.isFlipped ?? true ? visible.maxY >= documentHeight - 2 : visible.minY <= 2
+    }
+
+    /// Whether the start of the document shows, within two points.
+    var showsTop: Bool {
+        let visible = contentView.bounds
+        return documentView?.isFlipped ?? true ? visible.minY <= 2 : visible.maxY >= documentHeight - 2
+    }
+
+    /// Scrolls to the start or the end of the document, as the user would.
+    func scrollTo(top: Bool) {
+        let flipped = documentView?.isFlipped ?? true
+        let height = contentView.bounds.height
+        let y = top == flipped ? 0 : max(documentHeight - height, 0)
+        contentView.scroll(to: NSPoint(x: contentView.bounds.minX, y: y))
+        reflectScrolledClipView(contentView)
+    }
 }
