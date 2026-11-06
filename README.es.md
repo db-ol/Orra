@@ -78,6 +78,17 @@ Novedad de la versión 0.4.0.
 <tr>
 <td colspan="2" valign="middle">
 
+### Transcribir un archivo
+
+Elige Transcribir archivo… en el menú de Orra y arrastra a la ventana un archivo de audio o video, como una nota de voz, una llamada grabada o un video, en un formato que macOS reproduce, como M4A, MP3, WAV, MP4 o MOV. Orra escribe en tu Mac lo que se dice, con el modelo de transcripción, el idioma de dictado y el vocabulario de tus dictados, y muestra cada oración con su tiempo a medida que avanza. Copia el texto, o guárdalo como texto o como subtítulos para un reproductor de video. Mientras se transcribe un archivo, tus dictados van primero.
+
+Novedad de la versión 0.7.0.
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="middle">
+
 ### Proyectos (vista previa)
 
 Opcional, para una Mac con 16 GB de memoria o más, y una vista previa que todavía puede cambiar. Elige los buzones de Mail que lee Orra y agrega tus proyectos con sus carpetas y personas, o empieza con los proyectos que Orra sugiere, y Orra clasifica cada correo nuevo en su proyecto. Haz clic en Explicar, y el modelo local enumera lo que dice el correo, con sus fuentes en los archivos de su proyecto, y de tus otros proyectos cuando coinciden, en sus adjuntos y en correos anteriores, y las preguntas que solo tú puedes decidir. La explicación aparece en inglés. Cuando el correo necesita respuesta, sigue un borrador en el idioma del correo, chino o inglés. Un correo que Proyectos detecta en otro idioma, como el japonés, no recibe borrador. El borrador lo cambias escribiendo o con la tecla para hablar, y lo pegas en la ventana de respuesta de Mail. Orra nunca envía, mueve ni elimina correos, y nada de lo que lee sale de tu Mac.
