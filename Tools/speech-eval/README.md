@@ -224,9 +224,6 @@ TogiNet Radio, and the letters of 802.11a, b and g). Of the 200 clips, 19 refere
 their glosses and 12 clips carry accepted spellings. 45 references hold digits, so a rate
 without digits reads 155 clips.
 
-score.py reads neither `accepted` nor Hangul yet. Like any language but en, ja and es, a ko
-clip goes the Chinese way, which keeps only Han characters and ASCII.
-
 ## Baseline
 
 Run on 2026-10-12 on an Apple M5 Pro with 48 GB, macOS 26.6.2, Xcode 27.0, in a Release
