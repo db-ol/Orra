@@ -3,7 +3,8 @@ import SwiftUI
 
 /// The floating caption window: always on top, on every Space and over full screen apps,
 /// translucent, and moved by dragging anywhere on it. Closing it turns captions off.
-/// macOS remembers where it was and its size.
+/// macOS remembers where it was and its size. It tells the captions whether it can be
+/// seen, so they keep the display on only then, see MeetingCaptions.keepsDisplayOn.
 final class CaptionWindow: NSObject, NSWindowDelegate {
     static let defaultSize = CGSize(width: 520, height: 260)
     static let minimumSize = CGSize(width: 300, height: 140)
@@ -13,12 +14,42 @@ final class CaptionWindow: NSObject, NSWindowDelegate {
     private let cleanup: TextCleanup
     private let turns: EngineTurns
     private var panel: NSPanel?
+    /// True from the note that the displays went to sleep until the note that they woke,
+    /// or until the window shows or can be seen again.
+    private var displaysAsleep = false
+    /// The displays' sleep and wake, and Orra hidden and shown again.
+    private var observers: [any NSObjectProtocol] = []
 
     init(captions: MeetingCaptions, pushToTalk: PushToTalkController, cleanup: TextCleanup, turns: EngineTurns) {
         self.captions = captions
         self.pushToTalk = pushToTalk
         self.cleanup = cleanup
         self.turns = turns
+        super.init()
+        let workspace = NSWorkspace.shared.notificationCenter
+        let app = NotificationCenter.default
+        observers = [
+            workspace.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.displaysSlept(true)
+                }
+            },
+            workspace.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.displaysSlept(false)
+                }
+            },
+            app.addObserver(forName: NSApplication.didHideNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.noteVisibility()
+                }
+            },
+            app.addObserver(forName: NSApplication.didUnhideNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.noteVisibility()
+                }
+            },
+        ]
     }
 
     func show() {
@@ -26,10 +57,35 @@ final class CaptionWindow: NSObject, NSWindowDelegate {
         self.panel = panel
         // Without taking the focus from the call.
         panel.orderFrontRegardless()
+        // Captions are turned on while the displays are awake.
+        displaysAsleep = false
+        noteVisibility()
     }
 
     func close() {
         panel?.orderOut(nil)
+        noteVisibility()
+    }
+
+    /// Whether the window can be seen: ordered in and not hidden with Orra, not minimized,
+    /// not covered whole by other windows, and on displays that are awake. A window that is
+    /// covered in part counts as seen. Internal for tests.
+    nonisolated static func canBeSeen(onScreen: Bool, miniaturized: Bool, occlusion: NSWindow.OcclusionState, displaysAsleep: Bool) -> Bool {
+        onScreen && !miniaturized && occlusion.contains(.visible) && !displaysAsleep
+    }
+
+    /// Tells the captions whether the window can be seen now.
+    private func noteVisibility() {
+        guard let panel else {
+            captions.setWindowVisible(false)
+            return
+        }
+        captions.setWindowVisible(Self.canBeSeen(onScreen: panel.isVisible, miniaturized: panel.isMiniaturized, occlusion: panel.occlusionState, displaysAsleep: displaysAsleep))
+    }
+
+    private func displaysSlept(_ asleep: Bool) {
+        displaysAsleep = asleep
+        noteVisibility()
     }
 
     /// Internal so tests can check the panel without showing it.
@@ -89,10 +145,37 @@ final class CaptionWindow: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         captions.setOn(false)
     }
+
+    /// Covered, or seen again. A window that can be seen means that the displays are
+    /// awake, so a note of their wake that never came does not let the display sleep while
+    /// captions show.
+    func windowDidChangeOcclusionState(_ notification: Notification) {
+        if panel?.occlusionState.contains(.visible) == true {
+            displaysAsleep = false
+        }
+        noteVisibility()
+    }
+
+    /// The panel cannot be minimized today, so these only keep the visibility right if it
+    /// ever can.
+    func windowDidMiniaturize(_ notification: Notification) {
+        noteVisibility()
+    }
+
+    func windowDidDeminiaturize(_ notification: Notification) {
+        noteVisibility()
+    }
+
+    /// A click in the window shows that the screen is unlocked, see
+    /// MeetingCaptions.userIsAtTheScreen().
+    func windowDidBecomeKey(_ notification: Notification) {
+        captions.userIsAtTheScreen()
+    }
 }
 
-/// The captions, newest at the bottom, with what is in the way above them, and the display
-/// mode, the caption target and Copy at the top.
+/// The captions, newest at the bottom, with what is in the way above them, and what
+/// captions listen to, the display mode, the caption target and Copy at the top. While
+/// captions listen to the microphone, a line under the top row says so.
 struct CaptionView: View {
     @Bindable var captions: MeetingCaptions
     let pushToTalk: PushToTalkController
@@ -114,27 +197,35 @@ struct CaptionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                // Three segments while they fit, a menu in a narrow window.
-                ViewThatFits(in: .horizontal) {
-                    CaptionModePicker(captions: captions)
-                        .pickerStyle(.segmented)
-                    CaptionModePicker(captions: captions)
-                        .pickerStyle(.menu)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                CaptionTargetMenu(captions: captions, cleanup: cleanup)
-                CaptionCopyButton(captions: captions)
+            // What captions listen to by name and three segments while they fit. In a
+            // narrower window the modes become a menu first, since the source is the
+            // choice that says whether the microphone is used, then the source shows as
+            // its icon, and last the caption target as its icon.
+            ViewThatFits(in: .horizontal) {
+                topRow(sourceTitle: true, segmented: true, targetTitle: true)
+                topRow(sourceTitle: true, segmented: false, targetTitle: true)
+                topRow(sourceTitle: false, segmented: false, targetTitle: true)
+                topRow(sourceTitle: false, segmented: false, targetTitle: false)
+            }
+            // Also while a dictation pauses the captions, since the microphone stays on.
+            if let input = captions.microphoneInUse {
+                MicrophoneSign(input: input)
             }
             CaptionNotes(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup, turns: turns)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
                     // Says where captions come from, since a test with one's own voice
-                    // gives none. The note that nothing plays says the same, so the
-                    // placeholder hides while that note shows.
+                    // gives none of what the Mac plays. The note that nothing plays says
+                    // the same, so the placeholder hides while that note shows.
                     if captions.store.sentences.isEmpty, captions.silence != .noAudio {
-                        Text("Captions of what the Mac plays, such as a call or a video, appear here. What you say into your microphone is not captioned.")
-                            .foregroundStyle(.secondary)
+                        Group {
+                            if captions.source == .microphone {
+                                Text("Captions of what you say into the microphone appear here.")
+                            } else {
+                                Text("Captions of what the Mac plays, such as a call or a video, appear here. To caption what you say, choose Microphone in the menu at the top left of the window.")
+                            }
+                        }
+                        .foregroundStyle(.secondary)
                     }
                     ForEach(captions.store.shown) { sentence in
                         CaptionSentenceView(lines: captions.displayMode.lines(for: sentence))
@@ -182,6 +273,80 @@ struct CaptionView: View {
             Text("The model comes from Hugging Face or a mirror. Your text stays on this Mac.")
         }
     }
+
+    /// The top row: what captions listen to and what they show at the left, the caption
+    /// target and Copy at the right.
+    private func topRow(sourceTitle: Bool, segmented: Bool, targetTitle: Bool) -> some View {
+        HStack(spacing: 8) {
+            CaptionSourceMenu(captions: captions, showsTitle: sourceTitle)
+            if segmented {
+                CaptionModePicker(captions: captions)
+                    .pickerStyle(.segmented)
+            } else {
+                CaptionModePicker(captions: captions)
+                    .pickerStyle(.menu)
+            }
+            Spacer(minLength: 0)
+            CaptionTargetMenu(captions: captions, cleanup: cleanup, showsTitle: targetTitle)
+            CaptionCopyButton(captions: captions)
+        }
+    }
+}
+
+/// What captions listen to: what the Mac plays or the microphone, as in Settings. The
+/// choice's name shows beside its icon where the row has room, and the icon alone
+/// otherwise.
+private struct CaptionSourceMenu: View {
+    let captions: MeetingCaptions
+    let showsTitle: Bool
+
+    var body: some View {
+        Menu {
+            Picker("Captions listen to", selection: Binding(get: { captions.source }, set: { captions.setSource($0) })) {
+                ForEach(CaptionSource.allCases, id: \.self) { source in
+                    Label(source.title, systemImage: source.systemImage)
+                        .tag(source)
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            let label = Label {
+                Text(verbatim: captions.source.title)
+            } icon: {
+                Image(systemName: captions.source.systemImage)
+            }
+            if showsTitle {
+                label.labelStyle(.titleAndIcon)
+            } else {
+                label.labelStyle(.iconOnly)
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.borderless)
+        .menuIndicator(.visible)
+        .fixedSize()
+        .help(Text("Captions listen to"))
+        .accessibilityLabel(Text("Captions listen to"))
+        .accessibilityValue(Text(verbatim: captions.source.title))
+    }
+}
+
+/// The sign that captions listen to the microphone, with its name, under the top row. Plain
+/// text, so VoiceOver reads it, next to the orange dot macOS shows in the menu bar.
+private struct MicrophoneSign: View {
+    let input: AudioInput
+
+    var body: some View {
+        Label {
+            Text("Microphone on: \(input.name)")
+        } icon: {
+            Image(systemName: "mic.fill")
+                .foregroundStyle(.orange)
+        }
+        .font(.callout)
+        .accessibilityElement(children: .combine)
+    }
 }
 
 /// What the window shows of each sentence: Original, Translated or Both, as in Settings.
@@ -201,10 +366,12 @@ private struct CaptionModePicker: View {
 }
 
 /// The language captions translate into, as on the Meeting Interpretation page, with the
-/// choice checked. Off in Original, which does not translate.
+/// choice checked. Off in Original, which does not translate. Its name shows beside its
+/// icon unless the window is narrow.
 private struct CaptionTargetMenu: View {
     let captions: MeetingCaptions
     let cleanup: TextCleanup
+    let showsTitle: Bool
 
     var body: some View {
         // A target saved for another dictation language shows as the one it acts as.
@@ -218,12 +385,16 @@ private struct CaptionTargetMenu: View {
             .pickerStyle(.inline)
             .labelsHidden()
         } label: {
-            Label {
+            let label = Label {
                 Text(target.title)
             } icon: {
                 Image(systemName: "translate")
             }
-            .labelStyle(.titleAndIcon)
+            if showsTitle {
+                label.labelStyle(.titleAndIcon)
+            } else {
+                label.labelStyle(.iconOnly)
+            }
         }
         .menuStyle(.button)
         .buttonStyle(.borderless)
@@ -325,6 +496,24 @@ struct CaptionNotes: View {
             ForEach(Self.lines(captions: captions, speechReady: pushToTalk.modelState == .ready, turns: turns), id: \.self) { line in
                 plainNote(line)
             }
+            // The prompt while access is not decided, and the microphone pane of System
+            // Settings while it is off, as in the welcome window.
+            if case .microphoneUnavailable(.access(let access)) = captions.capture {
+                switch access {
+                case .notDetermined:
+                    Button("Allow Microphone Access…") {
+                        pushToTalk.requestMicrophoneAccess()
+                    }
+                    .controlSize(.small)
+                case .denied:
+                    Button("Open Microphone Settings…") {
+                        pushToTalk.requestMicrophoneAccess()
+                    }
+                    .controlSize(.small)
+                case .authorized, .notConfigured:
+                    EmptyView()
+                }
+            }
             // No translation notes or download until the capture runs. While it starts,
             // captions do not need the model yet, and a download agreed to then would be
             // ignored. None in Original only, which does not translate.
@@ -343,12 +532,24 @@ struct CaptionNotes: View {
             lines.append(String(localized: "This build of Orra cannot capture the sound the Mac plays yet."))
         case .unavailable(.failed):
             lines.append(String(localized: "Orra could not capture the sound the Mac plays. Turn Live Captions off and on again to try again."))
-        case .off, .starting, .listening:
+        case .microphoneUnavailable(.access(.notDetermined)):
+            lines.append(String(localized: "The microphone needs permission"))
+        case .microphoneUnavailable(.access(.denied)):
+            lines.append(String(localized: "Microphone access is off. Turn on Orra under Microphone in System Settings."))
+        case .microphoneUnavailable(.access(.notConfigured)):
+            lines.append(String(localized: "This build has no microphone usage description"))
+        case .microphoneUnavailable(.noInput):
+            lines.append(String(localized: "No microphone is connected. Captions start once you connect one."))
+        case .microphoneUnavailable(.access(.authorized)), .microphoneUnavailable(.failed):
+            lines.append(String(localized: "Orra could not start the microphone. Turn Live Captions off and on again to try again."))
+        case .off, .starting, .listening, .pausedWhileLocked:
             switch captions.silence {
             case .noAudio:
-                lines.append(String(localized: "Nothing is playing on the Mac. Captions show what the Mac plays, such as a call or a video, not what you say into your microphone."))
+                lines.append(String(localized: "Nothing is playing on the Mac. Captions show what the Mac plays, such as a call or a video. To caption what you say, choose Microphone in the menu at the top left of the window."))
             case .noSound:
                 lines.append(String(localized: "No sound from the Mac yet. If something is playing, allow Orra under Screen & System Audio Recording in Privacy & Security settings."))
+            case .microphoneSilent(let situation):
+                lines.append(Silence.advice(for: situation))
             case nil:
                 break
             }
@@ -359,9 +560,14 @@ struct CaptionNotes: View {
         // From the press of a key until the paste, captions start no model call, see
         // EngineTurns. Said once the dictation has gone on for a moment, so a tap of the
         // talk key does not flash it. Not for a capture that failed, which has nothing to
-        // catch up on.
+        // catch up on. What the Mac plays waits and catches up, and what the microphone
+        // hears meanwhile is left out, see MeetingCaptions.MicrophonePause.
         if turns.dictationNoteDue, captions.capture == .starting || captions.capture == .listening {
-            lines.append(String(localized: "Captions wait while you dictate and catch up when you finish."))
+            if captions.source == .microphone {
+                lines.append(String(localized: "Captions pause while you dictate and go on when you finish."))
+            } else {
+                lines.append(String(localized: "Captions wait while you dictate and catch up when you finish."))
+            }
         }
         return lines
     }
@@ -405,6 +611,24 @@ struct CaptionNotes: View {
             .font(.callout)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+extension CaptionSource {
+    /// The name of the choice, the same in the window and in Settings, where the row's
+    /// label "Captions listen to" supplies the verb.
+    var title: String {
+        switch self {
+        case .systemAudio: String(localized: "What the Mac Plays")
+        case .microphone: String(localized: "Microphone")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .systemAudio: "speaker.wave.2"
+        case .microphone: "mic.fill"
+        }
     }
 }
 

@@ -181,6 +181,21 @@ struct SettingsPageTests {
         #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .loading, total: 100, use: .translation) == "Loading the local model…")
     }
 
+    /// Captions listen to, on the Meeting Interpretation page and in the caption window,
+    /// offers what the Mac plays, the choice at every launch, and the microphone.
+    @Test func captionsListenToWhatTheMacPlaysOrTheMicrophone() {
+        #expect(CaptionSource.allCases.map(\.title) == ["What the Mac Plays", "Microphone"])
+        #expect(CaptionSource.allCases.map(\.systemImage) == ["speaker.wave.2", "mic.fill"])
+        let captions = MeetingCaptions(
+            systemAudio: SystemAudioSource(start: { _ in }, stop: {}, somethingPlays: { false }),
+            engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, target: { .chinese }, translate: { text, _ in text })
+        )
+        #expect(captions.source == .systemAudio)
+        captions.setSource(.microphone)
+        #expect(captions.source == .microphone)
+        #expect(!captions.isOn)
+    }
+
     @MainActor
     private final class Received {
         var count = 0
@@ -398,7 +413,7 @@ struct SettingsPageTests {
             dockIcon: DockIcon(showsInDock: true, save: { _ in }, setPolicy: { _ in }, hasOpenWindow: { true }),
             updater: AppUpdater(),
             captions: meeting ? MeetingCaptions(
-                source: SystemAudioSource(start: { _ in }, stop: {}, somethingPlays: { false }),
+                systemAudio: SystemAudioSource(start: { _ in }, stop: {}, somethingPlays: { false }),
                 engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, target: { .chinese }, translate: { text, _ in text })
             ) : nil,
             speech: meeting ? TranslationSpeech(engines: .only(FakeSynthesizer()), playback: FakePlayback(), outputs: { [] }, folders: { nil }) : nil,

@@ -271,6 +271,47 @@ struct TapConversionTests {
         #expect(abs(level - 0.177) < 0.01)
     }
 
+    /// The caption microphone's path without a device: one buffer of mono at the device's
+    /// own rate, as its input callback renders it, through TapWriter and Chunker.
+    @Test(arguments: [48_000.0, 44_100.0])
+    func aMonoMicrophoneAtItsOwnRateComesOutIn16kHzChunks(rate: Double) throws {
+        let input = try #require(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: 1, interleaved: false))
+        let output = try #require(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(RecordingLimits.sampleRate), channels: 1, interleaved: false))
+        let converter = try #require(AVAudioConverter(from: input, to: output))
+        let writer = TapWriter(ring: AudioFrameRing(planes: 1, bytesPerFrame: MemoryLayout<Float>.size, capacity: Int(rate * 2)))
+        let chunks = Chunks()
+        let chunker = Chunker(writer: writer, converter: converter, input: input, output: output, deliver: { chunks.append($0) })
+        let block = 512
+        let samples = UnsafeMutablePointer<Float>.allocate(capacity: block)
+        let list = AudioBufferList.allocate(maximumBuffers: 1)
+        defer {
+            samples.deallocate()
+            free(list.unsafeMutablePointer)
+        }
+        list[0] = AudioBuffer(mNumberChannels: 1, mDataByteSize: UInt32(block * MemoryLayout<Float>.size), mData: samples)
+        var frame = 0
+        for index in 0..<(Int(rate) / block) {
+            for offset in 0..<block {
+                samples[offset] = Float(0.5 * sin(2 * Double.pi * 440 * Double(frame + offset) / rate))
+            }
+            frame += block
+            writer.write(UnsafePointer(list.unsafePointer))
+            if index % 2 == 1 {
+                chunker.drain()
+            }
+        }
+        chunker.drain()
+        #expect(writer.ring.dropped == 0)
+        let all = chunks.all
+        let out = all.flatMap { $0 }
+        #expect(out.count > 16_000 - 1_600 - 200)
+        #expect(out.count <= 16_000)
+        #expect(all.allSatisfy { $0.count >= 1_600 && $0.count < 3_200 })
+        // A 0.5 tone keeps its level: RMS about 0.354.
+        let level = rms(out[2_000..<12_000])
+        #expect(abs(level - 0.354) < 0.01)
+    }
+
     @Test(arguments: [false, true])
     func buffersBeforeTheTapsAreNeverRead(interleaved: Bool) throws {
         let (chunks, _) = try convert(interleaved: interleaved, micBuffers: 2)

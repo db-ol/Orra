@@ -90,10 +90,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         save: { $0.save() },
         voiceFile: .live
     )
-    /// Meeting captions, off at every launch. Lazy, because they read the controller's
-    /// speech model state.
+    /// Meeting captions, off at every launch, listening to what the Mac plays until the
+    /// user chooses the microphone. They watch the screen lock, except in the copy of Orra
+    /// that hosts the tests, since the menu bar menu reads them before launching is done.
+    /// Lazy, because they read the controller's speech model state.
     lazy var captions = MeetingCaptions(
-        source: .live(),
+        systemAudio: .live(),
+        microphone: .live(),
+        screenLock: Self.isHostedByXcode ? .unlocked : .live(),
         engines: .live(
             transcription: transcription,
             isSpeechReady: { [pushToTalk] in pushToTalk.modelState == .ready },
@@ -104,7 +108,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         started: { [cleanup] in cleanup.captionsStarted() },
         stopped: { [cleanup] in cleanup.captionsStopped() },
         displayMode: CaptionDisplayMode.load(),
-        saveDisplayMode: { $0.save() }
+        saveDisplayMode: { $0.save() },
+        // Dictation goes first: microphone captions leave out what a dictation, a voice
+        // sample or Orra's voice gives the microphone.
+        pausesMicrophone: { [pushToTalk, speech] in
+            MeetingCaptions.MicrophonePause(
+                dictation: pushToTalk.state,
+                recordsVoiceSample: pushToTalk.isRecordingVoiceSample,
+                speaks: speech.state == .speaking
+            )
+        },
+        // The prompt, when the user chooses the microphone before access was decided. The
+        // controller learns the answer, so the menu and the welcome window follow it.
+        askForMicrophoneAccess: { [pushToTalk] in pushToTalk.requestMicrophoneAccess() }
     )
     lazy var captionWindow = CaptionWindow(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup, turns: turns)
     /// Projects, off until the user turns it on in Settings, and only in builds that show
@@ -201,6 +217,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.learnedNotice.offerKeyboardTip(key)
     }
     private var menuObserver: (any NSObjectProtocol)?
+    private var sleepObservers: [any NSObjectProtocol] = []
+    /// Keeps the display on while captions show, see `followCaptionDisplay()`.
+    private var captionDisplayActivity: (any NSObjectProtocol)?
     private var mailObservers: [any NSObjectProtocol] = []
     /// Orra's access to Mail as the Projects page last learned it, see `followMailAccess()`.
     private var mailAccess: ProjectsSettings.MailAccess.Access?
@@ -299,17 +318,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Reads the login item, the microphones and the copied word again each time a menu
-    /// opens, Orra's menu bar menu included, so the open menu shows them as they are now.
+    /// opens, Orra's menu bar menu and the caption window's menus included, so the open
+    /// menu shows them as they are now. A menu that opens also shows that the screen is
+    /// unlocked, see MeetingCaptions.userIsAtTheScreen().
     private func refreshWhenMenusOpen() {
         menuObserver = NotificationCenter.default.addObserver(
             forName: NSMenu.didBeginTrackingNotification,
             object: nil,
             queue: .main
-        ) { [openAtLogin, audioInputs, clipboard] _ in
+        ) { [openAtLogin, audioInputs, clipboard, captions] _ in
             MainActor.assumeIsolated {
                 openAtLogin.refresh()
                 audioInputs.refresh()
                 clipboard.refresh()
+                captions.userIsAtTheScreen()
             }
         }
     }
@@ -348,17 +370,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The Live Captions shortcut turns captions on, or off as closing the window does. The
-    /// window is the only other sign, so VoiceOver hears which.
+    /// window is the only other sign, so VoiceOver hears which, and whether they listen to
+    /// the microphone.
     private func toggleCaptionsFromShortcut() {
         captions.setOn(!captions.isOn)
         NSAccessibility.post(
             element: NSApp as Any,
             notification: .announcementRequested,
             userInfo: [
-                .announcement: LiveCaptionsShortcut.announcement(captionsOn: captions.isOn),
+                .announcement: LiveCaptionsShortcut.announcement(captionsOn: captions.isOn, microphone: captions.source == .microphone),
                 .priority: NSAccessibilityPriorityLevel.high.rawValue,
             ]
         )
+    }
+
+    /// Tells the captions the microphone chosen under Microphone, now and after every
+    /// change, so captions that listen to the microphone use the one a dictation records
+    /// from.
+    private func followMicrophoneChoice() {
+        captions.microphoneChosen(withObservationTracking {
+            pushToTalk.microphone?.uid
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                self?.followMicrophoneChoice()
+            }
+        })
+    }
+
+    /// Tells the captions when the Mac goes to sleep and when it wakes, so captions that
+    /// listen to the microphone let go of it for the sleep and start it again.
+    private func followSleepAndWake() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        sleepObservers = [
+            workspace.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [captions] _ in
+                MainActor.assumeIsolated {
+                    captions.macWillSleep()
+                }
+            },
+            workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [captions] _ in
+                MainActor.assumeIsolated {
+                    captions.macDidWake()
+                }
+            },
+        ]
+    }
+
+    /// Keeps the display on while captions start or listen and their window can be seen,
+    /// see MeetingCaptions.keepsDisplayOn, now and after every change: one process activity
+    /// that disables idle display sleep, as a video player holds, which macOS drops when
+    /// Orra quits. It never lights a display that is off, and never holds back a lock the
+    /// user asks for, Sleep or a closed lid.
+    private func followCaptionDisplay() {
+        let keeps = withObservationTracking {
+            captions.keepsDisplayOn
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                self?.followCaptionDisplay()
+            }
+        }
+        if keeps, captionDisplayActivity == nil {
+            captionDisplayActivity = ProcessInfo.processInfo.beginActivity(options: .idleDisplaySleepDisabled, reason: "Showing Live Captions")
+            Logger.captions.notice("Meeting captions keep the display on")
+        } else if !keeps, let activity = captionDisplayActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            captionDisplayActivity = nil
+            Logger.captions.notice("Meeting captions no longer keep the display on")
+        }
     }
 
     /// Watches the translation key while translation is on, now and after every change of
@@ -472,6 +549,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         captions.showWindow = { [captionWindow] in captionWindow.show() }
         captions.closeWindow = { [captionWindow] in captionWindow.close() }
         pushToTalk.onLiveCaptionsShortcut = { [weak self] in self?.toggleCaptionsFromShortcut() }
+        followMicrophoneChoice()
+        followSleepAndWake()
+        followCaptionDisplay()
         // The steps that keep a user's settings across versions. A version that changes
         // what a setting starts as adds its step inside, not here.
         LaunchMigrations.run(pushToTalk, cleanup: cleanup, setUpBefore: setUpBefore)

@@ -9,8 +9,11 @@ import os
 ///
 /// - Dictation never waits here. Its calls go straight to the models, as before captions.
 /// - From the press of the talk key or the translation key until the dictation is pasted
-///   or cancelled, captions start no model call. Sentences heard meanwhile wait in order
-///   and are captioned after the dictation.
+///   or cancelled, captions start no model call. Sentences of what the Mac plays heard
+///   meanwhile wait in order and are captioned after the dictation. Captions of the
+///   microphone drop what it hears meanwhile before it reaches them, see
+///   MeetingCaptions.MicrophonePause, so no caption call is ever made from what the user
+///   dictates.
 /// - A caption call already running when the key goes down is cancelled. A translation
 ///   then stops within a token or so and runs again after the dictation. A transcription
 ///   cannot stop early, but a caption sentence is at most about 12 s of audio, which the

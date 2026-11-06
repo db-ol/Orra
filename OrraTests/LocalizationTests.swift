@@ -217,7 +217,7 @@ struct LocalizationTests {
         let path = try #require(Bundle.main.path(forResource: "zh-Hans", ofType: "lproj"))
         let chinese = try #require(Bundle(path: path))
         #expect(chinese.localizedString(forKey: "Quit Orra", value: nil, table: nil) == "退出 Orra")
-        #expect(chinese.localizedString(forKey: "NSMicrophoneUsageDescription", value: nil, table: "InfoPlist") == "当你开始听写或翻译，或录制声音样本时，Orra 会使用麦克风，并在这台 Mac 上把你的声音转成文字。")
+        #expect(chinese.localizedString(forKey: "NSMicrophoneUsageDescription", value: nil, table: "InfoPlist") == "当你开始听写或翻译、录制声音样本，或为实时字幕选择麦克风时，Orra 会使用麦克风，并在这台 Mac 上把你的声音转成文字。")
     }
 
     /// The English microphone prompt comes from the build setting

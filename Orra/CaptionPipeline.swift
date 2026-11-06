@@ -14,8 +14,9 @@ nonisolated struct CaptionSentence: Identifiable, Equatable, Sendable {
     }
 
     let id: Int
-    /// Where the sentence starts and ends in the audio, in seconds from the start of the
-    /// captions.
+    /// Where the sentence starts and ends in the audio captions took in, in seconds from
+    /// their start. Audio they left out, such as a dictation that captions of the
+    /// microphone pause for, does not count.
     let start: Double
     let end: Double
     let original: String
@@ -113,8 +114,9 @@ extension CaptionEngines {
 
 /// Turns a stream of 16 kHz mono audio into caption sentences: CaptionSegmenter cuts it at
 /// pauses, the speech model transcribes each sentence, and the cleanup model translates
-/// it. Live captions feed it the sound the Mac plays, and the measurement and the tests
-/// feed it audio files or made up audio, so they all run the same path.
+/// it. Live captions feed it the sound the Mac plays or the microphone, and the
+/// measurement and the tests feed it audio files or made up audio, so they all run the
+/// same path.
 ///
 /// Sentences are transcribed and translated one at a time, in the order they were said.
 /// Each is reported once when it is heard, with its translation pending when one follows,
@@ -242,6 +244,17 @@ final class CaptionPipeline {
         Counts(cut: cutCount, reported: reportedCount, empty: emptyCount, dropped: droppedCount)
     }
 
+    /// True while the segmenter hears speech: a sentence is being heard, which is when the
+    /// stream rose above the noise of its pauses, see CaptionSegmenter, and the last frame
+    /// it judged was voiced. So a sentence that stays open when the audio stops does not
+    /// count once silence follows it, also when the first frame of that silence still holds
+    /// the last samples of the sentence, as the pieces of about 100 ms the captures hand on
+    /// seldom end where a frame ends. Live Captions take it for sound, see
+    /// MeetingCaptions.displayQuietLimit.
+    var hearsSpeech: Bool {
+        segmenter.isInSpeech && segmenter.openSilenceSeconds == 0
+    }
+
     /// Takes the next samples of the stream.
     func feed(_ samples: [Float]) {
         guard !isStopped else { return }
@@ -262,6 +275,22 @@ final class CaptionPipeline {
               segmenter.openSilenceSeconds < Self.interimPauseLimit else { return false }
         let heard = lastInterim.flatMap { $0.number == cutCount ? $0.seconds : nil } ?? 0
         return segmenter.openSeconds >= heard + interimInterval && engines.isFree()
+    }
+
+    /// Ends the sentence being heard, as a pause would, and goes on with the stream. For a
+    /// gap in the audio, such as a dictation that captions of the microphone leave out, or
+    /// a switch of what captions listen to. The sentence is transcribed and reported like
+    /// any other, under the id of its interim line, and nothing heard before the gap starts
+    /// the next one.
+    func endSentence() {
+        guard !isStopped else { return }
+        if let last = segmenter.breakStream() {
+            enqueue(last)
+        } else if let line = interimLine, line.number == cutCount {
+            // Too little speech for a sentence, so its interim line goes.
+            interimLine = nil
+            withdraw(line.id)
+        }
     }
 
     /// The end of the stream: the last sentence is cut, and this returns once every
