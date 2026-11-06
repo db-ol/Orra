@@ -120,6 +120,10 @@ class KoreanTokenTests(unittest.TestCase):
         }
         rates = score.strata(manifest, {"s1": "ありがとう", "s2": "", "n1": "Спасибо."})
         self.assertEqual((rates["silence"], rates["noise"]), ((1, 2), (1, 1)))
+        # --diff counts that output the same way.
+        text = score.diff(manifest, ("a", {"s1": {"text": "ありがとう"}, "n1": {"text": ""}}), ("b", {"s1": {"text": ""}, "n1": {"text": "Спасибо."}}), 10, False)
+        self.assertIn("s1 silence 5.0 s: 5 against 0 errors of 0 (+5)", text)
+        self.assertIn("n1 noise 5.0 s: 0 against 1 errors of 0 (-1)", text)
 
 
 class ManifestTests(unittest.TestCase):

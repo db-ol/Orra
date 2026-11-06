@@ -342,6 +342,18 @@ class CompareTests(unittest.TestCase):
         self.assertIn("corpus text cer_ko lenient: 1.00% -> 2.00%", result.lines)
         self.assertIn("corpus ruled_text cer_ko lenient: new, 1.00%", self.run_compare("corpus", corpus({"a": 0}), base).lines)
 
+    def test_compare_corpus_lists_clips_only_worse_in_lenient_errors(self):
+        base = corpus({"a": 2, "b": 0})
+        cand = copy.deepcopy(base)
+        for summary, lenient in ((base, 0), (cand, 2)):
+            summary["clips"]["a"]["lenient_errors"] = summary["clips"]["a"]["ruled_lenient_errors"] = lenient
+        result = self.run_compare("corpus", base, cand)
+        self.assertEqual(result.failures, [])
+        self.assertEqual(result.worse, ["corpus/a lenient_errors 0 -> 2", "corpus/a ruled_lenient_errors 0 -> 2"])
+        # A clip that is worse in its strict errors too is listed under them only.
+        cand["clips"]["a"]["errors"] = cand["clips"]["a"]["ruled_errors"] = 3
+        self.assertEqual(self.run_compare("corpus", base, cand).worse, ["corpus/a errors 2 -> 3", "corpus/a ruled_errors 2 -> 3"])
+
 
 def attack(item_id: str = "x1", kind: str = "email", **expected) -> dict:
     """An attack item made up for these tests, in the form of the set's adversarial.jsonl."""
