@@ -785,6 +785,31 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     With TEST_RUNNER_ORRA_CLEANUP_COMPARE=1 as well, each case also runs without the prefix
     cache right after, and the report lists every case where the two differ.
 
+    On 2026-11-06 the gate before the model, CleanupStep.hasWorkForModel, gained repeats:
+    a Chinese character, an English word or a phrase of up to four of them said twice in a
+    row, also with a comma or a space between. So a dictation with a repeat and no filler
+    or correction cue goes to the model too. Main's gate had sent 8 of the 22 accidental
+    repeats of the repeat cases to the model, which cleaned up 7 of them. A Release build
+    on the same M5 Pro with the installed model, without the comparison, took 276 s for
+    cleanupCases. With the skip gate, main's gate in brackets:
+
+    | Set | Sent to the model | Exact |
+    |---|---|---|
+    | regular, 182 | 136 (133) | 164 (164) |
+    | adversarial, 70 | 19 (18) | 68 (68) |
+    | meaning, 20 | 13 (12) | 18 (18) |
+    | repeats, 46 | 46 (10) | 42 (32) |
+    | numbers, 672 | 56 (28) | 669 (669) |
+
+    The runs without the gate gave main's results case for case, and no case that was exact
+    on main changed. The accidental repeats went from 8 to 18 of 22 exact, and all 24
+    repeats that are meant stayed. The model still keeps a character said twice inside a
+    word (这这个, 客客户 and 中中英, the last one from a beta user) and leaves the comma in
+    所以，所以我们. The pasted adversarial outputs that differ from the expected text are
+    the same four as before. Three wordings of a third kind of change in the prompt, for
+    words said twice by accident, were measured the same day, and none is used, see
+    RewritePrompt.
+
     On 2026-10-13 the prompt gained rules and two examples that keep words with meaning:
     pronouns, phrases such as 我再想想 and 我考虑一下, both parts of 不是 X，是 Y that sets
     a document or someone else right, and the text as it is when a correction is unclear.
