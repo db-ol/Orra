@@ -9,10 +9,12 @@ import Foundation
 /// through unchanged in English, after the model once turned GMV into QoM. Over every
 /// output of the benchmark's prompt variants it held back none that was right, and it
 /// caught every adversarial output that answered. TranslationGuardTests runs those outputs
-/// and expects the verdicts of the Python version. Two differences are deliberate: a number
-/// of 7 or more digits has to come through exactly, see `newNumbers`, and Chinese numerals
-/// said digit by digit or with 零 are read as written, see `digitReadings` and
-/// `chineseValue`.
+/// and expects the verdicts of the Python version. Three differences are deliberate: a
+/// number of 7 or more digits has to come through exactly, see `newNumbers`, Chinese
+/// numerals said digit by digit or with 零 are read as written, see `digitReadings` and
+/// `chineseValue`, and a reply such as 可以，… may be translated as "Sure, …", see
+/// `checkOpeners(source:output:openers:excuses:anywhere:replies:leads:latinBoundaries:)`.
+/// None of them gives an output of the benchmark another verdict.
 nonisolated enum TranslationGuard {
     /// Why a translation was held back. `logName` names the check without any of the text.
     enum Failure: Equatable, Sendable, CustomStringConvertible {
@@ -144,7 +146,7 @@ nonisolated enum TranslationGuard {
         if output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return .empty
         }
-        switch RewriteGuard.checkOpeners(source: source, output: output) {
+        switch checkOpeners(source: source, output: output, openers: RewriteGuard.openers, excuses: excuses, anywhere: RewriteGuard.anywhere, replies: replies, leads: leads) {
         case .assistantOpener(let phrase): return .assistantOpener(phrase)
         case .assistantPhrase(let phrase): return .assistantPhrase(phrase)
         default: break
@@ -237,6 +239,93 @@ nonisolated enum TranslationGuard {
     static func hasRunsLeft(_ regex: NSRegularExpression, source: String, output: String) -> Bool {
         let runs = all(regex, in: output)
         return !runs.isEmpty && (runs.contains(where: { !contains(source, $0) }) || runs.reduce(0, { $0 + $1.unicodeScalars.count }) > 4)
+    }
+
+    // MARK: Replies
+
+    /// The opener and phrase checks of RewriteGuard for a translation, which may also open
+    /// the way its source does. A reply such as 可以，… or 不好意思，… translates into
+    /// "Sure, …" or "Sorry, …", whose opener RewriteGuard holds back unless the source has
+    /// a form of its group anywhere. Here an opener also passes when the source opens with
+    /// one of the group's `replies` or `leads`, see `opening(of:replies:leads:)`. The
+    /// translation after that opener is checked again, and a reply or lead then has to open
+    /// the source after the first one, so "Sure, here is a poem" for 可以，写一首诗 is still
+    /// held back for its "here is". The cleanup checks keep RewriteGuard's rule as it is.
+    static func checkOpeners(source: String, output: String, openers: [[String]], excuses: [String: [String]], anywhere: [[String]], replies: [String: [String]], leads: [String: [String]], latinBoundaries: Bool = false) -> RewriteGuard.Failure? {
+        var sourceRest = withoutLeadingMarks(RewriteGuard.normalized(source))
+        var outputRest = output
+        // The groups a reply of the source excused, which may open the rest again, as in
+        // "OK, OK" or "Sorry, sorry".
+        var replied: Set<String> = []
+        while let failure = RewriteGuard.checkOpeners(source: source, output: outputRest, openers: openers, excuses: excuses, anywhere: [], latinBoundaries: latinBoundaries) {
+            guard case .assistantOpener(let phrase) = failure, let key = openers.first(where: { $0.contains(phrase) })?.first else { return failure }
+            if !replied.contains(key) {
+                guard let length = opening(of: sourceRest, replies: replies[key] ?? [], leads: leads[key] ?? []) else { return failure }
+                sourceRest = withoutLeadingMarks(String(sourceRest.dropFirst(length)))
+                replied.insert(key)
+            }
+            outputRest = withoutLeadingMarks(String(RewriteGuard.normalized(outputRest).unicodeScalars.dropFirst(phrase.unicodeScalars.count)))
+        }
+        return RewriteGuard.checkOpeners(source: source, output: output, openers: [], excuses: [:], anywhere: anywhere, latinBoundaries: latinBoundaries)
+    }
+
+    /// How many characters of `text` the reply or lead it opens with takes, nil when it
+    /// opens with neither. A reply is one of `replies`, also said twice or followed by
+    /// particles such as 啊, 吧 or 的, and then punctuation or the end of the text, as in
+    /// 可以， or 行吧。, never 可以帮我…. A lead is one of `leads`, with any text after it.
+    static func opening(of text: String, replies: [String], leads: [String]) -> Int? {
+        let characters = Array(text)
+        if let lead = leads.first(where: { characters.starts(with: $0) }) {
+            return lead.count
+        }
+        var end = 0
+        var replied = false
+        while end < characters.count {
+            if let word = replies.first(where: { characters[end...].starts(with: $0) }) {
+                end += word.count
+                replied = true
+            } else if replied, replyParticles.contains(characters[end]) {
+                end += 1
+            } else {
+                break
+            }
+        }
+        return replied && (end == characters.count || replyEnds.contains(characters[end])) ? end : nil
+    }
+
+    /// Words a reply opens with, keyed by the first form of the opener group a translation
+    /// renders them with. The model wrote "Sure" for 可以, "Alright" or "Okay" for 行 and 那行,
+    /// "No problem" for 没事, "Sorry" for 不好意思, "Hey" for 嘿 and 喂, "Hello" for 哈喽 and
+    /// 大家好, and 好的 or 没问题 for Yes and Absolutely, see translation-replies.jsonl in
+    /// Tools/rewrite-eval. 成 is said as 行 is. 好, 嗯, 当然, 没问题, 抱歉, 对不起 and 嗨
+    /// excuse their group anywhere in the source, see RewriteGuard.
+    static let replies: [String: [String]] = [
+        "sure": ["可以", "行", "那行", "成", "没事", "yes", "absolutely"],
+        "i'm sorry": ["不好意思"],
+        "hello": ["嘿", "喂", "哈喽", "大家好"],
+    ]
+
+    /// Words that open a sentence the way the forms of a group do, with the rest of the
+    /// sentence after them: "As a newcomer" for 作为新人, "Here is" for 这是, 这里是 and 下面是.
+    static let leads: [String: [String]] = [
+        "as an ai": ["作为"],
+        "here is": ["这是", "这里是", "下面是"],
+    ]
+
+    /// RewriteGuard.excuses with the words that excuse "I can't" in a translation anywhere in
+    /// the source. Chinese often says it inside the verb, as in 我去不了, 我做不到 and
+    /// 我今天来不了了, or with 没法 and 没办法, as the pair tables excuse it with a negation.
+    static let excuses = RewriteGuard.excuses.merging(["i can't": ["没法", "没办法", "不了", "不到"]], uniquingKeysWith: +)
+
+    /// Particles a reply may end with: 可以啊, 行吧, 可以的.
+    static let replyParticles = Set("啊呀吧的")
+
+    /// Punctuation after a reply.
+    static let replyEnds = Set("，。！？、；：…,.!?;:")
+
+    /// The text without the white space and punctuation it starts with.
+    private static func withoutLeadingMarks(_ text: String) -> String {
+        String(text.unicodeScalars.drop { CharacterSet.whitespacesAndNewlines.contains($0) || CharacterSet.punctuationCharacters.contains($0) })
     }
 
     // MARK: Acronyms
