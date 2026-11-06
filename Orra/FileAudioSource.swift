@@ -246,12 +246,19 @@ actor FileAudioSource {
     static func problemBeforeOpening(_ url: URL) -> FileAudioProblem? {
         var info = stat()
         guard stat(url.path, &info) == 0 else { return .unreadable }
-        guard info.st_mode & S_IFMT == S_IFREG else { return .unreadable }
-        if info.st_flags & UInt32(SF_DATALESS) != 0 {
+        let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey])
+        return problem(mode: info.st_mode, flags: info.st_flags, isUbiquitous: values?.isUbiquitousItem == true, downloadingStatus: values?.ubiquitousItemDownloadingStatus)
+    }
+
+    /// What `problemBeforeOpening(_:)` finds from what stat and the file's resource values
+    /// say: no ordinary file, or one whose contents are not on this Mac, which a file
+    /// provider such as iCloud Drive marks dataless, or an iCloud item not downloaded yet.
+    static func problem(mode: mode_t, flags: UInt32, isUbiquitous: Bool, downloadingStatus: URLUbiquitousItemDownloadingStatus?) -> FileAudioProblem? {
+        guard mode & S_IFMT == S_IFREG else { return .unreadable }
+        if flags & UInt32(SF_DATALESS) != 0 {
             return .notOnThisMac
         }
-        let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey])
-        if values?.isUbiquitousItem == true, values?.ubiquitousItemDownloadingStatus == .notDownloaded {
+        if isUbiquitous, downloadingStatus == .notDownloaded {
             return .notOnThisMac
         }
         return nil

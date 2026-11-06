@@ -116,6 +116,23 @@ struct FileAudioSourceTests {
         #expect(FileAudioSource.problemBeforeOpening(folder) == .unreadable)
     }
 
+    /// A file whose contents a file provider such as iCloud Drive left off this Mac, and an
+    /// iCloud item that is not downloaded, are refused before anything reads them, which
+    /// would have macOS download them. A downloaded item is read, also in an older version.
+    @Test func aFileThatIsNotDownloadedIsNotOnThisMac() {
+        let file = mode_t(S_IFREG | 0o644)
+        let dataless = UInt32(SF_DATALESS)
+        #expect(FileAudioSource.problem(mode: file, flags: 0, isUbiquitous: false, downloadingStatus: nil) == nil)
+        #expect(FileAudioSource.problem(mode: file, flags: dataless, isUbiquitous: false, downloadingStatus: nil) == .notOnThisMac)
+        #expect(FileAudioSource.problem(mode: file, flags: dataless | UInt32(UF_HIDDEN), isUbiquitous: true, downloadingStatus: .current) == .notOnThisMac)
+        #expect(FileAudioSource.problem(mode: file, flags: 0, isUbiquitous: true, downloadingStatus: .notDownloaded) == .notOnThisMac)
+        #expect(FileAudioSource.problem(mode: file, flags: 0, isUbiquitous: true, downloadingStatus: .current) == nil)
+        #expect(FileAudioSource.problem(mode: file, flags: 0, isUbiquitous: true, downloadingStatus: .downloaded) == nil)
+        // Other flags, such as a hidden or an archived file, leave it on this Mac.
+        #expect(FileAudioSource.problem(mode: file, flags: UInt32(UF_HIDDEN) | UInt32(SF_ARCHIVED), isUbiquitous: false, downloadingStatus: nil) == nil)
+        #expect(FileAudioSource.problem(mode: mode_t(S_IFDIR | 0o755), flags: 0, isUbiquitous: false, downloadingStatus: nil) == .unreadable)
+    }
+
     /// Each call decodes only up to the next segment: a segment comes once the pause after
     /// it is heard, not once the whole file is read, so the reader never runs ahead of the
     /// speech model, a stop leaves the rest unread and a long file takes no more memory
