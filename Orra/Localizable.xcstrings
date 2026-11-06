@@ -1366,6 +1366,28 @@
         }
       }
     },
+    "About %@ left" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiempo restante: aproximadamente %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "残り約%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大约还剩 %@"
+          }
+        }
+      }
+    },
     "About once a day Orra asks GitHub for the latest version. Like any web request, the check carries your preferred languages, and nothing else about your Mac. Each update is installed only after you choose it." : {
       "localizations" : {
         "es-419" : {
@@ -3437,6 +3459,28 @@
         }
       }
     },
+    "Choose File…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seleccionar archivo…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルを選択…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选取文件…"
+          }
+        }
+      }
+    },
     "Choose Files for This Email" : {
       "localizations" : {
         "es-419" : {
@@ -4690,6 +4734,50 @@
         }
       }
     },
+    "Discard" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descartar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "破棄"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "放弃"
+          }
+        }
+      }
+    },
+    "Discard the transcript of “%@”?" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Descartar la transcripción de “%@”?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”の文字起こしを破棄しますか?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要放弃“%@”的转写文本吗？"
+          }
+        }
+      }
+    },
     "Dismiss Suggestion" : {
       "localizations" : {
         "es-419" : {
@@ -5240,6 +5328,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "草稿需要核对。发送前请逐行阅读。"
+          }
+        }
+      }
+    },
+    "Drop an audio or video file here" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arrastra aquí un archivo de audio o video"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オーディオファイルかビデオファイルをここにドラッグ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把音频或视频文件拖到这里"
+          }
+        }
+      }
+    },
+    "Drop one file at a time." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arrastra un solo archivo a la vez."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルは1つずつドラッグしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一次只能拖入一个文件。"
           }
         }
       }
@@ -7210,6 +7342,28 @@
         }
       }
     },
+    "It is not saved. Save it as text or subtitles to keep it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No está guardada. Para conservarla, guárdala como texto o como subtítulos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まだ保存されていません。残すには、テキストまたは字幕として保存してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它还没有保存。要保留它，请保存为文本或字幕。"
+          }
+        }
+      }
+    },
     "It mentions a change of amounts, dates or other terms of payment." : {
       "localizations" : {
         "es-419" : {
@@ -7915,6 +8069,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "邮件和资料太长，因此略去"
+          }
+        }
+      }
+    },
+    "Less than a minute left" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Queda menos de un minuto"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "残り1分未満"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "剩余不到 1 分钟"
           }
         }
       }
@@ -9724,6 +9900,28 @@
         }
       }
     },
+    "No speech was found in this file." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se encontró voz en este archivo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このファイルに音声は見つかりませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个文件中没有找到语音。"
+          }
+        }
+      }
+    },
     "No speech was recognized" : {
       "localizations" : {
         "es-419" : {
@@ -10870,6 +11068,28 @@
         }
       }
     },
+    "Opening the file…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abriendo el archivo…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルを開いています…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在打开文件…"
+          }
+        }
+      }
+    },
     "Or drag folders here. Projects reads the files in them and never changes them." : {
       "localizations" : {
         "es-419" : {
@@ -11003,6 +11223,28 @@
         }
       }
     },
+    "Orra cannot read this file. Choose an audio or video file." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra no puede leer este archivo. Elige un archivo de audio o video."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraはこのファイルを読み込めません。オーディオファイルかビデオファイルを選択してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无法读取这个文件。请选择音频或视频文件。"
+          }
+        }
+      }
+    },
     "Orra changes your clipboard only when you choose Copy Report, or when your text is too long for the link." : {
       "localizations" : {
         "es-419" : {
@@ -11131,6 +11373,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 无法向 %@ 播放。"
+          }
+        }
+      }
+    },
+    "Orra could not read the rest of this file. The text so far stays." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra no pudo leer el resto de este archivo. El texto transcrito hasta ahora se conserva."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraはこのファイルの残りの部分を読み込めませんでした。ここまでのテキストは残ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无法读取这个文件的其余部分。已转写的文字会保留。"
           }
         }
       }
@@ -11443,6 +11707,28 @@
         }
       }
     },
+    "Orra is still transcribing it. What is done so far is not saved." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra todavía lo está transcribiendo. Lo transcrito hasta ahora no está guardado."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraはまだこのファイルを文字起こししています。ここまでの内容は保存されていません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 还在转写这个文件，已转写的部分还没有保存。"
+          }
+        }
+      }
+    },
     "Orra keeps the last %lld sentences." : {
       "localizations" : {
         "es-419" : {
@@ -11505,6 +11791,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 需要它来识别说话键并粘贴文字。请在打开的列表中打开 Orra，然后回到这里。"
+          }
+        }
+      }
+    },
+    "Orra needs its speech model first. Download it from Orra’s menu in the menu bar." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra necesita primero su modelo de transcripción. Descárgalo desde el menú de Orra en la barra de menús."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まず音声認識モデルが必要です。メニューバーのOrraのメニューからダウンロードしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 需要先下载语音模型。请在菜单栏的 Orra 菜单中下载。"
           }
         }
       }
@@ -11861,6 +12169,28 @@
         }
       }
     },
+    "Orra transcribes it on this Mac, with your dictation language and vocabulary." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra lo transcribe en esta Mac con tu idioma de dictado y tu vocabulario."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraは、音声入力の言語と用語集を使ってこのMac上で文字起こしします。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 会在这台 Mac 上转写它，用的是你的听写语言和个人词库。"
+          }
+        }
+      }
+    },
     "Orra translates the sound the Mac plays into captions, in a floating window." : {
       "localizations" : {
         "es-419" : {
@@ -11991,6 +12321,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这次听写有一部分无法转写。"
+          }
+        }
+      }
+    },
+    "Part of this file could not be transcribed." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo transcribir una parte de este archivo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このファイルの一部を文字起こしできませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个文件有一部分无法转写。"
           }
         }
       }
@@ -15147,6 +15499,50 @@
         }
       }
     },
+    "Save as Subtitles…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar como subtítulos…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字幕として保存…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存为字幕…"
+          }
+        }
+      }
+    },
+    "Save as Text…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar como texto…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テキストとして保存…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存为文本…"
+          }
+        }
+      }
+    },
     "Saved excerpt" : {
       "localizations" : {
         "es-419" : {
@@ -16648,6 +17044,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "停止朗读"
+          }
+        }
+      }
+    },
+    "Stopped. The text so far stays." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se detuvo. El texto transcrito hasta ahora se conserva."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止しました。ここまでのテキストは残ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已停止。已转写的文字会保留。"
           }
         }
       }
@@ -18507,6 +18925,28 @@
         }
       }
     },
+    "The speech model is not loaded. Try again once it is." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El modelo de transcripción no está cargado. Vuelve a intentarlo cuando se cargue."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声認識モデルが読み込まれていません。読み込まれてからもう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音模型尚未载入。载入后请再试一次。"
+          }
+        }
+      }
+    },
     "The speech model is not on this Mac" : {
       "localizations" : {
         "es-419" : {
@@ -18657,6 +19097,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "说话键需要辅助功能权限"
+          }
+        }
+      }
+    },
+    "The text appears here as Orra transcribes the file." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El texto aparece aquí a medida que Orra transcribe el archivo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文字起こしが進むと、ここにテキストが表示されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 转写时，文字会显示在这里。"
           }
         }
       }
@@ -19245,6 +19707,72 @@
         }
       }
     },
+    "This file has no audio." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este archivo no tiene audio."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このファイルにはオーディオがありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个文件没有音频。"
+          }
+        }
+      }
+    },
+    "This file is not on this Mac yet. Download it in Finder first." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este archivo todavía no está en esta Mac. Descárgalo primero en el Finder."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このファイルはまだこのMacにありません。先にFinderでダウンロードしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个文件还不在这台 Mac 上。请先在“访达”中下载它。"
+          }
+        }
+      }
+    },
+    "This file is protected, so Orra cannot read its audio." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este archivo está protegido, así que Orra no puede leer su audio."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このファイルは保護されているため、Orraはオーディオを読み込めません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个文件受保护，Orra 无法读取其中的音频。"
+          }
+        }
+      }
+    },
     "This folder is missing or cannot be read." : {
       "localizations" : {
         "es-419" : {
@@ -19707,6 +20235,50 @@
         }
       }
     },
+    "Transcribe File" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transcribir archivo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルを文字起こし"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转写文件"
+          }
+        }
+      }
+    },
+    "Transcribe File…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transcribir archivo…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルを文字起こし…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转写文件…"
+          }
+        }
+      }
+    },
     "Transcribing…" : {
       "localizations" : {
         "es-419" : {
@@ -19725,6 +20297,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在转写…"
+          }
+        }
+      }
+    },
+    "Transcript" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transcripción"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文字起こし"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转写文本"
           }
         }
       }
@@ -20695,6 +21289,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "等待识别文字"
+          }
+        }
+      }
+    },
+    "Waiting for your dictation to finish…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esperando a que termine tu dictado…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声入力が終わるのを待っています…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在等待你的听写结束…"
+          }
+        }
+      }
+    },
+    "Waiting while Live Captions run. The file goes on once they are off." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En espera mientras Subtítulos en vivo está activado. El archivo continúa cuando lo desactivas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“ライブキャプション”の実行中は待機しています。オフにすると、このファイルの文字起こしを続けます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时字幕运行时暂停。关闭实时字幕后会继续转写。"
           }
         }
       }
