@@ -32,6 +32,15 @@ struct TranscribeFileWindowTests {
         #expect(TranscribeFileView.speechModelLine(installer: .installed(folder), model: .unavailable(.failedToLoad)) == "The speech model could not be loaded")
     }
 
+    /// What the window says once a file is done: no speech, text with or without parts
+    /// the speech model failed on, or no text since it failed on every segment.
+    @Test func theWindowSaysHowAFileEnded() {
+        #expect(TranscribeFileView.endLine(segments: 0, failedSegments: 0) == "No speech was found in this file.")
+        #expect(TranscribeFileView.endLine(segments: 0, failedSegments: 3) == "Orra could not transcribe this file.")
+        #expect(TranscribeFileView.endLine(segments: 5, failedSegments: 0) == "Done")
+        #expect(TranscribeFileView.endLine(segments: 5, failedSegments: 1) == "Part of this file could not be transcribed.")
+    }
+
     /// Choose File… asks for one audio or video file, and hands over one in iCloud Drive
     /// that is not on this Mac yet, which FileAudioSource then refuses, instead of having
     /// macOS download it, as an open panel does unless told otherwise. The panel is made,

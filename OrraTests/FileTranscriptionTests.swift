@@ -308,6 +308,22 @@ struct FileTranscriptionTests {
         #expect(transcription.phase == .finished)
         #expect(transcription.segments.map(\.text) == ["Segment 1.", "Segment 3."])
         #expect(transcription.failedSegments == 1)
+        #expect(TranscribeFileView.endLine(segments: transcription.segments.count, failedSegments: transcription.failedSegments) == "Part of this file could not be transcribed.")
+    }
+
+    /// A file whose every segment the speech model fails on ends with no text, and the
+    /// window says that it could not be transcribed, not that it holds no speech.
+    @Test func aFileWhoseEverySegmentFailsSaysSo() async throws {
+        let source = FakeFileSource(starts: [0, 4], duration: 8)
+        let speech = FakeFileSpeech()
+        speech.errors = [1: URLError(.unknown), 2: URLError(.unknown)]
+        let transcription = FileTranscription(engines: engines(source, speech))
+        transcription.start(url)
+        try await finished(transcription)
+        #expect(transcription.phase == .finished)
+        #expect(transcription.segments.isEmpty)
+        #expect(transcription.failedSegments == 2)
+        #expect(TranscribeFileView.endLine(segments: 0, failedSegments: 2) == "Orra could not transcribe this file.")
     }
 
     @Test func aSpeechModelThatGoesAwayEndsTheFile() async throws {

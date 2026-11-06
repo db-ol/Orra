@@ -11509,6 +11509,28 @@
         }
       }
     },
+    "Orra could not transcribe this file." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra no pudo transcribir este archivo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraはこのファイルを文字起こしできませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无法转写这个文件。"
+          }
+        }
+      }
+    },
     "Orra does not paste into password fields. Use Copy Last Dictation." : {
       "localizations" : {
         "es-419" : {

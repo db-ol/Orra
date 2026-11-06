@@ -421,16 +421,24 @@ struct TranscribeFileView: View {
             }
             return String(localized: "Transcribing…")
         case .finished:
-            if transcription.segments.isEmpty {
-                return String(localized: "No speech was found in this file.")
-            }
-            return transcription.failedSegments > 0 ? String(localized: "Part of this file could not be transcribed.") : String(localized: "Done")
+            return Self.endLine(segments: transcription.segments.count, failedSegments: transcription.failedSegments)
         case .stopped:
             return String(localized: "Stopped. The text so far stays.")
         case .failed(.speechModel):
             return modelLine ?? String(localized: "The speech model is not loaded. Try again once it is.")
         case .failed(.file(let problem)):
             return Self.message(for: problem)
+        }
+    }
+
+    /// What the window says once every segment is done: whether any text came, and
+    /// whether the speech model failed on part of the file or on all of it.
+    static func endLine(segments: Int, failedSegments: Int) -> String {
+        switch (segments, failedSegments) {
+        case (0, 0): String(localized: "No speech was found in this file.")
+        case (0, _): String(localized: "Orra could not transcribe this file.")
+        case (_, 0): String(localized: "Done")
+        default: String(localized: "Part of this file could not be transcribed.")
         }
     }
 
