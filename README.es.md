@@ -118,8 +118,7 @@ Proyectos lee el correo a través de la app Mail de tu Mac y los archivos de las
 
 - **Reporta un problema.** Selecciona Reportar un problema… en el menú de Orra o [abre un issue en GitHub](https://github.com/db-ol/Orra/issues/new/choose). Por favor, no incluyas nada privado que hayas dictado. Para un problema en Proyectos, tampoco incluyas el texto de correos, nombres, direcciones de correo ni capturas de pantalla de correos.
 - **Preguntas e ideas.** Pregunta en [Discussions](https://github.com/db-ol/Orra/discussions).
-- **WeChat.** Escanea el código para unirte al grupo de Orra en WeChat.<br>
-  <img src="docs/images/wechat-group.png" alt="Código QR del grupo de Orra en WeChat" width="160">
+- **Discord.** Únete a la [comunidad de Orra en Discord](https://discord.gg/qSPTgTr8pD).
 - **Apoya el proyecto.** Si Orra te resulta útil, [dale una estrella en GitHub](https://github.com/db-ol/Orra).
 
 ## Para desarrolladores
