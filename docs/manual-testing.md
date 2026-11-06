@@ -3316,7 +3316,8 @@ the names offered for saving. FileTranscriptionEndToEndTests transcribes spoken 
 - [ ] Stop keeps the sentences so far. Copy pastes them without times into TextEdit.
 - [ ] Save as Text… and Save as Subtitles… start with the file's name and .txt or .srt. Open
   the .srt with the movie in a video player: each subtitle shows at its sentence, with at
-  most two lines.
+  most two lines of about the same length, no word broken between two lines, and none
+  shows for less than a second.
 - [ ] Drop another file or close the window while the text is not saved: Orra asks first.
   Cancel keeps the text, Discard starts the new file or closes the window. After a save it
   does not ask.

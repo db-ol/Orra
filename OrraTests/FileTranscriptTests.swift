@@ -65,26 +65,32 @@ struct FileTranscriptTests {
         #expect(FileTranscript.contents(of: [], as: .subtitles) == "")
     }
 
-    @Test func latinLinesBreakAtSpacesWithinFortyTwoCharacters() {
+    /// Latin lines break at spaces, each within 42 characters, and share the text of a
+    /// segment evenly, rather than filling the first lines and leaving a word or two for
+    /// the last one.
+    @Test func latinLinesBreakAtSpacesAndShareTheText() {
         let text = "We will look at the budget for next quarter and then talk about the hiring plan for the design team."
         let lines = FileTranscript.lines(of: text)
         #expect(lines == [
-            "We will look at the budget for next",
-            "quarter and then talk about the hiring",
+            "We will look at the budget",
+            "for next quarter and then",
+            "talk about the hiring",
             "plan for the design team.",
         ])
         #expect(lines.allSatisfy { $0.count <= 42 })
         #expect(lines.joined(separator: " ") == text)
+        // The two lines of a subtitle are about as wide as each other.
+        #expect(FileTranscript.lines(of: "We spent a little less than planned on travel.") == ["We spent a little less", "than planned on travel."])
+        #expect(FileTranscript.lines(of: "Gastamos un poco menos de lo previsto en viajes.") == ["Gastamos un poco menos", "de lo previsto en viajes."])
+        // A line breaks before a word such as “the”, not after it.
+        #expect(FileTranscript.lines(of: "Yes, and we can also ship the new build on Friday morning.") == ["Yes, and we can also ship", "the new build on Friday morning."])
     }
 
-    @Test func aLatinLineEndsAtACommaInItsSecondHalf() {
+    @Test func aLatinLineEndsAtACommaNearItsMiddle() {
         let lines = FileTranscript.lines(of: "If the numbers hold up this week, we can ship the new build on Friday.")
         #expect(lines == ["If the numbers hold up this week,", "we can ship the new build on Friday."])
-        // A comma in the first half of the line does not end it.
-        #expect(FileTranscript.lines(of: "Yes, and we can also ship the new build on Friday morning.") == [
-            "Yes, and we can also ship the new build on",
-            "Friday morning.",
-        ])
+        // A comma near the start does not leave a line of one word.
+        #expect(FileTranscript.lines(of: "Yes, we can ship the new build on Friday then.") == ["Yes, we can ship the new", "build on Friday then."])
     }
 
     @Test func aWordWiderThanALineKeepsALineOfItsOwn() {
@@ -95,13 +101,49 @@ struct FileTranscriptTests {
     @Test func chineseLinesHoldAboutEighteenCharactersAndNeverStartWithPunctuation() {
         let text = "我们下周一上午开会讨论预算，然后再确定设计团队的人选和时间安排，最后定下招聘计划。"
         let lines = FileTranscript.lines(of: text)
-        // Each comma closes a line, since it falls in the line's second half. The second
-        // line holds 18 characters with its comma.
+        // Each line ends at a comma. The second holds 18 characters with its comma.
         #expect(lines == ["我们下周一上午开会讨论预算，", "然后再确定设计团队的人选和时间安排，", "最后定下招聘计划。"])
         #expect(lines.allSatisfy { $0.count <= 18 })
-        // Without a comma a line holds 18 characters, and the 19th starts the next.
-        let plain = String(repeating: "字", count: 40)
-        #expect(FileTranscript.lines(of: plain).map(\.count) == [18, 18, 4])
+        // Without punctuation the lines share the text evenly.
+        let plain = FileTranscript.lines(of: String(repeating: "字", count: 40)).map(\.count)
+        #expect(plain.reduce(0, +) == 40)
+        #expect(plain.allSatisfy { $0 <= 18 })
+        #expect((plain.max() ?? 0) - (plain.min() ?? 0) <= 2)
+    }
+
+    /// A Chinese segment of 37 characters, as the speech model wrote one, makes two
+    /// subtitles of about 18, not one of 36 and one of a single character, and each shows
+    /// for longer than a second.
+    @Test func aChineseSegmentLeavesNoCharacterAlone() throws {
+        let text = "杜瓦尔已婚，有两个已经成年的孩子，他并没有给故事的讲述者米勒留下太大印象。"
+        let subtitles = FileTranscript.subtitles(of: segment(1, 537.22, 544.82, text))
+        try #require(subtitles.count == 2)
+        #expect(subtitles.flatMap(\.lines).joined() == text)
+        #expect(subtitles.allSatisfy { $0.lines.joined().count >= 12 })
+        #expect(subtitles.allSatisfy { $0.end - $0.start > 1 })
+        #expect(subtitles.flatMap(\.lines).contains { $0.contains("印象") })
+    }
+
+    /// Chinese and Japanese lines break between words, as CFStringTokenizer finds them,
+    /// never inside one, and a number stays with the character after it. Japanese keeps
+    /// the particles and endings in hiragana with the word before them.
+    @Test func chineseAndJapaneseLinesKeepTheirWordsWhole() {
+        let cases = [
+            ("桥下垂直净空15米。该项目于2011年8月完工，但直到2017年3月才开始通车。", ["完工", "15米", "2011年"]),
+            ("科学家们可以得出结论：暗物质对其他暗物质的影响方式与普通物质相同。", ["物质"]),
+            ("它的长下颚上布满了七十多颗剃刀般锋利的牙齿，上颚上还有一排。这意味着任何与它相遇的东西都无路可逃。", ["剃刀", "锋利", "牙齿", "相遇", "无路可逃"]),
+        ]
+        for (text, words) in cases {
+            let lines = FileTranscript.lines(of: text)
+            #expect(lines.joined() == text)
+            #expect(lines.allSatisfy { FileTranscript.width(of: $0) <= FileTranscript.lineWidth })
+            for word in words {
+                let parts = text.components(separatedBy: word).count - 1
+                #expect(lines.reduce(0) { $0 + $1.components(separatedBy: word).count - 1 } == parts, "\(word) broken in \(lines)")
+            }
+        }
+        let japanese = FileTranscript.lines(of: "ちょっとコーヒーを飲みに行きませんか、それとも会議室で打ち合わせを続けましょうか。")
+        #expect(japanese.dropFirst().allSatisfy { !"をにでかんませ".contains($0.first!) })
     }
 
     @Test func aClosingMarkStaysWithTheCharacterBeforeIt() {
@@ -126,7 +168,7 @@ struct FileTranscriptTests {
         let text = "我们用 Orra 把会议录音转成文字，然后发给 design team 看一下。"
         #expect(FileTranscript.lines(of: text) == ["我们用 Orra 把会议录音转成文字，", "然后发给 design team 看一下。"])
         // A Latin word next to Chinese without a space may start a line too.
-        #expect(FileTranscript.lines(of: "这是一个关于预算和招聘计划的会议我用Orra记录") == ["这是一个关于预算和招聘计划的会议我用", "Orra记录"])
+        #expect(FileTranscript.lines(of: "我们今天讨论预算和招聘计划。Orra会把会议记录发给大家。") == ["我们今天讨论预算和招聘计划。", "Orra会把会议记录发给大家。"])
     }
 
     /// A segment that needs more than two lines becomes several subtitles in a row, each
@@ -145,17 +187,53 @@ struct FileTranscriptTests {
         #expect(subtitles.flatMap(\.lines).joined(separator: " ") == text)
     }
 
-    @Test func subtitlesOfSeveralSegmentsAreNumberedInOrder() {
+    @Test func subtitlesOfSeveralSegmentsAreNumberedInOrder() throws {
         let long = String(repeating: "这是一个很长的句子，", count: 6)
         let srt = FileTranscript.contents(of: [segment(1, 0, 15, long), segment(2, 16, 18, "好的。")], as: .subtitles)
         let blocks = srt.components(separatedBy: "\n\n").filter { !$0.isEmpty }
         let numbers = blocks.map { $0.split(separator: "\n").first.map(String.init) }
         #expect(numbers == (1...blocks.count).map(String.init))
-        // Each line of the long segment ends at one of its commas, so its six lines make
-        // three subtitles, and the short segment a fourth.
-        #expect(blocks.count == 4)
+        // The 60 characters of the long segment fit in two subtitles of two lines, which
+        // split it at its middle comma, and the short segment makes a third.
+        try #require(blocks.count == 3)
+        #expect(blocks[0].split(separator: "\n").dropFirst(2).joined() == String(repeating: "这是一个很长的句子，", count: 3))
         #expect(blocks.allSatisfy { $0.split(separator: "\n").count <= 4 })
         #expect(blocks.last?.hasSuffix("好的。\n") == true || blocks.last?.hasSuffix("好的。") == true)
+    }
+
+    /// No subtitle shows for less than a second: one that its share of a segment would
+    /// make shorter takes time from the others of the segment, and the subtitle of a short
+    /// segment stays up into the pause after it, never past the start of the next one.
+    @Test func noSubtitleShowsForLessThanASecond() throws {
+        let segments = [
+            segment(1, 40.98, 44.72, "Many people don't think about them as dinosaurs because they have feathers and can fly."),
+            segment(2, 46.0, 46.5, "Yes."),
+            segment(3, 50.0, 50.4, "Right."),
+            segment(4, 50.7, 53.0, "Then let's look at the release schedule."),
+        ]
+        let subtitles = FileTranscript.subtitleList(of: segments)
+        try #require(subtitles.count >= 5)
+        let yes = try #require(subtitles.first { $0.lines == ["Yes."] })
+        #expect(yes.start == 46.0 && abs(yes.end - 47.0) < 1e-9)
+        let right = try #require(subtitles.first { $0.lines == ["Right."] })
+        #expect(right.start == 50.0 && right.end == 50.7)
+        #expect(subtitles.allSatisfy { $0.end - $0.start >= 1 - 1e-9 || $0.lines == ["Right."] })
+        for (subtitle, next) in zip(subtitles, subtitles.dropFirst()) {
+            #expect(subtitle.end <= next.start + 1e-9)
+        }
+    }
+
+    /// The time of a segment goes to its subtitles in proportion to their text, with at
+    /// least a second each when the segment has that much for all of them.
+    @Test func aShortSubtitleTakesTimeFromTheOthersOfItsSegment() {
+        let shares = FileTranscript.shares(of: 4, by: [10, 1, 10])
+        #expect(abs(shares[1] - 1) < 1e-9)
+        #expect(abs(shares[0] - 1.5) < 1e-9 && abs(shares[2] - 1.5) < 1e-9)
+        #expect(FileTranscript.shares(of: 6, by: [1, 2]) == [2, 4])
+        // A segment too short for a second each shares its time in proportion.
+        let short = FileTranscript.shares(of: 2, by: [10, 1, 10])
+        #expect(abs(short[1] - 2.0 / 21) < 1e-9)
+        #expect(abs(short.reduce(0, +) - 2) < 1e-9)
     }
 
     @Test func theSavePanelOffersTheFilesNameWithTheNewExtension() {
