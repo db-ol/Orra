@@ -573,7 +573,8 @@ final class MeetingCaptions {
     /// Keeps the watch of the screen lock, see ScreenLockSource.watch.
     @ObservationIgnored private var screenLockWatch: AnyObject?
     /// True once a read of the session said locked since captions took the screen as
-    /// locked, see `sessionShowsTheUnlock()`.
+    /// locked, or when that read took it as locked, see `sessionShowsTheUnlock()` and
+    /// `lockedBySession(_:)`.
     @ObservationIgnored private var sessionSaidLocked = false
     /// Looks at the session while captions are on and the screen is locked or they listen
     /// to the microphone, see `followTheScreenLock()`.
@@ -1182,11 +1183,14 @@ final class MeetingCaptions {
     /// `startMicrophone()`. Elsewhere only the watch's note locks, so captions of what the
     /// Mac plays take a lock from a read only at a wake. The note that comes late then
     /// changes nothing, and the unlock note or the look at the session ends the lock.
+    /// The read that found the lock said locked, so it counts for the look, as the one that
+    /// refuses an unlock note does, also when the session says unlocked again at once.
     /// `place` names the read in the log. Returns whether it locked.
     private func lockedBySession(_ place: String) -> Bool {
         guard !screenLocked, sessionSaysLocked() else { return false }
         Logger.captions.notice("Meeting captions found the screen locked \(place, privacy: .public)")
         screenLockChanged(true)
+        sessionSaidLocked = true
         return true
     }
 

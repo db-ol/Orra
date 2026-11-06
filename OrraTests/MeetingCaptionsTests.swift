@@ -314,10 +314,13 @@ struct MeetingCaptionsTests {
     /// Stands in for the screen lock. `lock()` and `unlock()` change what a read of the
     /// session says and then send the note, as macOS does. `note(_:)` sends a note alone, as
     /// on a Mac whose session does not tell a lock, or from another process, and setting
-    /// `locked` alone changes only the read, as when a note was lost.
+    /// `locked` alone changes only the read, as when a note was lost. `lockedReads` makes
+    /// that many reads say locked before `locked` counts again, as a session that says
+    /// locked for a moment.
     @MainActor
     private final class FakeScreenLock {
         var locked = false
+        var lockedReads = 0
         private(set) var watches = 0
         private var onChange: (@MainActor (Bool) -> Void)?
 
@@ -337,7 +340,11 @@ struct MeetingCaptionsTests {
 
         var source: ScreenLockSource {
             ScreenLockSource(isLocked: { [self] in
-                MainActor.assumeIsolated { locked }
+                MainActor.assumeIsolated {
+                    guard lockedReads > 0 else { return locked }
+                    lockedReads -= 1
+                    return true
+                }
             }, watch: { [self] onChange in
                 MainActor.assumeIsolated {
                     self.onChange = onChange
@@ -2322,6 +2329,43 @@ struct MeetingCaptionsTests {
         #expect(!captions.screenLocked)
         #expect(captions.keepsDisplayOn)
         captions.setOn(false)
+    }
+
+    /// The read that finds a lock said locked, so it counts for the reads that end the lock.
+    /// A session that says locked for a moment while the user is at the screen pauses
+    /// microphone captions only until the next look at the session, or until captions are
+    /// turned on again, not until the user clicks: a lock found at the look while
+    /// microphone captions are on, at a wake and before a start of the microphone.
+    @Test func aLockThatOneReadFoundEndsAtTheNextLook() async throws {
+        let microphone = FakeCaptionMicrophone()
+        let screen = FakeScreenLock()
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: microphone, screenLock: screen)
+        _ = try await listeningToTheMicrophone(captions)
+        screen.lockedReads = 1
+        try await eventually { microphone.stops == 1 }
+        try await eventually { captions.capture == .listening && microphone.starts == 2 }
+        #expect(!captions.screenLocked)
+        screen.lockedReads = 1
+        captions.macDidWake()
+        #expect(captions.screenLocked)
+        try await eventually { captions.capture == .listening && microphone.starts == 3 }
+        #expect(!captions.screenLocked)
+        captions.setOn(false)
+        // No look at the session meanwhile, so only the read before the start can lock.
+        let later = FakeCaptionMicrophone()
+        let other = FakeScreenLock()
+        let again = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), microphone: later, screenLock: other, screenLockCheckInterval: 60)
+        other.lockedReads = 1
+        again.setSource(.microphone)
+        again.setOn(true)
+        try await eventually { again.capture == .pausedWhileLocked }
+        #expect(again.screenLocked)
+        #expect(later.starts == 0)
+        again.setOn(false)
+        again.setOn(true)
+        try await eventually { again.capture == .listening && later.starts == 1 }
+        #expect(!again.screenLocked)
+        again.setOn(false)
     }
 
     /// Every start of the microphone reads the session first, right before the unit starts,
