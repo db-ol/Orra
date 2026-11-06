@@ -116,7 +116,32 @@ struct FileAudioSourceTests {
         #expect(FileAudioSource.problemBeforeOpening(folder) == .unreadable)
     }
 
-    /// Each call decodes only up to the next segment, so a stop leaves the rest unread.
+    /// Each call decodes only up to the next segment: a segment comes once the pause after
+    /// it is heard, not once the whole file is read, so the reader never runs ahead of the
+    /// speech model, a stop leaves the rest unread and a long file takes no more memory
+    /// than a short one.
+    @Test func eachCallDecodesOnlyUpToTheNextSegment() async throws {
+        let folder = try TestMedia.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("minute.caf")
+        // A minute of sound for 3 s in every 5 s.
+        let pattern = stride(from: 0.0, to: 60, by: 5).map { (start: $0 + 1, end: $0 + 4) }
+        try TestMedia.writeAudio(TestMedia.bursts(pattern, seconds: 60, rate: 16_000), rate: 16_000, to: url)
+        let source = FileAudioSource(url: url)
+        _ = try await source.open()
+        for _ in 0..<2 {
+            let segment = try #require(try await source.next())
+            let decoded = Double(await source.decodedSamples) / 16_000
+            // The pause after it is heard 0.6 s after its sound ends, and a buffer of the
+            // reader is far shorter than a second.
+            #expect(decoded < segment.end + 2, "decoded \(decoded) s for a segment that ends at \(segment.end) s")
+        }
+        await source.cancel()
+        #expect(try await source.next() == nil)
+        #expect(await source.decodedSamples < 16_000 * 15)
+    }
+
+    /// Once stopped, the reader gives no more segments.
     @Test func readingStopsWhenCancelled() async throws {
         let folder = try TestMedia.folder()
         defer { try? FileManager.default.removeItem(at: folder) }

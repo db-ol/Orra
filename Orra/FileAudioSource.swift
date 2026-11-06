@@ -68,6 +68,9 @@ actor FileAudioSource {
     /// Segments cut and not taken yet. One chunk of audio can end more than one.
     private var ready: [CaptionSegment] = []
     private var isAtEnd = false
+    /// The samples decoded so far. Internal for the tests that check that a file is read
+    /// one segment at a time.
+    private(set) var decodedSamples = 0
     /// Where the track's first sample plays in the file, in seconds, which segment times
     /// start from. A track that starts late in a video has its delay here.
     private var offset: Double?
@@ -183,7 +186,9 @@ actor FileAudioSource {
                 let time = CMSampleBufferGetPresentationTimeStamp(buffer)
                 offset = time.isNumeric ? max(time.seconds, 0) : 0
             }
-            for segment in segmenter.append(Self.samples(of: buffer)) {
+            let samples = Self.samples(of: buffer)
+            decodedSamples += samples.count
+            for segment in segmenter.append(samples) {
                 take(segment)
             }
         }
