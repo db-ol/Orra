@@ -21,7 +21,8 @@ under `sglang_omni_mlx/native/ci`. This folder took from it, at commit aac4b83:
 
 sglang-omni is licensed under the Apache License 2.0, a copy of which is in
 LICENSE-sglang-omni.txt. Those files keep that license. The headers of build_corpus.py and
-score.py say what was ported.
+score.py say what was ported. build_fleurs.py, fleurs.sha256 and fleurs-accepted.json are
+Orra's own, for the sets of other languages (see FLEURS sets).
 
 The audio and the references come from three public test sets. Each license was read from
 the source on 2026-10-12:
@@ -154,6 +155,77 @@ rows read the time of the pass that wrote the field when the run holds one, such
 decode_seconds_japanese for text_japanese or decode_seconds_chinese for text_chinese.
 `text`, `ruled_text`, `text_unhinted` and the `text_pass` fields have none of their own
 and read decode_seconds, the whole path with LanguageGuard's passes.
+
+## FLEURS sets
+
+build_fleurs.py builds the sets of read speech in other languages from the FLEURS test
+splits (huggingface.co/datasets/google/fleurs, CC BY 4.0) in the layout above, with the
+standard library only:
+
+    python3 -I Tools/speech-eval/build_fleurs.py build --count 200 --seed 20261004 ~/projects/orra-project/bench/fleurs-ko ko_kr
+    python3 -I Tools/speech-eval/build_fleurs.py rebuild ~/projects/orra-project/bench/fleurs-ja-es/manifest.jsonl ~/projects/orra-project/bench/fleurs-ja-es-check --downloads ~/projects/orra-project/bench/fleurs-ja-es/raw
+
+A set holds COUNT distinct sentences per language. The candidates are the first recording
+of each sentence id in the split's test.tsv, sorted by file name.
+`random.Random(SEED).sample` puts them in an order, and each language takes the first
+COUNT that its reference rule keeps, with a generator of its own. The reference is the raw
+transcription with the quoting of the TSV undone. A clip is the recording as 16 kHz mono
+16 bit WAVE, each sample times 32767, rounded. The manifest lines have `source` (such as
+`fleurs-ko_kr-test`), `source_id` (the FLEURS file name) and `sentence_id` besides the
+fields above. The set's folder also gets a README.md with the attribution, the downloads
+and the counts.
+
+fleurs.sha256 pins the SHA-256 of test.tsv and audio/test.tar.gz of each language. The
+script takes a copy with that hash from a folder named with `--downloads`, which it only
+reads, or from raw/ in the set's folder, and downloads into raw/ only when neither has one.
+It extracts only the archive's regular files named test/<digits>.wav, so no link, absolute
+path, `..` or other folder is ever written.
+
+`rebuild` takes the clips, their ids and their order from a stored manifest, makes the rest
+again from the downloads and compares the new manifest and clips byte for byte with the
+stored ones. `build --compare MANIFEST` compares a set drawn anew the same way. Either one
+exits with 1 when anything differs, and neither writes into a folder that holds a set.
+
+The sets in ~/projects/orra-project/bench were all drawn with seed 20261004, the seed of
+the speech corpus. The ja, es and yue sets were built in October 2026 by scripts that are
+lost. On 2026-11-06 `build` and `rebuild` both gave every stored manifest and clip of
+fleurs-ja-es and fleurs-yue byte for byte. fleurs-ko was built that day, from the ko_kr
+download pinned in fleurs.sha256, and rebuilds the same way.
+
+| Folder | FLEURS configs | Clips | With digits | Audio |
+|---|---|---|---|---|
+| fleurs-ja-es | ja_jp, es_419 | 200 + 200 | 62 + 36 | 2,724 s + 2,497 s |
+| fleurs-yue | yue_hant_hk | 200 | 43 | 2,394 s |
+| fleurs-ko | ko_kr | 200 | 45 | 2,551 s |
+
+### Korean references
+
+50 of the 270 sentences of ko_kr test hold Latin letters. 33 hold them in parentheses,
+mostly glosses such as 비슈케크(Bishkek), which a reader does not read. 20 hold them
+outside, such as km, UN and Martelly, which a reader may say in Hangul. 3 hold both. The
+rule:
+
+- A part in parentheses that holds Latin letters and no Hangul and no digits is a gloss.
+  It leaves the reference with the space before it.
+- A sentence with a part in parentheses that holds Latin letters with Hangul or digits,
+  such as (50 mi), stays out, since the reader may read part of it.
+- Latin letters outside parentheses stay only where fleurs-accepted.json gives accepted
+  spellings for every one of them. Otherwise the sentence stays out.
+
+fleurs-accepted.json holds lists per config and sentence id, each with the form written in
+the reference first, then the other spellings that count as right, such as
+`["km", "킬로미터", "킬로"]`. A clip's manifest line carries its lists as `accepted`, for a
+lenient rate beside the strict one. The Hangul spellings wait for a native reader's check,
+and a lenient rate on them says so until then.
+
+The rule leaves out 10 sentences: 5 for parts in parentheses with Hangul or digits, and 5
+for Latin words without accepted spellings (Sie, ASUS Eee PC and IT Month, Erik the Red,
+TogiNet Radio, and the letters of 802.11a, b and g). Of the 200 clips, 19 references lost
+their glosses and 12 clips carry accepted spellings. 45 references hold digits, so a rate
+without digits reads 155 clips.
+
+score.py reads neither `accepted` nor Hangul yet. Like any language but en, ja and es, a ko
+clip goes the Chinese way, which keeps only Han characters and ASCII.
 
 ## Baseline
 
