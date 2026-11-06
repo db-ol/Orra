@@ -76,7 +76,7 @@
 <td width="50%"><img src="docs/images/readme/zh/meeting.gif" alt="视频会议里，Alex 说英文，“实时字幕”窗口逐句显示原文和中文译文。窗口顶部选的是“双语”和“中文”，旁边是拷贝按钮。然后用户按一下翻译键，说“可以，我周三之前把测试做完”，再按一下，通话里从 Orra Microphone 听到“Sure, I’ll finish testing by Wednesday.”" width="100%"></td>
 </tr>
 <tr>
-<td colspan="2" valign="middle">
+<td width="50%" valign="middle">
 
 ### 转写文件
 
@@ -85,6 +85,7 @@
 0.7.0 新增。
 
 </td>
+<td width="50%"><img src="docs/images/readme/zh/transcribe.gif" alt="一个名为“团队周会.m4a”的文件被拖到“转写文件”窗口里。进度条前进时，句子带着开始时间逐句出现，窗口提示剩余不到 1 分钟。然后点按“保存为字幕…”，保存的“团队周会.srt”显示前两条带编号和时间的字幕。" width="100%"></td>
 </tr>
 <tr>
 <td colspan="2" valign="middle">

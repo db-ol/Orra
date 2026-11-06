@@ -4,13 +4,14 @@ This tool draws the animations in the Features table of README.md, README.zh-CN.
 README.ja.md and README.es.md. It is not part of the app and the Xcode project does not see it.
 
 Each animation is a small SwiftUI scene, styled like Orra's own interface (the dark capsule
-with white bars, the translation badge, the notice after a learned word, the caption window).
+with white bars, the translation badge, the notice after a learned word, the caption window,
+the Transcribe File window).
 The tool renders the scene frame by frame with ImageRenderer and writes a GIF with ImageIO.
 They are drawings, not screen recordings, so they need no permission and no running Orra.
 
 - Kit.swift: the shared pieces, drawn with plain shapes, since ImageRenderer cannot draw
   AppKit controls or blurred backgrounds.
-- Scenes.swift: the six scenes and their timing. Speech appears at about 8.5 Chinese
+- Scenes.swift: the seven scenes and their timing. Speech appears at about 8.5 Chinese
   characters or 3 English words a second, as on the website. Japanese goes at the rate of
   Chinese and Spanish at the rate of English.
 - main.swift: renders the frames, merges identical frames in a row and writes the GIFs.
@@ -41,8 +42,8 @@ To check one frame of one scene as a PNG in the current folder:
 
     /tmp/readme-media . meeting zh 7.5
 
-The scene names are dictation, vocabulary, cleanup, translation, meeting and updates, and the
-languages are en, zh, ja and es.
+The scene names are dictation, vocabulary, cleanup, translation, meeting, transcribe and
+updates, and the languages are en, zh, ja and es.
 
 ## Rules for the content
 
@@ -76,4 +77,6 @@ languages are en, zh, ja and es.
   English and Chinese GIFs these details the next time they are made.
 - Use the names the app uses (Live Captions, Speak Translations to Others) and the website's
   example sentences where a scene has one.
+- The Transcribe File window shows a made up recording of 21 s in the GIF's language, with
+  the subtitles of its first two sentences as FileTranscript writes them.
 - Make up no numbers, and show no real person, company or other project.

@@ -11,7 +11,7 @@ struct Scene {
 
 @MainActor
 func allScenes(icon: NSImage?) -> [Scene] {
-    [dictationScene, vocabularyScene, cleanupScene, translationScene, meetingScene, updatesScene(icon: icon)]
+    [dictationScene, vocabularyScene, cleanupScene, translationScene, meetingScene, transcribeScene, updatesScene(icon: icon)]
 }
 
 // MARK: - A dictation from key down to paste
@@ -773,6 +773,227 @@ struct MenuLabel: View {
         }
         .foregroundStyle(Color.white.opacity(0.85))
         .fixedSize()
+    }
+}
+
+// MARK: - Transcribe File
+
+/// The made up recording of the Transcribe File GIF: its name, and its sentences in the
+/// GIF's language with their start times, 21 s in all.
+let transcribeFile = L("Team meeting.m4a", "团队周会.m4a", "定例会議.m4a", "Reunión del equipo.m4a")
+let transcribeLength = "0:21"
+let transcribeSentences: [(start: String, text: L)] = [
+    ("0:00", L("Thanks everyone for joining. Let's start with the budget.", "谢谢大家参加，我们先看一下预算。", "皆さん、ありがとうございます。まず予算から始めましょう。", "Gracias a todos por venir. Empecemos con el presupuesto.")),
+    ("0:04", L("We spent a little less than planned on travel.", "差旅费比计划少花了一点。", "出張費は予定より少なく済みました。", "Gastamos un poco menos de lo previsto en viajes.")),
+    ("0:09", L("So there is room for the conference in May.", "所以五月的会议还有余地。", "5月のカンファレンスには余裕があります。", "Así que hay margen para la conferencia de mayo.")),
+    ("0:13", L("Can we move the design review to Thursday?", "设计评审能不能改到周四？", "デザインレビューを木曜日に移せますか？", "¿Podemos pasar la revisión de diseño al jueves?")),
+    ("0:18", L("Yes, Thursday works for me.", "可以，周四我没问题。", "はい、木曜日なら大丈夫です。", "Sí, el jueves me funciona.")),
+]
+/// The first two subtitles of the saved file, as FileTranscript writes them with the times
+/// 0.4 to 4.3 s and 4.8 to 8.4 s.
+let transcribeSubtitles = L(
+    "1\n00:00:00,400 --> 00:00:04,300\nThanks everyone for joining.\nLet's start with the budget.\n\n2\n00:00:04,800 --> 00:00:08,400\nWe spent a little less than planned on\ntravel.",
+    "1\n00:00:00,400 --> 00:00:04,300\n谢谢大家参加，我们先看一下预算。\n\n2\n00:00:04,800 --> 00:00:08,400\n差旅费比计划少花了一点。",
+    "1\n00:00:00,400 --> 00:00:04,300\n皆さん、ありがとうございます。\nまず予算から始めましょう。\n\n2\n00:00:04,800 --> 00:00:08,400\n出張費は予定より少なく済みました。",
+    "1\n00:00:00,400 --> 00:00:04,300\nGracias a todos por venir.\nEmpecemos con el presupuesto.\n\n2\n00:00:04,800 --> 00:00:08,400\nGastamos un poco menos de lo previsto en\nviajes."
+)
+
+/// When the file is dropped, when each sentence shows, when the file is done, and when the
+/// pointer presses Save as Subtitles….
+let transcribeDrop = 1.5
+let transcribeSentenceTimes = [2.3, 3.0, 3.7, 4.4, 5.1]
+let transcribeDone = 5.5
+let transcribePress = (start: 6.9, end: 7.15)
+
+/// A file is dropped on the Transcribe File window, its sentences come in with their times
+/// while the progress bar fills, and Save as Subtitles… writes the .srt file, whose first
+/// subtitles show at the end. The strings are Orra's own in each language.
+@MainActor
+let transcribeScene = Scene(
+    name: "transcribe",
+    duration: { _ in 10.0 },
+    frame: { t, lang in
+        // The file travels from the bottom left onto the window, the pointer with it.
+        let travel = min(1, max(0, (t - 0.5) / 0.7))
+        let eased = 1 - pow(1 - travel, 3)
+        let file = CGPoint(x: 80 + (300 - 80) * eased, y: 330 + (200 - 330) * eased)
+        let dropped = t >= transcribeDrop
+        // Then it moves to Save as Subtitles….
+        let toSave = min(1, max(0, (t - 6.3) / 0.5))
+        let easedSave = 1 - pow(1 - toSave, 3)
+        let save = CGPoint(x: 492, y: 328)
+        let pointer = dropped
+            ? CGPoint(x: file.x + (save.x - file.x) * easedSave, y: file.y + (save.y - file.y) * easedSave)
+            : CGPoint(x: file.x + 14, y: file.y + 18)
+        let shown = transcribeSentenceTimes.filter { t >= $0 }.count
+        return AnyView(
+            ZStack(alignment: .topLeading) {
+                Palette.wallpaper
+                AppWindow(title: L("Transcribe File", "转写文件", "ファイルを文字起こし", "Transcribir archivo")(lang), width: 560, height: 350) {
+                    if dropped {
+                        transcribing(lang: lang, t: t, shown: shown, pressed: t >= transcribePress.start && t < transcribePress.end)
+                    } else {
+                        dropArea(lang: lang, targeted: travel > 0.6)
+                    }
+                }
+                .position(x: 300, y: 188)
+                if !dropped && t >= 0.4 {
+                    fileIcon(lang: lang)
+                        .position(file)
+                }
+                if t >= 7.4 {
+                    subtitlesFile(lang: lang)
+                        .position(x: 410, y: 238)
+                }
+                if t >= 0.4 && t < 7.4 {
+                    Pointer().offset(x: pointer.x, y: pointer.y)
+                }
+            }
+        )
+    }
+)
+
+/// The window before a file: the dashed area, the symbol, the two lines and Choose File….
+@MainActor
+private func dropArea(lang: Lang, targeted: Bool) -> some View {
+    VStack(spacing: 10) {
+        Image(systemName: "waveform")
+            .font(.system(size: 34, weight: .light))
+            .foregroundStyle(Palette.muted)
+        T(L("Drop an audio or video file here", "把音频或视频文件拖到这里", "オーディオファイルかビデオファイルをここにドラッグ", "Arrastra aquí un archivo de audio o video")(lang))
+            .font(.system(size: 15))
+            .foregroundStyle(Palette.ink)
+        T(L("Orra transcribes it on this Mac, with your dictation language and vocabulary.", "Orra 会在这台 Mac 上转写它，用的是你的听写语言和个人词库。", "Orraは、音声入力の言語と用語集を使ってこのMac上で文字起こしします。", "Orra lo transcribe en esta Mac con tu idioma de dictado y tu vocabulario.")(lang))
+            .font(.system(size: 11))
+            .foregroundStyle(Palette.muted)
+            .multilineTextAlignment(.center)
+            .frame(width: 420)
+        windowButton(L("Choose File…", "选取文件…", "ファイルを選択…", "Seleccionar archivo…")(lang), enabled: true)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(
+        RoundedRectangle(cornerRadius: 10)
+            .strokeBorder(targeted ? Palette.accent : Palette.muted.opacity(0.4), style: StrokeStyle(lineWidth: targeted ? 2.5 : 1.2, dash: targeted ? [] : [6, 5]))
+            .padding(14)
+    )
+}
+
+/// The window while and after the file is transcribed.
+@MainActor
+private func transcribing(lang: Lang, t: Double, shown: Int, pressed: Bool) -> some View {
+    let done = t >= transcribeDone
+    // In tenths, as a bar of the app moves in steps, which keeps the GIF small.
+    let progress = (min(1, max(0, (t - transcribeDrop) / (transcribeDone - transcribeDrop))) * 10).rounded(.down) / 10
+    let status: String
+    if done {
+        status = L("Done", "完成", "完了", "Listo")(lang)
+    } else if shown >= 3 {
+        status = L("Less than a minute left", "剩余不到 1 分钟", "残り1分未満", "Queda menos de un minuto")(lang)
+    } else {
+        status = L("Transcribing…", "正在转写…", "文字起こし中…", "Transcribiendo…")(lang)
+    }
+    return VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 16))
+                    .foregroundStyle(Palette.muted)
+                VStack(alignment: .leading, spacing: 1) {
+                    T(transcribeFile(lang)).font(.system(size: 12, weight: .semibold))
+                    T(transcribeLength).font(.system(size: 10)).foregroundStyle(Palette.muted)
+                }
+                Spacer()
+                if done {
+                    windowButton(L("Choose File…", "选取文件…", "ファイルを選択…", "Seleccionar archivo…")(lang), enabled: true)
+                } else {
+                    windowButton(L("Stop", "停止", "停止", "Detener")(lang), enabled: true)
+                }
+            }
+            if !done {
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Palette.line)
+                    Capsule().fill(Palette.accent).frame(width: max(6, 516 * progress))
+                }
+                .frame(width: 516, height: 5)
+            }
+            T(status).font(.system(size: 11)).foregroundStyle(Palette.muted)
+        }
+        .foregroundStyle(Palette.ink)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        Rectangle().fill(Palette.line).frame(height: 1)
+        VStack(alignment: .leading, spacing: 7) {
+            ForEach(0..<shown, id: \.self) { index in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    T(transcribeSentences[index].start)
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundStyle(Palette.muted)
+                        .frame(width: 30, alignment: .trailing)
+                    T(transcribeSentences[index].text(lang))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Palette.ink)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        Rectangle().fill(Palette.line).frame(height: 1)
+        HStack(spacing: 6) {
+            Spacer()
+            windowButton(L("Copy", "拷贝", "コピー", "Copiar")(lang), enabled: done)
+            windowButton(L("Save as Text…", "保存为文本…", "テキストとして保存…", "Guardar como texto…")(lang), enabled: done)
+            windowButton(L("Save as Subtitles…", "保存为字幕…", "字幕として保存…", "Guardar como subtítulos…")(lang), enabled: done, pressed: pressed)
+        }
+        .padding(10)
+    }
+}
+
+/// A push button of the window, dimmed while it cannot be clicked.
+@MainActor
+private func windowButton(_ title: String, enabled: Bool, pressed: Bool = false) -> some View {
+    T(title)
+        .font(.system(size: 11))
+        .foregroundStyle(Palette.ink.opacity(enabled ? 1 : 0.35))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 3)
+        .background(RoundedRectangle(cornerRadius: 5).fill(pressed ? Color(white: 0.82) : Color(white: 0.93)))
+        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.black.opacity(0.08), lineWidth: 1))
+}
+
+/// The audio file as Finder shows it while it is dragged.
+@MainActor
+private func fileIcon(lang: Lang) -> some View {
+    VStack(spacing: 4) {
+        ZStack {
+            RoundedRectangle(cornerRadius: 5).fill(.white)
+            RoundedRectangle(cornerRadius: 5).strokeBorder(Color.black.opacity(0.15), lineWidth: 1)
+            VStack(spacing: 3) {
+                Image(systemName: "waveform").font(.system(size: 16)).foregroundStyle(Palette.accent)
+                T("M4A").font(.system(size: 8, weight: .bold)).foregroundStyle(Palette.muted)
+            }
+        }
+        .frame(width: 40, height: 50)
+        T(transcribeFile(lang))
+            .font(.system(size: 10))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(RoundedRectangle(cornerRadius: 4).fill(Palette.accent))
+    }
+    .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+    .opacity(0.92)
+}
+
+/// The saved .srt file, open in a plain text window.
+@MainActor
+private func subtitlesFile(lang: Lang) -> some View {
+    AppWindow(title: transcribeFile(lang).replacingOccurrences(of: ".m4a", with: ".srt"), width: 330, height: 206) {
+        T(transcribeSubtitles(lang))
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(Palette.ink)
+            .lineSpacing(1)
+            .padding(10)
     }
 }
 

@@ -76,7 +76,7 @@
 <td width="50%"><img src="docs/images/readme/ja/meeting.gif" alt="ビデオ通話でAlexが英語で話し、ライブキャプションのウインドウに各文とその日本語訳が表示されます。ウインドウの上部では“両方”と“日本語”が選ばれていて、その横にコピーボタンがあります。続いてユーザが翻訳キーを押して“いいですよ、水曜日までにテストを終わらせます”と話し、もう一度キーを押すと、通話にはOrra Microphoneから“Sure, I’ll finish testing by Wednesday.”と聞こえます。" width="100%"></td>
 </tr>
 <tr>
-<td colspan="2" valign="middle">
+<td width="50%" valign="middle">
 
 ### ファイルの文字起こし
 
@@ -85,6 +85,7 @@ Orraのメニューで“ファイルを文字起こし…”を選び、ボイ�
 0.7.0の新機能です。
 
 </td>
+<td width="50%"><img src="docs/images/readme/ja/transcribe.gif" alt="“定例会議.m4a”というファイルを“ファイルを文字起こし”ウインドウにドラッグします。進行状況バーが進むにつれて、各文が開始時間とともに1つずつ表示され、残り1分未満と表示されます。続いて“字幕として保存…”をクリックすると、保存した“定例会議.srt”に、番号と時間の付いた最初の2つの字幕が表示されます。" width="100%"></td>
 </tr>
 <tr>
 <td colspan="2" valign="middle">
