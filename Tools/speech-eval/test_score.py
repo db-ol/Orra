@@ -189,6 +189,34 @@ class PairGroupTests(unittest.TestCase):
             self.assertNotIn(f"| {name} ", table)
 
 
+class WithoutDigitsTests(unittest.TestCase):
+    MANIFEST = {
+        "r1": {"id": "r1", "stratum": "ko", "lang": "ko", "source": "fleurs-ko_kr-test", "duration": 5.0, "reference": "오늘은 날씨가 좋아요."},
+        "r2": {"id": "r2", "stratum": "ko", "lang": "ko", "source": "fleurs-ko_kr-test", "duration": 5.0, "reference": "회의는 3시에 시작해요."},
+        "r3": {"id": "r3", "stratum": "ko", "lang": "ko", "source": "fleurs-ko_kr-test", "duration": 5.0, "reference": "회의는 ３시에 시작해요."},
+        "v1": {"id": "v1", "stratum": "ko", "lang": "ko", "source": "volunteers", "duration": 5.0, "reference": "점심 먹었어요?"},
+        "m1": {"id": "m1", "stratum": "mixed", "lang": "mixed", "source": "ascend-test", "duration": 5.0, "reference": "这个 bug 明天 fix"},
+    }
+
+    def test_only_read_speech_without_digits_counts(self) -> None:
+        # r2 and r3 hold a digit, a full width one in r3, v1 is no read speech, and mer_mixed
+        # has none, so only r1 counts.
+        texts = {"r1": "오늘은 날씨가 좋아요", "r2": "회의는 세 시에 시작해요", "r3": "회의는 세 시에 시작해요", "v1": "점심 먹었어", "m1": "这个bug明天fix"}
+        self.assertEqual(score.without_digits(self.MANIFEST, texts), {"cer_ko": (0.0, 1)})
+        self.assertEqual(score.metrics(self.MANIFEST, texts)["cer_ko"], round(3 / 35, 5))
+        table = score.table(self.MANIFEST, [("run", {clip_id: {"text": text} for clip_id, text in texts.items()})])
+        self.assertIn("| cer_ko | 8.57% |", table)
+        self.assertIn("| cer_ko, read speech without digits (1) | 0.00% |", table)
+        self.assertNotIn("mer_mixed, read speech", table)
+
+    def test_the_speech_corpus_has_read_speech_without_digits_in_two_groups(self) -> None:
+        # LibriSpeech holds no digits. FLEURS cmn holds them in 44 of its 143 clips, and ASCEND is
+        # spontaneous speech.
+        manifest = score.load_manifest()
+        texts = {clip_id: clip["reference"] for clip_id, clip in manifest.items()}
+        self.assertEqual(score.without_digits(manifest, texts), {"wer_en": (0.0, 147), "cer_zh": (0.0, 99)})
+
+
 class VoxtReproductionTests(unittest.TestCase):
     """Scoring Voxt's own hypotheses gives exactly the error rates its golden files hold."""
 

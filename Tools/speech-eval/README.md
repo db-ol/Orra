@@ -82,6 +82,15 @@ Orra's runs, decode time and real time factor (decode time over audio time). Out
 silence and noise counts in any script: one token per Han character, kana and Hangul
 syllable, and one per run of any other letters and digits.
 
+### Rates without digits
+
+Below each group with read speech, the table gives its rate on the clips whose reference
+holds no digit, such as `cer_zh, read speech without digits (99)`. Read speech is a clip
+whose source is FLEURS or LibriSpeech, so the ASCEND and synthetic clips stay out, and so
+does mer_mixed. Digits never match number words, so a transcript that writes a number the
+way the reader said it counts errors that say little about what was heard. On the speech
+corpus, 44 of the 143 FLEURS clips hold digits and no LibriSpeech clip does.
+
 ## Steps
 
 1. Build the corpus, about 1 GB of downloads and 140 MB of clips, in a virtual environment
@@ -166,8 +175,9 @@ and `ko_en`) in the same layout. The test does not run such a corpus yet. It kno
 Japanese and Spanish as other languages, and expects 392 clips from a manifest without
 them.
 
-The table leaves out any group or stratum that no run has clips in, so a run of Spanish
-clips shows only wer_es and es, and a run without clips in a row shows n/a. The timing
+The table leaves out any group or stratum that no run has clips in, so a run of FLEURS
+Spanish clips shows only wer_es, its rate without digits and es, and a run without clips
+in a row shows n/a. The timing
 rows read the time of the pass that wrote the field when the run holds one, such as
 decode_seconds_japanese for text_japanese or decode_seconds_chinese for text_chinese.
 `text`, `ruled_text`, `text_unhinted` and the `text_pass` fields have none of their own

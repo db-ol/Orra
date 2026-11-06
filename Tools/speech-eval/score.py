@@ -7,8 +7,8 @@
 # authors, licensed under the Apache License 2.0
 # (https://www.apache.org/licenses/LICENSE-2.0). The scores per stratum, the timing and
 # the comparison of two runs are Orra's, and so are the Japanese, Spanish and Korean groups
-# for other corpora with the same layout. Standard library only, so CI runs the tests on
-# Linux with any python3.
+# for other corpora with the same layout and the rates without digits. Standard library
+# only, so CI runs the tests on Linux with any python3.
 #
 # Usage:
 #
@@ -55,6 +55,8 @@ STRATA = ["en_short", "en_mid", "en_long", "snr10_en", "zh_short", "zh_numbers",
 EMPTY_STRATA = ["silence", "noise"]
 # Shown only when a run has clips in them, like LANGUAGE_GROUPS.
 LANGUAGE_STRATA = ["ja", "es", "ko"]
+# Read speech, by the source of a clip. The rates without digits count these clips only.
+READ_SOURCES = ("fleurs", "librispeech")
 
 # Han characters, the marks 々 and 〆, and kana, one token each in Japanese and Spanish. The
 # kana blocks also hold the middle dot, the double hyphen and the voicing marks, which stay
@@ -125,6 +127,13 @@ def clip_errors(clip: dict, text: str) -> tuple[int, int]:
     return edit_distance(reference, tokens(text, lang)), len(reference)
 
 
+def read_without_digits(clip: dict) -> bool:
+    """Whether a clip is read speech, from FLEURS or LibriSpeech, whose reference holds no
+    digit. Digits never match the words a reader may say for them, nor the words a model may
+    write, so the rate without digits leaves such clips out."""
+    return str(clip.get("source", "")).startswith(READ_SOURCES) and not re.search(r"\d", unicodedata.normalize("NFKC", clip["reference"]))
+
+
 def load_manifest(path: Path = HERE / "manifest.jsonl") -> dict[str, dict]:
     return {row["id"]: row for row in map(json.loads, path.read_text(encoding="utf-8").splitlines())}
 
@@ -164,6 +173,23 @@ def metrics(manifest: dict[str, dict], texts: dict[str, str]) -> dict[str, float
                 total += count
         if total or name not in LANGUAGE_GROUPS:
             result[name] = round(errors / total, 5) if total else 0.0
+    return result
+
+
+def without_digits(manifest: dict[str, dict], texts: dict[str, str]) -> dict[str, tuple[float, int]]:
+    """Each group's error rate, rounded as metrics() rounds, and clip count over its read
+    speech without digits (read_without_digits). A group without such clips, such as
+    mer_mixed, which is spontaneous speech, is left out."""
+    result = {}
+    for name, keep in GROUPS.items():
+        errors = total = clips = 0
+        for clip_id, text in texts.items():
+            clip = manifest[clip_id]
+            if keep(clip) and read_without_digits(clip):
+                found, count = clip_errors(clip, text)
+                errors, total, clips = errors + found, total + count, clips + 1
+        if clips:
+            result[name] = (round(errors / total, 5) if total else 0.0, clips)
     return result
 
 
@@ -215,12 +241,19 @@ def table(manifest: dict[str, dict], runs: list[tuple[str, dict[str, dict]]]) ->
             print(f"warning: {label} lacks {len(missing)} clips", file=sys.stderr)
     lines = ["| | " + " | ".join(label for label, _ in runs) + " |", "|---" * (len(runs) + 1) + "|"]
     # A group or stratum without clips in any run, such as cer_zh for a run of Spanish clips,
-    # is left out, and a run without clips in it shows n/a.
+    # is left out, and a run without clips in it shows n/a. Below each group, its rate on read
+    # speech without digits when it has such clips.
     all_metrics = [metrics(manifest, run) for run in texts]
+    all_read = [without_digits(manifest, run) for run in texts]
     for name, keep in GROUPS.items():
         present = [name in m and any(keep(manifest[clip_id]) for clip_id in run) for m, run in zip(all_metrics, texts)]
-        if any(present):
-            lines.append(f"| {name} | " + " | ".join(f"{m[name]:.2%}" if has else "n/a" for m, has in zip(all_metrics, present)) + " |")
+        if not any(present):
+            continue
+        lines.append(f"| {name} | " + " | ".join(f"{m[name]:.2%}" if has else "n/a" for m, has in zip(all_metrics, present)) + " |")
+        counts = [rates[name][1] if name in rates else 0 for rates in all_read]
+        if any(counts):
+            count = next(filter(None, counts))
+            lines.append(f"| {name}, read speech without digits ({count}) | " + " | ".join(f"{rates[name][0]:.2%}" if name in rates else "n/a" for rates in all_read) + " |")
     all_strata = [strata(manifest, run) for run in texts]
     for stratum in STRATA + LANGUAGE_STRATA + EMPTY_STRATA:
         counts = [s[stratum][1] if stratum in s else 0 for s in all_strata]
