@@ -51,8 +51,15 @@ nonisolated struct OpenedFile: Sendable {
 /// that is not on this Mac yet is refused before anything reads it, see
 /// FileAudioProblem.notOnThisMac.
 ///
-/// An actor, so decoding runs off the main actor.
+/// An actor, so decoding runs off the main actor, on a queue of its own: AVAssetReader
+/// decodes in calls that block until the next buffer is ready, which must not hold a thread
+/// of the shared pool of Swift concurrency that other work waits for.
 actor FileAudioSource {
+    private let queue = DispatchSerialQueue(label: "io.github.db-ol.Orra.file-audio", qos: .userInitiated)
+    nonisolated var unownedExecutor: UnownedSerialExecutor {
+        queue.asUnownedSerialExecutor()
+    }
+
     private let url: URL
     private var segmenter: CaptionSegmenter
     private var joiner = FileSegmentJoiner()
