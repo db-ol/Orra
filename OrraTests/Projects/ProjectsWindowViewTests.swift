@@ -2695,7 +2695,7 @@ struct ProjectsWindowViewTests {
         }
 
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ProjectsWindowViewTests-\(UUID().uuidString)", isDirectory: true)
-        let suite = "io.github.db-ol.OrraTests.projects-window-\(UUID().uuidString)"
+        let suite: TestDefaults
         let defaults: UserDefaults
         let projects: ProjectsSwitch
         let dictation: Dictation
@@ -2711,7 +2711,8 @@ struct ProjectsWindowViewTests {
             self.dictation = dictation
             let mailRuns = MailRuns()
             self.mailRuns = mailRuns
-            defaults = try #require(UserDefaults(suiteName: suite))
+            suite = try TestDefaults("projects-window")
+            defaults = suite.defaults
             let storage = ProjectsStorage(root: root.appendingPathComponent("Support", isDirectory: true))
             projects = ProjectsSwitch(defaults: defaults, isVisible: true, physicalMemory: 32 << 30, storage: storage)
             projects.turnOn()
@@ -2806,7 +2807,7 @@ struct ProjectsWindowViewTests {
         }
 
         func cleanUp() {
-            defaults.removePersistentDomain(forName: suite)
+            suite.remove()
             try? FileManager.default.removeItem(at: root)
         }
     }

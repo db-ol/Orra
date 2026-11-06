@@ -282,14 +282,13 @@ struct VocabularyTests {
     }
 
     @Test func savesInTheBackgroundKeepTheirOrder() throws {
-        let suite = "io.github.db-ol.OrraTests.vocabulary-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let suite = try TestDefaults("vocabulary")
+        defer { suite.remove() }
         for count in 1...20 {
-            VocabularyPreference.saveInBackground(vocabularyWords((0..<count).map { "term\($0)" }), suiteName: suite)
+            VocabularyPreference.saveInBackground(vocabularyWords((0..<count).map { "term\($0)" }), suiteName: suite.name)
         }
         VocabularyPreference.flush()
-        #expect(VocabularyPreference.load(from: defaults).count == 20)
+        #expect(VocabularyPreference.load(from: suite.defaults).count == 20)
     }
 
     @MainActor

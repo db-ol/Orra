@@ -23,17 +23,18 @@ struct MailScanTests {
         MailMailbox(kind: .mailbox, reference: .name(MailEvents.Code.mailbox, name, of: account), name: name, account: "Studio")
     }
 
-    let suite = "io.github.db-ol.OrraTests.mail-scan-\(UUID().uuidString)"
+    let suite: TestDefaults
     let defaults: UserDefaults
     let mail = FakeMail()
     let store = Store()
 
     init() throws {
-        defaults = try #require(UserDefaults(suiteName: suite))
+        suite = try TestDefaults("mail-scan")
+        defaults = suite.defaults
     }
 
     private func cleanUp() {
-        defaults.removePersistentDomain(forName: suite)
+        suite.remove()
     }
 
     /// A confirmed choice of these mailboxes, or an unconfirmed one with `confirmed` false.

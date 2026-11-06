@@ -26,12 +26,43 @@ func waitUntil(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourc
     try #require(condition(), "Waited \(started.duration(to: .now)). The longest gap between two looks was \(longestGap).", sourceLocation: sourceLocation)
 }
 
-/// Runs `body` with a UserDefaults suite of its own, never Orra's real settings, and
-/// removes the suite afterwards. The suite name ends in a fresh UUID, so tests that run at
-/// the same time never share one.
+/// A UserDefaults suite of a test's own, never Orra's real settings, which `remove()`
+/// deletes with its file. The suite is named by the path of a file in a new folder in the
+/// temporary folder. UserDefaults writes that file as soon as a value changes, so nothing
+/// writes it again once the folder is gone. A suite with a plain name keeps its file in
+/// ~/Library/Preferences. removePersistentDomain(forName:) leaves that file, and cfprefsd
+/// writes a change up to 10 s later, so the file comes back after a test deletes it. The
+/// folder's name ends in a fresh UUID, so tests that run at the same time never share a
+/// suite.
+final class TestDefaults {
+    /// The suite's name, which UserDefaults(suiteName:) and persistentDomain(forName:) take.
+    let name: String
+    let defaults: UserDefaults
+    /// The folder that holds the suite's file.
+    let folder: URL
+
+    init(_ label: String) throws {
+        folder = FileManager.default.temporaryDirectory.appendingPathComponent("io.github.db-ol.OrraTests.defaults-\(label)-\(UUID().uuidString)", isDirectory: true)
+        name = folder.appendingPathComponent("defaults").path
+        defaults = try #require(UserDefaults(suiteName: name))
+    }
+
+    /// Deletes the suite's folder. The suite also goes when the last reference to it does,
+    /// so the one a suite type keeps goes after each test, also after a test that fails,
+    /// throws or never calls this.
+    func remove() {
+        try? FileManager.default.removeItem(at: folder)
+    }
+
+    deinit {
+        remove()
+    }
+}
+
+/// Runs `body` with a UserDefaults suite of its own, see TestDefaults, and removes the
+/// suite afterwards.
 func withTestDefaults(_ name: String, _ body: (UserDefaults) throws -> Void) throws {
-    let suite = "io.github.db-ol.OrraTests.\(name)-\(UUID().uuidString)"
-    let defaults = try #require(UserDefaults(suiteName: suite))
-    defer { defaults.removePersistentDomain(forName: suite) }
-    try body(defaults)
+    let suite = try TestDefaults(name)
+    defer { suite.remove() }
+    try body(suite.defaults)
 }

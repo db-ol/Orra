@@ -789,9 +789,9 @@ struct TranslationSpeechTests {
         speech.setChecksWords(!SpeechPreference.checksWordsByDefault)
         #expect(saved.map(\.checksWords) == [!SpeechPreference.checksWordsByDefault])
 
-        let name = "TranslationSpeechTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: name))
-        defer { defaults.removePersistentDomain(forName: name) }
+        let suite = try TestDefaults("translation-speech")
+        defer { suite.remove() }
+        let defaults = suite.defaults
         #expect(SpeechPreference.checksWords(in: defaults) == SpeechPreference.checksWordsByDefault)
         var settings = TranslationSpeech.Settings()
         settings.checksWords = false
@@ -884,9 +884,9 @@ struct TranslationSpeechTests {
     }
 
     @Test func settingsAreSavedWithoutTheVoice() throws {
-        let name = "AudioOutputTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: name))
-        defer { defaults.removePersistentDomain(forName: name) }
+        let suite = try TestDefaults("audio-output")
+        defer { suite.remove() }
+        let defaults = suite.defaults
         // The defaults: off, and the text is pasted too.
         #expect(TranslationSpeech.Settings.load(from: defaults) == TranslationSpeech.Settings(isOn: false, alsoPastes: true, output: nil))
         let chosen = TranslationSpeech.Settings(isOn: true, alsoPastes: false, output: SpeechOutputChoice(uid: "loopback-uid", name: "Loopback Audio"))
@@ -896,7 +896,7 @@ struct TranslationSpeechTests {
         #expect(TranslationSpeech.Settings.load(from: defaults).output == nil)
         #expect(defaults.string(forKey: SpeechPreference.outputNameKey) == nil)
         // Only these seven keys, so no sample or text can be in the settings.
-        let keys = Set(defaults.persistentDomain(forName: name)?.keys.map { $0 } ?? [])
+        let keys = Set(defaults.persistentDomain(forName: suite.name)?.keys.map { $0 } ?? [])
         #expect(keys.isSubset(of: [SpeechPreference.isOnKey, SpeechPreference.alsoPastesKey, SpeechPreference.outputUIDKey, SpeechPreference.outputNameKey, SpeechPreference.voiceModelKey, SpeechPreference.checksWordsKey, SpeechPreference.remembersVoiceKey]))
     }
 }

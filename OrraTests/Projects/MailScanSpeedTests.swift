@@ -33,15 +33,16 @@ struct MailScanSpeedTests {
         MailMailbox(kind: .mailbox, reference: .name(MailEvents.Code.mailbox, name, of: exchange), name: name, account: "Exchange")
     }
 
-    let suite = "io.github.db-ol.OrraTests.mail-scan-speed-\(UUID().uuidString)"
+    let suite: TestDefaults
     let defaults: UserDefaults
 
     init() throws {
-        defaults = try #require(UserDefaults(suiteName: suite))
+        suite = try TestDefaults("mail-scan-speed")
+        defaults = suite.defaults
     }
 
     private func cleanUp() {
-        defaults.removePersistentDomain(forName: suite)
+        suite.remove()
     }
 
     // MARK: The events of a pass

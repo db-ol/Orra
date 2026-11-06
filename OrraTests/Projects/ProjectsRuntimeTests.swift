@@ -18,7 +18,7 @@ struct ProjectsRuntimeTests {
     /// The day the tests run on, 2026-10-19 at noon UTC.
     nonisolated static let today = Date(timeIntervalSince1970: 1_792_411_200)
 
-    let suite = "io.github.db-ol.OrraTests.projects-runtime-\(UUID().uuidString)"
+    let suite: TestDefaults
     let defaults: UserDefaults
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("ProjectsRuntimeTests-\(UUID().uuidString)", isDirectory: true)
     let mail = FakeMail()
@@ -27,7 +27,8 @@ struct ProjectsRuntimeTests {
     let machine = Machine()
 
     init() throws {
-        defaults = try #require(UserDefaults(suiteName: suite))
+        suite = try TestDefaults("projects-runtime")
+        defaults = suite.defaults
     }
 
     private var storage: ProjectsStorage {
@@ -35,7 +36,7 @@ struct ProjectsRuntimeTests {
     }
 
     private func cleanUp() {
-        defaults.removePersistentDomain(forName: suite)
+        suite.remove()
         try? FileManager.default.removeItem(at: root)
     }
 
