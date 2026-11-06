@@ -14,6 +14,7 @@ import struct
 import tarfile
 import tempfile
 import unittest
+import urllib.request
 from pathlib import Path
 from unittest import mock
 
@@ -91,9 +92,11 @@ class DrawTests(unittest.TestCase):
         return language
 
     def test_the_order_starts_as_a_plain_sample_of_the_count(self) -> None:
-        # The stored ja, es and yue sets were drawn with random.Random(20261004).sample(items, 200).
-        items = list(range(321))
-        self.assertEqual(random.Random(20261004).sample(items, len(items))[:200], random.Random(20261004).sample(items, 200))
+        # The stored ja, es and yue sets were drawn with random.Random(20261004).sample(items, 200)
+        # from 321, 348 and 339 sentences. ko_kr has 270.
+        for count in (270, 321, 339, 348):
+            language = self.language(count, set())
+            self.assertEqual(language.draw(200, 20261004), random.Random(20261004).sample(language.candidates, 200), count)
 
     def test_a_sentence_left_out_leaves_the_rest_of_the_order(self) -> None:
         everything = [row["sentence_id"] for row in self.language(30, set()).draw(20, 7)]
@@ -154,12 +157,20 @@ class DataFileTests(unittest.TestCase):
                         self.assertTrue(build_fleurs.HANGUL.search(other))
                         self.assertFalse(build_fleurs.LATIN.search(other))
 
-    def test_a_list_needs_two_spellings(self) -> None:
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "accepted.json"
-            path.write_text(json.dumps({"ko_kr": {"1": [["km"]]}}), encoding="utf-8")
-            with self.assertRaises(SystemExit):
-                build_fleurs.load_accepted(path)
+    def test_a_list_needs_two_different_spellings_of_a_known_config(self) -> None:
+        for data in (
+            {"ko_kr": {"1": [["km"]]}},
+            {"ko_kr": {"1": [["km", "km"]]}},
+            {"ko_kr": {"1": [["km", ""]]}},
+            {"ko_kr": {"1": [["km", " 킬로미터"]]}},
+            {"ko_kr": {"1": ["km"]}},
+            {"xx_yy": {"1": [["km", "킬로미터"]]}},
+        ):
+            with self.subTest(data=data), tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / "accepted.json"
+                path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+                with self.assertRaises(SystemExit):
+                    build_fleurs.load_accepted(path)
 
     def test_every_download_is_pinned(self) -> None:
         hashes = build_fleurs.read_hashes()
@@ -209,9 +220,12 @@ class ExtractTests(unittest.TestCase):
                 add("test/../7.wav")
                 add("test/8.txt")
                 add("test/9.wav", tarfile.FIFOTYPE)
+                add("other/test/10.wav")
+                add("test/11.wav", data=b"too large")
             target = root / "out" / "extracted"
-            skipped = build_fleurs.extract(archive, target)
-            self.assertEqual(skipped, ["test/2.wav", "test/3.wav", "../4.wav", "/tmp/5.wav", "test/sub/6.wav", "test/../7.wav", "test/8.txt", "test/9.wav"])
+            with mock.patch.object(build_fleurs, "MAX_AUDIO_BYTES", 8):
+                skipped = build_fleurs.extract(archive, target)
+            self.assertEqual(skipped, ["test/2.wav", "test/3.wav", "../4.wav", "/tmp/5.wav", "test/sub/6.wav", "test/../7.wav", "test/8.txt", "test/9.wav", "other/test/10.wav", "test/11.wav"])
             written = sorted(path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file())
             self.assertEqual(written, ["audio.tar.gz", "out/extracted/.done", "out/extracted/test/1.wav"])
             self.assertEqual((target / "test" / "1.wav").read_bytes(), b"first")
@@ -251,6 +265,14 @@ class FetchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder, mock.patch.object(build_fleurs, "download", no_download):
             with self.assertRaises(SystemExit):
                 build_fleurs.fetch("a.tar.gz", "https://example.invalid/a", None, Path(folder), [])
+
+    def test_a_redirect_must_stay_on_https(self) -> None:
+        request = urllib.request.Request("https://huggingface.co/datasets/google/fleurs/resolve/main/data/ko_kr/test.tsv")
+        handler = build_fleurs.HttpsOnly()
+        with self.assertRaises(SystemExit):
+            handler.redirect_request(request, None, 302, "Found", {}, "http://cdn.example.invalid/test.tsv")
+        followed = handler.redirect_request(request, None, 302, "Found", {}, "https://cdn.example.invalid/test.tsv")
+        self.assertEqual(followed.full_url, "https://cdn.example.invalid/test.tsv")
 
 
 class SetTests(unittest.TestCase):
@@ -366,6 +388,8 @@ class SetTests(unittest.TestCase):
                 with self.assertRaises(SystemExit), quiet():
                     build_fleurs.rebuild(manifest, self.root / f"rebuilt-{number}", [self.split], self.hashes, self.ACCEPTED)
         self.assertEqual(list(self.root.rglob("escape*")), [])
+        with self.assertRaises(SystemExit):
+            build_fleurs.config_of("fleurs-xx_yy-test")
         twice = self.root / "twice.jsonl"
         twice.write_text((json.dumps(line, ensure_ascii=False) + "\n") * 2, encoding="utf-8")
         with self.assertRaises(SystemExit), quiet():
