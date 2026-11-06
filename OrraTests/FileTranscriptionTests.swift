@@ -221,6 +221,17 @@ struct FileTranscriptionTests {
         var segments: [Int] = []
         var running = false
         var calls = 0
+        /// When the test pressed the key.
+        var pressed: ContinuousClock.Instant?
+
+        /// A first call that only the press may end, however long a busy runner takes to
+        /// get to the press. It gives up 5 s after a press that did not cancel it, so the
+        /// test fails then instead of waiting for good.
+        func runUntilThePress() async throws {
+            while pressed.map({ $0.duration(to: .now) < .seconds(5) }) ?? true {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+        }
     }
 
     @Test func progressFollowsTheSegmentsAndTheTimeLeftComesAfterAFew() async throws {
@@ -366,8 +377,9 @@ struct FileTranscriptionTests {
     /// A dictation under way when a segment comes up holds it until the dictation is over,
     /// as for captions. The window says that the file waits once the dictation has gone on
     /// for a moment, as the caption window does, so a tap of the talk key does not flash
-    /// it: here once after 20 ms, and never for a tap within the 30 s of the other turns.
-    @Test(arguments: [(Duration.seconds(30), false), (.milliseconds(20), true)])
+    /// it: here once after 20 ms, and never for a tap, with turns whose note comes after an
+    /// hour.
+    @Test(arguments: [(Duration.seconds(3_600), false), (.milliseconds(20), true)])
     func aDictationGoesFirst(_ noteDelay: Duration, _ noteShows: Bool) async throws {
         let turns = EngineTurns(pollInterval: .milliseconds(2), noteDelay: noteDelay)
         let source = FakeFileSource(starts: [0, 4], duration: 8)
@@ -405,14 +417,14 @@ struct FileTranscriptionTests {
             if segment == 2, probe.segments.count(where: { $0 == 2 }) == 1 {
                 probe.running = true
                 defer { probe.running = false }
-                // Long enough that only the press ends it.
-                try await Task.sleep(for: .seconds(30))
+                try await probe.runUntilThePress()
             }
             return "Segment \(segment)."
         })
         let file = FileTranscription(engines: .shared(transcription: transcription, turns: turns, open: { try source.open($0) }, isSpeechReady: { true }, settings: { FileTranscriptionSettings() }, captionsRun: { false }))
         file.start(url)
         try await waitUntil { probe.running }
+        probe.pressed = .now
         turns.dictationStarted()
         try await waitUntil { !probe.running }
         try await Task.sleep(for: .milliseconds(30))
