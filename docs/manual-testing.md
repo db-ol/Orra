@@ -3308,8 +3308,9 @@ the names offered for saving. FileTranscriptionEndToEndTests transcribes spoken 
   on the window and picked with Choose File…: each time the window says that it is not on
   this Mac yet, and Finder shows no download.
 - [ ] Press the talk key while a file runs: the dictation pastes as quickly as without a
-  file, the window says that it waits for the dictation, and the file goes on after the
-  paste. The same with the translation key, and with a dictation cancelled with Escape.
+  file, the window says that it waits for the dictation once it has gone on for a second,
+  and the file goes on after the paste. A quick tap of the talk key does not flash that
+  line. The same with the translation key, and with a dictation cancelled with Escape.
 - [ ] Turn on Live Captions while a file runs: the file stops after the sentence under way
   and says that it waits while Live Captions run. Turn them off, and it goes on.
 - [ ] Stop keeps the sentences so far. Copy pastes them without times into TextEdit.

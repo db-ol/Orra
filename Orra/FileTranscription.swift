@@ -35,8 +35,9 @@ struct FileTranscriptionEngines {
     /// The speech model's text for the samples of one segment, after its turn, see
     /// EngineTurns.
     var transcribe: (_ samples: [Float], _ settings: FileTranscriptionSettings) async throws -> FileSegmentRecognition
-    /// Whether a dictation is under way, which the window says the file waits for.
-    var isDictating: () -> Bool
+    /// Whether a dictation has held up the file for a moment, which the window then says,
+    /// see EngineTurns.dictationNoteDue. A tap of the talk key holds it up too briefly.
+    var dictationNoteDue: () -> Bool
     /// Whether Live Captions run, during which the file waits.
     var captionsRun: () -> Bool
     /// Waits, while captions run. Tests pass a shorter one.
@@ -95,7 +96,7 @@ extension FileTranscriptionEngines {
                     return FileSegmentRecognition(text: text, modelSeconds: Double(took.components.seconds) + Double(took.components.attoseconds) / 1e18)
                 }
             },
-            isDictating: { turns.isDictating },
+            dictationNoteDue: { turns.dictationNoteDue },
             captionsRun: captionsRun
         )
     }
@@ -194,9 +195,9 @@ final class FileTranscription {
         engines.isSpeechReady()
     }
 
-    /// Whether a dictation holds up the file now.
+    /// Whether a dictation has held up the file for a moment, which the window says.
     var waitsForDictation: Bool {
-        phase == .transcribing && engines.isDictating()
+        phase == .transcribing && engines.dictationNoteDue()
     }
 
     /// True from the start of a file until it is done, stopped or failed.

@@ -105,7 +105,7 @@ struct FileTranscriptionTests {
             isSpeechReady: { ready },
             settings: { settings },
             transcribe: { try await speech.transcribe($0, $1) },
-            isDictating: { false },
+            dictationNoteDue: { false },
             captionsRun: captionsRun,
             sleep: { _ in try await Task.sleep(for: .milliseconds(1)) }
         )
@@ -328,9 +328,12 @@ struct FileTranscriptionTests {
     // MARK: Turns
 
     /// A dictation under way when a segment comes up holds it until the dictation is over,
-    /// as for captions.
-    @Test func aDictationGoesFirst() async throws {
-        let turns = EngineTurns(pollInterval: .milliseconds(2))
+    /// as for captions. The window says that the file waits once the dictation has gone on
+    /// for a moment, as the caption window does, so a tap of the talk key does not flash
+    /// it: here once after 20 ms, and never for a tap within the 30 s of the other turns.
+    @Test(arguments: [(Duration.seconds(30), false), (.milliseconds(20), true)])
+    func aDictationGoesFirst(_ noteDelay: Duration, _ noteShows: Bool) async throws {
+        let turns = EngineTurns(pollInterval: .milliseconds(2), noteDelay: noteDelay)
         let source = FakeFileSource(starts: [0, 4], duration: 8)
         let probe = Probe()
         let transcription = Transcription(load: {}, transcribe: { _, _, _ in
@@ -341,9 +344,13 @@ struct FileTranscriptionTests {
         turns.dictationStarted()
         file.start(url)
         try await waitUntil { file.phase == .transcribing }
-        try await Task.sleep(for: .milliseconds(40))
+        if noteShows {
+            try await waitUntil { file.waitsForDictation }
+        } else {
+            try await Task.sleep(for: .milliseconds(40))
+            #expect(!file.waitsForDictation)
+        }
         #expect(probe.calls == 0)
-        #expect(file.waitsForDictation)
         turns.dictationEnded()
         try await waitUntil { !file.isRunning }
         #expect(file.segments.map(\.text) == ["Hello.", "Hello."])

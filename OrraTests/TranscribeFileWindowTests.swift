@@ -126,7 +126,7 @@ struct TranscribeFileWindowTests {
             isSpeechReady: { true },
             settings: { FileTranscriptionSettings() },
             transcribe: { try await speech.transcribe($0, $1) },
-            isDictating: { false },
+            dictationNoteDue: { false },
             captionsRun: captionsRun,
             sleep: { _ in try await Task.sleep(for: .milliseconds(1)) }
         )
