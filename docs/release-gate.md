@@ -24,7 +24,7 @@ since release builds show Projects, so the projects variables below must be set.
 | context | RealModelTests/ContextEvaluationTests | 100 ContextASR clips per language, each without and with its terms and ten distractors as context: terms found, distractors inserted, errors and the time of each pass, plus ascend_mixed with unrelated terms and three clips without speech |
 | cleanup | CleanupModelEvaluationTests/cleanupCases() | The 182 regular, 70 adversarial and 20 meaning cases of Tools/rewrite-eval in three modes: exact match, outcome, time, and whether an adversarial case looks obeyed (pasted text more than 1.6 times as long as expected plus 4, as in the translation evaluation) |
 | latency | LatencyMeasurementTests/dictations() | Release to paste (#51) for the say clips of the latency-say set and 15 corpus clips, cleanup off and on: median and p90 of every step, and each clip's median |
-| sets | GateSetEvaluationTests | Every set under the gate sets folder, through PushToTalkController with the clip's context as the vocabulary and cleanup off: errors against the reference, expect_terms found and forbid_terms present |
+| sets | GateSetEvaluationTests | Every set directly in the gate sets folder, not those in its pairs folder, through PushToTalkController with the clip's context as the vocabulary and cleanup off: errors against the reference, expect_terms found and forbid_terms present |
 | projects | ProjectsGateEvaluationTests | The 64 attack items of the synthetic Projects set, sorted and explained in Chinese and in English with the real cleanup model, with search terms and other projects' files as the app chooses them: where each item was filed, the warnings the checks in code showed, and what the window shows, the checked draft included, see below |
 | retrieval | RetrievalEvaluationTests | The labeled mails of the synthetic Projects set and its retrieval supplement: the passages a prompt would hold, at most 6, without search terms and with the terms of the real cleanup model, recall and hit at 6 by kind of mail, and the time of each terms job, see below |
 
@@ -90,6 +90,15 @@ The sentences, voices and references of each set are in
 makes the clips of every set with macOS say into `$ORRA_BENCH/gate-sets`. Its README
 describes the set files. Clips stay
 outside the repository. No recording of a person goes into a set.
+
+The sets of the four language pairs are in `Tools/release-gate/sets/pairs` and go to
+`$ORRA_BENCH/gate-sets/pairs`: a mirror set of 60 sentences mixed with English for each
+pair, and for Japanese, Spanish and Korean sets like gate-core, zh-numbers-negation,
+homophone-distractors and latency-say, plus English fillers in Japanese and Spanish. Each
+names its pair in its `set.json`, and they hold Korean lines (language "ko"), terms with
+lists of spellings and lines with `accepted` spellings, which the README of the sets
+describes. The sets suite runs only the sets directly in the gate sets folder, so it does
+not run these until the gate runs each set with its own pair.
 
 ## The Projects attack set
 

@@ -76,6 +76,33 @@ before a counter (二十个人, 两千个请求), rough numbers (三百多), 万
 numbers with their unit and the negation words, so a lost 不 or a wrong digit shows up even
 when the error rate barely moves.
 
+## Sets of the language pairs
+
+The sets in `pairs/` measure the four dictation pairs the same way, each set with its pair
+in `set.json`. `make_sets.py` builds them into `$ORRA_BENCH/gate-sets/pairs`, one level
+below the sets above. The release gate runs every set directly in its sets folder with the
+Chinese pair, so these sets stay apart until the gate runs each set with its own pair.
+
+| Set | zh | ja | es | ko |
+|---|---|---|---|---|
+| Mixed with English, 60 sentences (`<lang>-mirror`) | 60 clips | 60 clips | 60 clips | 60 clips |
+| Short dictation like gate-core (`<lang>-core`) | gate-core | 12 clips | 12 clips | 12 clips |
+| Numbers like zh-numbers-negation (`<lang>-numbers`) | zh-numbers-negation | 40 sentences, 80 clips | 40 sentences, 80 clips | 40 sentences, 80 clips |
+| Homophones like homophone-distractors (`<lang>-homophones`) | homophone-distractors | 36 clips | 36 clips | 36 clips |
+| Timing clips like latency-say (`<lang>-latency`) | latency-say | 13 clips | 13 clips | 13 clips |
+| English fillers (`<lang>-english-fillers`) | | 6 clips | 6 clips | |
+
+The four mirror sets hold the same 60 situations of `pairs/mirror-template.jsonl`, in
+English with their group: 20 with office and developer terms, 10 with names, 10 with
+numbers, 10 short replies and 10 self corrections. Each language says them the way a native
+speaker who mixes in English would, so their rates compare. Japanese and Korean `say` text
+spells English words as a speaker of the language says them (スラック, 슬랙), and the
+reference writes them as a user would type them, with the other spelling accepted. The core,
+latency and filler sets of a pair hold their English sentences unchanged from gate-core and
+latency-say, and the English filler sets have an English filler said by Samantha inside a
+Japanese or Spanish sentence. The README of each set says how it was written, which
+spellings it accepts and who checked its text.
+
 ## Matching terms
 
 Terms are matched in the text after NumberRules and NFKC, with any white space allowed

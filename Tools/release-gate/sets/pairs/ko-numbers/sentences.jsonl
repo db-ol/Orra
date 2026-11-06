@@ -1,0 +1,40 @@
+{"id": "num01", "language": "ko", "say": "이천이십육 년 시월 십사일에 새 버전을 출시해요.", "reference": "2026년 10월 14일에 새 버전을 출시해요.", "expect_terms": [["2026년", "이천이십육 년"], ["10월 14일", "시월 십사일"]], "forbid_terms": []}
+{"id": "num02", "language": "ko", "say": "그 사람은 천구백구십팔 년생이에요.", "reference": "그 사람은 1998년생이에요.", "expect_terms": [["1998년생", "천구백구십팔 년생"]], "forbid_terms": []}
+{"id": "num03", "language": "ko", "say": "삼만 원이 아니라 삼만 오천 원이에요.", "reference": "3만 원이 아니라 3만 5천 원이에요.", "expect_terms": [["3만 원", "삼만 원", "30,000원"], ["3만 5천 원", "삼만 오천 원", "35,000원"], "아니라"], "forbid_terms": []}
+{"id": "num04", "language": "ko", "say": "예산이 삼백만 원이 아니라 삼백오십만 원이에요.", "reference": "예산이 300만 원이 아니라 350만 원이에요.", "expect_terms": [["300만 원", "삼백만 원"], ["350만 원", "삼백오십만 원"], "아니라"], "forbid_terms": []}
+{"id": "num05", "language": "ko", "say": "이 노트북은 백이십팔만 원 주고 샀어요.", "reference": "이 노트북은 128만 원 주고 샀어요.", "expect_terms": [["128만 원", "백이십팔만 원", "1,280,000원"]], "forbid_terms": []}
+{"id": "num06", "language": "ko", "say": "월세가 한 달에 팔십오만 원이에요.", "reference": "월세가 한 달에 85만 원이에요.", "expect_terms": [["85만 원", "팔십오만 원", "850,000원"]], "forbid_terms": []}
+{"id": "num07", "language": "ko", "say": "그 사람한테 이만 원 빌려줬는데 아직 안 갚았어요.", "reference": "그 사람한테 2만 원 빌려줬는데 아직 안 갚았어요.", "expect_terms": [["2만 원", "이만 원", "20,000원"], "안 갚았어요"], "forbid_terms": []}
+{"id": "num08", "language": "ko", "say": "전환율이 십이 퍼센트 올랐어요.", "reference": "전환율이 12% 올랐어요.", "expect_terms": [["12%", "12퍼센트", "십이 퍼센트"]], "forbid_terms": []}
+{"id": "num09", "language": "ko", "say": "배터리가 오 퍼센트밖에 안 남았어요.", "reference": "배터리가 5%밖에 안 남았어요.", "expect_terms": [["5%", "5퍼센트", "오 퍼센트"], "안 남았어요"], "forbid_terms": []}
+{"id": "num10", "language": "ko", "say": "정확도는 구십팔 점 오 퍼센트예요.", "reference": "정확도는 98.5%예요.", "expect_terms": [["98.5%", "98.5퍼센트", "구십팔 점 오 퍼센트"]], "forbid_terms": []}
+{"id": "num11", "language": "ko", "say": "삼십 퍼센트가 아니라 삼십오 퍼센트예요.", "reference": "30%가 아니라 35%예요.", "expect_terms": [["30%", "30퍼센트", "삼십 퍼센트"], ["35%", "35퍼센트", "삼십오 퍼센트"], "아니라"], "forbid_terms": []}
+{"id": "num12", "language": "ko", "say": "회의가 오후 세 시로 바뀌었어요.", "reference": "회의가 오후 3시로 바뀌었어요.", "expect_terms": [["3시", "세 시"]], "forbid_terms": []}
+{"id": "num13", "language": "ko", "say": "내일 아침 여덟 시 반에 출발해요.", "reference": "내일 아침 8시 반에 출발해요.", "expect_terms": [["8시 반", "여덟 시 반"]], "forbid_terms": []}
+{"id": "num14", "language": "ko", "say": "세 시 이십 분에 입구에서 만나요.", "reference": "3시 20분에 입구에서 만나요.", "expect_terms": [["3시 20분", "세 시 이십 분"]], "forbid_terms": []}
+{"id": "num15", "language": "ko", "say": "밤 열 시 이후에는 전화하지 마세요.", "reference": "밤 10시 이후에는 전화하지 마세요.", "expect_terms": [["10시", "열 시"], "하지 마세요"], "forbid_terms": []}
+{"id": "num16", "language": "ko", "say": "비행기는 오전 열한 시 사십오 분에 출발해요.", "reference": "비행기는 오전 11시 45분에 출발해요.", "expect_terms": [["11시 45분", "열한 시 사십오 분"]], "forbid_terms": []}
+{"id": "num17", "language": "ko", "say": "제 휴대폰 번호는 공일공 이사육팔 일삼오칠이에요.", "reference": "제 휴대폰 번호는 010-2468-1357이에요.", "expect_terms": [["010-2468-1357", "01024681357", "010 2468 1357"]], "forbid_terms": []}
+{"id": "num18", "language": "ko", "say": "인증 번호는 사칠이구일육이에요.", "reference": "인증 번호는 472916이에요.", "expect_terms": ["472916"], "forbid_terms": []}
+{"id": "num19", "language": "ko", "say": "저는 팔공육 호에 묵고 있어요.", "reference": "저는 806호에 묵고 있어요.", "expect_terms": [["806호", "팔공육 호"]], "forbid_terms": []}
+{"id": "num20", "language": "ko", "say": "주문 번호는 이공이육 일공일사 공공칠이에요.", "reference": "주문 번호는 20261014007이에요.", "expect_terms": ["20261014007"], "forbid_terms": []}
+{"id": "num21", "language": "ko", "say": "그 친구가 일 등을 했어요.", "reference": "그 친구가 1등을 했어요.", "expect_terms": [["1등", "일 등"]], "forbid_terms": []}
+{"id": "num22", "language": "ko", "say": "이번이 세 번째 알림이에요.", "reference": "이번이 세 번째 알림이에요.", "expect_terms": [["세 번째", "3번째"]], "forbid_terms": []}
+{"id": "num23", "language": "ko", "say": "일 분기 매출은 목표에 못 미쳤어요.", "reference": "1분기 매출은 목표에 못 미쳤어요.", "expect_terms": [["1분기", "일 분기"], "못 미쳤어요"], "forbid_terms": []}
+{"id": "num24", "language": "ko", "say": "가기 싫은 게 아니라 시간이 없어요.", "reference": "가기 싫은 게 아니라 시간이 없어요.", "expect_terms": ["아니라", "없어요"], "forbid_terms": []}
+{"id": "num25", "language": "ko", "say": "그 파일 그 사람한테 보내지 마세요.", "reference": "그 파일 그 사람한테 보내지 마세요.", "expect_terms": ["보내지 마세요"], "forbid_terms": []}
+{"id": "num26", "language": "ko", "say": "금요일 오후에는 배포하지 마세요.", "reference": "금요일 오후에는 배포하지 마세요.", "expect_terms": ["배포하지 마세요"], "forbid_terms": []}
+{"id": "num27", "language": "ko", "say": "오후 네 시 회의 잊지 마세요.", "reference": "오후 4시 회의 잊지 마세요.", "expect_terms": [["4시", "네 시"], "잊지 마세요"], "forbid_terms": []}
+{"id": "num28", "language": "ko", "say": "오만 원 넘게 쓰지 마세요.", "reference": "5만 원 넘게 쓰지 마세요.", "expect_terms": [["5만 원", "오만 원", "50,000원"], "쓰지 마세요"], "forbid_terms": []}
+{"id": "num29", "language": "ko", "say": "여기 서른 살 넘은 사람은 없어요.", "reference": "여기 서른 살 넘은 사람은 없어요.", "expect_terms": [["서른 살", "30살"], "없어요"], "forbid_terms": []}
+{"id": "num30", "language": "ko", "say": "그 사람은 십 킬로미터를 뛰었는데, 한 번도 안 쉬었어요.", "reference": "그 사람은 10km를 뛰었는데, 한 번도 안 쉬었어요.", "expect_terms": [["10km", "10킬로미터", "십 킬로미터", "10킬로"], "안 쉬었어요"], "forbid_terms": []}
+{"id": "num31", "language": "ko", "say": "이 파일은 삼 점 오 기가예요.", "reference": "이 파일은 3.5GB예요.", "expect_terms": [["3.5GB", "3.5기가", "삼 점 오 기가"]], "forbid_terms": []}
+{"id": "num32", "language": "ko", "say": "맥오에스 십오 점 일로 업데이트해 주세요.", "reference": "macOS 15.1로 업데이트해 주세요.", "expect_terms": ["macOS", ["15.1", "십오 점 일"]], "forbid_terms": []}
+{"id": "num33", "language": "ko", "say": "새 엠파이브 칩은 이십 퍼센트 빨라졌어요.", "reference": "새 M5 칩은 20% 빨라졌어요.", "expect_terms": ["M5", ["20%", "20퍼센트", "이십 퍼센트"]], "forbid_terms": []}
+{"id": "num34", "language": "ko", "say": "이 아이폰은 백이십오만 원이에요.", "reference": "이 iPhone은 125만 원이에요.", "expect_terms": ["iPhone", ["125만 원", "백이십오만 원", "1,250,000원"]], "forbid_terms": []}
+{"id": "num35", "language": "ko", "say": "이 피알은 삼백 줄 넘게 바꿨어요.", "reference": "이 PR은 300줄 넘게 바꿨어요.", "expect_terms": ["PR", ["300줄", "삼백 줄"]], "forbid_terms": []}
+{"id": "num36", "language": "ko", "say": "두 번째 버그는 아직 못 고쳤어요.", "reference": "두 번째 버그는 아직 못 고쳤어요.", "expect_terms": [["두 번째", "2번째"], "못 고쳤어요"], "forbid_terms": []}
+{"id": "num37", "language": "ko", "say": "서버 레이턴시가 이백 밀리초가 아니라 이십 밀리초예요.", "reference": "서버 레이턴시가 200밀리초가 아니라 20밀리초예요.", "expect_terms": [["200밀리초", "200ms", "이백 밀리초"], ["20밀리초", "20ms", "이십 밀리초"], "아니라"], "forbid_terms": []}
+{"id": "num38", "language": "ko", "say": "밤 열한 시 넘어서는 서버에 배포하지 마세요.", "reference": "밤 11시 넘어서는 서버에 배포하지 마세요.", "expect_terms": [["11시", "열한 시"], "배포하지 마세요"], "forbid_terms": []}
+{"id": "num39", "language": "ko", "say": "타임아웃을 삼십 초에서 육십 초로 바꾸고, 육백 초로는 하지 마세요.", "reference": "타임아웃을 30초에서 60초로 바꾸고, 600초로는 하지 마세요.", "expect_terms": [["30초", "삼십 초"], ["60초", "육십 초"], ["600초", "육백 초"], "하지 마세요"], "forbid_terms": []}
+{"id": "num40", "language": "ko", "say": "이번 스프린트에서 고친 버그는 열다섯 개가 아니라 스물다섯 개예요.", "reference": "이번 스프린트에서 고친 버그는 열다섯 개가 아니라 스물다섯 개예요.", "expect_terms": [["열다섯 개", "15개"], ["스물다섯 개", "25개"], "아니라"], "forbid_terms": []}

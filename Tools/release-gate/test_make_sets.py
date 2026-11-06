@@ -30,6 +30,7 @@ class RepositorySetTests(unittest.TestCase):
     def test_every_set_passes_its_checks(self):
         names = make_sets.set_names([])
         self.assertEqual([name for name in names if "/" not in name], GATE_SETS)
+        self.assertEqual(len([name for name in names if name.startswith("pairs/")]), 18)
         for name in names:
             with self.subTest(set=name):
                 sentences, variants, _ = make_sets.load_set(make_sets.HERE / name)
@@ -42,6 +43,33 @@ class RepositorySetTests(unittest.TestCase):
             self.assertNotIn("pair", settings)
             for line in make_sets.manifest_lines(sentences, variants):
                 self.assertEqual(list(line), ["id", "language", "reference", "context", "expect_terms", "forbid_terms"])
+
+    def test_pair_sets_name_their_pair_and_have_a_readme(self):
+        for name in make_sets.set_names(["pairs"]):
+            with self.subTest(set=name):
+                _, _, settings = make_sets.load_set(make_sets.HERE / name)
+                self.assertIn(settings.get("pair"), make_sets.PAIRS)
+                self.assertTrue(name.split("/")[1].startswith(settings["pair"] + "-"))
+                self.assertTrue((make_sets.HERE / name / "README.md").exists())
+
+    def test_the_mirror_sets_hold_the_situations_of_the_template(self):
+        template = lines(make_sets.HERE / "pairs/mirror-template.jsonl")
+        kinds = [row["kind"] for row in template]
+        self.assertEqual([kinds.count(kind) for kind in ("terms", "names", "numbers", "replies", "corrections")], [20, 10, 10, 10, 10])
+        for pair in make_sets.PAIRS:
+            with self.subTest(pair=pair):
+                sentences, _, _ = make_sets.load_set(make_sets.HERE / f"pairs/{pair}-mirror")
+                self.assertEqual([row["id"] for row in sentences], [row["id"] for row in template])
+                self.assertTrue(all(row["expect_terms"] for row in sentences))
+
+    def test_pair_sets_hold_the_english_lines_unchanged(self):
+        for source, kind in (("gate-core", "core"), ("latency-say", "latency")):
+            english = {row["id"]: row for row in lines(make_sets.HERE / source / "sentences.jsonl") if row["language"] == "en"}
+            for pair in ("ja", "es", "ko"):
+                with self.subTest(set=f"{pair}-{kind}"):
+                    copied = [row for row in lines(make_sets.HERE / f"pairs/{pair}-{kind}/sentences.jsonl") if row["language"] == "en"]
+                    self.assertEqual(copied, list(english.values()))
+
 
 class CheckTests(unittest.TestCase):
     def setUp(self):
@@ -120,7 +148,9 @@ class CheckTests(unittest.TestCase):
         self.assertNotIn("accepted", manifest[2])
 
     def test_set_names_stand_for_sets_and_folders_of_sets(self):
-        self.assertEqual(make_sets.set_names(["gate-core", "latency-say", "gate-core"]), ["gate-core", "latency-say"])
+        pairs = make_sets.set_names(["pairs"])
+        self.assertIn("pairs/ko-mirror", pairs)
+        self.assertEqual(make_sets.set_names(["gate-core", "pairs/ja-core", "gate-core"]), ["gate-core", "pairs/ja-core"])
         with self.assertRaises(make_sets.SetError):
             make_sets.set_names(["no-such-set"])
         with self.assertRaises(make_sets.SetError):
