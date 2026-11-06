@@ -1,0 +1,36 @@
+{"id": "hom01", "language": "es", "say": "Mueve el cursor al final de la línea y presiona enter.", "reference": "Mueve el cursor al final de la línea y presiona enter.", "expect_terms": [], "forbid_terms": ["Cursor"]}
+{"id": "hom02", "language": "es", "say": "El cursor desaparece cuando escribo muy rápido.", "reference": "El cursor desaparece cuando escribo muy rápido.", "expect_terms": [], "forbid_terms": ["Cursor"]}
+{"id": "hom03", "language": "es", "say": "Abrí el proyecto en Cursor y corrí las pruebas.", "reference": "Abrí el proyecto en Cursor y corrí las pruebas.", "expect_terms": ["Cursor"], "forbid_terms": []}
+{"id": "hom04", "language": "es", "say": "Ahora escribo casi todo el frontend en Cursor.", "reference": "Ahora escribo casi todo el frontend en Cursor.", "expect_terms": ["Cursor"], "forbid_terms": []}
+{"id": "hom05", "language": "es", "say": "No tengo ni la menor noción de a qué hora empieza la junta.", "reference": "No tengo ni la menor noción de a qué hora empieza la junta.", "expect_terms": [], "forbid_terms": ["Notion"]}
+{"id": "hom06", "language": "es", "say": "Perdí la noción del tiempo trabajando.", "reference": "Perdí la noción del tiempo trabajando.", "expect_terms": [], "forbid_terms": ["Notion"]}
+{"id": "hom07", "language": "es", "say": "Todas mis notas de las juntas están en Notion.", "reference": "Todas mis notas de las juntas están en Notion.", "expect_terms": ["Notion"], "forbid_terms": []}
+{"id": "hom08", "language": "es", "say": "Me regalaron un anillo de rubí para mi cumpleaños.", "reference": "Me regalaron un anillo de rubí para mi cumpleaños.", "expect_terms": [], "forbid_terms": ["Ruby"]}
+{"id": "hom09", "language": "es", "say": "Reescribimos el backend en Ruby el año pasado.", "reference": "Reescribimos el backend en Ruby el año pasado.", "expect_terms": ["Ruby"], "forbid_terms": []}
+{"id": "hom10", "language": "es", "say": "En el zoológico vimos una pitón enorme.", "reference": "En el zoológico vimos una pitón enorme.", "expect_terms": [], "forbid_terms": ["Python"]}
+{"id": "hom11", "language": "es", "say": "El script de evaluación está escrito en Python.", "reference": "El script de evaluación está escrito en Python.", "expect_terms": ["Python"], "forbid_terms": []}
+{"id": "hom12", "language": "es", "say": "La banda está de gira por Sudamérica.", "reference": "La banda está de gira por Sudamérica.", "expect_terms": [], "forbid_terms": ["Jira"]}
+{"id": "hom13", "language": "es", "say": "Después de la gira, el equipo se tomó una semana libre.", "reference": "Después de la gira, el equipo se tomó una semana libre.", "expect_terms": [], "forbid_terms": ["Jira"]}
+{"id": "hom14", "language": "es", "say": "Abre un ticket en Jira para ese bug.", "reference": "Abre un ticket en Jira para ese bug.", "expect_terms": ["Jira"], "forbid_terms": []}
+{"id": "hom15", "language": "es", "say": "Las tareas pendientes están todas en Jira.", "reference": "Las tareas pendientes están todas en Jira.", "expect_terms": ["Jira"], "forbid_terms": []}
+{"id": "hom16", "language": "es", "say": "Yo siempre miro las noticias en la mañana.", "reference": "Yo siempre miro las noticias en la mañana.", "expect_terms": [], "forbid_terms": ["Miro"]}
+{"id": "hom17", "language": "es", "say": "Cuando miro el código de hace un año, no entiendo nada.", "reference": "Cuando miro el código de hace un año, no entiendo nada.", "expect_terms": [], "forbid_terms": ["Miro"]}
+{"id": "hom18", "language": "es", "say": "Pon las ideas en el tablero de Miro.", "reference": "Pon las ideas en el tablero de Miro.", "expect_terms": ["Miro"], "forbid_terms": []}
+{"id": "hom19", "language": "es", "say": "Hicimos el diagrama en Miro durante la llamada.", "reference": "Hicimos el diagrama en Miro durante la llamada.", "expect_terms": ["Miro"], "forbid_terms": []}
+{"id": "hom20", "language": "es", "say": "Sí, claro, mañana te lo mando.", "reference": "Sí, claro, mañana te lo mando.", "expect_terms": [], "forbid_terms": ["Claro"]}
+{"id": "hom21", "language": "es", "say": "Está claro que necesitamos más tiempo.", "reference": "Está claro que necesitamos más tiempo.", "expect_terms": [], "forbid_terms": ["Claro"]}
+{"id": "hom22", "language": "es", "say": "Mi plan de celular es de Claro.", "reference": "Mi plan de celular es de Claro.", "expect_terms": ["Claro"], "forbid_terms": []}
+{"id": "hom23", "language": "es", "say": "Apaga la luz de la sala, por favor.", "reference": "Apaga la luz de la sala, por favor.", "expect_terms": [], "forbid_terms": ["Luz"]}
+{"id": "hom24", "language": "es", "say": "Entra mucha luz por esa ventana.", "reference": "Entra mucha luz por esa ventana.", "expect_terms": [], "forbid_terms": ["Luz"]}
+{"id": "hom25", "language": "es", "say": "Mañana Luz presenta los resultados del trimestre.", "reference": "Mañana Luz presenta los resultados del trimestre.", "expect_terms": ["Luz"], "forbid_terms": []}
+{"id": "hom26", "language": "es", "say": "Hoy hace mucho sol, llévate una gorra.", "reference": "Hoy hace mucho sol, llévate una gorra.", "expect_terms": [], "forbid_terms": ["Sol"]}
+{"id": "hom27", "language": "es", "say": "Nos sentamos al sol después de comer.", "reference": "Nos sentamos al sol después de comer.", "expect_terms": [], "forbid_terms": ["Sol"]}
+{"id": "hom28", "language": "es", "say": "Le pedí a Sol que revisara el contrato.", "reference": "Le pedí a Sol que revisara el contrato.", "expect_terms": ["Sol"], "forbid_terms": []}
+{"id": "hom29", "language": "es", "say": "Compré una camisa blanca para la boda.", "reference": "Compré una camisa blanca para la boda.", "expect_terms": [], "forbid_terms": ["Blanca"]}
+{"id": "hom30", "language": "es", "say": "La pared blanca se ve mejor con esta luz.", "reference": "La pared blanca se ve mejor con esta luz.", "expect_terms": [], "forbid_terms": ["Blanca", "Luz"]}
+{"id": "hom31", "language": "es", "say": "Hay que preguntarle a Blanca si ya firmó.", "reference": "Hay que preguntarle a Blanca si ya firmó.", "expect_terms": ["Blanca"], "forbid_terms": []}
+{"id": "hom32", "language": "es", "say": "Perdí la noción del tiempo organizando todo en Notion.", "reference": "Perdí la noción del tiempo organizando todo en Notion.", "expect_terms": ["Notion"], "forbid_terms": []}
+{"id": "hom33", "language": "es", "say": "Mi compañera Luz siempre deja la luz prendida.", "reference": "Mi compañera Luz siempre deja la luz prendida.", "expect_terms": ["Luz"], "forbid_terms": []}
+{"id": "hom34", "language": "es", "say": "Cuando miro el tablero de Miro, me pierdo.", "reference": "Cuando miro el tablero de Miro, me pierdo.", "expect_terms": ["Miro"], "forbid_terms": []}
+{"id": "hom35", "language": "es", "say": "Todos los detalles de la gira están en Jira.", "reference": "Todos los detalles de la gira están en Jira.", "expect_terms": ["Jira"], "forbid_terms": []}
+{"id": "hom36", "language": "es", "say": "Sol prefiere programar en Python.", "reference": "Sol prefiere programar en Python.", "expect_terms": ["Sol", "Python"], "forbid_terms": []}

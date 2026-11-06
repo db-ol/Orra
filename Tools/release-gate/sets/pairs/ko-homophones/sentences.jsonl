@@ -1,0 +1,36 @@
+{"id": "hom01", "language": "ko", "say": "마우스 커서가 갑자기 사라졌어요.", "reference": "마우스 커서가 갑자기 사라졌어요.", "expect_terms": [], "forbid_terms": ["Cursor"]}
+{"id": "hom02", "language": "ko", "say": "너는 커서 뭐가 되고 싶어?", "reference": "너는 커서 뭐가 되고 싶어?", "expect_terms": [], "forbid_terms": ["Cursor"]}
+{"id": "hom03", "language": "ko", "say": "커서로 프로젝트를 열어서 테스트를 돌렸어요.", "reference": "Cursor로 프로젝트를 열어서 테스트를 돌렸어요.", "expect_terms": ["Cursor"], "forbid_terms": []}
+{"id": "hom04", "language": "ko", "say": "요즘은 프론트엔드 코드를 거의 커서로 짜요.", "reference": "요즘은 프론트엔드 코드를 거의 Cursor로 짜요.", "expect_terms": ["Cursor"], "forbid_terms": [], "accepted": [["프론트엔드", "프런트엔드"]]}
+{"id": "hom05", "language": "ko", "say": "다음 달부터 버스 노선이 바뀐대요.", "reference": "다음 달부터 버스 노선이 바뀐대요.", "expect_terms": [], "forbid_terms": ["Notion", "노션"]}
+{"id": "hom06", "language": "ko", "say": "지하철 노선도 좀 보여 주세요.", "reference": "지하철 노선도 좀 보여 주세요.", "expect_terms": [], "forbid_terms": ["Notion", "노션"]}
+{"id": "hom07", "language": "ko", "say": "회의록은 노션에 정리해 둘게요.", "reference": "회의록은 Notion에 정리해 둘게요.", "expect_terms": [["Notion", "노션"]], "forbid_terms": []}
+{"id": "hom08", "language": "ko", "say": "노션 페이지 링크 보내 드릴게요.", "reference": "Notion 페이지 링크 보내 드릴게요.", "expect_terms": [["Notion", "노션"]], "forbid_terms": []}
+{"id": "hom09", "language": "ko", "say": "아이들이 미로 찾기를 정말 좋아해요.", "reference": "아이들이 미로 찾기를 정말 좋아해요.", "expect_terms": [], "forbid_terms": ["Miro"]}
+{"id": "hom10", "language": "ko", "say": "이 건물은 미로 같아서 길을 자꾸 잃어요.", "reference": "이 건물은 미로 같아서 길을 자꾸 잃어요.", "expect_terms": [], "forbid_terms": ["Miro"]}
+{"id": "hom11", "language": "ko", "say": "아이디어는 미로 보드에 붙여 주세요.", "reference": "아이디어는 Miro 보드에 붙여 주세요.", "expect_terms": ["Miro"], "forbid_terms": []}
+{"id": "hom12", "language": "ko", "say": "액셀을 너무 세게 밟지 마세요.", "reference": "액셀을 너무 세게 밟지 마세요.", "expect_terms": [], "forbid_terms": ["Excel", "엑셀"]}
+{"id": "hom13", "language": "ko", "say": "언덕에서는 액셀을 천천히 밟으세요.", "reference": "언덕에서는 액셀을 천천히 밟으세요.", "expect_terms": [], "forbid_terms": ["Excel", "엑셀"]}
+{"id": "hom14", "language": "ko", "say": "매출 자료는 엑셀 파일로 보내 주세요.", "reference": "매출 자료는 Excel 파일로 보내 주세요.", "expect_terms": [["Excel", "엑셀"]], "forbid_terms": []}
+{"id": "hom15", "language": "ko", "say": "회의실 빔 좀 켜 주세요.", "reference": "회의실 빔 좀 켜 주세요.", "expect_terms": [], "forbid_terms": ["Vim"]}
+{"id": "hom16", "language": "ko", "say": "발표하기 전에 빔이 잘 나오는지 확인해 주세요.", "reference": "발표하기 전에 빔이 잘 나오는지 확인해 주세요.", "expect_terms": [], "forbid_terms": ["Vim"]}
+{"id": "hom17", "language": "ko", "say": "저는 아직도 빔으로 코드를 짜요.", "reference": "저는 아직도 Vim으로 코드를 짜요.", "expect_terms": ["Vim"], "forbid_terms": []}
+{"id": "hom18", "language": "ko", "say": "그 말을 들으니까 좀 서운했어요.", "reference": "그 말을 들으니까 좀 서운했어요.", "expect_terms": [], "forbid_terms": ["서윤"]}
+{"id": "hom19", "language": "ko", "say": "생일을 잊어버려서 많이 서운했대요.", "reference": "생일을 잊어버려서 많이 서운했대요.", "expect_terms": [], "forbid_terms": ["서윤"]}
+{"id": "hom20", "language": "ko", "say": "서윤 씨가 오후에 발표할 거예요.", "reference": "서윤 씨가 오후에 발표할 거예요.", "expect_terms": ["서윤"], "forbid_terms": []}
+{"id": "hom21", "language": "ko", "say": "예전에는 여기가 카페였어요.", "reference": "예전에는 여기가 카페였어요.", "expect_terms": [], "forbid_terms": ["예준"]}
+{"id": "hom22", "language": "ko", "say": "요즘은 예전 같지 않네요.", "reference": "요즘은 예전 같지 않네요.", "expect_terms": [], "forbid_terms": ["예준"]}
+{"id": "hom23", "language": "ko", "say": "예준 씨한테 일정 다시 물어볼게요.", "reference": "예준 씨한테 일정 다시 물어볼게요.", "expect_terms": ["예준"], "forbid_terms": []}
+{"id": "hom24", "language": "ko", "say": "그 노래는 민중의 마음을 대변했어요.", "reference": "그 노래는 민중의 마음을 대변했어요.", "expect_terms": [], "forbid_terms": ["민준"]}
+{"id": "hom25", "language": "ko", "say": "민중의 목소리에 귀를 기울여야 해요.", "reference": "민중의 목소리에 귀를 기울여야 해요.", "expect_terms": [], "forbid_terms": ["민준"]}
+{"id": "hom26", "language": "ko", "say": "민준 씨가 회의록을 정리해 줬어요.", "reference": "민준 씨가 회의록을 정리해 줬어요.", "expect_terms": ["민준"], "forbid_terms": []}
+{"id": "hom27", "language": "ko", "say": "이 도형의 넓이를 구해 보세요.", "reference": "이 도형의 넓이를 구해 보세요.", "expect_terms": [], "forbid_terms": ["도현"]}
+{"id": "hom28", "language": "ko", "say": "삼각형은 변이 세 개인 도형이에요.", "reference": "삼각형은 변이 세 개인 도형이에요.", "expect_terms": [], "forbid_terms": ["도현"]}
+{"id": "hom29", "language": "ko", "say": "도현 씨가 디자인 시안을 보내 줬어요.", "reference": "도현 씨가 디자인 시안을 보내 줬어요.", "expect_terms": ["도현"], "forbid_terms": []}
+{"id": "hom30", "language": "ko", "say": "내일 시험 공부 많이 했어요?", "reference": "내일 시험 공부 많이 했어요?", "expect_terms": [], "forbid_terms": ["시현"]}
+{"id": "hom31", "language": "ko", "say": "시험 끝나고 같이 밥 먹어요.", "reference": "시험 끝나고 같이 밥 먹어요.", "expect_terms": [], "forbid_terms": ["시현"]}
+{"id": "hom32", "language": "ko", "say": "시현 씨도 오늘 회식에 와요?", "reference": "시현 씨도 오늘 회식에 와요?", "expect_terms": ["시현"], "forbid_terms": []}
+{"id": "hom33", "language": "ko", "say": "마우스 커서를 커서 창 위로 올려 보세요.", "reference": "마우스 커서를 Cursor 창 위로 올려 보세요.", "expect_terms": ["Cursor"], "forbid_terms": []}
+{"id": "hom34", "language": "ko", "say": "미로 보드가 미로처럼 복잡해졌어요.", "reference": "Miro 보드가 미로처럼 복잡해졌어요.", "expect_terms": ["Miro"], "forbid_terms": []}
+{"id": "hom35", "language": "ko", "say": "서윤 씨가 좀 서운했나 봐요.", "reference": "서윤 씨가 좀 서운했나 봐요.", "expect_terms": ["서윤"], "forbid_terms": []}
+{"id": "hom36", "language": "ko", "say": "예준 씨는 예전 회사에서 디자이너였어요.", "reference": "예준 씨는 예전 회사에서 디자이너였어요.", "expect_terms": ["예준"], "forbid_terms": []}
