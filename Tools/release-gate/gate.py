@@ -89,6 +89,13 @@ def term_found(term: str, text: str) -> bool:
     return re.search(pattern, unicodedata.normalize("NFKC", text)) is not None
 
 
+def term_forms(term: str | list[str]) -> list[str]:
+    """The spellings of an expected term. A string is one spelling. A list holds the form
+    written in the reference first, then the other spellings that count as right, such as
+    ["Slack", "슬랙"]. The strict check takes the first form only, the lenient check any."""
+    return [term] if isinstance(term, str) else list(term)
+
+
 def rate(errors: int, tokens: int) -> float:
     return round(100 * errors / tokens, 3) if tokens else 0.0
 
@@ -99,8 +106,13 @@ def rate(errors: int, tokens: int) -> float:
 def summarize_corpus(raw: dict, manifest: dict[str, dict]) -> dict:
     clips = {}
     groups = {}
+    # Lenient rates only for a corpus with accepted spellings, whose clips with lists also
+    # keep their lenient errors. Without lists they would equal the strict ones.
+    lenient_groups = {}
+    with_lists = {clip_id for clip_id in raw["clips"] if speech_score.accepted_spellings(manifest[clip_id])}
     for field in ("text", "ruled_text"):
         totals = {name: [0, 0] for name in speech_score.GROUPS}
+        lenient_totals = {name: [0, 0] for name in speech_score.GROUPS}
         for clip_id, row in raw["clips"].items():
             clip = manifest[clip_id]
             text = row.get(field, "")
@@ -109,21 +121,29 @@ def summarize_corpus(raw: dict, manifest: dict[str, dict]) -> dict:
                 errors, count = speech_score.clip_errors(clip, text)
                 entry["tokens"] = count
             else:
-                # Silence and noise: any output is an error.
-                errors, count = len(speech_score.tokens(text, "zh")), 0
+                # Silence and noise: any output is an error, in any script.
+                errors, count = len(speech_score.output_tokens(text)), 0
                 entry["tokens"] = 0
             entry["errors" if field == "text" else "ruled_errors"] = errors
+            lenient = errors
+            if clip_id in with_lists and clip["reference"]:
+                lenient = speech_score.clip_errors(clip, text, lenient=True)[0]
+                entry["lenient_errors" if field == "text" else "ruled_lenient_errors"] = lenient
             for name, keep in speech_score.GROUPS.items():
                 if keep(clip):
                     totals[name][0] += errors
                     totals[name][1] += count
-        # The Japanese and Spanish groups only for a corpus with such clips.
+                    lenient_totals[name][0] += lenient
+                    lenient_totals[name][1] += count
+        # The groups of other languages only for a corpus with such clips.
         groups[field] = {name: rate(*values) for name, values in totals.items() if values[1] or name not in speech_score.LANGUAGE_GROUPS}
+        lenient_groups[field] = {name: rate(*lenient_totals[name]) for name in groups[field]}
     decode = [row["decode_seconds"] for row in raw["clips"].values() if not row.get("skipped_silent")]
     return {
         "suite": "corpus",
         "build": raw.get("build"),
         "groups": groups,
+        **({"lenient_groups": lenient_groups} if with_lists else {}),
         "decode_median_s": statistics.median(decode) if decode else None,
         "decode_p90_s": percentile(decode, 0.9),
         "clips": clips,
@@ -196,18 +216,26 @@ def load_set_manifest(folder: Path) -> dict[str, dict]:
 
 
 def score_set_clip(clip: dict, text: str) -> dict:
+    """Errors and terms of one clip. A clip with accepted spellings also gets its lenient
+    errors and the terms that no form of theirs matches. A term is named by its first form."""
+    lists = speech_score.accepted_spellings(clip)
     lang = speech_score.scoring_lang(clip.get("language"))
     reference = speech_score.tokens(clip.get("reference", ""), lang)
     errors = speech_score.edit_distance(reference, speech_score.tokens(text, lang))
-    expect = [term for term in clip.get("expect_terms", []) if normalized(term)]
+    expect = [term_forms(term) for term in clip.get("expect_terms", []) if normalized(term_forms(term)[0])]
     forbid = [term for term in clip.get("forbid_terms", []) if normalized(term)]
-    return {
+    scored = {
         "errors": errors,
         "tokens": len(reference),
-        "missing_terms": [term for term in expect if not term_found(term, text)],
+        "missing_terms": [forms[0] for forms in expect if not term_found(forms[0], text)],
         "expect_terms": len(expect),
         "forbidden_found": [term for term in forbid if term_found(term, text)],
     }
+    if lists:
+        lenient = speech_score.lenient_text(text, lists, clip.get("reference", ""))
+        scored["lenient_errors"] = speech_score.edit_distance(reference, speech_score.tokens(lenient, lang))
+        scored["missing_terms_lenient"] = [forms[0] for forms in expect if not any(term_found(form, text) for form in forms)]
+    return scored
 
 
 def summarize_sets(raw: dict, sets_dir: Path) -> dict:
@@ -229,9 +257,21 @@ def summarize_sets(raw: dict, sets_dir: Path) -> dict:
         total["missing_terms"] += len(scored["missing_terms"])
         total["forbidden_found"] += len(scored["forbidden_found"])
         total["exact_clips"] += scored["errors"] == 0
+        # Lenient totals only for a set with accepted spellings, counted over all its clips.
+        total.setdefault("lenient", [0, 0, 0])
+        total["lenient"][0] += "lenient_errors" in scored
+        total["lenient"][1] += scored.get("lenient_errors", scored["errors"])
+        total["lenient"][2] += len(scored.get("missing_terms_lenient", scored["missing_terms"]))
     for total in sets.values():
         total["error_rate"] = rate(total["errors"], total["tokens"])
         total["expect_recall"] = rate(total["expect_terms"] - total["missing_terms"], total["expect_terms"]) if total["expect_terms"] else 100.0
+        accepted_clips, lenient_errors, missing_lenient = total.pop("lenient")
+        if accepted_clips:
+            total["accepted_clips"] = accepted_clips
+            total["lenient_errors"] = lenient_errors
+            total["missing_terms_lenient"] = missing_lenient
+            total["lenient_error_rate"] = rate(lenient_errors, total["tokens"])
+            total["expect_recall_lenient"] = rate(total["expect_terms"] - missing_lenient, total["expect_terms"]) if total["expect_terms"] else 100.0
     return {"suite": "sets", "build": raw.get("build"), "sets": sets, "clips": clips}
 
 
@@ -641,6 +681,12 @@ def compare_corpus(base: dict, cand: dict, result: Result) -> None:
             result.lines.append(f"corpus {field} {name}: {old:.2f}% -> {value:.2f}%")
             if value - old > CORPUS_RATE_TOLERANCE:
                 result.fail(f"corpus {field} {name} rose by {value - old:.2f} points, more than {CORPUS_RATE_TOLERANCE}")
+    # The lenient rates of a corpus with accepted spellings, shown beside the strict ones and
+    # not barred.
+    for field, rates in cand.get("lenient_groups", {}).items():
+        for name, value in rates.items():
+            old = base.get("lenient_groups", {}).get(field, {}).get(name)
+            result.lines.append(f"corpus {field} {name} lenient: " + (f"{old:.2f}% -> {value:.2f}%" if old is not None else f"new, {value:.2f}%"))
     result.lines.append(f"corpus decode p90: {base.get('decode_p90_s', 0):.3f} s -> {cand.get('decode_p90_s', 0):.3f} s")
     newly_wrong = []
     for clip_id, row in cand["clips"].items():
@@ -652,6 +698,9 @@ def compare_corpus(base: dict, cand: dict, result: Result) -> None:
                 result.worse.append(f"corpus/{clip_id} {key} {old[key]} -> {row[key]}")
                 if old[key] == 0:
                     newly_wrong.append(f"corpus/{clip_id}")
+        for key, strict in (("lenient_errors", "errors"), ("ruled_lenient_errors", "ruled_errors")):
+            if key in row and key in old and row[key] > old[key] and row[strict] <= old[strict]:
+                result.worse.append(f"corpus/{clip_id} {key} {old[key]} -> {row[key]}")
     if newly_wrong:
         result.fail("corpus clips that were right and are now wrong", sorted(set(newly_wrong)))
 
@@ -749,17 +798,31 @@ def compare_latency(base: dict, cand: dict, result: Result) -> None:
         result.worse += [f"{clip} median more than {LATENCY_GROWTH:.0%} slower" for clip in slower]
 
 
+def lenient_sets_line(old: dict | None, total: dict) -> str:
+    """The lenient numbers of a set with accepted spellings, for its line. They are shown
+    beside the strict ones and not barred."""
+    if "accepted_clips" not in total:
+        return ""
+    if old is None or "accepted_clips" not in old:
+        return f", lenient error {total['lenient_error_rate']:.2f}%, lenient terms {total['expect_recall_lenient']:.1f}% ({total['accepted_clips']} clips with accepted spellings)"
+    return (
+        f", lenient error {old['lenient_error_rate']:.2f}% -> {total['lenient_error_rate']:.2f}%, "
+        f"lenient terms {old['expect_recall_lenient']:.1f}% -> {total['expect_recall_lenient']:.1f}% ({total['accepted_clips']} clips with accepted spellings)"
+    )
+
+
 def compare_sets(base: dict, cand: dict, result: Result) -> None:
     require_all(result, "sets", "sets", base["sets"], cand["sets"])
     require_all(result, "sets", "clips", base["clips"], cand["clips"])
     for name, total in sorted(cand["sets"].items()):
         old = base["sets"].get(name)
         if old is None:
-            result.lines.append(f"sets {name}: new, error {total['error_rate']:.2f}%, terms {total['expect_recall']:.1f}%, forbidden {total['forbidden_found']}")
+            result.lines.append(f"sets {name}: new, error {total['error_rate']:.2f}%, terms {total['expect_recall']:.1f}%, forbidden {total['forbidden_found']}" + lenient_sets_line(None, total))
             continue
         result.lines.append(
             f"sets {name}: error {old['error_rate']:.2f}% -> {total['error_rate']:.2f}%, exact clips {old['exact_clips']} -> {total['exact_clips']} of {total['clips']}, "
             f"terms {old['expect_recall']:.1f}% -> {total['expect_recall']:.1f}%, forbidden {old['forbidden_found']} -> {total['forbidden_found']}"
+            + lenient_sets_line(old, total)
         )
         if total["error_rate"] - old["error_rate"] > SET_RATE_TOLERANCE:
             result.fail(f"sets {name} error rate rose by {total['error_rate'] - old['error_rate']:.2f} points")
@@ -777,6 +840,14 @@ def compare_sets(base: dict, cand: dict, result: Result) -> None:
                 newly_wrong.append(f"sets/{clip_id}")
         if set(row["missing_terms"]) - set(old["missing_terms"]):
             missing.append(f"sets/{clip_id}")
+        # Listed, not barred: a term no form of which matches now, or more lenient errors,
+        # where the strict check saw no change.
+        if "lenient_errors" in row and "lenient_errors" in old:
+            lost = set(row["missing_terms_lenient"]) - set(old["missing_terms_lenient"]) - (set(row["missing_terms"]) - set(old["missing_terms"]))
+            if lost:
+                result.worse.append(f"sets/{clip_id} lenient terms lost: {', '.join(sorted(lost))}")
+            if row["lenient_errors"] > old["lenient_errors"] and row["errors"] <= old["errors"]:
+                result.worse.append(f"sets/{clip_id} lenient_errors {old['lenient_errors']} -> {row['lenient_errors']}")
     if newly_wrong:
         result.fail("set clips that were right and are now wrong", newly_wrong)
     if missing:
