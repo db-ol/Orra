@@ -73,9 +73,10 @@ struct PromptPrefixTests {
     }
 }
 
-/// The prefix with the real tokenizer: every prompt of the cleanup evaluation starts with
-/// it, so the cache is used for all of them. Needs only the tokenizer files, so it runs
-/// whenever the model is on this Mac, and is skipped otherwise.
+/// The prefix with the real tokenizer: every prompt of the regular, adversarial, meaning
+/// and repeat cases of the cleanup evaluation starts with it, so the cache is used for all
+/// of them. Needs only the tokenizer files, so it runs whenever the model is on this Mac,
+/// and is skipped otherwise.
 @Suite(.enabled(if: RewriteTestModel.folder != nil))
 struct PromptPrefixTokenizerTests {
     @Test func everyEvaluationPromptStartsWithThePrefix() async throws {
@@ -86,7 +87,7 @@ struct PromptPrefixTokenizerTests {
         #expect(prefix.count > 800)
         let tools = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Tools/rewrite-eval")
         var count = 0
-        for file in ["cases.jsonl", "adversarial.jsonl", "meaning.jsonl"] {
+        for file in ["cases.jsonl", "adversarial.jsonl", "meaning.jsonl", "repeats.jsonl"] {
             for line in try String(contentsOf: tools.appendingPathComponent(file), encoding: .utf8).split(separator: "\n") {
                 let object = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
                 let input = try #require(object["input"] as? String)
@@ -97,6 +98,6 @@ struct PromptPrefixTokenizerTests {
                 }
             }
         }
-        #expect(count == 2 * (182 + 70 + 20))
+        #expect(count == 2 * (182 + 70 + 20 + 46))
     }
 }

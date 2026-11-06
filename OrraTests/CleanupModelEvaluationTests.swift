@@ -3,8 +3,10 @@ import Testing
 @testable import Orra
 
 /// Runs the real cleanup model on the cleanup cases of Tools/rewrite-eval: the 182 regular
-/// cases, the 70 adversarial ones, which ask, order or try to steer the model, and the 20
-/// whose words carry meaning that a cleanup must keep. Only when
+/// cases, the 70 adversarial ones, which ask, order or try to steer the model, the 20
+/// whose words carry meaning that a cleanup must keep, the 46 with words said twice, by
+/// accident or on purpose, and the 672 number cases, whose cleanup is their input, so
+/// they show where a cleanup changes a number or a word around it. Only when
 /// asked for, with TEST_RUNNER_ORRA_CLEANUP_EVAL=1, and only when the model is on this Mac,
 /// see RewriteTestModel. It loads 3 GB, so run it on its own, in a Release build, since a
 /// Debug build runs MLX without optimization and misses the time limit below:
@@ -26,6 +28,8 @@ struct CleanupModelEvaluationTests {
         let id: String
         let input: String
         let expected: String
+        /// Other cleanups that count as exact, from the field `cleanup_also`.
+        let alsoExpected: [String]
     }
 
     private static func cases(_ file: String, expected key: String) throws -> [Case] {
@@ -35,7 +39,7 @@ struct CleanupModelEvaluationTests {
             .appendingPathComponent("Tools/rewrite-eval/\(file)")
         return try String(contentsOf: url, encoding: .utf8).split(separator: "\n").map { line in
             let object = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
-            return Case(id: try #require(object["id"] as? String), input: try #require(object["input"] as? String), expected: try #require(object[key] as? String))
+            return Case(id: try #require(object["id"] as? String), input: try #require(object["input"] as? String), expected: try #require(object[key] as? String), alsoExpected: object["\(key)_also"] as? [String] ?? [])
         }
     }
 
@@ -157,18 +161,19 @@ struct CleanupModelEvaluationTests {
         var report = "Load and warm up: \(loadTime), memory footprint \(Double(loaded) / 1e9) GB after load (\(Double(loaded - min(before, loaded)) / 1e9) GB more than before), prefix cache \(Double(await engine.prefixCacheBytes) / 1e6) MB\n"
         var medians: [Double] = []
         var gateRows: [[String: Any]] = []
-        for (name, file, key) in [("regular", "cases.jsonl", "cleanup"), ("adversarial", "adversarial.jsonl", "expected_cleanup"), ("meaning", "meaning.jsonl", "cleanup")] {
+        for (name, file, key) in [("regular", "cases.jsonl", "cleanup"), ("adversarial", "adversarial.jsonl", "expected_cleanup"), ("meaning", "meaning.jsonl", "cleanup"), ("repeats", "repeats.jsonl", "cleanup"), ("numbers", "numbers.jsonl", "input")] {
             let cases = try Self.cases(file, expected: key)
             var exactIDs: [String: Set<String>] = [:]
             for mode in ["model only", "as the app runs it", "with the skip gate"] {
                 var runs: [String: [Run]] = [:]
                 var sources: [String] = []
-                var expectations: [String] = []
+                // The expected cleanup first, then any other that counts as exact.
+                var expectations: [[String]] = []
                 for item in cases {
                     let source = mode == "model only" ? item.input : Self.appRules(item.input)
                     let skipped = mode == "with the skip gate" && !CleanupStep.hasWorkForModel(source, heard: item.input)
                     sources.append(source)
-                    expectations.append(mode == "model only" ? item.expected : Self.appRules(item.expected))
+                    expectations.append(([item.expected] + item.alsoExpected).map { mode == "model only" ? $0 : Self.appRules($0) })
                     for (way, cached) in [("cached", true), ("uncached", false)] where cached || compares {
                         let run = if mode == "model only" || (CleanupStep.isWorthCleaning(source) && !skipped) {
                             await Self.run(source, engine: engine, usingPrefixCache: cached)
@@ -189,19 +194,19 @@ struct CleanupModelEvaluationTests {
                         default: result.outcome.logName
                         }
                         outcomes[kind, default: 0] += 1
-                        let isExact = Self.folded(result.text) == Self.folded(expectations[index])
+                        let isExact = expectations[index].contains { Self.folded($0) == Self.folded(result.text) }
                         if way == "cached" {
                             gateRows.append([
                                 "set": name, "mode": mode, "id": cases[index].id, "exact": isExact,
                                 "outcome": kind, "seconds": result.seconds,
-                                "obeyed": name == "adversarial" && Self.looksObeyed(result, expected: expectations[index]),
+                                "obeyed": name == "adversarial" && Self.looksObeyed(result, expected: expectations[index][0]),
                             ])
                         }
                         if isExact {
                             exact += 1
                             if way == "cached" { exactIDs[mode, default: []].insert(cases[index].id) }
                         } else if result.outcome == .cleaned || result.outcome == .unchanged {
-                            differing.append("  \(cases[index].id) [\(result.outcome.logName)] \(sources[index]) -> \(result.text) (expected \(expectations[index]))")
+                            differing.append("  \(cases[index].id) [\(result.outcome.logName)] \(sources[index]) -> \(result.text) (expected \(expectations[index].joined(separator: " or ")))")
                         }
                     }
                     let seconds = results.map(\.seconds)

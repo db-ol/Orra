@@ -1,8 +1,8 @@
 # Rewrite evaluation set
 
 Text cases for the steps that run after transcription: removing fillers, applying spoken
-self corrections, and translating a dictation. Nothing here is part of the app build, and
-nothing here is a recording.
+self corrections, removing words said twice by accident, and translating a dictation.
+Nothing here is part of the app build, and nothing here is a recording.
 
 ## The cases
 
@@ -68,6 +68,27 @@ others were written by hand in the same kinds:
 Each expected cleanup is the input, except that 呃 and 嗯 at the start go. The expected
 outputs were written by hand, and no case holds a recording. km12 repeats adv01, since that
 text lost 我 in use. None of them is a prompt example.
+OrraTests/CleanupModelEvaluationTests.swift runs them with the other cleanup cases.
+
+## Repeat cases
+
+`repeats.jsonl` has 46 cases of words said twice, in the format of `cases.jsonl`. A cleanup
+removes a repeat the speaker made by accident and keeps one that is meant:
+
+| Category | Cases | What it tests |
+| --- | --- | --- |
+| stutter_drop | 11 | A character or a word said twice that is no word doubled goes once: 我我我觉得, 这这个, 他，他说, 客客户, I I think, the the |
+| repeat_drop | 11 | A word or a phrase said twice by accident goes once: 我觉得我觉得, 然后然后, 就是就是, we need we need to, also with a comma between |
+| reduplication_keep | 10 | Doubled words stay: 看看, 试试, 谢谢谢谢, 天天, 好好, 慢慢, 干干净净, 一个一个, 散散步, 聊聊天 |
+| grammar_keep | 3 | Doubles of grammar stay: 公司司机, where two words meet, that that and had had |
+| emphasis_keep | 4 | Agreement and emphasis stay: 对对对, 好好好, 非常非常重要, very very |
+| name_keep | 3 | Names and titles stay: 《再见再见》, Duran Duran, 芳芳 |
+| list_keep | 4 | Lists, counting and spelling stay: 苹果、苹果汁, tea, tea lattes, 一二三，一二三, L E E |
+
+rp10 (中中英能够夹杂起来说) and rp11 (就去干干活去了) hold words a beta user dictated with
+cleanup on, where the repeat stayed. 干干活 is also a casual doubled verb, like 散散步, so
+rp11 has `cleanup_also`, a list of other cleanups that count as exact. The other cases were
+written by hand, no case holds a recording, and none of them is a prompt example.
 OrraTests/CleanupModelEvaluationTests.swift runs them with the other cleanup cases.
 
 ## Translation probes
@@ -243,7 +264,10 @@ times after a person's name, ranges of times and years, and years with 千. n394
 became a keep case with it.
 
 OrraTests/NumberRulesTests.swift runs every case, so Orra/NumberRules.swift gets all of
-them while the tests pass.
+them while the tests pass. OrraTests/CleanupModelEvaluationTests.swift runs the cleanup
+model on every input, as heard and after the rules, and expects it back as it went in, so
+it shows where a cleanup changes a number or a word around it. n070 holds a spoken self
+correction, so its cleanup should differ.
 
 ## Scoring
 
