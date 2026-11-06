@@ -87,7 +87,9 @@ struct TranscribeFileWindowTests {
     /// The list of segments shows the newest one as it comes, until the user scrolls up to
     /// read, and again once they scroll back to the end. The window is the app's, shown
     /// with orderFrontRegardless far off every screen, so the app is never activated and
-    /// nothing shows on the screen.
+    /// nothing shows on the screen. The user's scrolls are events of a mouse wheel given to
+    /// the list's scroll view, never posted to the system. A scroll of its clip view in
+    /// code would not do: SwiftUI puts its own scroll position back within 50 ms.
     @Test func theListFollowsTheNewestSegmentUntilTheUserScrollsUp() async throws {
         let count = 26
         let source = FakeFileSource(starts: (0..<count).map { Double($0) * 7.5 + 0.4 }, seconds: 6, duration: Double(count) * 7.5 + 5)
@@ -117,7 +119,7 @@ struct TranscribeFileWindowTests {
         try await waitUntil { list.documentHeight > list.contentView.bounds.height + 60 && list.showsEnd }
 
         // The user scrolls up to the first segments, and the list stays there.
-        list.scrollTo(top: true)
+        list.scrollByWheel(lines: 200)
         try await Task.sleep(for: .milliseconds(300))
         try await release(17...18)
         try await Task.sleep(for: .milliseconds(300))
@@ -125,8 +127,9 @@ struct TranscribeFileWindowTests {
         #expect(!list.showsEnd)
 
         // Back at the end, it follows again.
-        list.scrollTo(top: false)
+        list.scrollByWheel(lines: -200)
         try await Task.sleep(for: .milliseconds(300))
+        #expect(list.showsEnd)
         try await release(19...count)
         try await waitUntil { !transcription.isRunning && list.showsEnd }
     }
@@ -309,12 +312,11 @@ private extension NSScrollView {
         return documentView?.isFlipped ?? true ? visible.minY <= 2 : visible.maxY >= documentHeight - 2
     }
 
-    /// Scrolls to the start or the end of the document, as the user would.
-    func scrollTo(top: Bool) {
-        let flipped = documentView?.isFlipped ?? true
-        let height = contentView.bounds.height
-        let y = top == flipped ? 0 : max(documentHeight - height, 0)
-        contentView.scroll(to: NSPoint(x: contentView.bounds.minX, y: y))
-        reflectScrolledClipView(contentView)
+    /// Scrolls with the wheel of a mouse, as the user does, by `lines` lines, up when
+    /// positive. The event goes to this view only, never to the system.
+    func scrollByWheel(lines: Int32) {
+        guard let event = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: lines, wheel2: 0, wheel3: 0),
+              let wheel = NSEvent(cgEvent: event) else { return }
+        scrollWheel(with: wheel)
     }
 }

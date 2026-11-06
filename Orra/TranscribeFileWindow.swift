@@ -358,23 +358,24 @@ struct TranscribeFileView: View {
             userScrolls = phase == .tracking || phase == .interacting || phase == .decelerating
         }
         .onScrollGeometryChange(for: ListGeometry.self) { geometry in
-            ListGeometry(contentHeight: geometry.contentSize.height, visibleHeight: geometry.visibleRect.height, showsEnd: geometry.visibleRect.maxY >= geometry.contentSize.height - 8)
+            ListGeometry(offset: geometry.contentOffset.y, showsEnd: geometry.visibleRect.maxY >= geometry.contentSize.height - 8)
         } action: { old, new in
-            if new.contentHeight == old.contentHeight, new.visibleHeight == old.visibleHeight {
-                // The list scrolled, up to read or back down to the end.
-                followsNewest = new.showsEnd
-            } else if !userScrolls, followsNewest || new.showsEnd {
-                // A new segment, or another size of the window.
+            if new.showsEnd {
+                // At the end, scrolled back there or with the newest segment in view.
                 followsNewest = true
+            } else if new.offset != old.offset {
+                // Scrolled up to read, also when the list grew at the same moment.
+                followsNewest = false
+            } else if followsNewest, !userScrolls {
+                // A new segment below the end, or a smaller window, while the list follows.
                 scroll.scrollTo(edge: .bottom)
             }
         }
     }
 
-    /// How tall the list of segments is, how much of it shows, and whether its end shows.
+    /// Where the list of segments is scrolled to, and whether its end shows.
     private struct ListGeometry: Equatable {
-        var contentHeight: CGFloat
-        var visibleHeight: CGFloat
+        var offset: CGFloat
         var showsEnd: Bool
     }
 
