@@ -16,6 +16,5 @@ the common word, so a clip with 노선 or 액셀 forbids both spellings. Cursor,
 in Latin letters, since their Hangul is the common word. 프론트엔드 and the standard spelling 프런트엔드
 count as the same word.
 
-The Korean text of this set was written and reviewed by an AI process, not by a native speaker,
-and waits for a native reader. Until one has read it, its references, its accepted spellings and
-every result on it rest on AI review only.
+No native speaker has read the Korean text of this set yet. Until one has, its references, its
+accepted spellings and every result on it are not confirmed by a native reader.

@@ -7,6 +7,5 @@ middle length and one long. The Japanese ones say the same things as the Chinese
 latency-say, without fillers, since Orra has no Japanese filler rule yet. The self correction in
 ja_mid_1 stays in the reference, as in latency-say, and numbers are digits.
 
-The Japanese text of this set was written and reviewed by an AI process, not by a native
-speaker, and waits for a native reader. Until one has read it, its references, its accepted
-spellings and every result on it rest on AI review only.
+No native speaker has read the Japanese text of this set yet. Until one has, its references, its
+accepted spellings and every result on it are not confirmed by a native reader.
