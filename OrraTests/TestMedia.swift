@@ -59,6 +59,26 @@ enum TestMedia {
     }
 
     /// A movie this Mac could not write, such as a virtual machine without a video encoder.
+    /// Cuts an MPEG-4 file off inside its media data, keeping `fraction` of it, as a copy
+    /// that broke off leaves a file, or a recording whose app crashed. Its table of samples
+    /// still names the audio after the cut, so a reader of the file fails partway.
+    static func cutMediaData(of url: URL, keeping fraction: Double) throws {
+        let whole = try Data(contentsOf: url)
+        var offset = 0
+        var media: (start: Int, size: Int)?
+        // The top level boxes: a 32 bit size and a four letter type each.
+        while offset + 8 <= whole.count {
+            let size = whole[offset..<(offset + 4)].reduce(0) { $0 << 8 | Int($1) }
+            if String(decoding: whole[(offset + 4)..<(offset + 8)], as: UTF8.self) == "mdat" {
+                media = (offset, size)
+            }
+            guard size >= 8 else { break }
+            offset += size
+        }
+        guard let media else { throw CocoaError(.fileReadCorruptFile) }
+        try whole.prefix(media.start + Int(Double(media.size) * fraction)).write(to: url)
+    }
+
     struct MovieNotWritten: Error {
         var underlying: (any Error)?
     }

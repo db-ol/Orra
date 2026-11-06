@@ -68,6 +68,9 @@ actor FileAudioSource {
     /// Segments cut and not taken yet. One chunk of audio can end more than one.
     private var ready: [CaptionSegment] = []
     private var isAtEnd = false
+    /// Set when the audio stopped partway, so `next()` throws once the segments decoded
+    /// before it are taken.
+    private var stoppedPartway = false
     /// The samples decoded so far. Internal for the tests that check that a file is read
     /// one segment at a time.
     private(set) var decodedSamples = 0
@@ -157,8 +160,8 @@ actor FileAudioSource {
     }
 
     /// The next segment, nil after the last one or once reading was cancelled. Throws
-    /// FileAudioProblem.readFailed when the audio stops partway, and CancellationError when
-    /// the task is cancelled.
+    /// FileAudioProblem.readFailed when the audio stops partway, after the segments of the
+    /// speech decoded before that, and CancellationError when the task is cancelled.
     func next() throws -> CaptionSegment? {
         while ready.isEmpty, !isAtEnd {
             try Task.checkCancellation()
@@ -168,12 +171,14 @@ actor FileAudioSource {
                 switch reader.status {
                 case .failed:
                     Logger.fileTranscription.error("Reading the file stopped partway: \(reader.error.map(Self.code(of:)) ?? "no error", privacy: .public)")
-                    throw FileAudioProblem.readFailed
+                    stoppedPartway = true
                 case .cancelled:
                     return nil
                 default:
                     break
                 }
+                // What was heard up to the end, or up to where the audio stopped, such as
+                // a sentence under way or a short answer that waits for the next one.
                 if let last = segmenter.finish() {
                     take(last)
                 }
@@ -192,7 +197,13 @@ actor FileAudioSource {
                 take(segment)
             }
         }
-        return ready.isEmpty ? nil : ready.removeFirst()
+        if !ready.isEmpty {
+            return ready.removeFirst()
+        }
+        if stoppedPartway {
+            throw FileAudioProblem.readFailed
+        }
+        return nil
     }
 
     /// Stops reading. Later calls of `next()` return nil.
@@ -202,6 +213,7 @@ actor FileAudioSource {
         output = nil
         ready = []
         isAtEnd = true
+        stoppedPartway = false
     }
 
     private func take(_ segment: CaptionSegment) {

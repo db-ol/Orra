@@ -171,6 +171,36 @@ struct FileAudioSourceTests {
         #expect(try await opened.next() == nil)
     }
 
+    /// A file that stops partway, such as a copy that broke off, gives the speech decoded
+    /// before the damage, a short answer that waited for the next sentence and as much of
+    /// that sentence as was heard, and then says that the rest cannot be read.
+    @Test func aFileThatStopsPartwayGivesTheSpeechHeardBeforeIt() async throws {
+        let folder = try TestMedia.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("cut off.m4a")
+        // A sentence, a short answer, and a long sentence that the damage cuts.
+        try TestMedia.writeAudio(TestMedia.bursts([(1.0, 3.0), (5.0, 5.8), (6.8, 28.0)], seconds: 30, rate: 44_100), rate: 44_100, to: url)
+        try TestMedia.cutMediaData(of: url, keeping: 0.7)
+        let opened = try await FileAudioSource.open(url)
+        var segments: [CaptionSegment] = []
+        var problem: FileAudioProblem?
+        do {
+            while let segment = try await opened.next() {
+                segments.append(segment)
+            }
+        } catch let error as FileAudioProblem {
+            problem = error
+        }
+        await opened.cancel()
+        #expect(problem == .readFailed)
+        try #require(segments.count >= 2)
+        #expect(abs(segments[0].start - 0.8) < 0.1)
+        #expect(abs(segments[0].end - 3.15) < 0.1)
+        // The short answer, with the long sentence as far as it was heard.
+        #expect(abs(segments[1].start - 4.8) < 0.1)
+        #expect((segments.last?.end ?? 0) > 8)
+    }
+
     /// A segment shorter than 2 s joins the one after it when that follows within a second.
     @Test func aShortStretchJoinsTheNextOne() async throws {
         let folder = try TestMedia.folder()
