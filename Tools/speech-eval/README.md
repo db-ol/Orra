@@ -104,14 +104,16 @@ other spellings. A group whose clips have lists gets a lenient row below its rat
 does its rate without digits. The lenient rate scores the text with each accepted spelling
 written as the reference writes it, the longest spellings first, so 킬로미터 becomes km
 before 미터 can become m, and no shorter spelling replaces part of the reference's own
-form. White space inside a spelling is free. A spelling never takes part of a longer word
-or number: where it starts or ends with a letter of an alphabet, Latin with or without
-accents or another, no such letter may stand right next to it, and where it starts or ends
-with a digit, no digit may. So Slack is not found in Slacker, 30,000 not in 130,000 and es
-de 20 not in es de 200, while km is found in 80km. Hangul has no such edge, since Korean
-writes particles right after a word and a missing space must not count, so 일 테라 is found
-in 십일 테라 too, whose 십 stays an error. The term check of the release gate keeps its own
-rules (docs/release-gate.md).
+form. A spelling that the reference holds outside the forms of its lists, such as 세 시 in
+세 시간 when 세 시 is a spelling of 3시, is a word of the reference and stays as it is, so a
+text equal to its reference keeps no error. White space inside a spelling is free. A
+spelling never takes part of a longer word or number: where it starts or ends with a
+letter of an alphabet, Latin with or without accents or another, no such letter may stand
+right next to it, and where it starts or ends with a digit, no digit may. So Slack is not
+found in Slacker, 30,000 not in 130,000 and es de 20 not in es de 200, while km is found
+in 80km. Hangul has no such edge, since Korean writes particles right after a word and a
+missing space must not count, so 일 테라 is found in 십일 테라 too, whose 십 stays an error. The
+term check of the release gate keeps its own rules (docs/release-gate.md).
 The replaced form joins the letters and digits next to it as they were written: 80킬로미터
 becomes 80km, one token, which counts against a reference that writes 80 km as an output
 of 80km would. The strict rate is the rate as before. A clip without lists scores the same

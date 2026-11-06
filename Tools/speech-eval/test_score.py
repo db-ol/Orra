@@ -225,15 +225,26 @@ class AcceptedSpellingTests(unittest.TestCase):
     }
 
     def test_longest_spellings_go_first(self) -> None:
-        self.assertEqual(score.lenient_text("약 15킬로미터 떨어진 곳에서 3미터", [["km", "킬로미터"], ["m", "미터"]]), "약 15km 떨어진 곳에서 3m")
-        self.assertEqual(score.lenient_text("3미터와 15킬로미터", [["m", "미터"], ["km", "킬로미터"]]), "3m와 15km")
+        self.assertEqual(score.lenient_text("약 15킬로미터 떨어진 곳에서 3미터", [["km", "킬로미터"], ["m", "미터"]], ""), "약 15km 떨어진 곳에서 3m")
+        self.assertEqual(score.lenient_text("3미터와 15킬로미터", [["m", "미터"], ["km", "킬로미터"]], ""), "3m와 15km")
 
     def test_a_shorter_spelling_never_cuts_the_form_of_the_reference(self) -> None:
-        self.assertEqual(score.lenient_text("킬로그램과 킬로", [["킬로그램", "kg"], ["km", "킬로"]]), "킬로그램과 km")
+        self.assertEqual(score.lenient_text("킬로그램과 킬로", [["킬로그램", "kg"], ["km", "킬로"]], "킬로그램과 km"), "킬로그램과 km")
+
+    def test_a_word_of_the_reference_keeps_its_spelling(self) -> None:
+        # 세 시간 holds 세 시, another spelling of 3시, and 킬로그램 holds 킬로, another spelling of
+        # km. Neither is replaced, so a text equal to its reference keeps no error.
+        for reference, lists in (("세 시간 뒤 3시에 만나요", [["3시", "세 시"]]), ("10킬로그램을 들고 80km를 걸었다", [["km", "킬로미터", "킬로"]])):
+            clip = {"id": "k", "lang": "ko", "reference": reference, "accepted": lists}
+            self.assertEqual(score.clip_errors(clip, reference, lenient=True), (0, len(score.tokens(reference, "ko"))), reference)
+        # The other spellings still count, and 킬로, which the reference holds, keeps its errors.
+        clip = {"id": "k", "lang": "ko", "reference": "10킬로그램을 들고 80km를 걸었다", "accepted": [["km", "킬로미터", "킬로"]]}
+        self.assertEqual(score.clip_errors(clip, "10킬로그램을 들고 80킬로미터를 걸었다", lenient=True), (0, 13))
+        self.assertEqual(score.clip_errors(clip, "10킬로그램을 들고 80킬로를 걸었다", lenient=True), score.clip_errors(clip, "10킬로그램을 들고 80킬로를 걸었다"))
 
     def test_latin_spellings_match_whole_words_and_spaces_are_free(self) -> None:
-        self.assertEqual(score.lenient_text("Slacker와 Slack에서", [["슬랙", "Slack"]]), "slacker와 슬랙에서")
-        self.assertEqual(score.lenient_text("에이 피 아이 문서", [["API", "에이피아이"]]), "api 문서")
+        self.assertEqual(score.lenient_text("Slacker와 Slack에서", [["슬랙", "Slack"]], ""), "slacker와 슬랙에서")
+        self.assertEqual(score.lenient_text("에이 피 아이 문서", [["API", "에이피아이"]], ""), "api 문서")
 
     def test_no_spelling_takes_part_of_a_longer_word_or_number(self) -> None:
         # A letter with an accent ends a word as much as an ASCII letter, and a digit ends a number.
@@ -244,7 +255,7 @@ class AcceptedSpellingTests(unittest.TestCase):
             ("un disco de 11TB", [["1 TB", "1TB"]]),
             ("en el edificio 20", [["edificio dos", "edificio 2"]]),
         ):
-            self.assertEqual(score.lenient_text(text, lists), score.folded(text), text)
+            self.assertEqual(score.lenient_text(text, lists, ""), score.folded(text), text)
         # es de 20 must not take part of es de 200, which 200 ms needs (es-numbers num37 of the
         # pair sets).
         clip = {
@@ -255,9 +266,9 @@ class AcceptedSpellingTests(unittest.TestCase):
         self.assertEqual(score.clip_errors(clip, "La latencia del server no es de 200 ms, es de veinte.", lenient=True), (0, 12))
         # A digit next to a letter, or anything next to Hangul, still matches: km in 80km, and a
         # spelling right after a particle without its space.
-        self.assertEqual(score.lenient_text("타임아웃을30초에서 80킬로미터", [["삼십 초", "30초"], ["km", "킬로미터"]]), "타임아웃을삼십 초에서 80km")
+        self.assertEqual(score.lenient_text("타임아웃을30초에서 80킬로미터", [["삼십 초", "30초"], ["km", "킬로미터"]], ""), "타임아웃을삼십 초에서 80km")
         # Hangul has no edge, so 일 테라 is found in 십일 테라 too, and its 십 stays an error.
-        self.assertEqual(score.lenient_text("십일 테라", [["1TB", "일 테라"]]), "십1tb")
+        self.assertEqual(score.lenient_text("십일 테라", [["1TB", "일 테라"]], ""), "십1tb")
 
     def test_strict_and_lenient_rates(self) -> None:
         texts = {"k1": "약 80킬로미터 떨어진 곳", "k2": "슬랙에 올려 주세요", "k3": "점심 먹었어요"}

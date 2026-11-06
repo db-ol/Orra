@@ -155,26 +155,27 @@ def edge(character: str, before: bool) -> str:
     return ""
 
 
-def lenient_text(text: str, lists: list[list[str]]) -> str:
-    """The text with each accepted spelling in it written as the reference writes it, the
-    longest spellings first, so with ["km", "킬로미터"] and ["m", "미터"] the text 5킬로미터
-    becomes 5km, not 5킬로m. The form in the reference counts as a spelling too, so no
-    shorter spelling replaces part of it. White space inside a spelling is free. A spelling
-    never takes part of a longer word or number (see edge), so Slack is not found in Slacker,
-    30,000 not in 130,000 and es de 20 not in es de 200, while km is found in 80km. Hangul
-    has no such edge, since Korean writes particles right after a word and a missing space
-    must not count. The text comes back in NFKC lower case, which tokens() reads the same
-    way."""
-    text = folded(text)
-    spellings = sorted(((spelling, forms[0]) for forms in lists for spelling in forms), key=lambda pair: -len("".join(folded(pair[0]).split())))
+def spelling_patterns(lists: list[list[str]]) -> list[tuple[re.Pattern, str, bool]]:
+    """Each spelling of the lists as a pattern, with the form of its list in the reference and
+    whether it is that form, the longest spellings first. White space inside a spelling is
+    free, and edge() keeps it out of longer words and numbers."""
+    found = []
+    for forms in lists:
+        for index, spelling in enumerate(forms):
+            characters = [character for character in folded(spelling) if not character.isspace()]
+            if characters:
+                pattern = edge(characters[0], True) + r"\s*".join(re.escape(character) for character in characters) + edge(characters[-1], False)
+                found.append((len(characters), re.compile(pattern), folded(forms[0]), index == 0))
+    found.sort(key=lambda item: -item[0])
+    return [item[1:] for item in found]
+
+
+def spelling_spans(text: str, patterns: list[tuple[re.Pattern, str, bool]]) -> list[tuple[int, int, int]]:
+    """The spans of the text that the patterns take, each pattern in turn, none in a span
+    taken before, with the number of the pattern."""
     taken = [False] * len(text)
     found = []
-    for spelling, form in spellings:
-        characters = [character for character in folded(spelling) if not character.isspace()]
-        if not characters:
-            continue
-        pattern = edge(characters[0], True) + r"\s*".join(re.escape(character) for character in characters) + edge(characters[-1], False)
-        compiled = re.compile(pattern)
+    for number, (compiled, _, _) in enumerate(patterns):
         position = 0
         while match := compiled.search(text, position):
             start, end = match.span()
@@ -182,10 +183,29 @@ def lenient_text(text: str, lists: list[list[str]]) -> str:
                 position = start + 1
                 continue
             taken[start:end] = [True] * (end - start)
-            found.append((start, end, folded(form)))
+            found.append((start, end, number))
             position = end
-    for start, end, form in sorted(found, reverse=True):
-        text = text[:start] + form + text[end:]
+    return found
+
+
+def lenient_text(text: str, lists: list[list[str]], reference: str) -> str:
+    """The text with each accepted spelling in it written as the reference writes it, the
+    longest spellings first, so with ["km", "킬로미터"] and ["m", "미터"] the text 5킬로미터
+    becomes 5km, not 5킬로m. The form in the reference counts as a spelling too, so no
+    shorter spelling replaces part of it. A spelling that the reference holds outside the
+    forms of its lists, such as 세 시 in 세 시간 when ["3시", "세 시"] is a list, is a word of
+    the reference and stays as it is, so a text equal to its reference keeps no error. White
+    space inside a spelling is free. A spelling never takes part of a longer word or number
+    (see edge), so Slack is not found in Slacker, 30,000 not in 130,000 and es de 20 not in
+    es de 200, while km is found in 80km. Hangul has no such edge, since Korean writes
+    particles right after a word and a missing space must not count. The text comes back in
+    NFKC lower case, which tokens() reads the same way."""
+    patterns = spelling_patterns(lists)
+    held = {number for _, _, number in spelling_spans(folded(reference), patterns) if not patterns[number][2]}
+    patterns = [pattern for number, pattern in enumerate(patterns) if number not in held]
+    text = folded(text)
+    for start, end, number in sorted(spelling_spans(text, patterns), reverse=True):
+        text = text[:start] + patterns[number][1] + text[end:]
     return text
 
 
@@ -196,7 +216,7 @@ def clip_errors(clip: dict, text: str, lenient: bool = False) -> tuple[int, int]
     reference = tokens(clip["reference"], lang)
     lists = accepted_spellings(clip) if lenient else []
     if lists:
-        text = lenient_text(text, lists)
+        text = lenient_text(text, lists, clip["reference"])
     return edit_distance(reference, tokens(text, lang)), len(reference)
 
 

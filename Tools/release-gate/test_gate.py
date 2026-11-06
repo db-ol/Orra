@@ -87,6 +87,12 @@ class ScoringTests(unittest.TestCase):
         # The strict check takes the first form with its case, as for a term without a list.
         self.assertEqual(gate.score_set_clip(clip, "slack이랑 Jira에")["missing_terms_lenient"], ["Slack"])
 
+    def test_lenient_errors_keep_the_words_of_the_reference(self):
+        # 세 시간 holds 세 시, another spelling of 3시, so the right text keeps no lenient error.
+        clip = {"language": "ko", "reference": "세 시간 뒤 3시에 만나요", "expect_terms": [["3시", "세 시"]], "forbid_terms": []}
+        scored = gate.score_set_clip(clip, "세 시간 뒤 3시에 만나요")
+        self.assertEqual((scored["errors"], scored["lenient_errors"], scored["missing_terms"], scored["missing_terms_lenient"]), (0, 0, [], []))
+
     def test_accepted_spellings_that_are_no_terms_count_in_the_errors_only(self):
         clip = {"language": "ko", "reference": "약 80km 떨어진 곳", "expect_terms": [], "forbid_terms": [], "accepted": [["km", "킬로미터"]]}
         scored = gate.score_set_clip(clip, "약 80킬로미터 떨어진 곳")

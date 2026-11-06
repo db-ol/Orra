@@ -232,7 +232,7 @@ def score_set_clip(clip: dict, text: str) -> dict:
         "forbidden_found": [term for term in forbid if term_found(term, text)],
     }
     if lists:
-        lenient = speech_score.lenient_text(text, lists)
+        lenient = speech_score.lenient_text(text, lists, clip.get("reference", ""))
         scored["lenient_errors"] = speech_score.edit_distance(reference, speech_score.tokens(lenient, lang))
         scored["missing_terms_lenient"] = [forms[0] for forms in expect if not any(term_found(form, text) for form in forms)]
     return scored
