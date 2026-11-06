@@ -178,6 +178,8 @@ final class FileTranscription {
     private(set) var isSaved = false
     /// What waits for the user to discard the text that is not saved, see `choose(_:)`.
     var pendingDiscard: Discard?
+    /// True after a drop of several files, which the window says, until a file is chosen.
+    private(set) var refusedSeveralFiles = false
 
     @ObservationIgnored private let engines: FileTranscriptionEngines
     @ObservationIgnored private var job: Task<Void, Never>?
@@ -216,9 +218,24 @@ final class FileTranscription {
         FileTranscript.text(of: segments)
     }
 
+    /// A drop on the window: one file goes to `choose(_:)`. Several files are refused,
+    /// which the window then says, and so is a drop of anything that is no file or while
+    /// the speech model is not loaded. Returns whether the drop was taken.
+    func drop(_ urls: [URL]) -> Bool {
+        let files = urls.filter(\.isFileURL)
+        guard isSpeechReady, !files.isEmpty else { return false }
+        guard files.count == 1, let url = files.first else {
+            refusedSeveralFiles = true
+            return false
+        }
+        choose(url)
+        return true
+    }
+
     /// The user dropped or picked a file: it starts, or when that would lose text that is
     /// not saved, the window asks first, see `pendingDiscard`.
     func choose(_ url: URL) {
+        refusedSeveralFiles = false
         guard hasUnsavedText else {
             start(url)
             return

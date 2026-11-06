@@ -158,8 +158,6 @@ struct TranscribeFileView: View {
     /// Closes the window after the user agreed to discard its text.
     let closeWindow: () -> Void
     @State private var isTargeted = false
-    /// Said under the drop area after a drop of several files.
-    @State private var dropNote: String?
     /// Where the list of segments is scrolled to.
     @State private var scroll = ScrollPosition(edge: .top)
     /// Whether the list shows the newest segment as it comes, which the user ends by
@@ -190,7 +188,8 @@ struct TranscribeFileView: View {
             }
         }
         .dropDestination(for: URL.self) { urls, _ in
-            drop(urls, modelReady: modelLine == nil)
+            // Nothing is taken while the speech model cannot take a file.
+            modelLine == nil && transcription.drop(urls)
         } isTargeted: { targeted in
             isTargeted = targeted
         }
@@ -306,6 +305,12 @@ struct TranscribeFileView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if let dropNote {
+                Text(verbatim: dropNote)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(16)
     }
@@ -362,6 +367,11 @@ struct TranscribeFileView: View {
         var contentHeight: CGFloat
         var visibleHeight: CGFloat
         var showsEnd: Bool
+    }
+
+    /// Said after a drop of several files, until the next file.
+    private var dropNote: String? {
+        transcription.refusedSeveralFiles ? String(localized: "Drop one file at a time.") : nil
     }
 
     private var footer: some View {
@@ -455,20 +465,6 @@ struct TranscribeFileView: View {
     static func clock(_ seconds: Double, showingHours: Bool) -> String {
         let duration = Duration.seconds(Int(max(seconds, 0)))
         return duration.formatted(.time(pattern: showingHours ? .hourMinuteSecond : .minuteSecond))
-    }
-
-    /// A drop of one file starts it, or asks first. Several files, a drop while the
-    /// speech model cannot take one, and anything that is no file are refused.
-    private func drop(_ urls: [URL], modelReady: Bool) -> Bool {
-        let files = urls.filter(\.isFileURL)
-        guard modelReady, !files.isEmpty else { return false }
-        guard files.count == 1, let url = files.first else {
-            dropNote = String(localized: "Drop one file at a time.")
-            return false
-        }
-        dropNote = nil
-        transcription.choose(url)
-        return true
     }
 }
 

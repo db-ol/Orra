@@ -3302,7 +3302,8 @@ the list follows the newest sentence. FileTranscriptionEndToEndTests transcribes
   name and length, the progress, the time left after a few sentences and each sentence with
   its start time. Try an .mp3, a .wav, a .flac, an .mp4 and a .mov with sound too.
 - [ ] Choose File… opens the open panel, which offers audio and video files only.
-- [ ] Drop two files at once: nothing starts and the window says to drop one file at a time.
+- [ ] Drop two files at once, on the empty window and on one with a file: nothing starts and
+  the window says to drop one file at a time.
   Drop a folder, a PDF and a movie without sound: each gets its message. A movie bought in
   the TV app says that it is protected.
 - [ ] A file in iCloud Drive that shows the cloud in Finder (Remove Download first), dropped

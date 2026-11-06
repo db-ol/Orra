@@ -432,6 +432,36 @@ struct FileTranscriptionTests {
         #expect(transcription.phase == .finished)
     }
 
+    // MARK: Drops
+
+    /// A drop of one file starts it. A drop of several files is refused, which the window
+    /// says until a file is chosen, also while a file is in the window, and so is a drop of
+    /// no file or while the speech model is not loaded.
+    @Test func aDropTakesOneFileAtATime() async throws {
+        let source = FakeFileSource(starts: [0], duration: 4)
+        let transcription = FileTranscription(engines: engines(source, FakeFileSpeech()))
+        let other = URL(fileURLWithPath: "/Users/someone/Movies/Talk.mp4")
+        #expect(!transcription.drop([url, other]))
+        #expect(transcription.refusedSeveralFiles)
+        #expect(transcription.file == nil)
+        let notAFile = try #require(URL(string: "orra-test:talk"))
+        #expect(!transcription.drop([notAFile]))
+        #expect(transcription.drop([url]))
+        #expect(!transcription.refusedSeveralFiles)
+        try await finished(transcription)
+        #expect(transcription.file?.name == "Interview.m4a")
+        #expect(!transcription.drop([url, other]))
+        #expect(transcription.refusedSeveralFiles)
+        #expect(transcription.file?.name == "Interview.m4a")
+        #expect(source.opened == 1)
+        transcription.choose(other)
+        #expect(!transcription.refusedSeveralFiles)
+
+        let notReady = FileTranscription(engines: engines(FakeFileSource(starts: [0], duration: 4), FakeFileSpeech(), ready: false))
+        #expect(!notReady.drop([url]))
+        #expect(notReady.file == nil)
+    }
+
     // MARK: The text that is not saved
 
     @Test func anotherFileAsksFirstWhileTheTextIsNotSaved() async throws {
