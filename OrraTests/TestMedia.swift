@@ -58,19 +58,37 @@ enum TestMedia {
         }
     }
 
+    /// A movie this Mac could not write, such as a virtual machine without a video encoder.
+    struct MovieNotWritten: Error {
+        var underlying: (any Error)?
+    }
+
     /// Writes an MPEG-4 or QuickTime movie, by the extension of `url`, with a small H.264
     /// picture at 2 frames a second when `video`, and an AAC track of `samples` when they
-    /// are given, `seconds` long.
+    /// are given, `seconds` long. Throws MovieNotWritten when the writer fails, so a test
+    /// can tell a Mac that cannot write video from a problem of the code it tests.
     static func writeMovie(_ samples: [Float]?, rate: Double, seconds: Double, video: Bool, to url: URL) async throws {
+        do {
+            try await writeMovieOrThrow(samples, rate: rate, seconds: seconds, video: video, to: url)
+        } catch {
+            throw MovieNotWritten(underlying: error)
+        }
+    }
+
+    private static func writeMovieOrThrow(_ samples: [Float]?, rate: Double, seconds: Double, video: Bool, to url: URL) async throws {
         let type: AVFileType = url.pathExtension == "mov" ? .mov : .mp4
         let writer = try AVAssetWriter(outputURL: url, fileType: type)
         var picture: (input: AVAssetWriterInput, adaptor: AVAssetWriterInputPixelBufferAdaptor)?
         if video {
-            let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            let settings: [String: Any] = [
                 AVVideoCodecKey: AVVideoCodecType.h264,
                 AVVideoWidthKey: 64,
                 AVVideoHeightKey: 64,
-            ])
+            ]
+            guard writer.canApply(outputSettings: settings, forMediaType: .video) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
             input.expectsMediaDataInRealTime = false
             let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
@@ -93,24 +111,36 @@ enum TestMedia {
         }
         guard writer.startWriting() else { throw writer.error ?? CocoaError(.fileWriteUnknown) }
         writer.startSession(atSourceTime: .zero)
+        // Waits until `input` takes more, and throws when the writer failed or does not take
+        // it for 30 s, such as on a Mac without the encoder, rather than wait for good.
+        func ready(_ input: AVAssetWriterInput) async throws {
+            let deadline = ContinuousClock.now + .seconds(30)
+            while !input.isReadyForMoreMediaData {
+                guard writer.status == .writing, ContinuousClock.now < deadline else {
+                    writer.cancelWriting()
+                    throw writer.error ?? CocoaError(.fileWriteUnknown)
+                }
+                try await Task.sleep(for: .milliseconds(1))
+            }
+        }
         // Half a second of each track at a time, so the writer can interleave them.
         let step = 0.5
         var time = 0.0
         var written = 0
         while time < seconds {
             if let picture {
-                while !picture.input.isReadyForMoreMediaData {
-                    try await Task.sleep(for: .milliseconds(1))
+                try await ready(picture.input)
+                guard picture.adaptor.append(try pixelBuffer(), withPresentationTime: CMTime(seconds: time, preferredTimescale: 600)) else {
+                    throw writer.error ?? CocoaError(.fileWriteUnknown)
                 }
-                picture.adaptor.append(try pixelBuffer(), withPresentationTime: CMTime(seconds: time, preferredTimescale: 600))
             }
             if let sound, let samples {
                 let end = min(Int((time + step) * rate), samples.count)
                 if end > written {
-                    while !sound.isReadyForMoreMediaData {
-                        try await Task.sleep(for: .milliseconds(1))
+                    try await ready(sound)
+                    guard sound.append(try sampleBuffer(samples[written..<end], rate: rate, at: written)) else {
+                        throw writer.error ?? CocoaError(.fileWriteUnknown)
                     }
-                    sound.append(try sampleBuffer(samples[written..<end], rate: rate, at: written))
                     written = end
                 }
             }

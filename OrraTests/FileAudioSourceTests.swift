@@ -51,7 +51,7 @@ struct FileAudioSourceTests {
         let folder = try TestMedia.folder()
         defer { try? FileManager.default.removeItem(at: folder) }
         let url = folder.appendingPathComponent("movie.\(type)")
-        try await TestMedia.writeMovie(TestMedia.bursts(Self.bursts, seconds: 12, rate: 48_000), rate: 48_000, seconds: 12, video: true, to: url)
+        try await Self.writeMovie(TestMedia.bursts(Self.bursts, seconds: 12, rate: 48_000), seconds: 12, to: url)
         let (duration, segments) = try await segments(of: url)
         #expect(abs(duration - 12) < 0.6)
         expectBursts(segments)
@@ -61,9 +61,19 @@ struct FileAudioSourceTests {
         let folder = try TestMedia.folder()
         defer { try? FileManager.default.removeItem(at: folder) }
         let url = folder.appendingPathComponent("silent movie.mp4")
-        try await TestMedia.writeMovie(nil, rate: 48_000, seconds: 3, video: true, to: url)
+        try await Self.writeMovie(nil, seconds: 3, to: url)
         await #expect(throws: FileAudioProblem.noAudio) {
             _ = try await FileAudioSource.open(url)
+        }
+    }
+
+    /// Writes a movie with a picture, or ends the test as skipped on a Mac that cannot
+    /// write H.264 video, such as a virtual machine without a video encoder.
+    private static func writeMovie(_ samples: [Float]?, seconds: Double, to url: URL) async throws {
+        do {
+            try await TestMedia.writeMovie(samples, rate: 48_000, seconds: seconds, video: true, to: url)
+        } catch let error as TestMedia.MovieNotWritten {
+            try Test.cancel("This Mac could not write an H.264 movie: \(String(describing: error.underlying))")
         }
     }
 
