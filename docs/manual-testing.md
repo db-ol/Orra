@@ -3552,6 +3552,53 @@ the last 15 s. Use a Release build:
   text:
   `/usr/bin/log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "push-to-talk"' | grep pieces`.
 
+Transcribe File, added on 2026-11-05, not verified yet in the running app. The unit tests
+cover the segments and their times, the text and the subtitles, the progress and the time
+left, Stop, the turns with dictation and captions with fakes, files that cannot be read and
+the names offered for saving, and a test shows the window off every screen to check that
+the list follows the newest sentence. FileTranscriptionEndToEndTests transcribes spoken
+.m4a and .mp4 files with the real speech model. Check by hand:
+- [ ] Transcribe File… stands below Meeting Interpretation in the menu with its symbol and
+  opens the window, which brings Orra into the Dock while it is open.
+- [ ] Drop a voice memo (.m4a) from Finder on the window: it starts and shows the file's
+  name and length, the progress, the time left after a few sentences and each sentence with
+  its start time. Try an .mp3, a .wav, a .flac, an .mp4 and a .mov with sound too.
+- [ ] Choose File… opens the open panel, which offers audio and video files only.
+- [ ] Drop two files at once, on the empty window and on one with a file: nothing starts and
+  the window says to drop one file at a time.
+  Drop a folder, a PDF and a movie without sound: each gets its message. A movie bought in
+  the TV app says that it is protected.
+- [ ] A file in iCloud Drive that shows the cloud in Finder (Remove Download first), dropped
+  on the window and picked with Choose File…: each time the window says that it is not on
+  this Mac yet, and Finder shows no download.
+- [ ] Open the window while the speech model downloads: it says how far the download is, as
+  the menu does, and not to download it from the menu.
+- [ ] Press the talk key while a file runs: the dictation pastes as quickly as without a
+  file, the window says that it waits for the dictation once it has gone on for a second,
+  and the file goes on after the paste. A quick tap of the talk key does not flash that
+  line. The same with the translation key, and with a dictation cancelled with Escape.
+- [ ] Turn on Live Captions while a file runs: the file stops after the sentence under way
+  and says that it waits while Live Captions run. Turn them off, and it goes on.
+- [ ] During a file of several minutes, the list shows the newest sentence as it comes.
+  Scroll up: the list stays where you read. Scroll back to the end: it follows again.
+- [ ] Stop keeps the sentences so far. Copy pastes them without times into TextEdit.
+- [ ] Save as Text… and Save as Subtitles… start in the file's folder with its name and .txt
+  or .srt. Open the .srt with the movie in a video player: each subtitle shows at its
+  sentence, with at most two lines of about the same length, no word broken between two
+  lines, and none shows for less than a second.
+- [ ] Drop another file or close the window while the text is not saved: Orra asks first.
+  Cancel keeps the text, Discard starts the new file or closes the window. After a save it
+  does not ask.
+- [ ] A file of an hour or more: the times show hours, the memory of Orra in Activity
+  Monitor stays flat, and the Mac does not go to sleep on its own while it runs.
+- [ ] With the window behind other apps or minimized, the file goes on at the same pace.
+- [ ] In Chinese, Japanese and Spanish the menu item and the window read well, and the
+  buttons fit at the smallest size of the window.
+- [ ] VoiceOver reads the file's name, the progress and each sentence.
+- [ ] The log shows durations, counts, timings and error codes, never text or the file's
+  name:
+  `/usr/bin/log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "transcribe-file"'`.
+
 Model gate, added on 2026-10-16, not verified yet. The voice model runs alone, the
 speech and cleanup models share the gate, and a dictation reserves it, so no voice work
 comes in between its calls, see Orra/ModelGate.swift. Use a Release build with Speak
