@@ -24,10 +24,10 @@
 {"id": "m24", "language": "ja", "say": "エミリーさんは来週まで休暇中です。", "reference": "エミリーさんは来週まで休暇中です。", "expect_terms": [["エミリー", "Emily"]], "forbid_terms": []}
 {"id": "m25", "language": "ja", "say": "このイタリアンのお店は、クリスさんのおすすめです。", "reference": "このイタリアンのお店は、クリスさんのおすすめです。", "expect_terms": [["クリス", "Chris"]], "forbid_terms": []}
 {"id": "m26", "language": "ja", "say": "セールスフォースと契約を結びました。", "reference": "Salesforceと契約を結びました。", "expect_terms": [["Salesforce", "セールスフォース"]], "forbid_terms": []}
-{"id": "m27", "language": "ja", "say": "宿はエアビーアンドビーで予約しました。", "reference": "宿はAirbnbで予約しました。", "expect_terms": [["Airbnb", "エアビーアンドビー", "エアビー"]], "forbid_terms": []}
+{"id": "m27", "language": "ja", "say": "宿はエアビーアンドビーで予約しました。", "reference": "宿はAirbnbで予約しました。", "expect_terms": [["Airbnb", "エアビーアンドビー"]], "forbid_terms": []}
 {"id": "m28", "language": "ja", "say": "リンクトインでリンクを送ってもらえますか？", "reference": "LinkedInでリンクを送ってもらえますか？", "expect_terms": [["LinkedIn", "リンクトイン"]], "forbid_terms": []}
 {"id": "m29", "language": "ja", "say": "マーケティングチームは、ニュースレターにハブスポットを使っています。", "reference": "マーケティングチームは、ニュースレターにHubSpotを使っています。", "expect_terms": [["HubSpot", "ハブスポット"], ["ニュースレター", "newsletter"]], "forbid_terms": []}
-{"id": "m30", "language": "ja", "say": "ロードマップはサラさんとケビンさんが発表します。", "reference": "ロードマップはサラさんとケビンさんが発表します。", "expect_terms": [["ロードマップ", "roadmap"], ["サラ", "Sarah"], ["ケビン", "Kevin"]], "forbid_terms": []}
+{"id": "m30", "language": "ja", "say": "ロードマップはサラさんとケビンさんが発表します。", "reference": "ロードマップはサラさんとケビンさんが発表します。", "expect_terms": [["ロードマップ", "roadmap"], ["サラ", "Sarah"], ["ケビン", "ケヴィン", "Kevin"]], "forbid_terms": []}
 {"id": "m31", "language": "ja", "say": "明日のミーティングは、午後三時半に変更になりました。", "reference": "明日のミーティングは、午後3時半に変更になりました。", "expect_terms": [["ミーティング", "meeting"], ["3時半", "三時半"]], "forbid_terms": []}
 {"id": "m32", "language": "ja", "say": "サーバー代は月に千二百ドルかかります。", "reference": "サーバー代は月に1200ドルかかります。", "expect_terms": [["サーバー", "サーバ", "server"], ["1200ドル", "1,200ドル", "千二百ドル"]], "forbid_terms": []}
 {"id": "m33", "language": "ja", "say": "リリース後、コンバージョンが十五パーセント上がりました。", "reference": "リリース後、コンバージョンが15%上がりました。", "expect_terms": [["リリース", "release"], ["コンバージョン", "conversion"], ["15%", "15パーセント", "十五パーセント"]], "forbid_terms": []}
@@ -47,7 +47,7 @@
 {"id": "m47", "language": "ja", "say": "了解です、エーエスエーピーで確認します。", "reference": "了解です、ASAPで確認します。", "expect_terms": ["ASAP"], "forbid_terms": []}
 {"id": "m48", "language": "ja", "say": "対応しました。修正はプッシュ済みです。", "reference": "対応しました。修正はプッシュ済みです。", "expect_terms": [["プッシュ", "push"]], "forbid_terms": []}
 {"id": "m49", "language": "ja", "say": "了解です、ドキュメントをアップデートしておきます。", "reference": "了解です、ドキュメントをアップデートしておきます。", "expect_terms": [["ドキュメント", "document", "doc"], ["アップデート", "update"]], "forbid_terms": []}
-{"id": "m50", "language": "ja", "say": "じゃあ、また明日。バイバイ！", "reference": "じゃあ、また明日。バイバイ！", "expect_terms": [["バイバイ", "bye bye", "bye-bye"]], "forbid_terms": []}
+{"id": "m50", "language": "ja", "say": "じゃあ、また明日。バイバイ！", "reference": "じゃあ、また明日。バイバイ！", "expect_terms": [["バイバイ", "bye bye", "bye-bye", "Bye bye", "Bye-bye"]], "forbid_terms": []}
 {"id": "m51", "language": "ja", "say": "ミーティングは火曜日に、あ、違う、水曜日にしましょう。", "reference": "ミーティングは火曜日に、あ、違う、水曜日にしましょう。", "expect_terms": [["ミーティング", "meeting"]], "forbid_terms": []}
 {"id": "m52", "language": "ja", "say": "ジェニファーさんに送って、あ、すみません、エミリーさんでした。", "reference": "ジェニファーさんに送って、あ、すみません、エミリーさんでした。", "expect_terms": [["ジェニファー", "Jennifer"], ["エミリー", "Emily"]], "forbid_terms": []}
 {"id": "m53", "language": "ja", "say": "デッドラインは金曜日、いや、やっぱり月曜日にしましょう。", "reference": "デッドラインは金曜日、いや、やっぱり月曜日にしましょう。", "expect_terms": [["デッドライン", "deadline"]], "forbid_terms": []}

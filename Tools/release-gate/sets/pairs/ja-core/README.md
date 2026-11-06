@@ -8,7 +8,7 @@ their terms as context and one plain. Each sentence runs with its own context.
 
 In `say` the terms are written as a Japanese speaker says them (クバネティス, てしがわらさん), and the
 reference has the vocabulary's spelling (Kubernetes, 勅使河原). The number sentences list other
-spellings of each number in `accepted`.
+spellings of every number but the room number 403 in `accepted`.
 
 The Japanese text of this set was written and reviewed by an AI process, not by a native
 speaker, and waits for a native reader. Until one has read it, its references, its accepted

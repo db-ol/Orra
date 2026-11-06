@@ -3,9 +3,9 @@
 {"id": "m03", "language": "ko", "say": "자세한 내용은 슬랙으로 공유할게요.", "reference": "자세한 내용은 Slack으로 공유할게요.", "expect_terms": [["Slack", "슬랙"]], "forbid_terms": []}
 {"id": "m04", "language": "ko", "say": "배포 끝나면 지라 티켓 닫아 주세요.", "reference": "배포 끝나면 Jira 티켓 닫아 주세요.", "expect_terms": [["Jira", "지라"], ["티켓", "ticket"]], "forbid_terms": []}
 {"id": "m05", "language": "ko", "say": "이번 스프린트에서는 에이피아이 문서부터 정리하죠.", "reference": "이번 스프린트에서는 API 문서부터 정리하죠.", "expect_terms": [["스프린트", "sprint"], "API"], "forbid_terms": []}
-{"id": "m06", "language": "ko", "say": "오늘 안으로 깃허브에 푸시해 주세요.", "reference": "오늘 안으로 GitHub에 푸시해 주세요.", "expect_terms": [["GitHub", "깃허브"], ["푸시", "push"]], "forbid_terms": []}
+{"id": "m06", "language": "ko", "say": "오늘 안으로 깃허브에 푸시해 주세요.", "reference": "오늘 안으로 GitHub에 푸시해 주세요.", "expect_terms": [["GitHub", "깃허브"], ["푸시", "푸쉬", "push"]], "forbid_terms": []}
 {"id": "m07", "language": "ko", "say": "엑셀 파일을 메일에 첨부했어요.", "reference": "Excel 파일을 메일에 첨부했어요.", "expect_terms": [["Excel", "엑셀"]], "forbid_terms": []}
-{"id": "m08", "language": "ko", "say": "대시보드 수치를 주간 보고서에 넣죠.", "reference": "대시보드 수치를 주간 보고서에 넣죠.", "expect_terms": [["대시보드", "dashboard"]], "forbid_terms": []}
+{"id": "m08", "language": "ko", "say": "대시보드 수치를 주간 보고서에 넣죠.", "reference": "대시보드 수치를 주간 보고서에 넣죠.", "expect_terms": [["대시보드", "대쉬보드", "dashboard"]], "forbid_terms": []}
 {"id": "m09", "language": "ko", "say": "고객 피드백은 구글 드라이브 공유 폴더에 있어요.", "reference": "고객 피드백은 Google Drive 공유 폴더에 있어요.", "expect_terms": [["피드백", "feedback"], ["Google Drive", "구글 드라이브", "Google 드라이브"]], "forbid_terms": []}
 {"id": "m10", "language": "ko", "say": "씨아이가 또 실패했는데, 로그 좀 봐 주실래요?", "reference": "CI가 또 실패했는데, 로그 좀 봐 주실래요?", "expect_terms": ["CI", ["로그", "log"]], "forbid_terms": []}
 {"id": "m11", "language": "ko", "say": "리뷰 끝나면 이 브랜치를 메인에 머지해 주세요.", "reference": "리뷰 끝나면 이 브랜치를 메인에 머지해 주세요.", "expect_terms": [["리뷰", "review"], ["브랜치", "branch"], ["메인", "main"], ["머지", "merge"]], "forbid_terms": []}
@@ -27,7 +27,7 @@
 {"id": "m27", "language": "ko", "say": "숙소는 에어비앤비로 예약했어요.", "reference": "숙소는 Airbnb로 예약했어요.", "expect_terms": [["Airbnb", "에어비앤비"]], "forbid_terms": []}
 {"id": "m28", "language": "ko", "say": "링크드인으로 링크 보내 줄 수 있어요?", "reference": "LinkedIn으로 링크 보내 줄 수 있어요?", "expect_terms": [["LinkedIn", "링크드인"]], "forbid_terms": []}
 {"id": "m29", "language": "ko", "say": "마케팅 팀은 뉴스레터에 허브스팟을 써요.", "reference": "마케팅 팀은 뉴스레터에 HubSpot을 써요.", "expect_terms": [["HubSpot", "허브스팟"], ["뉴스레터", "newsletter"]], "forbid_terms": []}
-{"id": "m30", "language": "ko", "say": "로드맵은 사라 씨랑 케빈 씨가 발표할 거예요.", "reference": "로드맵은 사라 씨랑 케빈 씨가 발표할 거예요.", "expect_terms": [["로드맵", "roadmap"], ["사라", "Sarah"], ["케빈", "Kevin"]], "forbid_terms": []}
+{"id": "m30", "language": "ko", "say": "로드맵은 사라 씨랑 케빈 씨가 발표할 거예요.", "reference": "로드맵은 사라 씨랑 케빈 씨가 발표할 거예요.", "expect_terms": [["로드맵", "roadmap"], ["사라", "세라", "Sarah"], ["케빈", "Kevin"]], "forbid_terms": []}
 {"id": "m31", "language": "ko", "say": "내일 미팅이 오후 세 시 반으로 바뀌었어요.", "reference": "내일 미팅이 오후 3시 반으로 바뀌었어요.", "expect_terms": [["미팅", "meeting"], ["3시 반", "세 시 반"]], "forbid_terms": []}
 {"id": "m32", "language": "ko", "say": "서버 비용이 한 달에 천이백 달러예요.", "reference": "서버 비용이 한 달에 1,200달러예요.", "expect_terms": [["서버", "server"], ["1,200달러", "1200달러", "천이백 달러"]], "forbid_terms": []}
 {"id": "m33", "language": "ko", "say": "릴리스 이후에 전환율이 십오 퍼센트 올랐어요.", "reference": "릴리스 이후에 전환율이 15% 올랐어요.", "expect_terms": [["릴리스", "릴리즈", "release"], ["15%", "15퍼센트", "십오 퍼센트"]], "forbid_terms": []}
@@ -37,22 +37,22 @@
 {"id": "m37", "language": "ko", "say": "데모는 십일월 십사일이에요.", "reference": "데모는 11월 14일이에요.", "expect_terms": [["데모", "demo"], ["11월 14일", "십일월 십사일"]], "forbid_terms": []}
 {"id": "m38", "language": "ko", "say": "제 번호는 공일공 일이삼사 오육칠팔이에요. 급한 거 아니면 디엠 주세요.", "reference": "제 번호는 010-1234-5678이에요. 급한 거 아니면 DM 주세요.", "expect_terms": [["010-1234-5678", "01012345678", "010 1234 5678"], ["DM", "디엠"]], "forbid_terms": []}
 {"id": "m39", "language": "ko", "say": "레이턴시가 이백 밀리초에서 오십 밀리초로 줄었어요.", "reference": "레이턴시가 200밀리초에서 50밀리초로 줄었어요.", "expect_terms": [["레이턴시", "latency"], ["200밀리초", "200ms", "이백 밀리초"], ["50밀리초", "50ms", "오십 밀리초"]], "forbid_terms": []}
-{"id": "m40", "language": "ko", "say": "캠페인 예산은 오천 달러가 아니라 오만 달러예요.", "reference": "캠페인 예산은 5천 달러가 아니라 5만 달러예요.", "expect_terms": [["캠페인", "campaign"], ["5천 달러", "5,000달러", "오천 달러"], ["5만 달러", "50,000달러", "오만 달러"], "아니라"], "forbid_terms": []}
+{"id": "m40", "language": "ko", "say": "캠페인 예산은 오천 달러가 아니라 오만 달러예요.", "reference": "캠페인 예산은 5천 달러가 아니라 5만 달러예요.", "expect_terms": [["캠페인", "campaign"], ["5천 달러", "5,000달러", "5000달러", "오천 달러"], ["5만 달러", "50,000달러", "50000달러", "오만 달러"], "아니라"], "forbid_terms": []}
 {"id": "m41", "language": "ko", "say": "오케이, 좋아요.", "reference": "OK, 좋아요.", "expect_terms": [["OK", "오케이"]], "forbid_terms": []}
-{"id": "m42", "language": "ko", "say": "땡큐, 확인했어요.", "reference": "땡큐, 확인했어요.", "expect_terms": [["땡큐", "Thank you", "thank you"]], "forbid_terms": []}
+{"id": "m42", "language": "ko", "say": "땡큐, 확인했어요.", "reference": "땡큐, 확인했어요.", "expect_terms": [["땡큐", "생큐", "Thank you", "thank you"]], "forbid_terms": []}
 {"id": "m43", "language": "ko", "say": "엘지티엠, 머지해 주세요.", "reference": "LGTM, 머지해 주세요.", "expect_terms": ["LGTM", ["머지", "merge"]], "forbid_terms": []}
 {"id": "m44", "language": "ko", "say": "에프와이아이, 금요일에는 사무실이 쉬어요.", "reference": "FYI, 금요일에는 사무실이 쉬어요.", "expect_terms": ["FYI"], "forbid_terms": []}
 {"id": "m45", "language": "ko", "say": "나이스, 굿잡!", "reference": "나이스, 굿잡!", "expect_terms": [["나이스", "Nice", "nice"], ["굿잡", "Good job", "good job"]], "forbid_terms": []}
 {"id": "m46", "language": "ko", "say": "쏘리, 링크 다시 보내 줄 수 있어요?", "reference": "쏘리, 링크 다시 보내 줄 수 있어요?", "expect_terms": [["쏘리", "Sorry", "sorry"], ["링크", "link"]], "forbid_terms": []}
 {"id": "m47", "language": "ko", "say": "네, 에이에스에이피로 확인할게요.", "reference": "네, ASAP로 확인할게요.", "expect_terms": ["ASAP"], "forbid_terms": []}
-{"id": "m48", "language": "ko", "say": "완료했어요. 수정 사항 푸시했어요.", "reference": "완료했어요. 수정 사항 푸시했어요.", "expect_terms": [["푸시", "push"]], "forbid_terms": []}
+{"id": "m48", "language": "ko", "say": "완료했어요. 수정 사항 푸시했어요.", "reference": "완료했어요. 수정 사항 푸시했어요.", "expect_terms": [["푸시", "푸쉬", "push"]], "forbid_terms": []}
 {"id": "m49", "language": "ko", "say": "알겠어요, 문서 업데이트해 둘게요.", "reference": "알겠어요, 문서 업데이트해 둘게요.", "expect_terms": [["업데이트", "update"]], "forbid_terms": []}
 {"id": "m50", "language": "ko", "say": "내일 봐요, 바이바이!", "reference": "내일 봐요, 바이바이!", "expect_terms": [["바이바이", "bye bye", "bye-bye"]], "forbid_terms": []}
 {"id": "m51", "language": "ko", "say": "미팅은 화요일에, 아 아니다, 수요일에 해요.", "reference": "미팅은 화요일에, 아 아니다, 수요일에 해요.", "expect_terms": [["미팅", "meeting"]], "forbid_terms": []}
 {"id": "m52", "language": "ko", "say": "제니퍼 씨한테 보내 주세요, 아 죄송해요, 에밀리 씨요.", "reference": "제니퍼 씨한테 보내 주세요, 아 죄송해요, 에밀리 씨요.", "expect_terms": [["제니퍼", "Jennifer"], ["에밀리", "Emily"]], "forbid_terms": []}
 {"id": "m53", "language": "ko", "say": "데드라인은 금요일, 아니다, 월요일로 할게요.", "reference": "데드라인은 금요일, 아니다, 월요일로 할게요.", "expect_terms": [["데드라인", "deadline"]], "forbid_terms": []}
 {"id": "m54", "language": "ko", "say": "미팅룸 세 명으로, 아니 네 명으로 예약해 주세요.", "reference": "미팅룸 세 명으로, 아니 네 명으로 예약해 주세요.", "expect_terms": [["미팅룸", "meeting room"], ["세 명", "3명"], ["네 명", "4명"]], "forbid_terms": []}
-{"id": "m55", "language": "ko", "say": "디벨롭 브랜치에 푸시해 주세요, 아니 스테이징에요.", "reference": "develop 브랜치에 푸시해 주세요, 아니 스테이징에요.", "expect_terms": [["develop", "디벨롭"], ["브랜치", "branch"], ["푸시", "push"], ["스테이징", "staging"]], "forbid_terms": []}
+{"id": "m55", "language": "ko", "say": "디벨롭 브랜치에 푸시해 주세요, 아니 스테이징에요.", "reference": "develop 브랜치에 푸시해 주세요, 아니 스테이징에요.", "expect_terms": [["develop", "디벨롭"], ["브랜치", "branch"], ["푸시", "푸쉬", "push"], ["스테이징", "staging"]], "forbid_terms": []}
 {"id": "m56", "language": "ko", "say": "엑셀 파일 쓰세요, 아니다, 구글 시트로요.", "reference": "Excel 파일 쓰세요, 아니다, Google Sheets로요.", "expect_terms": [["Excel", "엑셀"], ["Google Sheets", "구글 시트", "Google 시트"]], "forbid_terms": []}
 {"id": "m57", "language": "ko", "say": "미팅은 두 시예요, 아 죄송해요, 두 시 반이요.", "reference": "미팅은 2시예요, 아 죄송해요, 2시 반이요.", "expect_terms": [["미팅", "meeting"], ["2시 반", "두 시 반"]], "forbid_terms": [], "accepted": [["2시예요", "두 시예요"]]}
 {"id": "m58", "language": "ko", "say": "슬랙에 올려 주세요, 아니다, 그냥 메일로 보내 주세요.", "reference": "Slack에 올려 주세요, 아니다, 그냥 메일로 보내 주세요.", "expect_terms": [["Slack", "슬랙"]], "forbid_terms": []}

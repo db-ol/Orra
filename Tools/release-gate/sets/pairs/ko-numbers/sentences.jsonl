@@ -1,6 +1,6 @@
 {"id": "num01", "language": "ko", "say": "이천이십육 년 시월 십사일에 새 버전을 출시해요.", "reference": "2026년 10월 14일에 새 버전을 출시해요.", "expect_terms": [["2026년", "이천이십육 년"], ["10월 14일", "시월 십사일"]], "forbid_terms": []}
 {"id": "num02", "language": "ko", "say": "그 사람은 천구백구십팔 년생이에요.", "reference": "그 사람은 1998년생이에요.", "expect_terms": [["1998년생", "천구백구십팔 년생"]], "forbid_terms": []}
-{"id": "num03", "language": "ko", "say": "삼만 원이 아니라 삼만 오천 원이에요.", "reference": "3만 원이 아니라 3만 5천 원이에요.", "expect_terms": [["3만 원", "삼만 원", "30,000원"], ["3만 5천 원", "삼만 오천 원", "35,000원"], "아니라"], "forbid_terms": []}
+{"id": "num03", "language": "ko", "say": "삼만 원이 아니라 삼만 오천 원이에요.", "reference": "3만 원이 아니라 3만 5천 원이에요.", "expect_terms": [["3만 원", "삼만 원", "30,000원", "30000원"], ["3만 5천 원", "3만 5000원", "삼만 오천 원", "35,000원", "35000원"], "아니라"], "forbid_terms": []}
 {"id": "num04", "language": "ko", "say": "예산이 삼백만 원이 아니라 삼백오십만 원이에요.", "reference": "예산이 300만 원이 아니라 350만 원이에요.", "expect_terms": [["300만 원", "삼백만 원"], ["350만 원", "삼백오십만 원"], "아니라"], "forbid_terms": []}
 {"id": "num05", "language": "ko", "say": "이 노트북은 백이십팔만 원 주고 샀어요.", "reference": "이 노트북은 128만 원 주고 샀어요.", "expect_terms": [["128만 원", "백이십팔만 원", "1,280,000원"]], "forbid_terms": []}
 {"id": "num06", "language": "ko", "say": "월세가 한 달에 팔십오만 원이에요.", "reference": "월세가 한 달에 85만 원이에요.", "expect_terms": [["85만 원", "팔십오만 원", "850,000원"]], "forbid_terms": []}
@@ -16,9 +16,9 @@
 {"id": "num16", "language": "ko", "say": "비행기는 오전 열한 시 사십오 분에 출발해요.", "reference": "비행기는 오전 11시 45분에 출발해요.", "expect_terms": [["11시 45분", "열한 시 사십오 분"]], "forbid_terms": []}
 {"id": "num17", "language": "ko", "say": "제 휴대폰 번호는 공일공 이사육팔 일삼오칠이에요.", "reference": "제 휴대폰 번호는 010-2468-1357이에요.", "expect_terms": [["010-2468-1357", "01024681357", "010 2468 1357"]], "forbid_terms": []}
 {"id": "num18", "language": "ko", "say": "인증 번호는 사칠이구일육이에요.", "reference": "인증 번호는 472916이에요.", "expect_terms": ["472916"], "forbid_terms": []}
-{"id": "num19", "language": "ko", "say": "저는 팔공육 호에 묵고 있어요.", "reference": "저는 806호에 묵고 있어요.", "expect_terms": [["806호", "팔공육 호"]], "forbid_terms": []}
+{"id": "num19", "language": "ko", "say": "저는 팔공육 호에 묵고 있어요.", "reference": "저는 806호에 묵고 있어요.", "expect_terms": ["806호"], "forbid_terms": []}
 {"id": "num20", "language": "ko", "say": "주문 번호는 이공이육 일공일사 공공칠이에요.", "reference": "주문 번호는 20261014007이에요.", "expect_terms": ["20261014007"], "forbid_terms": []}
-{"id": "num21", "language": "ko", "say": "그 친구가 일 등을 했어요.", "reference": "그 친구가 1등을 했어요.", "expect_terms": [["1등", "일 등"]], "forbid_terms": []}
+{"id": "num21", "language": "ko", "say": "그 친구가 일 등을 했어요.", "reference": "그 친구가 1등을 했어요.", "expect_terms": [["1등", "일등"]], "forbid_terms": []}
 {"id": "num22", "language": "ko", "say": "이번이 세 번째 알림이에요.", "reference": "이번이 세 번째 알림이에요.", "expect_terms": [["세 번째", "3번째"]], "forbid_terms": []}
 {"id": "num23", "language": "ko", "say": "일 분기 매출은 목표에 못 미쳤어요.", "reference": "1분기 매출은 목표에 못 미쳤어요.", "expect_terms": [["1분기", "일 분기"], "못 미쳤어요"], "forbid_terms": []}
 {"id": "num24", "language": "ko", "say": "가기 싫은 게 아니라 시간이 없어요.", "reference": "가기 싫은 게 아니라 시간이 없어요.", "expect_terms": ["아니라", "없어요"], "forbid_terms": []}
@@ -27,7 +27,7 @@
 {"id": "num27", "language": "ko", "say": "오후 네 시 회의 잊지 마세요.", "reference": "오후 4시 회의 잊지 마세요.", "expect_terms": [["4시", "네 시"], "잊지 마세요"], "forbid_terms": []}
 {"id": "num28", "language": "ko", "say": "오만 원 넘게 쓰지 마세요.", "reference": "5만 원 넘게 쓰지 마세요.", "expect_terms": [["5만 원", "오만 원", "50,000원"], "쓰지 마세요"], "forbid_terms": []}
 {"id": "num29", "language": "ko", "say": "여기 서른 살 넘은 사람은 없어요.", "reference": "여기 서른 살 넘은 사람은 없어요.", "expect_terms": [["서른 살", "30살"], "없어요"], "forbid_terms": []}
-{"id": "num30", "language": "ko", "say": "그 사람은 십 킬로미터를 뛰었는데, 한 번도 안 쉬었어요.", "reference": "그 사람은 10km를 뛰었는데, 한 번도 안 쉬었어요.", "expect_terms": [["10km", "10킬로미터", "십 킬로미터", "10킬로"], "안 쉬었어요"], "forbid_terms": []}
+{"id": "num30", "language": "ko", "say": "그 사람은 십 킬로미터를 뛰었는데, 한 번도 안 쉬었어요.", "reference": "그 사람은 10km를 뛰었는데, 한 번도 안 쉬었어요.", "expect_terms": [["10km", "10킬로미터", "십 킬로미터"], "안 쉬었어요"], "forbid_terms": []}
 {"id": "num31", "language": "ko", "say": "이 파일은 삼 점 오 기가예요.", "reference": "이 파일은 3.5GB예요.", "expect_terms": [["3.5GB", "3.5기가", "삼 점 오 기가"]], "forbid_terms": []}
 {"id": "num32", "language": "ko", "say": "맥오에스 십오 점 일로 업데이트해 주세요.", "reference": "macOS 15.1로 업데이트해 주세요.", "expect_terms": ["macOS", ["15.1", "십오 점 일"]], "forbid_terms": []}
 {"id": "num33", "language": "ko", "say": "새 엠파이브 칩은 이십 퍼센트 빨라졌어요.", "reference": "새 M5 칩은 20% 빨라졌어요.", "expect_terms": ["M5", ["20%", "20퍼센트", "이십 퍼센트"]], "forbid_terms": []}

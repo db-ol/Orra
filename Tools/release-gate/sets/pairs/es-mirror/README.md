@@ -18,8 +18,10 @@ English words as the model writes them on its own.
 The sentences are Latin American Spanish with tú and keep the English words in Latin letters, so
 Paulina says them with Spanish sounds, as many speakers do. Numbers follow the Spanish of
 Mexico: digits with a comma for thousands (1,200 dólares) and a colon for minutes (3:30), and
-words for small counts (para tres). Where a number may also be written in words, the words are
-an accepted spelling, as are other spellings of a few words (okey for OK, email for mail).
+words for small counts (para tres). A period for thousands, as many other Spanish speaking
+countries write it (1.200 dólares), counts as right too. Where a number may also be written in
+words, the words are an accepted spelling, as are other spellings of a few words (okey for OK,
+email for mail).
 
 The Spanish text of this set was written and reviewed by an AI process, not by a native speaker,
 and waits for a native reader. Until one has read it, its references, its accepted spellings and

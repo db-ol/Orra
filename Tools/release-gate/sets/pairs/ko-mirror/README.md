@@ -19,7 +19,8 @@ English words as the model writes them on its own.
 that way. The reference writes them as a user would type them: names of products and companies
 and acronyms in Latin letters (Slack, PR, API), common loanwords in Hangul (미팅, 데드라인) and names
 of people in Hangul (제니퍼). Each English word is an expected term with its other spellings as
-accepted spellings, such as ["Slack", "슬랙"] and ["데드라인", "deadline"]. Particles follow how the
+accepted spellings, such as ["Slack", "슬랙"] and ["데드라인", "deadline"]. Where Korean writes a
+loanword two ways, both count, such as 릴리스 and 릴리즈 or 푸시 and 푸쉬. Particles follow how the
 word is said (Slack으로, API는, ASAP로). Numbers are digits for dates, times, money and percentages
 (3시 반, 1,200달러), with 만 for ten thousands (5만 달러), and words for counts with native numbers (세
 명). Most numbers list their spelling in words.

@@ -8,7 +8,9 @@ terms as context and one plain. Each sentence runs with its own context.
 
 In `say` the terms are written as a Korean speaker says them (쿠버네티스, 그라파나), and the reference
 has the vocabulary's spelling (Kubernetes, Grafana). 남궁민지, 제갈윤 and 두레이 test names and a product
-the model may not know. The number sentences list other spellings of each number in `accepted`.
+the model may not know. The number sentences list other spellings of most numbers in `accepted`.
+The building and the room number (2동, 403호) list none, since Korean writes them in digits only,
+and 이 동 would read as this building.
 
 The Korean text of this set was written and reviewed by an AI process, not by a native speaker,
 and waits for a native reader. Until one has read it, its references, its accepted spellings and

@@ -1,7 +1,7 @@
 {"id": "hom01", "language": "ko", "say": "마우스 커서가 갑자기 사라졌어요.", "reference": "마우스 커서가 갑자기 사라졌어요.", "expect_terms": [], "forbid_terms": ["Cursor"]}
 {"id": "hom02", "language": "ko", "say": "너는 커서 뭐가 되고 싶어?", "reference": "너는 커서 뭐가 되고 싶어?", "expect_terms": [], "forbid_terms": ["Cursor"]}
 {"id": "hom03", "language": "ko", "say": "커서로 프로젝트를 열어서 테스트를 돌렸어요.", "reference": "Cursor로 프로젝트를 열어서 테스트를 돌렸어요.", "expect_terms": ["Cursor"], "forbid_terms": []}
-{"id": "hom04", "language": "ko", "say": "요즘은 프론트엔드 코드를 거의 커서로 짜요.", "reference": "요즘은 프론트엔드 코드를 거의 Cursor로 짜요.", "expect_terms": ["Cursor"], "forbid_terms": []}
+{"id": "hom04", "language": "ko", "say": "요즘은 프론트엔드 코드를 거의 커서로 짜요.", "reference": "요즘은 프론트엔드 코드를 거의 Cursor로 짜요.", "expect_terms": ["Cursor"], "forbid_terms": [], "accepted": [["프론트엔드", "프런트엔드"]]}
 {"id": "hom05", "language": "ko", "say": "다음 달부터 버스 노선이 바뀐대요.", "reference": "다음 달부터 버스 노선이 바뀐대요.", "expect_terms": [], "forbid_terms": ["Notion", "노션"]}
 {"id": "hom06", "language": "ko", "say": "지하철 노선도 좀 보여 주세요.", "reference": "지하철 노선도 좀 보여 주세요.", "expect_terms": [], "forbid_terms": ["Notion", "노션"]}
 {"id": "hom07", "language": "ko", "say": "회의록은 노션에 정리해 둘게요.", "reference": "회의록은 Notion에 정리해 둘게요.", "expect_terms": [["Notion", "노션"]], "forbid_terms": []}

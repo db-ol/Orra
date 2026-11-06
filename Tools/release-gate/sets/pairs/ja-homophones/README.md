@@ -12,7 +12,8 @@ word, and list it in `expect_terms`. The reference is the sentence.
 `say` writes the vocabulary words as a Japanese speaker says them (ラスト for Rust, しょうじ for 東海林),
 and the reference has the vocabulary's spelling. Slack also counts as right in katakana (スラック),
 which is not a common word. The other English words count only in Latin letters, since their
-katakana is the common word.
+katakana is the common word. Long vowel variants of other words count as the same word, such as
+パーサー and パーサ.
 
 The Japanese text of this set was written and reviewed by an AI process, not by a native
 speaker, and waits for a native reader. Until one has read it, its references, its accepted
