@@ -68,7 +68,7 @@ Opcional. Presiona una segunda tecla, habla y vuelve a presionarla. Si la config
 
 ### Interpretación en reuniones
 
-Para reuniones en distintos idiomas. Lee en tu idioma lo que dicen los demás y deja que te escuchen en el suyo, incluso con tu propia voz. **Subtítulos en vivo** muestra lo que reproduce la Mac, como una llamada, en forma de subtítulos traducidos en una ventana flotante. **Leer traducciones a los demás** lee en voz alta lo que dijiste con la tecla de traducción, con un modelo de síntesis de voz en tu Mac, y lo envía al dispositivo virtual Orra Microphone, para que la otra persona de la llamada escuche tus palabras en su idioma.
+Para reuniones en distintos idiomas. Lee en tu idioma lo que dicen los demás y deja que te escuchen en el suyo, incluso con tu propia voz. **Subtítulos en vivo** muestra lo que reproduce la Mac, como una llamada, o lo que dices al micrófono si lo eliges, en forma de subtítulos traducidos en una ventana flotante. **Leer traducciones a los demás** lee en voz alta lo que dijiste con la tecla de traducción, con un modelo de síntesis de voz en tu Mac, y lo envía al dispositivo virtual Orra Microphone, para que la otra persona de la llamada escuche tus palabras en su idioma.
 
 Novedad de la versión 0.4.0.
 
@@ -130,8 +130,7 @@ Proyectos lee el correo a través de la app Mail de tu Mac y los archivos de las
 
 - **Reporta un problema.** Selecciona Reportar un problema… en el menú de Orra o [abre un issue en GitHub](https://github.com/db-ol/Orra/issues/new/choose). Por favor, no incluyas nada privado que hayas dictado. Para un problema en Proyectos, tampoco incluyas el texto de correos, nombres, direcciones de correo ni capturas de pantalla de correos.
 - **Preguntas e ideas.** Pregunta en [Discussions](https://github.com/db-ol/Orra/discussions).
-- **WeChat.** Escanea el código para unirte al grupo de Orra en WeChat.<br>
-  <img src="docs/images/wechat-group.png" alt="Código QR del grupo de Orra en WeChat" width="160">
+- **Discord.** Únete a la [comunidad de Orra en Discord](https://discord.gg/qSPTgTr8pD).
 - **Apoya el proyecto.** Si Orra te resulta útil, [dale una estrella en GitHub](https://github.com/db-ol/Orra).
 
 ## Para desarrolladores

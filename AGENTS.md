@@ -20,6 +20,7 @@ This file is the guide for anyone, human or agent, who changes this repository.
 
 ## Intended flow
 Hotkey -> Audio Capture -> TranscriptionEngine -> optional RewriteEngine -> Text Injection
+Live Captions (off at every launch): what the Mac plays (SystemAudioTap), or the microphone when the user chooses it (CaptionMicrophone) -> CaptionSegmenter -> speech model -> optional translation -> caption window
 Projects (optional, a preview): Mail app (Apple Events) and project folders -> local index -> cleanup model -> Projects window -> Mail's reply window and the clipboard, on the user's click
 Transcribe File: the one file the user drops or picks -> FileAudioSource (16 kHz mono, streamed) -> segments at pauses -> speech model, after dictation -> Transcribe File window -> the clipboard or a file the user saves, on the user's click
 
@@ -159,6 +160,45 @@ trusted once in Xcode. docs/dependencies.md has the details.
   ~/Library/Application Support/io.github.db-ol.Orra/Voice (folder 0700, file 0600, left out
   of backups) until the user removes the sample or turns the switch off. VoiceSampleFile is
   the only code that writes it.
+- Live Captions listen to what the Mac plays, or to the microphone only when the user
+  chooses it, approved by the maintainer on 2026-11-01. One source at a time, and every
+  launch starts with what the Mac plays. Captions ask for microphone access only when the
+  user chooses the microphone or clicks the button in the caption window, never when they
+  start. They record through their own unit in CaptionMicrophone, never through
+  AudioRecorder, and keep nothing of it set up after they stop. While they listen to the
+  microphone the caption window says so, and turning captions off, closing the window or
+  choosing what the Mac plays lets go of it at once. So do a lock of the screen and a switch
+  away from the user's session, approved by the maintainer on 2026-11-02, and captions
+  start it again once the screen unlocks or the session is back, if they are still on and
+  still listen to it. That start does not count toward the limit of starts again. Any
+  process can post the note of an unlock, so captions take one only while the window
+  server's session agrees, and they look at the session every 2 s while the screen is
+  locked and while they listen to the microphone, since a note may come late or not at
+  all. A lock counts from its note, or from a read of the session that says locked at a
+  wake, at that look while captions listen to the microphone and right before every start
+  of the microphone, approved by the maintainer on 2026-11-05. A sleep of the Mac lets go
+  of the microphone too, and the wake starts it again unless the screen is locked then.
+  Nothing said meanwhile is captioned, and captions of what the Mac plays go on while the
+  screen is locked. From the press of the talk key or the translation key,
+  in any mode, until the dictation is pasted or cancelled, while a voice sample records
+  and while Orra speaks a translation, microphone captions drop what the microphone hears
+  before it reaches the captions, and they go on afterwards. Their unit keeps running
+  meanwhile, so the window still says that the microphone is on. A start of their unit
+  waits until the pause is over, and only a start already under way at the press
+  completes. Their model calls go through EngineTurns as all caption calls do, so a
+  dictation waits at most for the end of one caption call already running at the press,
+  and usually not at all. They keep only what captions of the Mac keep: the text in memory
+  until Orra quits, no audio, and nothing in the log but counts, timings and states.
+- While Live Captions are on and start or listen, their window can be seen (ordered in, not
+  minimized or hidden, not covered whole, on displays that are awake), the screen is not
+  locked and they heard sound in the last 5 minutes, Orra keeps the display on through one
+  process activity with idleDisplaySleepDisabled, the way a video player does, for both
+  sources, approved by the maintainer on 2026-11-02, with the 5 minutes on 2026-11-05.
+  Sound is what the caption segmenter takes for speech, so the steady noise of a quiet
+  room counts as none. AppDelegate holds it while MeetingCaptions.keepsDisplayOn is
+  true and ends it as soon as it is not, and macOS drops it when Orra quits. The activity
+  never keeps the Mac awake with its displays off, and never holds back a lock the user
+  asks for, Sleep or a closed lid.
 - Orra goes online only for the speech model download the user starts from the menu or the
   welcome window, the cleanup model download the user agrees to in Settings, for Clean Up
   Text, Translation or Projects, or starts in the welcome window (with the speech model
@@ -206,6 +246,10 @@ docs/privacy.md, as docs/website.md describes.
 - Never run the tests from an unsigned build on a Mac where a person is logged in without that
   skip in place. Setting up an audio unit asks for microphone access, and answering the prompt
   rewrites Orra's microphone permission for the unsigned build.
+- MeetingCaptions gets the microphone and the screen lock as closures,
+  MicrophoneCaptionSource and ScreenLockSource, as it gets SystemAudioSource, and tests pass
+  fakes. No test starts CaptionMicrophone, sets up its unit, asks for microphone access,
+  watches the real screen lock or keeps the display on.
 - Tests never send Apple Events. Projects code must keep the Mail bridge behind closures, and
   tests pass fakes, as they do for the models.
 

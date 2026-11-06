@@ -32,9 +32,9 @@ struct SettingsPageTests {
     /// for Projects opens its page there, and General everywhere else. Every other page opens
     /// as asked either way.
     @Test func projectsOpensItsPageOnlyWhereItShows() throws {
-        let suite = "io.github.db-ol.OrraTests.settings-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let suite = try TestDefaults("settings")
+        defer { suite.remove() }
+        let defaults = suite.defaults
         let storage = ProjectsStorage(root: FileManager.default.temporaryDirectory.appendingPathComponent("SettingsPageTests-\(UUID().uuidString)", isDirectory: true))
         let shown = SettingsView.tabs(projects: ProjectsSwitch(defaults: defaults, isVisible: true, storage: storage))
         let hidden = SettingsView.tabs(projects: ProjectsSwitch(defaults: defaults, isVisible: false, storage: storage))
@@ -179,6 +179,21 @@ struct SettingsPageTests {
         #expect(CleanupLabels.loading(.cleanup) == "Loading the cleanup model…")
         #expect(CleanupLabels.progress(bytes: 50, total: 100, use: .translation).hasPrefix("Downloading the local model: 50%"))
         #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .loading, total: 100, use: .translation) == "Loading the local model…")
+    }
+
+    /// Captions listen to, on the Meeting Interpretation page and in the caption window,
+    /// offers what the Mac plays, the choice at every launch, and the microphone.
+    @Test func captionsListenToWhatTheMacPlaysOrTheMicrophone() {
+        #expect(CaptionSource.allCases.map(\.title) == ["What the Mac Plays", "Microphone"])
+        #expect(CaptionSource.allCases.map(\.systemImage) == ["speaker.wave.2", "mic.fill"])
+        let captions = MeetingCaptions(
+            systemAudio: SystemAudioSource(start: { _ in }, stop: {}, somethingPlays: { false }),
+            engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, target: { .chinese }, translate: { text, _ in text })
+        )
+        #expect(captions.source == .systemAudio)
+        captions.setSource(.microphone)
+        #expect(captions.source == .microphone)
+        #expect(!captions.isOn)
     }
 
     @MainActor
@@ -339,9 +354,9 @@ struct SettingsPageTests {
             try storage.create()
             try Data(count: projectsData).write(to: storage.indexFolder.appendingPathComponent("projects.sqlite"))
         }
-        let suite = "io.github.db-ol.OrraTests.settings-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let suite = try TestDefaults("settings")
+        defer { suite.remove() }
+        let defaults = suite.defaults
         let projects = ProjectsSwitch(defaults: defaults, isVisible: true, physicalMemory: physicalMemory, storage: storage)
         if projectsData > 0 || projectsOn {
             projects.turnOn()
@@ -398,7 +413,7 @@ struct SettingsPageTests {
             dockIcon: DockIcon(showsInDock: true, save: { _ in }, setPolicy: { _ in }, hasOpenWindow: { true }),
             updater: AppUpdater(),
             captions: meeting ? MeetingCaptions(
-                source: SystemAudioSource(start: { _ in }, stop: {}, somethingPlays: { false }),
+                systemAudio: SystemAudioSource(start: { _ in }, stop: {}, somethingPlays: { false }),
                 engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, target: { .chinese }, translate: { text, _ in text })
             ) : nil,
             speech: meeting ? TranslationSpeech(engines: .only(FakeSynthesizer()), playback: FakePlayback(), outputs: { [] }, folders: { nil }) : nil,

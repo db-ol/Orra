@@ -176,9 +176,9 @@ struct ScreenNamesTests {
     }
 
     @Test func theSwitchIsOffUntilTurnedOnAndSaved() throws {
-        let suite = "orra-screen-names-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let suite = try TestDefaults("screen-names")
+        defer { suite.remove() }
+        let defaults = suite.defaults
         #expect(!ScreenNamesPreference.load(from: defaults))
         ScreenNamesPreference.save(true, to: defaults)
         #expect(ScreenNamesPreference.load(from: defaults))

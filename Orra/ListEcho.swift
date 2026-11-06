@@ -81,21 +81,6 @@ nonisolated enum ListEcho {
         return 1 - Double(editDistance(x, y)) / Double(max(x.count, y.count))
     }
 
-    /// SoundAlike.soundsAlike, and for a word too short for its English key, the edit
-    /// distance of the sound keys alone.
-    static func soundsAlike(_ first: String, _ second: String) -> Bool {
-        guard SoundAlike.consonants(first) == nil || SoundAlike.consonants(second) == nil else {
-            return SoundAlike.soundsAlike(first, second)
-        }
-        let a = Array(SoundAlike.sound(first))
-        let b = Array(SoundAlike.sound(second))
-        guard let firstA = a.first, let firstB = b.first else { return false }
-        let crossesScripts = first.unicodeScalars.contains { $0.value >= 0x3400 } != second.unicodeScalars.contains { $0.value >= 0x3400 }
-        if !crossesScripts, firstA != firstB { return false }
-        let limit = Double(max(a.count, b.count)) * (crossesScripts ? 0.6 : 0.4)
-        return Double(editDistance(a, b)) <= limit
-    }
-
     // MARK: Leading list
 
     static let separators: Set<Character> = [",", "，", "、", ";", "；", ".", "。", ":", "："]
@@ -150,7 +135,7 @@ nonisolated enum ListEcho {
             for start in head.indices {
                 for length in max(1, size - 1)...(size + 1) where start + length <= head.count {
                     let piece = head[start..<(start + length)].joined(separator: " ")
-                    if VocabularyEcho.normalized(piece) == VocabularyEcho.normalized(item) || soundsAlike(piece, item) {
+                    if VocabularyEcho.normalized(piece) == VocabularyEcho.normalized(item) || SoundAlike.soundsAlike(piece, item) {
                         found = true
                     }
                 }

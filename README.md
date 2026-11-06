@@ -68,7 +68,7 @@ Optional. Press a second key, speak, and press it again. If you set the key to H
 
 ### Meeting Interpretation
 
-For meetings across languages. Read what others say in your language, and let them hear you in theirs, even in your own voice. **Live Captions** shows what the Mac plays, such as a call, as translated captions in a floating window. **Speak Translations to Others** speaks what you said with the translation key in a voice model on your Mac, into the Orra Microphone virtual device, so the other side of the call hears your words in their language.
+For meetings across languages. Read what others say in your language, and let them hear you in theirs, even in your own voice. **Live Captions** shows what the Mac plays, such as a call, or, if you choose it, what you say into your microphone, as translated captions in a floating window. **Speak Translations to Others** speaks what you said with the translation key in a voice model on your Mac, into the Orra Microphone virtual device, so the other side of the call hears your words in their language.
 
 New in 0.4.0.
 
@@ -130,8 +130,7 @@ Projects reads mail through the Mail app on your Mac and the files in the folder
 
 - **Report a problem.** Choose Report a Problem… in Orra's menu, or [open an issue on GitHub](https://github.com/db-ol/Orra/issues/new/choose). Please leave out anything private you dictated. For a problem in Projects, also leave out mail text, names, email addresses and screenshots of mail.
 - **Questions and ideas.** Ask in [Discussions](https://github.com/db-ol/Orra/discussions).
-- **WeChat.** Scan to join the Orra WeChat group.<br>
-  <img src="docs/images/wechat-group.png" alt="QR code for the Orra WeChat group" width="160">
+- **Discord.** Join the [Orra community on Discord](https://discord.gg/qSPTgTr8pD).
 - **Show support.** If Orra is useful to you, [star it on GitHub](https://github.com/db-ol/Orra).
 
 ## For developers

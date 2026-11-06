@@ -228,22 +228,68 @@ nonisolated struct CaptionFollow: Equatable, Sendable {
     }
 }
 
-/// Meeting captions: the sound the Mac plays, cut into sentences, transcribed and
-/// translated as they come, shown in a floating window. Off at every launch, turned on
-/// from the menu.
+/// What Live Captions listen to, one at a time: what the Mac plays, or the microphone once
+/// the user chooses it. Not saved, so every launch starts with what the Mac plays and a
+/// launch never opens the microphone. Captions of both at once, each with its own label,
+/// would be a third choice.
+nonisolated enum CaptionSource: String, CaseIterable, Sendable {
+    case systemAudio
+    case microphone
+}
+
+/// Meeting captions: what the Mac plays, or the microphone when the user chooses it, cut
+/// into sentences, transcribed and translated as they come, shown in a floating window.
+/// Off at every launch, turned on from the menu.
 ///
-/// Turning it off stops the capture and closes the window. The sentences stay in memory
-/// until Orra quits, so they can still be copied, and the next start keeps them as the
-/// previous transcript. Nothing is logged or saved but counts and timings.
+/// A meeting keeps one pipeline and one window from the start to the stop, and only the
+/// capture under them changes when the user chooses what captions listen to. Each capture
+/// starts and stops on a queue of its own, so a switch never waits for a start of the
+/// other, such as one that waits for the permission prompt.
+///
+/// The microphone is the user's own voice, and dictation goes first: from the press of the
+/// talk key or the translation key until the dictation is pasted or cancelled, while a
+/// voice sample records and while Orra speaks a translation, microphone captions drop what
+/// the microphone hears before it reaches the pipeline, see `MicrophonePause`, and they go
+/// on afterwards. Their unit keeps running meanwhile, and a start of it waits until the
+/// pause is over, see `startMicrophone`. Their model calls go through EngineTurns as all
+/// caption calls do.
+///
+/// While the screen is locked, or the user's session is switched away, microphone captions
+/// let go of the microphone as a stop does, and start it again once the screen unlocks, if
+/// they are still on and still listen to it, see `screenLockChanged(_:)`. The sentence
+/// being heard ends at the lock, and nothing said meanwhile is captioned. Captions of what
+/// the Mac plays go on. A lock counts from its note, or from a read of the window server's
+/// session that says locked at a wake, at the look while microphone captions are on and
+/// before every start of the microphone, see `lockedBySession(_:)`. Microphone captions
+/// let go of the microphone at a sleep too, and the wake starts it again, see
+/// `macWillSleep()`.
+///
+/// While captions start or listen and their window can be seen, they keep the display on,
+/// as a video player does, until they hear no sound for `displayQuietLimit`, see
+/// `keepsDisplayOn`.
+///
+/// Turning it off stops the capture, lets go of the microphone and closes the window. The
+/// sentences stay in memory until Orra quits, so they can still be copied, and the next
+/// start keeps them as the previous transcript. Nothing is logged or saved but counts,
+/// timings and states.
 @Observable
 final class MeetingCaptions {
     nonisolated enum CaptureState: Equatable, Sendable {
         case off
         /// The capture is being set up off the main actor. The first time, macOS may
-        /// show the permission prompt meanwhile.
+        /// show the permission prompt meanwhile. Microphone captions also show as
+        /// starting from a sleep until the wake starts the microphone again, see
+        /// `macWillSleep()`.
         case starting
         case listening
+        /// What the Mac plays cannot be captured.
         case unavailable(SystemAudioProblem)
+        /// The microphone cannot be used, see MicrophoneCaptionProblem.
+        case microphoneUnavailable(MicrophoneCaptionProblem)
+        /// Captions listen to the microphone, but the screen is locked or the user's
+        /// session is switched away, so nothing of it runs until the unlock, see
+        /// `screenLocked`.
+        case pausedWhileLocked
     }
 
     /// What came in place of sound, see `silence`.
@@ -257,6 +303,68 @@ final class MeetingCaptions {
         /// like while something plays, or no samples at all while an app plays or Core
         /// Audio cannot tell, which a refused permission may give too.
         case noSound
+        /// The microphone gave no sound, as dictation measures it, see Silence: none since
+        /// it started, or none for `microphoneQuietLimit` after it gave some, as with a
+        /// closed lid or a muted microphone. The window explains it as the menu explains a
+        /// dictation without sound.
+        case microphoneSilent(MicrophoneSituation)
+    }
+
+    /// What holds microphone captions back, read at each piece of audio the microphone
+    /// delivers. Captions of what the Mac plays are never held back.
+    nonisolated enum MicrophonePause: Equatable, Sendable {
+        /// Nothing: microphone captions take in what the microphone hears.
+        case notPaused
+        /// A key that waits is down, and its press may still turn out to be a shortcut,
+        /// such as right Option to type a character. What the microphone hears meanwhile
+        /// waits, and goes into the captions when the press is dropped.
+        case arming
+        /// A dictation, from the press of its key until it is pasted or cancelled, a voice
+        /// sample that records, or Orra speaking a translation. What the microphone hears
+        /// meanwhile is left out, and the sentence that was open ends.
+        case paused
+
+        /// From the state of push to talk, which goes from idle only at the press of a
+        /// key, in any trigger mode, and back to idle once the dictation is pasted or
+        /// cancelled, whether a voice sample records, and whether Orra speaks.
+        init(dictation: PushToTalkStateMachine.State, recordsVoiceSample: Bool, speaks: Bool) {
+            if recordsVoiceSample || speaks {
+                self = .paused
+                return
+            }
+            switch dictation {
+            case .idle: self = .notPaused
+            case .arming: self = .arming
+            case .listening, .waitingForSecondPress, .handsFree, .processing: self = .paused
+            }
+        }
+    }
+
+    /// Why captions start the microphone again, for the log. The start at the unlock of the
+    /// screen is none of these: it starts at once and never counts toward `restartLimit`,
+    /// see `screenLockChanged(_:)`.
+    nonisolated enum RestartReason: String, Sendable {
+        /// The device went away, changed its rate or lost its inputs, or the microphone to
+        /// listen to is now another one.
+        case moved
+        /// The user chose another microphone under Microphone.
+        case choice
+        /// The Mac woke from sleep, after which a device may come back silent or under a
+        /// new ID. Its start reads the session first, see `lockedBySession(_:)`.
+        case wake
+        /// Microphone access was given.
+        case access
+        /// A device came or went while no microphone was connected.
+        case inputs
+        /// A device came or went after a start of the microphone failed, as on a headset
+        /// whose input was not ready yet.
+        case retry
+
+        /// Whether the start again follows the device, not the user or the Mac, and so
+        /// counts toward `restartLimit`.
+        var followsTheDevice: Bool {
+            self == .moved || self == .retry
+        }
     }
 
     /// Seconds between the checks of whether an app plays, while no samples came and the
@@ -272,14 +380,70 @@ final class MeetingCaptions {
     /// check with no answer by then counts as one that cannot tell, and an audio server
     /// that hangs suggests the permission instead of leaving the window without a note.
     static let playCheckLimit = 2.0
+    /// Seconds after a pause during which the microphone's audio is still left out. A piece
+    /// of audio reaches the main actor up to about a quarter of a second after it was
+    /// recorded, a Bluetooth microphone's later, so this keeps the end of a cancelled
+    /// dictation, or of Orra's voice from the speakers, out of the captions. Measured from
+    /// the first piece that finds the pause over, which is never before its end.
+    static let microphoneHold = 0.5
+    /// Seconds without sound from the microphone, after it gave some, before the window
+    /// says so. Longer than `silenceHint`, since a headset may give exactly zero while its
+    /// user only listens.
+    static let microphoneQuietLimit = 30.0
+    /// Seconds a start again of the microphone waits after a move, a wake or a change of
+    /// the devices, so a device that changes in steps opens once.
+    static let restartDelay = 0.5
+    /// The most starts again of the microphone that follow the device, after a move or a
+    /// failed start, within `restartWindow`. One more lets go of the microphone and says
+    /// that it could not start, so a device that keeps moving, such as a headset that
+    /// changes its profile at each start, does not start again without end.
+    static let restartLimit = 3
+    /// Seconds over which `restartLimit` counts.
+    static let restartWindow = 20.0
+    /// Seconds between the looks at microphone access while it is not given, as the
+    /// welcome window looks.
+    static let accessCheckInterval = 1.0
+    /// Seconds between the looks whether a pause of the microphone is over, while a start
+    /// of the microphone waits for it.
+    static let pauseCheckInterval = 0.1
+    /// The most audio heard while a key that waits is down that is kept for the captions.
+    /// A key waits 0.3 s, see TalkKeyDetector.
+    static let armingLimit = 1.0
+    /// Seconds between the looks at the window server's session while captions are on and
+    /// take the screen as locked or listen to the microphone, since Apple's
+    /// DistributedNotificationCenter says that a note may come late or be dropped, see
+    /// `followTheScreenLock()`. A look reads one dictionary of the window server.
+    static let screenLockCheckInterval = 2.0
+    /// Seconds without sound after which captions let go of the display, for both sources,
+    /// as when the window is left open after a call, see `quietTooLong`. Sound is what the
+    /// segmenter takes for speech, see CaptionPipeline.hearsSpeech, so the steady noise of a
+    /// quiet room or a line counts as none, as it does in the pauses of a call.
+    static let displayQuietLimit = 300.0
 
     private(set) var isOn = false
     private(set) var capture: CaptureState = .off
-    /// What came in place of sound for `silenceHint` since captions were turned on, for
-    /// the window's note. Nil until then and from the first sound on. No audio at all
-    /// becomes no sound when an app starts to play and still no audio comes, see
-    /// `playCheckInterval`, and goes once audio comes, since something plays then. Both go
-    /// after a start that failed, whose own note says why.
+    /// What captions listen to. What the Mac plays until the user chooses the microphone,
+    /// at every launch.
+    private(set) var source: CaptionSource = .systemAudio
+    /// The microphone captions listen to, for the window's sign. Set only while they
+    /// listen to it: nil while it starts or cannot be used, while the screen is locked,
+    /// and once captions stop or listen to what the Mac plays again.
+    private(set) var microphoneInUse: AudioInput?
+    /// Whether the screen is locked or the user's session is switched away, as captions
+    /// last learned it, see ScreenLockSource. Microphone captions let go of the microphone
+    /// meanwhile, see `screenLockChanged(_:)`.
+    private(set) var screenLocked = false
+    /// Whether the caption window can be seen, as CaptionWindow reports it, see
+    /// `keepsDisplayOn`.
+    private(set) var windowVisible = false
+    /// True once captions heard no sound for `displayQuietLimit`, from their start or from
+    /// the last sound, until sound comes back or they stop, see `keepsDisplayOn`.
+    private(set) var quietTooLong = false
+    /// What came in place of sound for `silenceHint` since the capture started, for the
+    /// window's note. Nil until then and from the first sound on. No audio at all from the
+    /// Mac becomes no sound when an app starts to play and still no audio comes, see
+    /// `playCheckInterval`, and goes once audio comes, since something plays then. Each
+    /// goes after a start that failed, whose own note says why.
     private(set) var silence: SilenceKind?
     /// True after a sentence was dropped since the speech model was not loaded.
     private(set) var speechModelMissing = false
@@ -292,54 +456,168 @@ final class MeetingCaptions {
     @ObservationIgnored var showWindow: () -> Void = {}
     @ObservationIgnored var closeWindow: () -> Void = {}
 
-    @ObservationIgnored private let source: SystemAudioSource
+    /// What one start of the capture keeps. Reset at each start: when captions turn on,
+    /// when the user chooses what they listen to, and when the microphone starts again.
+    private struct CaptureRun {
+        /// Seconds of audio this start delivered, so the log and the notes tell no audio
+        /// from silence.
+        var receivedSeconds = 0.0
+        var heardSound = false
+        /// Seconds of the microphone without sound in a row.
+        var quietSeconds = 0.0
+        /// True once a check found an app playing, or could not tell, while the window
+        /// said that nothing plays, until a check finds none.
+        var mayPlay = false
+        /// True from the first piece of the microphone's audio that a pause left out until
+        /// one finds it over.
+        var paused = false
+        /// The microphone's audio while a key that waits is down, kept until its press
+        /// counts or is dropped.
+        var armingAudio: [[Float]] = []
+        /// Seconds of `armingAudio`.
+        var heldSeconds: Double {
+            Double(armingAudio.reduce(0) { $0 + $1.count }) / Double(RecordingLimits.sampleRate)
+        }
+        /// The microphone's audio that arrives before this is still left out after a
+        /// pause, see `microphoneHold`.
+        var holdUntil: ContinuousClock.Instant?
+        /// True after a pause, until the sentence that was open is ended.
+        var endsSentence = false
+        /// Checks what plays while no samples come, or whether the microphone gave sound.
+        var silenceCheck: Task<Void, Never>?
+        /// Looks at microphone access while it is not given.
+        var accessCheck: Task<Void, Never>?
+        /// A start of the microphone that waits for its queue and for a pause to end, see
+        /// `startMicrophone`.
+        var waitingStart: Task<Void, Never>?
+        /// A start again of the microphone, see `scheduleRestart`.
+        var restart: Task<Void, Never>?
+        /// Watches the devices while no microphone is connected or after a start of it
+        /// failed.
+        var inputWatch: AnyObject?
+
+        func cancelTasks() {
+            silenceCheck?.cancel()
+            accessCheck?.cancel()
+            waitingStart?.cancel()
+            restart?.cancel()
+        }
+    }
+
+    /// The meeting's counts for the log, over all its starts of the capture.
+    private struct MeetingCounts {
+        var receivedSeconds = 0.0
+        var soundSeconds = 0.0
+        /// Pauses of the microphone, and the seconds of its audio they left out.
+        var pauses = 0
+        var leftOutSeconds = 0.0
+        var listenedToMicrophone = false
+    }
+
+    @ObservationIgnored private let systemAudio: SystemAudioSource
+    @ObservationIgnored private let microphone: MicrophoneCaptionSource
+    @ObservationIgnored private let screenLock: ScreenLockSource
     @ObservationIgnored private let engines: CaptionEngines
     @ObservationIgnored private let started: () -> Void
     @ObservationIgnored private let stopped: () -> Void
     @ObservationIgnored private let saveDisplayMode: (CaptionDisplayMode) -> Void
     @ObservationIgnored private let copyText: (String) -> Void
+    @ObservationIgnored private let pausesMicrophone: () -> MicrophonePause
+    @ObservationIgnored private let askForMicrophoneAccess: () -> Void
     @ObservationIgnored private let silenceHint: Double
     @ObservationIgnored private let playCheckInterval: Double
     @ObservationIgnored private let playCheckLimit: Double
+    @ObservationIgnored private let microphoneHold: Double
+    @ObservationIgnored private let microphoneQuietLimit: Double
+    @ObservationIgnored private let restartDelay: Double
+    @ObservationIgnored private let restartWindow: Double
+    @ObservationIgnored private let accessCheckInterval: Double
+    @ObservationIgnored private let screenLockCheckInterval: Double
+    /// The time and a wait, only for how long captions heard no sound, see
+    /// `displayQuietLimit`. Tests pass a clock they move.
+    @ObservationIgnored private let now: () -> ContinuousClock.Instant
+    @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
     @ObservationIgnored private var pipeline: CaptionPipeline?
-    /// Starts and stops the capture, one after the other, off the main actor. Since it is
-    /// serial, a stop that comes while a start still runs tears down what the start made.
+    /// Starts and stops the capture of what the Mac plays, one after the other, off the
+    /// main actor. Since it is serial, a stop that comes while a start still runs tears
+    /// down what the start made.
     @ObservationIgnored private let captureQueue = DispatchQueue(label: "io.github.db-ol.Orra.caption-capture", qos: .userInitiated)
+    /// The same for the microphone, so a switch never waits for a start of the other.
+    @ObservationIgnored private let microphoneQueue = DispatchQueue(label: "io.github.db-ol.Orra.caption-microphone-start", qos: .userInitiated)
     /// Asks whether an app plays, off the main actor. Not `captureQueue`, which a start
     /// that waits for the first sound holds.
     @ObservationIgnored private let playQueue = DispatchQueue(label: "io.github.db-ol.Orra.caption-plays", qos: .userInitiated)
-    /// Counts the starts, so samples of an earlier run are ignored.
+    /// Counts the starts and stops of the capture, so samples of an earlier one are
+    /// ignored.
     @ObservationIgnored private var run = 0
+    /// What the current start of the capture listens to, so its stop reaches it after
+    /// `source` changed. Nil while captions are off, and while microphone captions wait
+    /// for the screen to unlock.
+    @ObservationIgnored private var capturing: CaptionSource?
+    /// The microphone chosen under Microphone, nil for the system default, see
+    /// `microphoneChosen(_:)`.
+    @ObservationIgnored private var chosenMicrophone: String?
+    /// When the microphone started again to follow the device, within `restartWindow`.
+    /// Cleared when captions turn on and when the user chooses what they listen to or a
+    /// microphone.
+    @ObservationIgnored private var deviceRestarts: [ContinuousClock.Instant] = []
+    @ObservationIgnored private var runState = CaptureRun()
+    @ObservationIgnored private var meeting = MeetingCounts()
     /// When captions were turned on, for the times in the log.
     @ObservationIgnored private var turnedOn = ContinuousClock.now
-    /// Seconds of audio this run, and of those with sound, so the log tells no audio
-    /// from silence.
-    @ObservationIgnored private var receivedSeconds = 0.0
-    @ObservationIgnored private var soundSeconds = 0.0
-    @ObservationIgnored private var heardSound = false
-    /// Checks what plays while no samples come, see `checkSilence`.
-    @ObservationIgnored private var silenceCheck: Task<Void, Never>?
-    /// True once a check found an app playing, or could not tell, while the window said
-    /// that nothing plays, until a check finds none.
-    @ObservationIgnored private var mayPlay = false
-    /// True once this run called `started`, so a switch to a mode that translates calls it
-    /// once, and a switch back does not undo it until captions stop.
+    /// When the current start of the capture began, for the times in the log.
+    @ObservationIgnored private var captureStarted = ContinuousClock.now
+    /// True once this meeting called `started`, so a switch to a mode that translates
+    /// calls it once, and a switch back does not undo it until captions stop.
     @ObservationIgnored private var wantsModel = false
+    /// Keeps the watch of the screen lock, see ScreenLockSource.watch.
+    @ObservationIgnored private var screenLockWatch: AnyObject?
+    /// True once a read of the session said locked since captions took the screen as
+    /// locked, or when that read took it as locked, see `sessionShowsTheUnlock()` and
+    /// `lockedBySession(_:)`.
+    @ObservationIgnored private var sessionSaidLocked = false
+    /// Looks at the session while captions are on and the screen is locked or they listen
+    /// to the microphone, see `followTheScreenLock()`.
+    @ObservationIgnored private var screenLockCheck: Task<Void, Never>?
+    /// When captions last heard sound, or started, by `now`, see `displayQuietLimit`.
+    @ObservationIgnored private var lastSound = ContinuousClock.now
+    /// Waits for `displayQuietLimit` without sound while captions are on, see
+    /// `followTheQuiet()`.
+    @ObservationIgnored private var quietCheck: Task<Void, Never>?
 
     /// - Parameters:
-    ///   - source: The capture of the sound the Mac plays. Tests pass a fake.
+    ///   - systemAudio: The capture of the sound the Mac plays. Tests pass a fake.
+    ///   - microphone: The capture of the microphone. Tests pass a fake, and captions
+    ///     without one listen only to what the Mac plays.
+    ///   - screenLock: Whether the screen is locked, see ScreenLockSource. Tests pass a fake,
+    ///     and captions without one take the screen as never locked.
     ///   - engines: The models, see CaptionEngines.live.
     ///   - started: Called once captions run in a mode that translates, so the cleanup
     ///     model loads, see TextCleanup.captionsStarted. Not in Original only, until the
     ///     user switches to a mode that translates.
     ///   - stopped: Called when they stop.
     ///   - copyText: Puts a copy on the clipboard. Tests pass a fake.
-    ///   - silenceHint: Seconds without sound before the window says that nothing plays or
-    ///     suggests the permission.
+    ///   - pausesMicrophone: What holds microphone captions back now, see
+    ///     MicrophonePause. Read on the main actor at each piece of the microphone's audio.
+    ///   - askForMicrophoneAccess: Shows the prompt for microphone access, called only when
+    ///     the user chooses the microphone while access is not decided yet.
+    ///   - silenceHint: Seconds without sound before the window says that nothing plays,
+    ///     suggests the permission, or says that the microphone gave no sound.
     ///   - playCheckInterval: See `MeetingCaptions.playCheckInterval`.
     ///   - playCheckLimit: See `MeetingCaptions.playCheckLimit`.
+    ///   - microphoneHold: See `MeetingCaptions.microphoneHold`.
+    ///   - microphoneQuietLimit: See `MeetingCaptions.microphoneQuietLimit`.
+    ///   - restartDelay: See `MeetingCaptions.restartDelay`.
+    ///   - restartWindow: See `MeetingCaptions.restartWindow`.
+    ///   - accessCheckInterval: See `MeetingCaptions.accessCheckInterval`.
+    ///   - screenLockCheckInterval: See `MeetingCaptions.screenLockCheckInterval`.
+    ///   - now: The time, for how long captions heard no sound, see
+    ///     `MeetingCaptions.displayQuietLimit`. Tests pass a clock they move.
+    ///   - sleep: Waits for a time, for the same. Tests pass that clock.
     init(
-        source: SystemAudioSource,
+        systemAudio: SystemAudioSource,
+        microphone: MicrophoneCaptionSource = .unavailable,
+        screenLock: ScreenLockSource = .unlocked,
         engines: CaptionEngines,
         started: @escaping () -> Void = {},
         stopped: @escaping () -> Void = {},
@@ -347,11 +625,23 @@ final class MeetingCaptions {
         saveDisplayMode: @escaping (CaptionDisplayMode) -> Void = { _ in },
         store: CaptionStore = CaptionStore(),
         copyText: @escaping (String) -> Void = { ConcealedClipboard.copy($0, to: .general) },
+        pausesMicrophone: @escaping () -> MicrophonePause = { .notPaused },
+        askForMicrophoneAccess: @escaping () -> Void = {},
         silenceHint: Double = 8,
         playCheckInterval: Double = MeetingCaptions.playCheckInterval,
-        playCheckLimit: Double = MeetingCaptions.playCheckLimit
+        playCheckLimit: Double = MeetingCaptions.playCheckLimit,
+        microphoneHold: Double = MeetingCaptions.microphoneHold,
+        microphoneQuietLimit: Double = MeetingCaptions.microphoneQuietLimit,
+        restartDelay: Double = MeetingCaptions.restartDelay,
+        restartWindow: Double = MeetingCaptions.restartWindow,
+        accessCheckInterval: Double = MeetingCaptions.accessCheckInterval,
+        screenLockCheckInterval: Double = MeetingCaptions.screenLockCheckInterval,
+        now: @escaping () -> ContinuousClock.Instant = { .now },
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
-        self.source = source
+        self.systemAudio = systemAudio
+        self.microphone = microphone
+        self.screenLock = screenLock
         self.engines = engines
         self.started = started
         self.stopped = stopped
@@ -359,14 +649,107 @@ final class MeetingCaptions {
         self.saveDisplayMode = saveDisplayMode
         self.store = store
         self.copyText = copyText
+        self.pausesMicrophone = pausesMicrophone
+        self.askForMicrophoneAccess = askForMicrophoneAccess
         self.silenceHint = silenceHint
         self.playCheckInterval = playCheckInterval
         self.playCheckLimit = playCheckLimit
+        self.microphoneHold = microphoneHold
+        self.microphoneQuietLimit = microphoneQuietLimit
+        self.restartDelay = restartDelay
+        self.restartWindow = restartWindow
+        self.accessCheckInterval = accessCheckInterval
+        self.screenLockCheckInterval = screenLockCheckInterval
+        self.now = now
+        self.sleep = sleep
+        // As the session says now, which covers a launch while the screen is locked or the
+        // session is switched away, and after that as the watch reports.
+        screenLocked = screenLock.isLocked()
+        sessionSaidLocked = screenLocked
+        screenLockWatch = screenLock.watch { [weak self] locked in
+            self?.screenLockNoted(locked)
+        }
     }
 
     func setOn(_ on: Bool) {
         guard on != isOn else { return }
         on ? start() : stop()
+    }
+
+    /// Chooses what captions listen to. While they are on, the capture changes at once,
+    /// and the meeting, its window and its sentences go on. Choosing the microphone while
+    /// access is not decided yet shows the prompt, which so follows the user's own click.
+    /// While the screen is locked, the microphone waits for the unlock. The look at the
+    /// session follows the choice, see `followTheScreenLock()`.
+    func setSource(_ choice: CaptionSource) {
+        guard choice != source else { return }
+        source = choice
+        deviceRestarts = []
+        if choice == .microphone, microphone.access() == .notDetermined {
+            askForMicrophoneAccess()
+        }
+        guard isOn else { return }
+        Logger.captions.notice("Meeting captions now listen to \(choice.rawValue, privacy: .public)")
+        lookAtTheScreenLockBeforeAStart()
+        restartCapture()
+        followTheScreenLock()
+    }
+
+    /// The user chose the microphone with this UID under Microphone, or nil for the system
+    /// default. Captions that listen to the microphone start it again with the new one.
+    func microphoneChosen(_ uid: String?) {
+        guard uid != chosenMicrophone else { return }
+        chosenMicrophone = uid
+        deviceRestarts = []
+        scheduleRestart(.choice, after: 0)
+    }
+
+    /// The Mac goes to sleep. Captions that listen to the microphone let go of it, as a stop
+    /// does, so no unit runs through the sleep into a lock screen, and the sentence being
+    /// heard ends. They still listen to it and show as starting, and the wake starts it
+    /// again, see `macDidWake()`. The capture of what the Mac plays goes on as it is.
+    func macWillSleep() {
+        guard isOn, capturing == .microphone else { return }
+        Logger.captions.notice("Meeting captions let go of the microphone while the Mac sleeps")
+        stopCapture()
+        pipeline?.endSentence()
+        capturing = .microphone
+        capture = .starting
+        silence = nil
+    }
+
+    /// The Mac woke from sleep. Captions that listen to the microphone start it again,
+    /// since its IO may come back silent or its device under a new ID. The note of a lock
+    /// may reach Orra after the wake, so a session that says locked at the wake, also while
+    /// captions are off or listen to what the Mac plays, or at the wake's start of the
+    /// microphone, counts as a lock, see `lockedBySession(_:)`. While the screen is locked
+    /// nothing starts, and the unlock starts the microphone. The capture of what the Mac
+    /// plays goes on as it is.
+    func macDidWake() {
+        if lockedBySession("at the wake") { return }
+        scheduleRestart(.wake, after: restartDelay)
+    }
+
+    /// Whether captions keep the display on now, the way a video player does: while they
+    /// are on and start or listen, their window can be seen, the screen is not locked and
+    /// they heard sound within `displayQuietLimit`, for both sources. AppDelegate holds a
+    /// process activity while this is true. A capture that cannot start lets the display
+    /// sleep, since its window then only says why, and so do the pause while the screen is
+    /// locked and a long quiet, as after a call, until sound comes back. A dictation does
+    /// not change it, and a start again stops and starts within one turn of the main actor,
+    /// so it stays true.
+    var keepsDisplayOn: Bool {
+        guard isOn, windowVisible, !screenLocked, !quietTooLong else { return false }
+        return switch capture {
+        case .starting, .listening: true
+        case .off, .unavailable, .microphoneUnavailable, .pausedWhileLocked: false
+        }
+    }
+
+    /// The caption window can be seen now, or no longer, see CaptionWindow.
+    func setWindowVisible(_ visible: Bool) {
+        guard visible != windowVisible else { return }
+        windowVisible = visible
     }
 
     func setDisplayMode(_ mode: CaptionDisplayMode) {
@@ -399,18 +782,15 @@ final class MeetingCaptions {
     }
 
     private func start() {
+        lookAtTheScreenLockBeforeAStart()
         isOn = true
-        run += 1
         turnedOn = .now
-        Logger.captions.notice("Meeting captions turned on")
+        meeting = MeetingCounts()
+        deviceRestarts = []
+        Logger.captions.notice("Meeting captions turned on, listening to \(self.source.rawValue, privacy: .public)")
         store.startOver()
         follow = CaptionFollow()
-        silence = nil
         speechModelMissing = false
-        receivedSeconds = 0
-        soundSeconds = 0
-        heardSound = false
-        mayPlay = false
         let pipeline = CaptionPipeline(engines: engines, interimInterval: CaptionPipeline.defaultInterimInterval, wantsTranslation: { [weak self] in
             self?.displayMode.translates ?? false
         }, speechNotReady: { [weak self] in
@@ -423,87 +803,24 @@ final class MeetingCaptions {
         })
         self.pipeline = pipeline
         showWindow()
-        let current = run
-        capture = .starting
-        // When no samples at all came by the time samples of only zeros would suggest the
-        // permission, as while nothing plays or the start waits, Core Audio tells whether
-        // an app plays. See checkSilence and receive.
-        silenceCheck = Task { [weak self, silenceHint] in
-            var wait = silenceHint
-            while true {
-                try? await Task.sleep(for: .seconds(wait))
-                guard !Task.isCancelled, let next = await self?.checkSilence(run: current) else { return }
-                wait = next
-            }
-        }
-        let source = source
-        let deliver: @Sendable ([Float]) -> Void = { [weak self] samples in
-            DispatchQueue.main.async {
-                self?.receive(samples, run: current)
-            }
-        }
-        // Creating the tap and the device and starting it can wait for the permission
-        // prompt, so it runs off the main actor and the outcome comes back to it.
-        captureQueue.async { [weak self] in
-            let problem: SystemAudioProblem?
-            do {
-                try source.start(deliver)
-                problem = nil
-            } catch let failure as SystemAudioProblem {
-                problem = failure
-            } catch {
-                problem = .failed(step: "start", status: 0)
-            }
-            DispatchQueue.main.async {
-                self?.captureStarted(run: current, problem: problem)
-            }
-        }
-    }
-
-    /// The outcome of a start, on the main actor. Ignored when captions were turned off
-    /// meanwhile: that stop is queued after the start and tears it down.
-    private func captureStarted(run current: Int, problem: SystemAudioProblem?) {
-        guard isOn, current == run else { return }
-        if let problem {
-            capture = .unavailable(problem)
-            // The window says that the capture failed, which is why no sound comes. So it
-            // shows no note about silence, and this run neither checks what plays nor logs
-            // about silence anymore. When the start failed after `silenceHint`, the log may
-            // already say that nothing plays.
-            silenceCheck?.cancel()
-            silenceCheck = nil
-            silence = nil
-            return
-        }
-        // Only once the capture runs: the local model is not loaded, nor its download
-        // offered, for captions that cannot hear anything, nor in Original only.
-        wantModelIfTranslating()
-        capture = .listening
-        let target = CaptionTarget.effective(engines.target(), for: engines.language())
-        // How long the start took tells a start that waited, as for the permission
-        // prompt, from audio that comes late.
-        Logger.captions.notice("Meeting captions started, showing \(self.displayMode.rawValue, privacy: .public), into \(target.logName, privacy: .public), after \(self.turnedOn.duration(to: .now), privacy: .public)")
-    }
-
-    /// Asks for the local model once per run, when the display mode translates.
-    private func wantModelIfTranslating() {
-        guard displayMode.translates, !wantsModel else { return }
-        wantsModel = true
-        started()
+        lastSound = now()
+        quietTooLong = false
+        followTheQuiet()
+        startCapture()
+        followTheScreenLock()
     }
 
     private func stop() {
         isOn = false
-        run += 1
-        let source = source
-        captureQueue.async {
-            source.stop()
-        }
+        followTheScreenLock()
+        quietCheck?.cancel()
+        quietCheck = nil
+        quietTooLong = false
+        let listenedTo = capturing ?? source
+        stopCapture()
         let sentences = pipeline?.counts ?? CaptionPipeline.Counts()
         pipeline?.stop()
         pipeline = nil
-        silenceCheck?.cancel()
-        silenceCheck = nil
         wantsModel = false
         // Kept for a copy after the meeting. Sentences still waiting to be transcribed
         // are dropped, since transcribing them would keep the GPU busy after the stop.
@@ -515,14 +832,536 @@ final class MeetingCaptions {
         closeWindow()
         // The counts tell no audio from silence, and sound without speech from sentences
         // that were dropped or still waited, as behind a long dictation.
-        Logger.captions.notice("Meeting captions stopped after \(self.turnedOn.duration(to: .now), privacy: .public), with \(self.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio, \(self.soundSeconds, format: .fixed(precision: 1), privacy: .public) s of it with sound, \(sentences.cut, privacy: .public) sentences cut, \(sentences.reported, privacy: .public) reported, \(sentences.empty, privacy: .public) without text and \(sentences.dropped, privacy: .public) dropped")
+        let pauses = meeting.listenedToMicrophone
+            ? ", \(meeting.pauses) pauses of the microphone, \(String(format: "%.1f", meeting.leftOutSeconds)) s of audio left out"
+            : ""
+        Logger.captions.notice("Meeting captions stopped after \(self.turnedOn.duration(to: .now), privacy: .public), listening to \(listenedTo.rawValue, privacy: .public), with \(self.meeting.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio, \(self.meeting.soundSeconds, format: .fixed(precision: 1), privacy: .public) s of it with sound, \(sentences.cut, privacy: .public) sentences cut, \(sentences.reported, privacy: .public) reported, \(sentences.empty, privacy: .public) without text and \(sentences.dropped, privacy: .public) dropped\(pauses, privacy: .public)")
+    }
+
+    /// Starts the capture of what captions listen to, under a new run. While the screen is
+    /// locked, microphone captions start nothing and wait for the unlock.
+    private func startCapture() {
+        run += 1
+        runState = CaptureRun()
+        captureStarted = .now
+        silence = nil
+        microphoneInUse = nil
+        if source == .microphone, screenLocked {
+            capturing = nil
+            capture = .pausedWhileLocked
+            Logger.captions.notice("Meeting captions wait for the screen to unlock to start the microphone")
+            return
+        }
+        capturing = source
+        switch source {
+        case .systemAudio:
+            startSystemAudio()
+        case .microphone:
+            meeting.listenedToMicrophone = true
+            startMicrophone()
+        }
+    }
+
+    /// Stops the current capture. Its stop is queued at once behind a start of the same
+    /// capture that still runs, and samples still on their way are ignored. What the start
+    /// kept goes, also what a key that waits held back, so no audio stays in memory.
+    private func stopCapture() {
+        run += 1
+        runState.cancelTasks()
+        meeting.leftOutSeconds += runState.heldSeconds
+        runState = CaptureRun()
+        switch capturing {
+        case .systemAudio:
+            let systemAudio = systemAudio
+            captureQueue.async {
+                systemAudio.stop()
+            }
+        case .microphone:
+            let microphone = microphone
+            microphoneQueue.async {
+                microphone.stop()
+            }
+        case nil:
+            break
+        }
+        capturing = nil
+        microphoneInUse = nil
+    }
+
+    /// Another capture under the same meeting: the window and the sentences stay, and the
+    /// sentence that was open ends, since what comes next is not its continuation.
+    private func restartCapture() {
+        stopCapture()
+        pipeline?.endSentence()
+        startCapture()
+    }
+
+    private func startSystemAudio() {
+        let current = run
+        capture = .starting
+        // When no samples at all came by the time samples of only zeros would suggest the
+        // permission, as while nothing plays or the start waits, Core Audio tells whether
+        // an app plays. See checkSilence and receive.
+        self.runState.silenceCheck = Task { [weak self, silenceHint] in
+            var wait = silenceHint
+            while true {
+                try? await Task.sleep(for: .seconds(wait))
+                guard !Task.isCancelled, let next = await self?.checkSilence(run: current) else { return }
+                wait = next
+            }
+        }
+        let systemAudio = systemAudio
+        let deliver: @Sendable ([Float]) -> Void = { [weak self] samples in
+            DispatchQueue.main.async {
+                self?.receive(samples, run: current)
+            }
+        }
+        // Creating the tap and the device and starting it can wait for the permission
+        // prompt, so it runs off the main actor and the outcome comes back to it.
+        captureQueue.async { [weak self] in
+            let problem: SystemAudioProblem?
+            do {
+                try systemAudio.start(deliver)
+                problem = nil
+            } catch let failure as SystemAudioProblem {
+                problem = failure
+            } catch {
+                problem = .failed(step: "start", status: 0)
+            }
+            DispatchQueue.main.async {
+                self?.systemAudioStarted(run: current, problem: problem)
+            }
+        }
+    }
+
+    /// The outcome of a start of what the Mac plays, on the main actor. Ignored when
+    /// captions were turned off or switched meanwhile: that stop is queued after the start
+    /// and tears it down.
+    private func systemAudioStarted(run current: Int, problem: SystemAudioProblem?) {
+        guard isOn, current == run else { return }
+        if let problem {
+            capture = .unavailable(problem)
+            // The window says that the capture failed, which is why no sound comes. So it
+            // shows no note about silence, and this run neither checks what plays nor logs
+            // about silence anymore. When the start failed after `silenceHint`, the log may
+            // already say that nothing plays.
+            self.runState.silenceCheck?.cancel()
+            self.runState.silenceCheck = nil
+            silence = nil
+            return
+        }
+        // Only once the capture runs: the local model is not loaded, nor its download
+        // offered, for captions that cannot hear anything, nor in Original only.
+        wantModelIfTranslating()
+        capture = .listening
+        logStarted()
+    }
+
+    /// The microphone, after a look at access, which never prompts. Without access the
+    /// window says so, nothing starts, and captions start once access is given. A start
+    /// never asks: the prompt comes only from the user's choice of the microphone or a
+    /// click in the window.
+    ///
+    /// The start first waits for what `microphoneQueue` still does, such as the stop of the
+    /// unit before a start again, and then while a dictation, a voice sample or Orra's
+    /// voice holds the microphone, whose audio captions would leave out anyway. So a press
+    /// that comes while an earlier stop still runs holds the start too. Only a start already
+    /// under way at the press completes, since a unit cannot stop halfway through its start.
+    ///
+    /// Right before the unit starts, the start reads the window server's session, since the
+    /// note of a lock may come late or be dropped. A session that says locked counts as a
+    /// lock, and nothing starts until the unlock, see `lockedBySession(_:)`.
+    private func startMicrophone() {
+        let access = microphone.access()
+        guard access == .authorized else {
+            microphoneUnavailable(.access(access))
+            return
+        }
+        capture = .starting
+        let current = run
+        let queue = microphoneQueue
+        self.runState.waitingStart = Task { [weak self] in
+            await withCheckedContinuation { continuation in
+                queue.async {
+                    continuation.resume()
+                }
+            }
+            await self?.waitWhileMicrophonePaused()
+            guard !Task.isCancelled, let self, self.isOn, self.run == current else { return }
+            if self.lockedBySession("before a start of the microphone") { return }
+            self.launchMicrophone()
+        }
+    }
+
+    /// Starts the microphone off the main actor, since a Bluetooth microphone can take
+    /// seconds, and brings the outcome back to it.
+    private func launchMicrophone() {
+        let current = run
+        startMicrophoneSilenceCheck(run: current)
+        let microphone = microphone
+        let preferred = chosenMicrophone
+        let deliver: @Sendable ([Float]) -> Void = { [weak self] samples in
+            DispatchQueue.main.async {
+                self?.receive(samples, run: current)
+            }
+        }
+        let moved: @Sendable () -> Void = { [weak self] in
+            DispatchQueue.main.async {
+                self?.microphoneMoved(run: current)
+            }
+        }
+        microphoneQueue.async { [weak self] in
+            let outcome: Result<AudioInput, MicrophoneCaptionProblem>
+            do {
+                outcome = .success(try microphone.start(preferred, deliver, moved))
+            } catch let problem as MicrophoneCaptionProblem {
+                outcome = .failure(problem)
+            } catch {
+                outcome = .failure(.failed(step: "start", status: 0))
+            }
+            DispatchQueue.main.async {
+                self?.microphoneStarted(run: current, outcome: outcome)
+            }
+        }
+    }
+
+    /// The outcome of a start of the microphone, on the main actor. Ignored when captions
+    /// were turned off or switched meanwhile, as for what the Mac plays.
+    private func microphoneStarted(run current: Int, outcome: Result<AudioInput, MicrophoneCaptionProblem>) {
+        guard isOn, current == run else { return }
+        switch outcome {
+        case .success(let input):
+            microphoneInUse = input
+            // A note that came while the start still ran names the device now.
+            if case .microphoneSilent = silence {
+                silence = .microphoneSilent(MicrophoneSituation(lidClosed: microphone.lidClosed(), input: input))
+            }
+            wantModelIfTranslating()
+            capture = .listening
+            logStarted()
+        case .failure(let problem):
+            microphoneUnavailable(problem)
+        }
+    }
+
+    /// The window says why the microphone cannot be used, so it shows no note about
+    /// silence. Captions start it once access is given, or at the next change of the
+    /// devices after none was connected or its start failed.
+    private func microphoneUnavailable(_ problem: MicrophoneCaptionProblem) {
+        capture = .microphoneUnavailable(problem)
+        runState.silenceCheck?.cancel()
+        runState.silenceCheck = nil
+        silence = nil
+        switch problem {
+        case .access(let access):
+            Logger.captions.notice("Meeting captions cannot use the microphone, access \(String(describing: access), privacy: .public)")
+            watchAccess(from: access)
+        case .noInput:
+            Logger.captions.notice("Meeting captions found no microphone to listen to")
+            startAgainWhenTheDevicesChange(.inputs)
+        case .failed(let step, let status):
+            Logger.captions.error("Meeting captions could not start the microphone: \(step, privacy: .public), \(status, privacy: .public)")
+            startAgainWhenTheDevicesChange(.retry)
+        }
+    }
+
+    /// Starts the microphone again after the next change of Core Audio's devices, such as a
+    /// microphone plugged in while none was connected, or a headset whose input is ready by
+    /// then. Part of the current start, so a stop, a switch or the start again ends the
+    /// watch.
+    private func startAgainWhenTheDevicesChange(_ reason: RestartReason) {
+        let current = run
+        self.runState.inputWatch = microphone.watchInputs { [weak self] in
+            guard let self, self.run == current else { return }
+            self.scheduleRestart(reason, after: self.restartDelay)
+        }
+    }
+
+    /// Looks at microphone access every `accessCheckInterval` while it is not given, and
+    /// starts the microphone through `scheduleRestart` once it is, such as after the user
+    /// allowed it in the prompt or in System Settings. Part of the current start, so a stop
+    /// or a switch ends it, and access given later never opens the microphone for captions
+    /// that are off or listen to what the Mac plays. A build that cannot ask never changes,
+    /// so it is not watched.
+    private func watchAccess(from access: MicrophoneAccess) {
+        guard access != .notConfigured else { return }
+        let current = run
+        self.runState.accessCheck = Task { [weak self, accessCheckInterval] in
+            var last = access
+            while true {
+                try? await Task.sleep(for: .seconds(accessCheckInterval))
+                guard !Task.isCancelled, let self, self.isOn, self.run == current else { return }
+                let now = self.microphone.access()
+                if now == .authorized {
+                    self.scheduleRestart(.access, after: 0)
+                    return
+                }
+                if now != last {
+                    last = now
+                    self.capture = .microphoneUnavailable(.access(now))
+                    if now == .notConfigured { return }
+                }
+            }
+        }
+    }
+
+    /// The microphone moved, see MicrophoneCaptionSource.start.
+    private func microphoneMoved(run current: Int) {
+        guard current == run else { return }
+        scheduleRestart(.moved, after: restartDelay)
+    }
+
+    /// Starts the microphone again after `delay`, once no pause holds it, unless captions
+    /// were turned off, switched or started again meanwhile. Only while they listen to the
+    /// microphone. A later call takes the place of one that still waits, and so does it of
+    /// a start that still waits, since it starts the microphone anyway, so the microphone
+    /// does not start only to stop and start again.
+    private func scheduleRestart(_ reason: RestartReason, after delay: Double) {
+        guard isOn, capturing == .microphone else { return }
+        let current = run
+        self.runState.waitingStart?.cancel()
+        self.runState.restart?.cancel()
+        self.runState.restart = Task { [weak self] in
+            if delay > 0 {
+                try? await Task.sleep(for: .seconds(delay))
+            }
+            await self?.waitWhileMicrophonePaused()
+            guard !Task.isCancelled, let self, self.isOn, self.capturing == .microphone, self.run == current else { return }
+            if reason == .wake, self.lockedBySession("at the wake") { return }
+            if reason.followsTheDevice, !self.mayFollowTheDevice() {
+                self.stopFollowingTheMicrophone()
+                return
+            }
+            Logger.captions.notice("Meeting captions start the microphone again: \(reason.rawValue, privacy: .public)")
+            self.restartCapture()
+        }
+    }
+
+    /// Whether the microphone may start again to follow the device, see `restartLimit`.
+    /// Counts the start again when it may.
+    private func mayFollowTheDevice() -> Bool {
+        let now = ContinuousClock.now
+        deviceRestarts.removeAll { $0.duration(to: now) > .seconds(restartWindow) }
+        guard deviceRestarts.count < Self.restartLimit else { return false }
+        deviceRestarts.append(now)
+        return true
+    }
+
+    /// The microphone kept moving, so captions let go of it, as a stop does, and the window
+    /// says that it could not start. The sentence that was open ends. They still listen to
+    /// the microphone, so turning them off and on, a choice of a microphone, a wake and the
+    /// unlock of the screen start it again, and a change of the devices does not.
+    private func stopFollowingTheMicrophone() {
+        Logger.captions.error("Meeting captions let go of the microphone after \(Self.restartLimit, privacy: .public) starts again within \(self.restartWindow, format: .fixed(precision: 0), privacy: .public) s")
+        stopCapture()
+        pipeline?.endSentence()
+        capturing = .microphone
+        capture = .microphoneUnavailable(.failed(step: "follow the microphone", status: 0))
+        silence = nil
+    }
+
+    /// The watch's report, see ScreenLockSource.watch. It comes after each note, so only a
+    /// change counts. Any process can post the note of an unlock, so an unlock counts only
+    /// while the session agrees, and otherwise the look at the session finds it once the
+    /// session does, see `followTheScreenLock()`. The read that refuses the note said
+    /// locked, so it counts for the look, also when the note of the lock came before the
+    /// session said locked.
+    private func screenLockNoted(_ locked: Bool) {
+        guard locked != screenLocked else { return }
+        if !locked, sessionSaysLocked() {
+            Logger.captions.notice("Meeting captions take no unlock while the session says that the screen is locked")
+            return
+        }
+        screenLockChanged(locked)
+    }
+
+    /// Takes the screen as locked when captions do not yet and the session says that it is,
+    /// since the note of a lock may come late or be dropped. Only at a wake and at the
+    /// wake's start of the microphone, since the note of a lock that came with the sleep may
+    /// reach Orra after the wake, at the look while microphone captions are on, see
+    /// `followTheScreenLock()`, and right before every start of the microphone, see
+    /// `startMicrophone()`. Elsewhere only the watch's note locks, so captions of what the
+    /// Mac plays take a lock from a read only at a wake. The note that comes late then
+    /// changes nothing, and the unlock note or the look at the session ends the lock.
+    /// The read that found the lock said locked, so it counts for the look, as the one that
+    /// refuses an unlock note does, also when the session says unlocked again at once.
+    /// `place` names the read in the log. Returns whether it locked.
+    private func lockedBySession(_ place: String) -> Bool {
+        guard !screenLocked, sessionSaysLocked() else { return false }
+        Logger.captions.notice("Meeting captions found the screen locked \(place, privacy: .public)")
+        screenLockChanged(true)
+        sessionSaidLocked = true
+        return true
+    }
+
+    /// The user opened one of Orra's menus or clicked the caption window, which they can do
+    /// only at an unlocked screen. A lock whose unlock note never came ends here when the
+    /// session agrees, also on a Mac whose session does not tell a lock.
+    func userIsAtTheScreen() {
+        guard screenLocked, !sessionSaysLocked() else { return }
+        Logger.captions.notice("Meeting captions found the screen unlocked without its note, at a menu or a click")
+        screenLockChanged(false)
+    }
+
+    /// Takes the screen as locked or unlocked. Microphone captions that are on let go of
+    /// the microphone at a lock, as a stop does, and the sentence being heard ends, see
+    /// `restartCapture`. They start it again at the unlock, at once and through
+    /// `startMicrophone`, so the start waits for a dictation as any start does, and it never
+    /// counts toward `restartLimit`. Captions of what the Mac plays go on.
+    private func screenLockChanged(_ locked: Bool) {
+        screenLocked = locked
+        if locked {
+            // Only reads from this lock on count.
+            sessionSaidLocked = false
+            _ = sessionSaysLocked()
+        }
+        followTheScreenLock()
+        guard isOn, source == .microphone else { return }
+        if locked {
+            Logger.captions.notice("Meeting captions let go of the microphone while the screen is locked")
+        } else {
+            Logger.captions.notice("Meeting captions start the microphone again after the screen unlocked")
+        }
+        restartCapture()
+    }
+
+    /// Reads the window server's session, see ScreenLockSource.isLocked. Every read after
+    /// the first, in init, goes through here, so none that says locked while captions take
+    /// the screen as locked is lost: it is noted, see `sessionShowsTheUnlock()`.
+    private func sessionSaysLocked() -> Bool {
+        let locked = screenLock.isLocked()
+        if locked, screenLocked {
+            sessionSaidLocked = true
+        }
+        return locked
+    }
+
+    /// Whether a read of the session shows that a lock captions still keep is over: it
+    /// says unlocked now, and a read since the lock said locked. So on a Mac whose session
+    /// does not tell a lock only the unlock note ends it, and the microphone never starts
+    /// at the lock screen. Where a read locks, see `lockedBySession(_:)`.
+    private func sessionShowsTheUnlock() -> Bool {
+        guard screenLocked, !sessionSaysLocked() else { return false }
+        return sessionSaidLocked
+    }
+
+    /// Captions are turned on, or choose what they listen to, so a lock whose unlock note
+    /// never came ends here once the session shows it, see `sessionShowsTheUnlock()`. Only
+    /// the flag changes, since the caller starts the capture next.
+    private func lookAtTheScreenLockBeforeAStart() {
+        guard sessionShowsTheUnlock() else { return }
+        Logger.captions.notice("Meeting captions found the screen unlocked without its note")
+        screenLocked = false
+        followTheScreenLock()
+    }
+
+    /// Looks at the session every `screenLockCheckInterval` while captions are on. While
+    /// they take the screen as locked, so an unlock whose note came late, never came or came
+    /// while the session still said locked is found without the user's help, see
+    /// `sessionShowsTheUnlock()`. While they listen to the microphone and do not, so a lock
+    /// whose note came late or never came is found too, see `lockedBySession(_:)`, and the
+    /// microphone does not stay on at the lock screen. Starts again at each lock, unlock and
+    /// choice of what captions listen to, and ends when captions stop and while they listen
+    /// to what the Mac plays at a screen they take as unlocked.
+    private func followTheScreenLock() {
+        screenLockCheck?.cancel()
+        screenLockCheck = nil
+        guard isOn, screenLocked || source == .microphone else { return }
+        screenLockCheck = Task { [weak self, screenLockCheckInterval] in
+            while true {
+                try? await Task.sleep(for: .seconds(screenLockCheckInterval))
+                guard !Task.isCancelled, let self, self.isOn else { return }
+                if self.screenLocked {
+                    if self.sessionShowsTheUnlock() {
+                        Logger.captions.notice("Meeting captions found the screen unlocked without its note")
+                        self.screenLockChanged(false)
+                        return
+                    }
+                } else if self.source == .microphone {
+                    if self.lockedBySession("at a look at the session") { return }
+                } else {
+                    return
+                }
+            }
+        }
+    }
+
+    /// Returns once nothing holds the microphone back, looking every
+    /// `pauseCheckInterval`, or once the task is cancelled.
+    private func waitWhileMicrophonePaused() async {
+        while pausesMicrophone() != .notPaused, !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(Self.pauseCheckInterval))
+        }
+    }
+
+    /// Asks for the local model once per meeting, when the display mode translates.
+    private func wantModelIfTranslating() {
+        guard displayMode.translates, !wantsModel else { return }
+        wantsModel = true
+        started()
+    }
+
+    private func logStarted() {
+        let target = CaptionTarget.effective(engines.target(), for: engines.language())
+        // How long the start took tells a start that waited, as for the permission
+        // prompt, from audio that comes late.
+        Logger.captions.notice("Meeting captions started, listening to \(self.source.rawValue, privacy: .public), showing \(self.displayMode.rawValue, privacy: .public), into \(target.logName, privacy: .public), after \(self.captureStarted.duration(to: .now), privacy: .public)")
     }
 
     /// Samples from the capture, on the main actor. Internal for tests.
     func receive(_ samples: [Float], run: Int? = nil) {
         guard isOn, run == nil || run == self.run, let pipeline else { return }
-        if receivedSeconds == 0, !samples.isEmpty {
-            Logger.captions.notice("Meeting captions got the first audio \(self.turnedOn.duration(to: .now), privacy: .public) after they were turned on")
+        if capturing == .microphone {
+            noteMicrophoneAudio(samples)
+            guard admitsMicrophoneAudio(samples, into: pipeline) else { return }
+        } else {
+            noteSystemAudio(samples)
+        }
+        pipeline.feed(samples)
+        if pipeline.hearsSpeech {
+            noteSound()
+        }
+    }
+
+    /// Captions hear sound, see `displayQuietLimit`. Called for each piece of audio after
+    /// which the segmenter hears speech, so it only notes the time until the display was
+    /// let go, and then keeps it on again.
+    private func noteSound() {
+        lastSound = now()
+        guard quietTooLong else { return }
+        quietTooLong = false
+        Logger.captions.notice("Meeting captions hear sound again")
+        followTheQuiet()
+    }
+
+    /// Lets go of the display once captions heard no sound for `displayQuietLimit`, see
+    /// `quietTooLong`. Each wait lasts until the limit would pass from the last sound, so
+    /// sound only notes its time and the wait starts again from there. Ends when captions
+    /// stop, and starts again when sound comes back.
+    private func followTheQuiet() {
+        quietCheck?.cancel()
+        quietCheck = nil
+        guard isOn, !quietTooLong else { return }
+        quietCheck = Task { [weak self, sleep] in
+            var wait = MeetingCaptions.displayQuietLimit
+            while true {
+                guard (try? await sleep(.seconds(wait))) != nil, !Task.isCancelled, let self, self.isOn else { return }
+                let quiet = self.lastSound.duration(to: self.now()) / .seconds(1)
+                if quiet >= MeetingCaptions.displayQuietLimit {
+                    self.quietTooLong = true
+                    Logger.captions.notice("Meeting captions heard no sound for \(quiet, format: .fixed(precision: 0), privacy: .public) s and let go of the display")
+                    return
+                }
+                wait = MeetingCaptions.displayQuietLimit - quiet
+            }
+        }
+    }
+
+    /// What the Mac plays: the first audio and the first sound, and samples of only zeros
+    /// that suggest the permission.
+    private func noteSystemAudio(_ samples: [Float]) {
+        if runState.receivedSeconds == 0, !samples.isEmpty {
+            Logger.captions.notice("Meeting captions got the first audio \(self.captureStarted.duration(to: .now), privacy: .public) after they started listening")
             // Something plays now, so the window no longer says that nothing does. A
             // suggestion of the permission stays until the first sound, as with zeros.
             if silence == .noAudio {
@@ -530,18 +1369,129 @@ final class MeetingCaptions {
             }
         }
         let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
-        receivedSeconds += seconds
+        runState.receivedSeconds += seconds
+        meeting.receivedSeconds += seconds
         if samples.contains(where: { $0 != 0 }) {
-            soundSeconds += seconds
-            if !heardSound {
-                heardSound = true
+            meeting.soundSeconds += seconds
+            if !runState.heardSound {
+                runState.heardSound = true
                 silence = nil
-                Logger.captions.notice("Meeting captions got the first sound \(self.turnedOn.duration(to: .now), privacy: .public) after they were turned on")
+                Logger.captions.notice("Meeting captions got the first sound \(self.captureStarted.duration(to: .now), privacy: .public) after they started listening")
             }
-        } else if !heardSound, receivedSeconds >= silenceHint {
+        } else if !runState.heardSound, runState.receivedSeconds >= silenceHint {
             suggestPermission(after: silenceHint)
         }
-        pipeline.feed(samples)
+    }
+
+    /// The microphone: whether it gives sound, as dictation tells it, see Silence. Also
+    /// while a pause leaves its audio out, so the window still knows the device works.
+    /// None since the start for `silenceHint`, or none for `microphoneQuietLimit` after
+    /// some, says so in the window, and the first sound takes the note away.
+    private func noteMicrophoneAudio(_ samples: [Float]) {
+        if runState.receivedSeconds == 0, !samples.isEmpty {
+            Logger.captions.notice("Meeting captions got the first audio of the microphone \(self.captureStarted.duration(to: .now), privacy: .public) after they started listening")
+        }
+        let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
+        runState.receivedSeconds += seconds
+        meeting.receivedSeconds += seconds
+        guard Silence.isSilent(samples) else {
+            meeting.soundSeconds += seconds
+            runState.quietSeconds = 0
+            if !runState.heardSound {
+                runState.heardSound = true
+                Logger.captions.notice("Meeting captions got the first sound of the microphone \(self.captureStarted.duration(to: .now), privacy: .public) after they started listening")
+            }
+            if case .microphoneSilent = silence {
+                silence = nil
+            }
+            return
+        }
+        runState.quietSeconds += seconds
+        if runState.quietSeconds >= (runState.heardSound ? microphoneQuietLimit : silenceHint) {
+            sayMicrophoneSilent(after: runState.quietSeconds)
+        }
+    }
+
+    /// Whether the microphone's samples go into the captions now, see MicrophonePause.
+    /// What a pause leaves out is gone at once, and so is what arrives within
+    /// `microphoneHold` after it. The sentence that was open ends before the next samples
+    /// go in, so what was said before a dictation never joins what is said after it, and
+    /// the cut never starts a model call during the wait of a key. What a key that waits
+    /// heard goes in, in order, when its press is dropped.
+    private func admitsMicrophoneAudio(_ samples: [Float], into pipeline: CaptionPipeline) -> Bool {
+        let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
+        let now = ContinuousClock.now
+        let holding = runState.holdUntil.map { now < $0 } ?? false
+        switch pausesMicrophone() {
+        case .arming:
+            guard !runState.paused, !holding else {
+                meeting.leftOutSeconds += seconds
+                return false
+            }
+            runState.armingAudio.append(samples)
+            var kept = runState.armingAudio.reduce(0) { $0 + $1.count }
+            while Double(kept) / Double(RecordingLimits.sampleRate) > Self.armingLimit, !runState.armingAudio.isEmpty {
+                let oldest = runState.armingAudio.removeFirst()
+                kept -= oldest.count
+                meeting.leftOutSeconds += Double(oldest.count) / Double(RecordingLimits.sampleRate)
+            }
+            return false
+        case .paused:
+            if !runState.paused {
+                runState.paused = true
+                meeting.pauses += 1
+            }
+            runState.holdUntil = nil
+            runState.endsSentence = true
+            meeting.leftOutSeconds += seconds + runState.heldSeconds
+            runState.armingAudio = []
+            return false
+        case .notPaused:
+            if runState.paused {
+                runState.paused = false
+                runState.holdUntil = now + .seconds(microphoneHold)
+                if microphoneHold > 0 {
+                    meeting.leftOutSeconds += seconds
+                    return false
+                }
+            }
+            if holding {
+                meeting.leftOutSeconds += seconds
+                return false
+            }
+            runState.holdUntil = nil
+            if runState.endsSentence {
+                runState.endsSentence = false
+                pipeline.endSentence()
+            }
+            // A press that turned out to be a shortcut. What was heard meanwhile goes in
+            // first, in order.
+            for held in runState.armingAudio {
+                pipeline.feed(held)
+            }
+            runState.armingAudio = []
+            return true
+        }
+    }
+
+    /// Starts the clock of `silenceHint` for the microphone: when no sound came by then,
+    /// not even quiet samples, the window says so.
+    private func startMicrophoneSilenceCheck(run current: Int) {
+        self.runState.silenceCheck = Task { [weak self, silenceHint] in
+            try? await Task.sleep(for: .seconds(silenceHint))
+            guard !Task.isCancelled, let self, self.isOn, self.run == current, !self.runState.heardSound else { return }
+            self.sayMicrophoneSilent(after: silenceHint)
+        }
+    }
+
+    /// The microphone gave no sound for `seconds`, so the window explains it, naming the
+    /// device, or the closed lid for the built in microphone.
+    private func sayMicrophoneSilent(after seconds: Double) {
+        if case .microphoneSilent(let situation) = silence, situation.input == microphoneInUse { return }
+        let first = silence == nil
+        silence = .microphoneSilent(MicrophoneSituation(lidClosed: microphone.lidClosed(), input: microphoneInUse))
+        guard first else { return }
+        Logger.captions.notice("Meeting captions got no sound from the microphone for \(seconds, format: .fixed(precision: 1), privacy: .public) s, with \(self.runState.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio")
     }
 
     /// One check of what plays while no samples came this run: at `silenceHint`, and every
@@ -552,7 +1502,7 @@ final class MeetingCaptions {
         let plays = await somethingPlays()
         guard !Task.isCancelled, waitsForAudio(run: current) else { return nil }
         if plays == false {
-            mayPlay = false
+            self.runState.mayPlay = false
             if silence == nil {
                 sayNothingPlays()
             }
@@ -561,27 +1511,27 @@ final class MeetingCaptions {
         // An app plays, or Core Audio cannot tell. At `silenceHint` that suggests the
         // permission at once, as samples of only zeros do. Once the window said that
         // nothing plays, the tap's auto start gets until the next check to deliver audio.
-        if silence == .noAudio, !mayPlay {
-            mayPlay = true
+        if silence == .noAudio, !self.runState.mayPlay {
+            self.runState.mayPlay = true
             if plays == true {
-                Logger.captions.notice("Meeting captions found an app playing \(self.turnedOn.duration(to: .now), privacy: .public) after they were turned on, with no audio yet")
+                Logger.captions.notice("Meeting captions found an app playing \(self.captureStarted.duration(to: .now), privacy: .public) after they started listening, with no audio yet")
             }
             return playCheckInterval
         }
-        suggestPermission(after: silence == nil ? silenceHint : turnedOn.duration(to: .now) / .seconds(1))
+        suggestPermission(after: silence == nil ? silenceHint : captureStarted.duration(to: .now) / .seconds(1))
         return nil
     }
 
-    /// Whether this run still got no samples at all, with no note or the note that nothing
-    /// plays in the window.
+    /// Whether this run of what the Mac plays still got no samples at all, with no note
+    /// or the note that nothing plays in the window.
     private func waitsForAudio(run current: Int) -> Bool {
-        isOn && current == run && receivedSeconds == 0 && silence != .noSound
+        isOn && current == run && capturing == .systemAudio && self.runState.receivedSeconds == 0 && silence != .noSound
     }
 
     /// Asks on `playQueue` whether an app plays, see SystemAudioSource.somethingPlays. Nil
     /// when Core Audio cannot tell, also when it gave no answer within `playCheckLimit`.
     private func somethingPlays() async -> Bool? {
-        let ask = source.somethingPlays
+        let ask = systemAudio.somethingPlays
         let queue = playQueue
         let (answer, timedOut) = await TimedCall.run(within: .seconds(playCheckLimit)) {
             await withCheckedContinuation { continuation in
@@ -601,7 +1551,7 @@ final class MeetingCaptions {
     /// and its 0.0 s of audio tells the two apart.
     private func sayNothingPlays() {
         silence = .noAudio
-        Logger.captions.notice("Meeting captions got no sound for \(self.silenceHint, format: .fixed(precision: 1), privacy: .public) s, with \(self.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio, and say that nothing plays")
+        Logger.captions.notice("Meeting captions got no sound for \(self.silenceHint, format: .fixed(precision: 1), privacy: .public) s, with \(self.runState.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio, and say that nothing plays")
     }
 
     /// No sound came for `seconds` although something may play, see SilenceKind.noSound,
@@ -609,11 +1559,16 @@ final class MeetingCaptions {
     private func suggestPermission(after seconds: Double) {
         guard silence != .noSound else { return }
         silence = .noSound
-        Logger.captions.notice("Meeting captions got no sound for \(seconds, format: .fixed(precision: 1), privacy: .public) s, with \(self.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio, and suggest the permission")
+        Logger.captions.notice("Meeting captions got no sound for \(seconds, format: .fixed(precision: 1), privacy: .public) s, with \(self.runState.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio, and suggest the permission")
     }
 
     /// The run of the latest start, for tests that feed samples like the capture does.
     var currentRun: Int {
         run
+    }
+
+    /// Seconds of the microphone's audio that a key that waits holds back now, for tests.
+    var heldMicrophoneSeconds: Double {
+        runState.heldSeconds
     }
 }

@@ -25,6 +25,7 @@ struct ProblemReportTests {
         dictationLanguage: "Chinese",
         translateInto: "Automatic",
         captionsShow: "originalAndTranslation",
+        captionsListenTo: "microphone",
         translateCaptionsInto: "Chinese (default)",
         settings: [.init(name: "Sounds", on: true), .init(name: "Show in Dock", on: false), .init(name: "Clean up with a local model", on: true)],
         cleanupModelState: "installed, loaded",
@@ -85,7 +86,7 @@ struct ProblemReportTests {
         #expect(report.contains("Folder size: 2.5 GB"))
         #expect(report.contains("Accessibility: granted"))
         #expect(report.contains("Talk key: fn"))
-        #expect(report.contains("Dictation language: Chinese\nTranslate into: Automatic\nLive Captions show: originalAndTranslation\nTranslate captions into: Chinese (default)"))
+        #expect(report.contains("Dictation language: Chinese\nTranslate into: Automatic\nLive Captions show: originalAndTranslation\nLive Captions listen to: microphone\nTranslate captions into: Chinese (default)"))
         #expect(report.contains("Clean up with a local model: on"))
         #expect(report.contains("Cleanup model: installed, loaded"))
         #expect(report.contains("Sounds: on"))

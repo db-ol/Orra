@@ -110,11 +110,15 @@ nonisolated enum LiveCaptionsShortcut {
     }
 
     /// What VoiceOver says after the shortcut turned Live Captions on or off. The change
-    /// may come while another app is in front, where nothing else says it.
-    static func announcement(captionsOn: Bool, in locale: Locale = .interface) -> String {
-        captionsOn
-            ? String(localized: LocalizedStringResource("Live Captions on", locale: locale))
-            : String(localized: LocalizedStringResource("Live Captions off", locale: locale))
+    /// may come while another app is in front, where nothing else says it. Captions that
+    /// turn on listening to the microphone say so, since that opens it.
+    static func announcement(captionsOn: Bool, microphone: Bool, in locale: Locale = .interface) -> String {
+        guard captionsOn else {
+            return String(localized: LocalizedStringResource("Live Captions off", locale: locale))
+        }
+        return microphone
+            ? String(localized: LocalizedStringResource("Live Captions on, listening to the microphone", locale: locale))
+            : String(localized: LocalizedStringResource("Live Captions on", locale: locale))
     }
 }
 

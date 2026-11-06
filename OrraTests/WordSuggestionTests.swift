@@ -73,6 +73,16 @@ struct OneCharacterFixTests {
         #expect(suggest("用通一千问", "用通一千问") == nil)
     }
 
+    @Test func aChangeOfNumberIsNotOffered() {
+        // 两 and 三, or 二 and 一, do not sound alike. Both were offered while a Chinese
+        // numeral counted as a digit of a name.
+        #expect(suggest("我们两点开会", "我们三点开会") == nil)
+        #expect(suggest("这是第二次", "这是第一次") == nil)
+        // A numeral that sounds the same is still offered, as in a name.
+        #expect(suggest("我用通义签问写代码", "我用通义千问写代码")?.pair == Correction(heard: "通义签问", corrected: "通义千问"))
+        #expect(suggest("找王亦博签名", "找王一博签名")?.change == Correction(heard: "亦", corrected: "一"))
+    }
+
     @Test func theGuessIsTheTokenizersWordWhenItKnowsOne() {
         // 北京 is one word, so the guess is that word.
         #expect(suggest("我们去北经开会", "我们去北京开会")?.pair == Correction(heard: "北经", corrected: "北京"))

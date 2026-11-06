@@ -312,26 +312,16 @@ struct KeyNameTests {
     }
 }
 
-/// Uses UserDefaults suites of its own, never Orra's real settings. Each test has a fixed
-/// suite name, so reruns reuse one empty file per test instead of leaving a new one in
-/// ~/Library/Preferences every time, and tests running in parallel never share one.
+/// Uses UserDefaults suites of its own, never Orra's real settings, see TestDefaults.
 struct TalkKeyPreferenceTests {
-    private func withDefaults(_ name: String, _ body: (UserDefaults) throws -> Void) rethrows {
-        let suite = "io.github.db-ol.OrraTests.TalkKeyPreference.\(name)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
-        try body(defaults)
-    }
-
-    @Test func nothingSavedMeansTheDefault() {
-        withDefaults("nothingSaved") { defaults in
+    @Test func nothingSavedMeansTheDefault() throws {
+        try withTestDefaults("TalkKeyPreference.nothingSaved") { defaults in
             #expect(TalkKeyPreference.load(from: defaults) == TalkKey.defaultKey)
         }
     }
 
-    @Test func theSavedKeyComesBack() {
-        withDefaults("saved") { defaults in
+    @Test func theSavedKeyComesBack() throws {
+        try withTestDefaults("TalkKeyPreference.saved") { defaults in
             TalkKeyPreference.save(.rightOption, to: defaults)
             #expect(TalkKeyPreference.load(from: defaults) == .rightOption)
             // Saved as a list of one, the way Orra 0.1.0 reads it.
@@ -339,8 +329,8 @@ struct TalkKeyPreferenceTests {
         }
     }
 
-    @Test func severalSavedKeysKeepOne() {
-        withDefaults("several") { defaults in
+    @Test func severalSavedKeysKeepOne() throws {
+        try withTestDefaults("TalkKeyPreference.several") { defaults in
             // As Orra 0.1.0 saved them, with several keys on.
             defaults.set(["rightControl", "rightOption", "rightCommand", "fn"], forKey: TalkKeyPreference.defaultsKey)
             #expect(TalkKeyPreference.load(from: defaults) == .fn)
@@ -353,8 +343,8 @@ struct TalkKeyPreferenceTests {
         }
     }
 
-    @Test func unknownKeysAreIgnored() {
-        withDefaults("unknown") { defaults in
+    @Test func unknownKeysAreIgnored() throws {
+        try withTestDefaults("TalkKeyPreference.unknown") { defaults in
             defaults.set(["leftShift", "leftOption"], forKey: TalkKeyPreference.defaultsKey)
             #expect(TalkKeyPreference.load(from: defaults) == .leftOption)
             defaults.set(["leftShift"], forKey: TalkKeyPreference.defaultsKey)
@@ -366,24 +356,16 @@ struct TalkKeyPreferenceTests {
 }
 
 struct TranslationKeyPreferenceTests {
-    private func withDefaults(_ name: String, _ body: (UserDefaults) throws -> Void) rethrows {
-        let suite = "io.github.db-ol.OrraTests.TranslationKeyPreference.\(name)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
-        try body(defaults)
-    }
-
-    @Test func nothingSavedFollowsTheTalkKey() {
-        withDefaults("nothingSaved") { defaults in
+    @Test func nothingSavedFollowsTheTalkKey() throws {
+        try withTestDefaults("TranslationKeyPreference.nothingSaved") { defaults in
             #expect(TranslationKeyPreference.loadHotkey(talkKey: .rightControl, from: defaults) == .rightOption)
             #expect(TranslationKeyPreference.loadHotkey(talkKey: .fn, from: defaults) == .rightOption)
             #expect(TranslationKeyPreference.loadHotkey(talkKey: .rightOption, from: defaults) == .rightCommand)
         }
     }
 
-    @Test func theSavedKeyComesBackUnlessItIsTheTalkKey() {
-        withDefaults("saved") { defaults in
+    @Test func theSavedKeyComesBackUnlessItIsTheTalkKey() throws {
+        try withTestDefaults("TranslationKeyPreference.saved") { defaults in
             TranslationKeyPreference.save(.leftCommand, to: defaults)
             #expect(TranslationKeyPreference.loadHotkey(talkKey: .rightControl, from: defaults) == .leftCommand)
             #expect(defaults.string(forKey: TranslationKeyPreference.defaultsKey) == "leftCommand")
@@ -396,11 +378,10 @@ struct TranslationKeyPreferenceTests {
 }
 
 struct HandsFreePreferenceTests {
-    @Test func onUntilTurnedOff() {
-        let suite = "io.github.db-ol.OrraTests.HandsFreePreference.onUntilTurnedOff"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+    @Test func onUntilTurnedOff() throws {
+        let suite = try TestDefaults("HandsFreePreference.onUntilTurnedOff")
+        defer { suite.remove() }
+        let defaults = suite.defaults
         #expect(HandsFreePreference.load(from: defaults))
         HandsFreePreference.save(false, to: defaults)
         #expect(HandsFreePreference.load(from: defaults) == false)

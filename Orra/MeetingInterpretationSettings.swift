@@ -1,10 +1,11 @@
 import SwiftUI
 
 /// Meeting Interpretation, its own page in Settings: a meeting where each side speaks
-/// another language. Live captions show what the other side says, translated into the
-/// caption target. Speak translations to others speaks what the translation key
-/// translated, so the other side hears it, in the voice of a sample the user recorded if
-/// they like. Each part shows only where the page has it.
+/// another language. Live captions show what the other side says, or what the user says
+/// into the microphone once they choose it, translated into the caption target. Speak
+/// translations to others speaks what the translation key translated, so the other side
+/// hears it, in the voice of a sample the user recorded if they like. Each part shows only
+/// where the page has it.
 struct MeetingInterpretationSettings: View {
     let pushToTalk: PushToTalkController
     let captions: MeetingCaptions?
@@ -132,8 +133,8 @@ struct MeetingInterpretationSettings: View {
     }
 }
 
-/// Live captions: the switch, what the caption window shows and the language it
-/// translates into. The window has the same choices.
+/// Live captions: the switch, what they listen to, what the caption window shows and the
+/// language it translates into. The window has the same choices.
 private struct LiveCaptionRows: View {
     let captions: MeetingCaptions
     /// The caption target and the dictation language, whose choices it offers.
@@ -156,11 +157,26 @@ private struct LiveCaptionRows: View {
         )) {
             DescribedLabel(
                 title: "Live captions",
-                detail: "Orra translates the sound the Mac plays into captions, in a floating window.",
+                detail: "Orra translates the sound the Mac plays, or what you say into the microphone once you choose it, into captions, in a floating window.",
                 systemImage: "captions.bubble"
             )
         }
         .help(help)
+        // Never saved, so a launch never opens the microphone, see CaptionSource.
+        Picker(selection: Binding(
+            get: { captions.source },
+            set: { captions.setSource($0) }
+        )) {
+            ForEach(CaptionSource.allCases, id: \.self) { source in
+                Text(verbatim: source.title).tag(source)
+            }
+        } label: {
+            DescribedLabel(
+                title: "Captions listen to",
+                detail: "Each time Orra starts, captions listen to what the Mac plays. Choose Microphone to caption what you say.",
+                systemImage: "ear"
+            )
+        }
         Picker(selection: Binding(
             get: { captions.displayMode },
             set: { captions.setDisplayMode($0) }

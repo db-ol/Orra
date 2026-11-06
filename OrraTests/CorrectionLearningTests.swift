@@ -613,6 +613,26 @@ struct CorrectionLearningTests {
         #expect(vocabulary.words == ["Claude"])
     }
 
+    @Test func aChangeOfWhatWasSaidIsNotLearnedNextToAFix() async {
+        // 克劳德 to Claude is learned. 开会 to 十点 changes what was said, and it was learned
+        // too while 十 counted as a digit of a name.
+        let pasted = "我在用克劳德写代码，明天开会"
+        let field = ScriptedField([pasted, pasted, "我在用Claude写代码，明天十点"])
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: field, vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        var offered: [WordSuggestion] = []
+        learning.onLearned = { learned.append($0) }
+        learning.onSuggest = { offered.append($0) }
+        learning.pasted(pasted, in: 42)
+        await waitForReads(field)
+        learning.isOn = false
+        #expect(learned.map(\.correction) == [pair])
+        #expect(offered.isEmpty)
+        #expect(vocabulary.words == ["Claude"])
+        #expect(learning.store.entries.map(\.correction) == [pair])
+    }
+
     /// Waits until the field's reads have stopped for a while.
     private func waitForReads(_ field: ScriptedField) async {
         var lastReads = -1

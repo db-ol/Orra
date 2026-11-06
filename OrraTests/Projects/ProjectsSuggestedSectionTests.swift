@@ -203,13 +203,14 @@ struct ProjectsSuggestedSectionTests {
     /// Projects on with no project, a Mail that never runs and no model.
     @MainActor final class Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ProjectsSuggestedSectionTests-\(UUID().uuidString)", isDirectory: true)
-        let suite = "io.github.db-ol.OrraTests.projects-suggestions-\(UUID().uuidString)"
+        let suite: TestDefaults
         let defaults: UserDefaults
         let projects: ProjectsSwitch
         let runtime: ProjectsRuntime
 
         init() async throws {
-            defaults = try #require(UserDefaults(suiteName: suite))
+            suite = try TestDefaults("projects-suggestions")
+            defaults = suite.defaults
             let storage = ProjectsStorage(root: root.appendingPathComponent("Support", isDirectory: true))
             projects = ProjectsSwitch(defaults: defaults, isVisible: true, physicalMemory: 32 << 30, storage: storage)
             projects.turnOn()
@@ -277,7 +278,7 @@ struct ProjectsSuggestedSectionTests {
         }
 
         func cleanUp() {
-            defaults.removePersistentDomain(forName: suite)
+            suite.remove()
             try? FileManager.default.removeItem(at: root)
         }
     }

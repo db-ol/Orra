@@ -105,6 +105,28 @@ struct CaptionSegmenterTests {
         #expect(again == nil)
     }
 
+    /// A gap, such as a dictation that captions of the microphone leave out, ends the
+    /// sentence being heard. What came before the gap is no preroll of the next sentence,
+    /// and the times go on from the samples taken in.
+    @Test func aBreakEndsTheSentenceAndTheNextStartsWithoutTheAudioBeforeIt() throws {
+        var segmenter = CaptionSegmenter()
+        _ = segmenter.append(CaptionAudio.silence(0.5) + CaptionAudio.tone(1))
+        let ended = segmenter.breakStream()
+        let cut = try #require(ended)
+        #expect(abs(cut.start - 0.3) < 0.03)
+        #expect(abs(cut.end - 1.5) < 0.03)
+        #expect(!segmenter.isInSpeech)
+        // Two loud frames are too short to start a sentence, so they would be its preroll.
+        _ = segmenter.append(CaptionAudio.silence(0.46) + CaptionAudio.tone(0.04, amplitude: 0.5))
+        let none = segmenter.breakStream()
+        #expect(none == nil)
+        let found = segmenter.append(CaptionAudio.tone(1) + CaptionAudio.silence(1))
+        try #require(found.count == 1)
+        // The tone starts at 2 s of the stream, with no preroll from before the break.
+        #expect(abs(found[0].start - 2) < 0.01)
+        #expect(found[0].samples.allSatisfy { abs($0) <= 0.1 })
+    }
+
     @Test func steadyNoiseRaisesTheThresholds() {
         // Soft noise between sentences lifts the floor, so a sound just above the start
         // level but not above the noise by enough does not start a sentence.

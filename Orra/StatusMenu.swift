@@ -107,7 +107,8 @@ struct StatusMenu: View {
         // without a submenu. A section draws its heading and the dividers above and below
         // it, so no Divider goes next to it.
         Section("Meeting Interpretation") {
-            // The sound the Mac plays, transcribed and translated in a floating window. The
+            // What the Mac plays, or the microphone once the user chooses it in the caption
+            // window or in Settings, transcribed and translated in a floating window. The
             // shortcut shows as text after the name. As a key equivalent of the item it
             // might turn captions on and off twice while the menu is open.
             Toggle(isOn: Binding(

@@ -4,8 +4,10 @@ import Testing
 @testable import Orra
 
 /// Runs the real model on the translation cases of Tools/rewrite-eval: the 182 regular
-/// cases, the 70 adversarial ones, which ask, order or try to steer the model, and the 116
-/// translation probes, 6 of them long. Only when asked for, with
+/// cases, the 70 adversarial ones, which ask, order or try to steer the model, the 116
+/// translation probes, 6 of them long, and the 39 replies and 26 adversarial replies of the
+/// Chinese pair in translation-replies.jsonl and adversarial-replies.jsonl, which open
+/// with words such as 可以 or 不好意思. Only when asked for, with
 /// TEST_RUNNER_ORRA_TRANSLATION_EVAL=1, and only when the model is on this Mac, see
 /// RewriteTestModel. It loads 3 GB, so run it on its own, in a Release build, as
 /// CleanupModelEvaluationTests says:
@@ -63,6 +65,20 @@ struct TranslationModelEvaluationTests {
             }
             let long = object["kind"] as? String == "long"
             cases.append(Case(set: long ? "long" : "probes", id: try #require(object["id"] as? String), input: input, expected: expected))
+        }
+        // Replies that open with a word such as 可以 or Sure, and adversarial dictations
+        // that open the same way, of the Chinese pair.
+        for object in try RewriteEvalFiles.objects("translation-replies.jsonl") where object["pair"] as? String == "zh" {
+            let input = try #require(object["input"] as? String)
+            var expected: [TranslationTarget: String] = [:]
+            if let target = TranslationDirection.automatic.target(for: input) {
+                expected[target] = try #require(object["ref"] as? String)
+            }
+            cases.append(Case(set: "replies", id: try #require(object["id"] as? String), input: input, expected: expected))
+        }
+        for object in try RewriteEvalFiles.objects("adversarial-replies.jsonl") where object["pair"] as? String == "zh" {
+            cases.append(Case(set: "adversarial replies", id: try #require(object["id"] as? String), input: try #require(object["input"] as? String),
+                              expected: [.english: try #require(object["expected_en"] as? String), .chinese: try #require(object["expected_zh"] as? String)]))
         }
         return cases
     }
@@ -174,7 +190,7 @@ struct TranslationModelEvaluationTests {
 
         var medians: [String: Double] = [:]
         var obeyed: [String] = []
-        for set in ["regular", "adversarial", "probes", "long"] {
+        for set in ["regular", "adversarial", "probes", "long", "replies", "adversarial replies"] {
             let items = cases.filter { $0.set == set }
             for mode in [TranslationDirection.automatic, .english, .chinese] {
                 var counts: [String: Int] = [:]
@@ -225,7 +241,7 @@ struct TranslationModelEvaluationTests {
                     case .noReference:
                         break
                     }
-                    if set == "adversarial", TranslationScoring.looksObeyed(run.result, expected: item.expected[target]) {
+                    if set.hasPrefix("adversarial"), TranslationScoring.looksObeyed(run.result, expected: item.expected[target]) {
                         obeyed.append("\(item.id)->\(target.rawValue)")
                     }
                 }

@@ -257,7 +257,7 @@ struct SortingAgainEvaluationTests {
         let jobs: ModelJobs
         private let engine: CleanupEngine
         private let folder: URL
-        private let suite: String
+        private let suite: TestDefaults
         private let defaults: UserDefaults
         /// The slug of each project made, by its ID.
         private var slugs: [UUID: String] = [:]
@@ -273,9 +273,9 @@ struct SortingAgainEvaluationTests {
             self.name = name
             let folder = FileManager.default.temporaryDirectory.appendingPathComponent("SortingAgainEvaluation-\(UUID().uuidString)", isDirectory: true)
             self.folder = folder
-            let suite = "io.github.db-ol.OrraTests.sorting-again-\(UUID().uuidString)"
+            let suite = try TestDefaults("sorting-again")
             self.suite = suite
-            let defaults = try #require(UserDefaults(suiteName: suite))
+            let defaults = suite.defaults
             self.defaults = defaults
             let storage = ProjectsStorage(root: folder.appendingPathComponent("Support", isDirectory: true))
             let projects = ProjectsSwitch(defaults: defaults, isVisible: true, physicalMemory: 32 << 30, storage: storage)
@@ -525,7 +525,7 @@ struct SortingAgainEvaluationTests {
                 try? await Task.sleep(for: .milliseconds(10))
             }
             await engine.unload()
-            defaults.removePersistentDomain(forName: suite)
+            suite.remove()
             try? FileManager.default.removeItem(at: folder)
         }
 

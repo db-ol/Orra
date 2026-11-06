@@ -148,6 +148,20 @@ nonisolated struct CaptionSegmenter: Sendable {
         return finished
     }
 
+    /// A gap in the stream, such as a dictation that captions of the microphone leave out,
+    /// or a switch of what captions listen to: the sentence being heard ends here, if it
+    /// holds enough speech, as at the end of the stream. The next sentence starts afresh,
+    /// without preroll from before the gap. The noise floor stays, and the times go on from
+    /// the samples taken in so far.
+    mutating func breakStream() -> CaptionSegment? {
+        let taken = pending.count
+        defer {
+            pendingStart += taken
+            preroll = []
+        }
+        return finish()
+    }
+
     /// The end of the stream: the sentence being heard, if it holds enough speech.
     mutating func finish() -> CaptionSegment? {
         defer {
