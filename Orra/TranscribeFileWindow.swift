@@ -102,15 +102,25 @@ final class TranscribeFileWindow: NSObject, NSWindowDelegate {
     /// only one Transcribe File reads.
     private func chooseFile() {
         guard let window, let transcription else { return }
+        let panel = Self.openPanel()
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let url = panel.url else { return }
+            transcription.choose(url)
+        }
+    }
+
+    /// The open panel of Choose File…, for one audio or video file. It hands over a file in
+    /// iCloud Drive that is not on this Mac yet instead of having macOS download it, which
+    /// it does by default, so FileAudioSource refuses it as for a drop, see
+    /// FileAudioProblem.notOnThisMac.
+    static func openPanel() -> NSOpenPanel {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.audiovisualContent]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.beginSheetModal(for: window) { response in
-            guard response == .OK, let url = panel.url else { return }
-            transcription.choose(url)
-        }
+        panel.canDownloadUbiquitousContents = false
+        return panel
     }
 
     /// Save as Text… and Save as Subtitles…: the save panel, starting with the file's name

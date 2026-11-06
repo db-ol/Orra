@@ -3304,8 +3304,9 @@ the names offered for saving. FileTranscriptionEndToEndTests transcribes spoken 
 - [ ] Drop two files at once: nothing starts and the window says to drop one file at a time.
   Drop a folder, a PDF and a movie without sound: each gets its message. A movie bought in
   the TV app says that it is protected.
-- [ ] A file in iCloud Drive that shows the cloud in Finder (Remove Download first) says that
-  it is not on this Mac yet, and Finder shows no download.
+- [ ] A file in iCloud Drive that shows the cloud in Finder (Remove Download first), dropped
+  on the window and picked with Choose File…: each time the window says that it is not on
+  this Mac yet, and Finder shows no download.
 - [ ] Press the talk key while a file runs: the dictation pastes as quickly as without a
   file, the window says that it waits for the dictation, and the file goes on after the
   paste. The same with the translation key, and with a dictation cancelled with Escape.

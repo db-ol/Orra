@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import SwiftUI
 import Testing
+import UniformTypeIdentifiers
 @testable import Orra
 
 /// What the Transcribe File window says: the time left, times in the file, what the
@@ -29,6 +30,19 @@ struct TranscribeFileWindowTests {
         #expect(TranscribeFileView.speechModelLine(installer: .checking, model: .notLoaded) == "Loading the speech model…")
         #expect(TranscribeFileView.speechModelLine(installer: .missing(bytesPresent: 0), model: .notLoaded) == "Orra needs its speech model first. Download it from Orra’s menu in the menu bar.")
         #expect(TranscribeFileView.speechModelLine(installer: .installed(folder), model: .unavailable(.failedToLoad)) == "The speech model could not be loaded")
+    }
+
+    /// Choose File… asks for one audio or video file, and hands over one in iCloud Drive
+    /// that is not on this Mac yet, which FileAudioSource then refuses, instead of having
+    /// macOS download it, as an open panel does unless told otherwise. The panel is made,
+    /// never shown.
+    @Test func theOpenPanelHasMacOSDownloadNothing() {
+        let panel = TranscribeFileWindow.openPanel()
+        #expect(!panel.canDownloadUbiquitousContents)
+        #expect(!panel.allowsMultipleSelection)
+        #expect(!panel.canChooseDirectories)
+        #expect(panel.canChooseFiles)
+        #expect(panel.allowedContentTypes == [.audiovisualContent])
     }
 
     @Test func eachProblemHasItsMessage() {
