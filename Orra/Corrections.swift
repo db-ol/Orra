@@ -488,13 +488,16 @@ nonisolated enum SoundAlike {
     /// Within one script: the same first sound, and an edit distance of at most 40% of the
     /// longer sound, so 明天 and 今天 or Monday and Sunday do not pass. Between Chinese and
     /// Latin text, such as 克劳德 and Claude, 60% and any first sound, since pinyin only
-    /// roughly spells English.
+    /// roughly spells English. Within one script a second word that looks like a name also
+    /// passes with the English key of the first, as Aura and Orra do. Words without a key,
+    /// such as Chinese words and single letters, are compared by their sound alone, so
+    /// 开会 and 十点 do not pass.
     static func soundsAlike(_ first: String, _ second: String) -> Bool {
         let a = Array(sound(first))
         let b = Array(sound(second))
         guard let firstA = a.first, let firstB = b.first else { return false }
         let crossesScripts = first.unicodeScalars.contains { $0.value >= 0x3400 } != second.unicodeScalars.contains { $0.value >= 0x3400 }
-        if !crossesScripts, consonants(first) == consonants(second), looksLikeName(second) {
+        if !crossesScripts, let key = consonants(first), key == consonants(second), looksLikeName(second) {
             return true
         }
         if !crossesScripts, firstA != firstB { return false }
@@ -522,10 +525,12 @@ nonisolated enum SoundAlike {
         return key.count >= 2 ? key : nil
     }
 
-    /// A name rather than a plain word, such as Orra or Qwen3: a capital letter or a digit.
-    /// Fixing form to from changes a word, and that is never learned this way.
+    /// A name rather than a plain word, such as Orra or Qwen3: a capital letter or an ASCII
+    /// digit. Fixing form to from changes a word, and that is never learned this way. The
+    /// key reads ASCII letters only, and a Latin name writes its digits in ASCII. Swift
+    /// counts Chinese numerals such as 十 and 一 as numbers, but they are words.
     private static func looksLikeName(_ text: String) -> Bool {
-        text.contains { $0.isUppercase || $0.isNumber }
+        text.contains { $0.isUppercase || ($0.isASCII && $0.isNumber) }
     }
 }
 

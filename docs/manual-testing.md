@@ -486,7 +486,9 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     out changes of meaning, deletions, additions, rewrites and edits outside the paste,
     the pinyin comparison, accepting only pairs that were not undone, and the stored file.
     They also cover separate fixes in one sentence judged one by one, a Chinese name
-    widened to its unchanged characters, and the cap of 8 Chinese characters.
+    widened to its unchanged characters, and the cap of 8 Chinese characters. Two words
+    without an English key, such as 开会 and 十点 or A and B, are compared by their sound
+    only, and a Chinese numeral is no digit of a name.
     CorrectionWatcherTests drives the watcher with a scripted field, so no app is read: a
     reported fix, no watch at all after a paste into Orra's own process, and no reading
     after leaving the app, under secure input, in a field without the pasted text, or in a
@@ -494,7 +496,8 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     CorrectionLearningTests checks that nothing is read while learning is off, that the
     first fix adds the word and tells the user, a quiet new mishearing, Undo, that a
     learned word removed from the vocabulary is learned again, that after a cleanup only
-    a fix of a word the speech model wrote is learned,
+    a fix of a word the speech model wrote is learned, that a change of what was said next
+    to a fixed name is not learned,
     and that Paste Original Text ends the watch of the cleaned paste. LearnedNoticeTests checks the notice and its panel.
   - WordReplacementTests covers putting the user's words back into a transcript: a kept
     pair replaces its heard spelling only while its word is in the vocabulary, Latin
@@ -511,8 +514,9 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     runs after the rule steps and before the cleanup model, and that Paste Original Text
     keeps the replaced words.
     OneCharacterFixTests and WordSuggestionLearningTests cover a fix of one Chinese
-    character: grammar pairs never offered, the guessed word from the system tokenizer,
-    and adding, editing and declining the offered word.
+    character: grammar pairs and a change of number such as 两 to 三 never offered, the
+    guessed word from the system tokenizer, and adding, editing and declining the offered
+    word.
   - ScreenNamesTests, ScreenReaderTests, ListEchoTests and ScreenNamesControllerTests cover
     Use names on screen, added on 2026-10-17. The extractor, on texts of the context
     experiment of 2026-10-15: names in English and Chinese without their courtesy title or
@@ -2078,9 +2082,10 @@ corrections under Recognition in Settings, Dictation first:
   pointer over it the ring shows a pause sign, and after the pointer leaves it counts 4. The app you are in keeps the focus. The next dictation is more likely to
   write it right, and where the model still writes the misheard spelling, Orra writes your
   word, see Replacing learned words below.
-- [ ] Changing a word's meaning, such as 明天 to 后天 or Monday to Sunday, fixing one
-  Chinese character as grammar such as 的 to 得, deleting words, or rewriting the sentence
-  adds nothing. Fixing a word and then typing a period learns the word without the period.
+- [ ] Changing a word's meaning, such as 明天 to 后天, 开会 to 十点 or Monday to Sunday,
+  fixing one Chinese character as grammar such as 的 to 得, changing a number such as 两点
+  to 三点, deleting words, or rewriting the sentence adds nothing. Fixing a word and then
+  typing a period learns the word without the period.
 - [ ] Dictate 我用通义千问写代码 so it comes out as 通一千问 and fix the one character: no
   word is added, and a notice asks "Add a word to your vocabulary?" with 通义千问 in its
   field. The app you are in keeps the focus and typing there still works while the notice
