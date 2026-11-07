@@ -173,6 +173,38 @@ OrraTests/TranslationPairEvaluationTests.swift runs the model on them, and
 OrraTests/TranslationPairTests.swift checks that every reference passes the checks in
 Orra/TranslationGuard+Pairs.swift, see docs/manual-testing.md.
 
+## English fillers in other languages
+
+Rule cases for the English filler rule on Japanese, Spanish and Korean sentences, in the
+format of `cases.jsonl` with `lang` (ja, es or ko) and without the translations. Every case
+has `rules` true.
+
+| File | Cases | What it holds |
+| --- | --- | --- |
+| `fillers-japanese.jsonl` | 21 | Japanese, fja01 to fja21 |
+| `fillers-spanish.jsonl` | 28 | Spanish, fes01 to fes28 |
+| `fillers-korean.jsonl` | 19 | Korean, fko01 to fko19 |
+
+In filler_en an English filler, um, uh or erm, goes with the comma, space or ellipsis it
+left behind. The cases cover a filler at the start, between commas or 、, between words with
+and without spaces, ideographic spaces among them, before an English name, at the start of
+a second sentence, before ¿, the capital at the start of a Spanish sentence, also on an
+accented letter or after ¿, the space that stays between two Spanish or two Korean words,
+also between words of jamo and before a number, a filler beside a filler of the language
+itself, and an exclamation of nothing but the filler, such as ¡Uh!, which goes with its ¡
+and !. In control_keep the sentence stays as it is: a filler of the language itself (えーと,
+eh, 음), which the English rule does not know, a Spanish word that looks like a filler (eh,
+em), a quoted filler, a filler before a question mark, UM in capitals, um inside a word or
+at its end, uh-huh, a surname after a Spanish title such as Sr. or Dra., and um, uh or erm
+right before a Korean particle, as in um이라는, which makes it a word that is meant.
+
+Japanese and Spanish text of a user who dictates in that language takes the English filler
+rule alone, see LanguageGuard.rules(for:language:), and OrraTests/FillerRulesTests.swift
+runs every case that way. A Korean speaker dictates with 中文 + English today, where every
+text takes every rule, so the test runs the Korean cases that way too. Like the other cases
+they are synthetic and hold no one's dictation. No native speaker has read their Japanese,
+Spanish or Korean text yet.
+
 ## Numbers
 
 `numbers.jsonl` has 672 cases for writing spoken Chinese numbers as digits, one JSON

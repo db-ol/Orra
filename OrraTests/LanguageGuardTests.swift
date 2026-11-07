@@ -107,6 +107,30 @@ struct LanguageGuardTests {
         }
     }
 
+    /// The English filler rule takes every text the other steps take, and with Japanese or
+    /// Spanish chosen also text in that language, but not text in another language.
+    @Test func theEnglishFillerRuleAlsoTakesTheDictationLanguage() {
+        let every: [(String, DictationLanguage)] = [
+            (Self.chinese, .chinese), (Self.japanese, .chinese), (Self.swedish, .chinese), ("내일 um 회의가 있어요.", .chinese),
+            (Self.english, .japanese), (Self.english, .spanish), ("Um, okay.", .japanese),
+        ]
+        let fillersOnly: [(String, DictationLanguage)] = [
+            (Self.japanese, .japanese), (Self.japaneseInHan, .japanese), ("Um、明日の会議は3時からです。", .japanese),
+            (Self.spanish, .spanish), ("Um, okay.", .spanish), ("Uh, la reunión es mañana.", .spanish),
+        ]
+        let none: [(String, DictationLanguage)] = [
+            (Self.swedish, .japanese), (Self.swedish, .spanish), (Self.chinese, .spanish), ("내일 um 회의가 있어요.", .japanese),
+        ]
+        for (texts, steps, fillers) in [(every, true, true), (fillersOnly, false, true), (none, false, false)] {
+            for (text, language) in texts {
+                let rules = LanguageGuard.rules(for: text, language: language)
+                #expect(rules.chineseAndEnglish == steps, "\(language) \(text)")
+                #expect(rules.englishFillers == fillers, "\(language) \(text)")
+                #expect(LanguageGuard.takesChineseAndEnglishSteps(text, for: language) == steps, "\(language) \(text)")
+            }
+        }
+    }
+
     @Test func chineseOrEnglishTextIsTranscribedOnce() async throws {
         speech.reply = Self.chinese
         let text = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1)

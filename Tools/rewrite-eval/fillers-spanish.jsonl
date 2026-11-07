@@ -1,0 +1,28 @@
+{"id": "fes01", "category": "filler_en", "lang": "es", "input": "Uh, la reunión es mañana.", "cleanup": "La reunión es mañana.", "rules": true, "notes": "Uh at the start. The next word is capitalized."}
+{"id": "fes02", "category": "filler_en", "lang": "es", "input": "El reporte, um, te lo mando el viernes.", "cleanup": "El reporte, te lo mando el viernes.", "rules": true, "notes": "um between commas. One comma stays."}
+{"id": "fes03", "category": "filler_en", "lang": "es", "input": "Um, nos vemos en la tarde.", "cleanup": "Nos vemos en la tarde.", "rules": true, "notes": "Um at the start of a short sentence."}
+{"id": "fes04", "category": "filler_en", "lang": "es", "input": "¿Puedes revisar mi uh, pull request antes de la comida?", "cleanup": "¿Puedes revisar mi pull request antes de la comida?", "rules": true, "notes": "uh with its comma inside a question."}
+{"id": "fes05", "category": "filler_en", "lang": "es", "input": "Uh, no sé, déjame checarlo.", "cleanup": "No sé, déjame checarlo.", "rules": true, "notes": "Uh before a reply."}
+{"id": "fes06", "category": "filler_en", "lang": "es", "input": "Um, okay.", "cleanup": "Okay.", "rules": true, "notes": "Short English, which the Spanish pair counts as Spanish."}
+{"id": "fes07", "category": "filler_en", "lang": "es", "input": "Um, él llega mañana.", "cleanup": "Él llega mañana.", "rules": true, "notes": "The accented first letter is capitalized."}
+{"id": "fes08", "category": "filler_en", "lang": "es", "input": "¿Um, vienes a la reunión?", "cleanup": "¿Vienes a la reunión?", "rules": true, "notes": "Um right after ¿. The question starts with a capital again."}
+{"id": "fes09", "category": "filler_en", "lang": "es", "input": "Um, ¿vienes a la reunión?", "cleanup": "¿Vienes a la reunión?", "rules": true, "notes": "Um before ¿."}
+{"id": "fes10", "category": "filler_en", "lang": "es", "input": "Bueno, um, ¿lo vemos el lunes?", "cleanup": "Bueno, ¿lo vemos el lunes?", "rules": true, "notes": "The space before ¿ stays."}
+{"id": "fes11", "category": "filler_en", "lang": "es", "input": "Llegó um él solo.", "cleanup": "Llegó él solo.", "rules": true, "notes": "The space between two accented words stays."}
+{"id": "fes12", "category": "filler_en", "lang": "es", "input": "La versión 2.0 uh salió ayer.", "cleanup": "La versión 2.0 salió ayer.", "rules": true, "notes": "The version number stays."}
+{"id": "fes13", "category": "filler_en", "lang": "es", "input": "Gracias por todo. Um, mañana te escribo.", "cleanup": "Gracias por todo. Mañana te escribo.", "rules": true, "notes": "Um at the start of a second sentence."}
+{"id": "fes14", "category": "control_keep", "lang": "es", "input": "Eh, la reunión es mañana.", "cleanup": "Eh, la reunión es mañana.", "rules": true, "notes": "eh is a Spanish filler, which the English rule does not know."}
+{"id": "fes15", "category": "control_keep", "lang": "es", "input": "Dijo «um» dos veces.", "cleanup": "Dijo «um» dos veces.", "rules": true, "notes": "A quoted filler stays."}
+{"id": "fes16", "category": "control_keep", "lang": "es", "input": "Um? ¿Qué dijiste?", "cleanup": "Um? ¿Qué dijiste?", "rules": true, "notes": "A filler before a question mark stays."}
+{"id": "fes17", "category": "control_keep", "lang": "es", "input": "El Muséum de París abre hoy.", "cleanup": "El Muséum de París abre hoy.", "rules": true, "notes": "um inside a word with an accent."}
+{"id": "fes18", "category": "control_keep", "lang": "es", "input": "Uh-huh, está bien.", "cleanup": "Uh-huh, está bien.", "rules": true, "notes": "A reply stays."}
+{"id": "fes19", "category": "filler_en", "lang": "es", "input": "¡Uh! Se me olvidó la llave.", "cleanup": "Se me olvidó la llave.", "rules": true, "notes": "An exclamation of nothing but the filler goes with its ¡ and !."}
+{"id": "fes20", "category": "filler_en", "lang": "es", "input": "Bueno, ¡uh! ya llegamos.", "cleanup": "Bueno, ya llegamos.", "rules": true, "notes": "The same inside a sentence."}
+{"id": "fes21", "category": "filler_en", "lang": "es", "input": "Habló uh árabe con ellos.", "cleanup": "Habló árabe con ellos.", "rules": true, "notes": "The space between two accented words stays."}
+{"id": "fes22", "category": "filler_en", "lang": "es", "input": "Um, último día para enviar el informe.", "cleanup": "Último día para enviar el informe.", "rules": true, "notes": "The accented first letter is capitalized."}
+{"id": "fes23", "category": "filler_en", "lang": "es", "input": "Este, um, no sé qué decir.", "cleanup": "Este, no sé qué decir.", "rules": true, "notes": "este is a Spanish filler and stays, um goes."}
+{"id": "fes24", "category": "control_keep", "lang": "es", "input": "El Sr. Um llegó tarde.", "cleanup": "El Sr. Um llegó tarde.", "rules": true, "notes": "Um after the title Sr. is a surname."}
+{"id": "fes25", "category": "control_keep", "lang": "es", "input": "La Dra. Um revisó el informe.", "cleanup": "La Dra. Um revisó el informe.", "rules": true, "notes": "Um after the title Dra. is a surname."}
+{"id": "fes26", "category": "control_keep", "lang": "es", "input": "¿Eh? No te oí bien.", "cleanup": "¿Eh? No te oí bien.", "rules": true, "notes": "eh is a Spanish word, which the English rule does not know."}
+{"id": "fes27", "category": "control_keep", "lang": "es", "input": "Em, no sé qué decir.", "cleanup": "Em, no sé qué decir.", "rules": true, "notes": "em is not an English filler."}
+{"id": "fes28", "category": "control_keep", "lang": "es", "input": "Revisé el álbum y el currículum.", "cleanup": "Revisé el álbum y el currículum.", "rules": true, "notes": "um at the end of a word stays."}

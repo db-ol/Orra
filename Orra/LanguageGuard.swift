@@ -60,6 +60,16 @@ nonisolated enum LanguageGuard {
         language == .chinese || verdict(on: text, for: language) == .chineseOrEnglish
     }
 
+    /// The rule steps that take the text, from one verdict: whether the steps above take
+    /// it, and whether the English filler rule does. That one takes text in the dictation
+    /// language too, so um and uh leave a Japanese or Spanish sentence, but not text in a
+    /// language the user does not dictate in.
+    static func rules(for text: String, language: DictationLanguage) -> (chineseAndEnglish: Bool, englishFillers: Bool) {
+        guard language != .chinese else { return (true, true) }
+        let verdict = verdict(on: text, for: language)
+        return (verdict == .chineseOrEnglish, verdict != .foreign)
+    }
+
     /// For Chinese, the verdict Orra always had: other scripts from `otherScriptShare` of
     /// the letters on, kana among them, are foreign, and so is Latin text long enough to
     /// judge that is not English. For Japanese, kana and Han characters count as Japanese.

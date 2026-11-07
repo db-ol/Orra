@@ -616,8 +616,22 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     verb 呃 (to cheat) stays in a Cantonese dictation, as in 佢呃咗我啲钱 and 唔好俾人呃,
     while 呃 apart from the words is still a filler there, that a filler written right next
     to a word stays in a Cantonese dictation, and that in a Mandarin dictation a 呃 next to
-    words still goes. PushToTalkControllerTests checks that the paste has the fillers removed
-    while the setting is on and not while it is off, and that a change is saved.
+    words still goes. It runs the English filler rule alone, as Japanese and Spanish text
+    takes it, on the rule cases of Tools/rewrite-eval/fillers-japanese.jsonl,
+    fillers-spanish.jsonl and fillers-korean.jsonl, and the Korean ones with every rule too,
+    as a Korean speaker gets them with 中文 + English. It checks that the space where a
+    filler stood stays between two Latin words with or without accents and between two
+    Hangul words, that um stays inside Muséum and before a Korean particle, as in um이라는,
+    that a Spanish sentence starts with a capital again after ¿ or ¡, that an exclamation of
+    nothing but a filler, such as ¡Uh!, goes with its ¡ and !, and that Um after a Spanish
+    title such as Sr. stays. It runs English fillers in Chinese text with every rule and with
+    the English rule alone.
+    PushToTalkControllerTests checks that the paste has the fillers removed while the
+    setting is on and not while it is off, and that a change is saved. It also checks that
+    English fillers leave Japanese and Spanish for a user who dictates in it while the
+    number rule and the cleanup model leave that text alone, that text in a language the
+    user does not dictate in keeps them, and that DictationRules, which the evaluations
+    use in place of a dictation, gives what a dictation pastes.
   - NumberRulesTests runs the number rules on every case of
     Tools/rewrite-eval/numbers.jsonl and checks that applying them twice changes nothing
     more. It checks that every cleanup in cases.jsonl without a number stays as it is,
@@ -3593,7 +3607,8 @@ or press the key to start and again to finish where they say hold:
   comes back when 中文 + English is picked again.
 - [ ] With 日本語 + English, hold the translation key and say a short sentence in kana
   only: English is pasted and the badge shows 訳. Say an English sentence: Japanese is
-  pasted. Paste Original Text pastes the Japanese as heard, fillers included.
+  pasted. Paste Original Text pastes the Japanese as heard, with Japanese fillers such as
+  えーと and without English ones such as um.
 - [ ] With Español + English, the badge shows ⇄, Spanish is pasted in English and English
   in Spanish.
 - [ ] With Translate into set to Japanese, a Japanese sentence is pasted as said, at once,
