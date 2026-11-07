@@ -150,7 +150,7 @@ private struct PolishToggle: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Polish with a local model")
                     Group {
-                        Text("Rewrites what you say as clear, concise written text and keeps your meaning, names, numbers and the languages you mix. It uses the model of Clean Up Text and adds time to a dictation as cleanup does. Paste Original Text in the Orra menu brings back what you said.")
+                        Text("Rewrites what you say as clear, concise written text with the model of Clean Up Text, which adds time to a dictation as cleanup does. A rewrite can leave out a detail or change what you meant, most often in Concise. Paste Original Text in the Orra menu brings back the text from before it.")
                         if language != .chinese {
                             Text("Polishing works on English sentences only for now.")
                         }
@@ -165,7 +165,7 @@ private struct PolishToggle: View {
         }
         // Off while Orra looks for the model on disk, a moment at launch.
         .disabled(!cleanup.polishIsOn && !cleanup.canTurnOn)
-        .help(Text("Dictations over \(PolishStep.maximumLength) characters are pasted without polishing, and so is a polish that fails Orra's checks or takes too long, so nothing you say is lost.") + Text(verbatim: "\n") + Text("Orra never learns corrections from a polished paste."))
+        .help(Text("Dictations over \(PolishStep.maximumLength) characters are pasted without polishing, and so is a polish that fails Orra's checks or takes too long. The checks catch some changes of meaning, not all of them.") + Text(verbatim: "\n") + Text("Orra never learns corrections from a polished paste."))
         .alert("Download the model for polishing?", isPresented: $cleanup.isConfirmingPolishDownload) {
             Button(CleanupLabels.downloadButton(models.state, total: total)) {
                 cleanup.confirmPolishDownload()
@@ -218,7 +218,7 @@ extension PolishStyle {
     var detail: LocalizedStringKey {
         switch self {
         case .clear: "Clear, fluent written text that keeps nearly everything you said."
-        case .concise: "Only the points, usually about half as long as what you said."
+        case .concise: "Only the points. Rambling speech often comes out about half as long."
         }
     }
 }
