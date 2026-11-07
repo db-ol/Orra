@@ -2186,6 +2186,26 @@ struct PushToTalkControllerTests {
         #expect(inserter.inserted == ["我们用克劳德。"])
     }
 
+    /// Learning no longer keeps a fix that changes only a number, but an earlier version
+    /// kept pairs such as Qwen2 to Qwen3, and they replace nothing now. The other kept pairs
+    /// still replace. A word typed in Settings is no pair, so nothing of it is left out: the
+    /// speech model still gets it, and a kept pair for it still writes it.
+    @Test func aKeptPairThatChangesOnlyANumberReplacesNothing() async throws {
+        let controller = await controller(vocabulary: [
+            VocabularyWord("Qwen3", added: .distantPast, source: .user),
+            VocabularyWord("Claude", added: .distantPast, source: .learned),
+        ])
+        controller.replacementPairs = { [
+            Correction(heard: "Qwen2", corrected: "Qwen3"),
+            Correction(heard: "quen 3", corrected: "Qwen3"),
+            Correction(heard: "克劳德", corrected: "Claude"),
+        ] }
+        speech.reply = "我在用克劳德写代码，quen 3比Qwen2好。"
+        try await dictate(controller)
+        #expect(inserter.inserted == ["我在用Claude写代码，Qwen3比Qwen2好。"])
+        #expect(speech.receivedContexts == ["Qwen3\nClaude"])
+    }
+
     /// The cleanup model sees the user's words, and Paste Original Text keeps them: they are
     /// the user's own, and taking them out would put back a known mishearing.
     @Test func theCleanupAndPasteOriginalTextKeepTheReplacements() async throws {

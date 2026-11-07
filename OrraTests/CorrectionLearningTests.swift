@@ -763,9 +763,11 @@ struct CorrectionLearningTests {
 
     /// The same for the model's number put back in another writing: GPT-4 where the model
     /// wrote GPT4 and an earlier pair pasted GPT-5. The fix is learned with the model's
-    /// number, and the two pairs for GPT4 then disagree, so neither replaces it any more.
+    /// number. The old pair changes only the number, so it neither replaces nor makes the
+    /// new pair disagree, and GPT4 becomes GPT-4 from then on.
     @Test func puttingBackTheNumberInAnotherWritingStopsItsOldPair() async {
         let old = Correction(heard: "GPT4", corrected: "GPT-5")
+        let new = Correction(heard: "GPT4", corrected: "GPT-4")
         let pasted = "我在用GPT-5写代码"
         let field = ScriptedField([pasted, pasted, "我在用GPT-4写代码"])
         let vocabulary = VocabularyBox()
@@ -773,8 +775,8 @@ struct CorrectionLearningTests {
         learning.record(old)
         learning.pasted(pasted, in: 42, replacements: [Replacement(span: 3..<8, heard: "GPT4", corrected: "GPT-5", pair: old)])
         await waitForReads(field)
-        #expect(Set(accepted(learning)) == [old, Correction(heard: "GPT4", corrected: "GPT-4")])
-        #expect(WordReplacement.usablePairs(learning.replacementPairs, vocabulary: vocabulary.words, ordinary: OrdinaryWords([])).isEmpty)
+        #expect(Set(accepted(learning)) == [old, new])
+        #expect(WordReplacement.usablePairs(learning.replacementPairs, vocabulary: vocabulary.words, ordinary: OrdinaryWords([])) == [new])
     }
 
     /// A fix of a replaced word is learned with what the model wrote. The two pairs for 克劳德

@@ -28,6 +28,9 @@ nonisolated struct Replacement: Equatable, Hashable, Sendable {
 ///   or 生根 for 申根, is never replaced, since it is far more often meant as written.
 /// - A heard spelling that is itself a vocabulary word, or that two pairs fix in different
 ///   ways, is left alone.
+/// - A pair whose two sides differ only in numbers, such as Qwen2 to Qwen3, is never used.
+///   Learning no longer keeps one, but earlier versions did, and it would change what was
+///   said in every later dictation.
 /// - The longest heard spelling wins where two overlap, and every replacement is made in
 ///   the transcript as the model wrote it, so one never feeds another.
 ///
@@ -66,7 +69,10 @@ nonisolated enum WordReplacement {
 
     /// The pairs that may replace text: the user's word is in the vocabulary, and the heard
     /// spelling is longer than one character, no vocabulary word, not only ordinary English
-    /// words, and fixed one way only.
+    /// words, and fixed one way only. A pair that changes only numbers, see
+    /// `CorrectionFinder.changesOnlyNumbers(_:_:)`, is left out before that last check, so
+    /// it never replaces and never makes another pair for its heard spelling disagree.
+    /// Every pair comes from learning, and the words typed in Settings are no pairs.
     static func usablePairs(_ pairs: [Correction], vocabulary: [String], ordinary: OrdinaryWords) -> [Correction] {
         let words = Set(vocabulary.map { $0.lowercased() })
         let candidates = Set(pairs).filter { pair in
@@ -77,6 +83,8 @@ nonisolated enum WordReplacement {
                 // A heard spelling that is a vocabulary word is the user's word too, unless
                 // the pair only fixes its case, as kvlite to KVLite.
                 && (!words.contains(pair.heard.lowercased()) || pair.heard.lowercased() == pair.corrected.lowercased())
+                // Such as Qwen2 to Qwen3, kept by an earlier version.
+                && !CorrectionFinder.changesOnlyNumbers(pair.heard, pair.corrected)
                 && !ordinary.holdsOnlyOrdinaryWords(pair.heard)
         }
         // Two pairs for the same heard spelling with different words: the user's fixes do
