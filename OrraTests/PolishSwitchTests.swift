@@ -42,6 +42,36 @@ struct PolishSwitchTests {
         }
     }
 
+    /// A stand in whose polish prompt is read only when the test says so.
+    @MainActor
+    final class SlowPromptEngine {
+        private(set) var prepared: [PolishStyle] = []
+        private(set) var isPreparing = false
+        private var finishing: CheckedContinuation<Void, Never>?
+
+        var engine: CleanupEngine {
+            CleanupEngine(
+                load: { _ in },
+                unload: {},
+                complete: { _ in #"{"cleaned": ""}"# },
+                polish: { _, _ in #"{"polished": ""}"# },
+                preparePolish: { [self] style in await prepare(style) }
+            )
+        }
+
+        private func prepare(_ style: PolishStyle) async {
+            isPreparing = true
+            await withCheckedContinuation { finishing = $0 }
+            prepared.append(style)
+            isPreparing = false
+        }
+
+        func finishPreparing() {
+            finishing?.resume()
+            finishing = nil
+        }
+    }
+
     private func makeCleanup(
         isOn: Bool = false,
         polishIsOn: Bool = false,
@@ -50,7 +80,8 @@ struct PolishSwitchTests {
         saved: @escaping (Bool) -> Void = { _ in },
         savedPolish: @escaping (Bool) -> Void = { _ in },
         savedStyle: @escaping (PolishStyle) -> Void = { _ in },
-        engine: CleanupEngine = .live()
+        engine: CleanupEngine = .live(),
+        loadWait: Duration = TextCleanup.defaultLoadWait
     ) -> TextCleanup {
         TextCleanup(
             isOn: isOn,
@@ -64,7 +95,8 @@ struct PolishSwitchTests {
                 folders: temporary.folders,
                 environment: ModelDownload.Environment(fetch: fetch, freeSpace: { _ in 100_000_000_000 }, sleep: { _ in })
             ),
-            engine: engine
+            engine: engine,
+            loadWait: loadWait
         )
     }
 
@@ -157,6 +189,54 @@ struct PolishSwitchTests {
         #expect(await cleanup.model.waitUntilLoadedForPolish())
         #expect(await cleanup.model.waitUntilLoaded() == false)
         #expect(cleanup.model.isOn() == false)
+    }
+
+    /// A dictation that waits for the load goes on only once the polish prompt is read, so
+    /// the first polish after a load, at launch or at the press of a key after an idle
+    /// unload, does not spend its time limit reading the prompt. The wait stays bounded by
+    /// `loadWait`, which this test sets long.
+    @Test func aDictationWaitingForTheLoadGoesOnOnceThePolishPromptIsRead() async throws {
+        defer { temporary.remove() }
+        try temporary.writeAll(to: temporary.installed)
+        let fake = SlowPromptEngine()
+        let cleanup = makeCleanup(polishIsOn: true, polishStyle: .concise, fetch: FileFetch { _, _, _, _, _, _ in }, engine: fake.engine, loadWait: .seconds(3_600))
+        await cleanup.start()
+        #expect(cleanup.engineState == .loading)
+        let loaded = Mutex<Bool?>(nil)
+        let dictation = Task {
+            let ready = await cleanup.model.waitUntilLoadedForPolish()
+            loaded.withLock { $0 = ready }
+        }
+        try await waitUntil({ fake.isPreparing })
+        // Time for a dictation resumed too early to go on.
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(loaded.withLock { $0 } == nil)
+        #expect(cleanup.engineState == .loading)
+        fake.finishPreparing()
+        await dictation.value
+        #expect(loaded.withLock { $0 } == true)
+        #expect(fake.prepared == [.concise])
+        await cleanup.waitForLoad()
+        #expect(cleanup.engineState == .ready)
+        #expect(fake.prepared == [.concise])
+    }
+
+    /// A style picked while the model loads is read once the load is over, so the first
+    /// polish in it does not read it either.
+    @Test func aStylePickedWhileTheModelLoadsIsReadAfterTheLoad() async throws {
+        defer { temporary.remove() }
+        try temporary.writeAll(to: temporary.installed)
+        let fake = SlowPromptEngine()
+        let cleanup = makeCleanup(polishIsOn: true, polishStyle: .clear, fetch: FileFetch { _, _, _, _, _, _ in }, engine: fake.engine, loadWait: .seconds(3_600))
+        await cleanup.start()
+        try await waitUntil({ fake.isPreparing })
+        cleanup.setPolishStyle(.concise)
+        fake.finishPreparing()
+        try await waitUntil({ fake.prepared == [.clear] && fake.isPreparing })
+        fake.finishPreparing()
+        await cleanup.waitForLoad()
+        #expect(fake.prepared == [.clear, .concise])
+        #expect(cleanup.engineState == .ready)
     }
 
     /// With the model loaded for cleanup, turning Polish on reads its prompt ahead at

@@ -657,12 +657,13 @@ final class TextCleanup {
     }
 
     /// The user picked a style of a polish. Reads its prompt ahead while Polish is on and
-    /// the model is loaded. The style is saved also while Polish is off.
+    /// the model is loaded, or after the load under way. The style is saved also while
+    /// Polish is off.
     func setPolishStyle(_ style: PolishStyle) {
         guard style != polishStyle else { return }
         polishStyle = style
         savePolishStyle(style)
-        if polishIsOn, isLoaded {
+        if polishIsOn, isLoaded || engineState == .loading {
             preparePolish()
         }
     }
@@ -927,9 +928,15 @@ final class TextCleanup {
     }
 
     /// Reads the polish prompt of the user's style ahead while Polish is on and the model
-    /// is loaded. A failure only costs the first polish the time to read it.
+    /// is loaded.
     private func fillPolishPrefix() async {
         guard polishIsOn, isLoaded else { return }
+        await readPolishPrompt()
+    }
+
+    /// Reads the polish prompt of the user's style. A failure only costs the first polish
+    /// the time to read it.
+    private func readPolishPrompt() async {
         do {
             try await engine.preparePolish(polishStyle)
         } catch {
@@ -1000,13 +1007,18 @@ final class TextCleanup {
             }
             // Turned off while loading. The unload queued then runs next.
             guard generation == loadGeneration else { return }
+            // With Polish on, its prompt is read before a dictation that waits for the load
+            // goes on, as the cleanup prompt is in the load, so the first polish after a load
+            // does not spend its time limit reading it. The wait stays bounded by `loadWait`.
+            if loaded, polishIsOn {
+                await readPolishPrompt()
+                guard generation == loadGeneration else { return }
+            }
             engineState = loaded ? .ready : .failed
             resumeAllWaiters()
-            // With translation or Polish on, their prompts are read before any other work on
-            // the model.
+            // With translation on, its prompts are read before any other work on the model.
             if loaded {
                 await fillTranslationPrefixes()
-                await fillPolishPrefix()
             }
             scheduleIdleUnload()
         }
