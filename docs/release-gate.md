@@ -87,9 +87,9 @@ A set is a folder `<sets>/<name>/` with `clips/<id>.wav` (16 kHz mono) and
   English is scored per word, Chinese and mixed per Chinese character and per Latin word,
   Japanese per Han character and per kana, Spanish per word with its accents, and Korean
   per Hangul syllable, Han character and kana and per word of other letters, as
-  Tools/speech-eval/score.py scores them. A set says no more: the sets of Japanese,
-  Spanish and Korean write their sentences with English words as "ja", "es" and "ko", and
-  their pair decides the group, see Dictation pairs. The scorer also takes "ja_en",
+  Tools/speech-eval/score.py scores them. The sets of Japanese, Spanish and Korean write
+  their sentences, English words and all, as "ja", "es" and "ko", and the set's pair
+  decides the group of a line, see Dictation pairs. The scorer also takes "ja_en",
   "es_en" and "ko_en", the lang of a corpus line in one of those languages mixed with
   English, scored as that language.
 - reference: the text Orra should paste with cleanup off, so after the filler and number
@@ -135,7 +135,8 @@ runs in wrong-pairs only.
 
 - pairs: for each pair but Chinese, the 392 clips of the speech corpus and the pair's
   FLEURS clips, then for every pair its sets in the pairs folder, all with the pair chosen.
-  Chinese has its corpus runs in the corpus suite, so for zh it runs zh-mirror only.
+  Chinese has its corpus runs in the corpus suite, so for zh it runs only its sets in the
+  pairs folder, zh-mirror today.
 - wrong-pairs: with each pair chosen, 50 FLEURS clips of every other pair, at even steps
   through its set, Korean included. It is outside the release gate and runs once per
   release, since a clip in another pair's language pays two or three passes.
