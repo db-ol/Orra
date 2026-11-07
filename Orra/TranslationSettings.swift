@@ -146,7 +146,7 @@ extension TranslationDirection {
         switch (self, language) {
         case (.automatic, .japanese): "Japanese is translated into English, and English into Japanese. Mixed text goes by the language most of it is in, and text in another script, such as Korean, is translated into English."
         case (.automatic, .spanish): "Spanish is translated into English, and English into Spanish. Mixed text goes by the language most of it is in, and text in another script, such as Korean, is translated into English."
-        case (.automatic, _): "Chinese is translated into English, and English into Chinese. Mixed text goes by the language most of it is in."
+        case (.automatic, .chinese): "Chinese is translated into English, and English into Chinese. Mixed text goes by the language most of it is in."
         case (.english, _): "Everything you say is pasted in English."
         case (.chinese, _): "Everything you say is pasted in Chinese. Common English terms, such as PR or iPhone, may stay in English."
         case (.japanese, _): "Everything you say is pasted in Japanese. Common English terms, such as PR or iPhone, may stay in English."

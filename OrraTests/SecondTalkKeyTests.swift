@@ -74,7 +74,8 @@ struct SecondTalkKeyTests {
             listeningCueDelay: .zero,
             talkKey: talkKey,
             secondTalkKey: second,
-            saveSecondTalkKey: saved
+            saveSecondTalkKey: saved,
+            dictationLanguage: .chinese
         )
     }
 

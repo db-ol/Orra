@@ -101,7 +101,8 @@ struct LatencyMeasurementTests {
             frontmostApp: { 100 },
             lidIsClosed: { false },
             isTrusted: { true },
-            minimumHold: .zero
+            minimumHold: .zero,
+            dictationLanguage: .chinese
         )
         var latest: DictationTimings?
         controller.onTimings = { latest = $0 }

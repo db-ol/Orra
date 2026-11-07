@@ -66,7 +66,8 @@ struct ScreenNamesControllerTests {
             vocabulary: vocabularyWords(vocabulary),
             usesScreenNames: on,
             saveUsesScreenNames: saved,
-            readScreenNames: { await screen.read($0, pressed: $1) }
+            readScreenNames: { await screen.read($0, pressed: $1) },
+            dictationLanguage: .chinese
         )
         await controller.loadModel()
         return controller

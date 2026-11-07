@@ -28,9 +28,13 @@ nonisolated enum DictationLanguage: String, CaseIterable, Identifiable, Sendable
     }
 
     /// Japanese and Spanish are new and measured on read speech only, so their choice says
-    /// beta.
+    /// beta. Each language sets its own label.
     var isBeta: Bool {
-        self != .chinese
+        switch self {
+        case .chinese: false
+        case .japanese: true
+        case .spanish: true
+        }
     }
 
     /// The language the speech model is told to write first when it chose a language the

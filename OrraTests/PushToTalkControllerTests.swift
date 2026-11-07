@@ -204,7 +204,8 @@ struct PushToTalkControllerTests {
             minimumHold: minimumHold,
             releaseTail: .zero,
             listeningCueDelay: listeningCueDelay,
-            soundWaitLimit: soundWaitLimit
+            soundWaitLimit: soundWaitLimit,
+            dictationLanguage: .chinese
         )
         if loadModel {
             await controller.loadModel()
@@ -233,7 +234,8 @@ struct PushToTalkControllerTests {
             limitNoticeWindow: limitNoticeWindow,
             minimumHold: .zero,
             releaseTail: .zero,
-            accessCheckDelay: .milliseconds(20)
+            accessCheckDelay: .milliseconds(20),
+            dictationLanguage: .chinese
         )
         controller.start()
         #expect(controller.isHotkeyActive)
@@ -269,7 +271,8 @@ struct PushToTalkControllerTests {
             transcription: speech.transcription,
             insert: inserter.insert,
             talkKey: .rightControl,
-            saveTalkKey: { saved.append($0) }
+            saveTalkKey: { saved.append($0) },
+            dictationLanguage: .chinese
         )
         controller.chooseTalkKey(.fn)
         #expect(controller.talkKey == .fn)
@@ -288,7 +291,8 @@ struct PushToTalkControllerTests {
             frontmostApp: { 100 },
             minimumHold: .zero,
             releaseTail: .zero,
-            saveMicrophone: { saved.append($0) }
+            saveMicrophone: { saved.append($0) },
+            dictationLanguage: .chinese
         )
         await controller.loadModel()
         #expect(controller.microphone == nil)
@@ -333,7 +337,8 @@ struct PushToTalkControllerTests {
             lidIsClosed: { true },
             minimumHold: .zero,
             releaseTail: .zero,
-            microphone: MicrophoneChoice(uid: "brio-uid", name: "Brio 500")
+            microphone: MicrophoneChoice(uid: "brio-uid", name: "Brio 500"),
+            dictationLanguage: .chinese
         )
         await controller.loadModel()
         try await dictate(controller)
@@ -366,7 +371,8 @@ struct PushToTalkControllerTests {
             lidIsClosed: { true },
             minimumHold: .zero,
             releaseTail: .zero,
-            microphone: MicrophoneChoice(uid: "brio-uid", name: "Brio 500")
+            microphone: MicrophoneChoice(uid: "brio-uid", name: "Brio 500"),
+            dictationLanguage: .chinese
         )
         await controller.loadModel()
         try await dictate(controller)
@@ -387,7 +393,8 @@ struct PushToTalkControllerTests {
             lidIsClosed: { false },
             minimumHold: .zero,
             releaseTail: .zero,
-            microphone: MicrophoneChoice(uid: "brio-uid", name: "Brio 500")
+            microphone: MicrophoneChoice(uid: "brio-uid", name: "Brio 500"),
+            dictationLanguage: .chinese
         )
         await controller.loadModel()
         try await dictate(controller)
@@ -415,7 +422,8 @@ struct PushToTalkControllerTests {
             frontmostApp: { 100 },
             minimumHold: .zero,
             releaseTail: .zero,
-            microphone: MicrophoneChoice(uid: "brio-uid", name: "Brio 500")
+            microphone: MicrophoneChoice(uid: "brio-uid", name: "Brio 500"),
+            dictationLanguage: .chinese
         )
         await controller.loadModel()
         controller.handle(.pressed(isRepeat: false))
@@ -457,7 +465,8 @@ struct PushToTalkControllerTests {
             insert: inserter.insert,
             isTrusted: tapSystem.isTrusted,
             installTap: tapSystem.install,
-            accessCheckDelay: .milliseconds(20)
+            accessCheckDelay: .milliseconds(20),
+            dictationLanguage: .chinese
         )
         controller.start()
         try await Task.sleep(for: .milliseconds(100))
@@ -586,7 +595,8 @@ struct PushToTalkControllerTests {
             },
             frontmostApp: { 100 },
             minimumHold: .zero,
-            releaseTail: .zero
+            releaseTail: .zero,
+            dictationLanguage: .chinese
         )
         probe.controller = controller
         await controller.loadModel()
@@ -670,7 +680,8 @@ struct PushToTalkControllerTests {
             frontmostApp: { 100 },
             lidIsClosed: { true },
             minimumHold: .zero,
-            releaseTail: .zero
+            releaseTail: .zero,
+            dictationLanguage: .chinese
         )
         await controller.loadModel()
         try await dictate(controller)
@@ -1734,7 +1745,8 @@ struct PushToTalkControllerTests {
             releaseTail: .zero,
             listeningCueDelay: .zero,
             vocabulary: vocabularyWords("Orra", added: added),
-            saveVocabulary: { saved.append($0.map(\.text)) }
+            saveVocabulary: { saved.append($0.map(\.text)) },
+            dictationLanguage: .chinese
         )
         await controller.loadModel()
         try await dictate(controller)
@@ -1756,7 +1768,8 @@ struct PushToTalkControllerTests {
             minimumHold: .zero,
             releaseTail: .zero,
             listeningCueDelay: .zero,
-            saveRemovesFillerWords: { saved.append($0) }
+            saveRemovesFillerWords: { saved.append($0) },
+            dictationLanguage: .chinese
         )
         #expect(controller.removesFillerWords)
         await controller.loadModel()
@@ -1783,7 +1796,8 @@ struct PushToTalkControllerTests {
             minimumHold: .zero,
             releaseTail: .zero,
             listeningCueDelay: .zero,
-            saveWritesNumbersAsDigits: { saved.append($0) }
+            saveWritesNumbersAsDigits: { saved.append($0) },
+            dictationLanguage: .chinese
         )
         #expect(controller.writesNumbersAsDigits)
         await controller.loadModel()
@@ -1809,7 +1823,8 @@ struct PushToTalkControllerTests {
             minimumHold: .zero,
             releaseTail: .zero,
             listeningCueDelay: .zero,
-            vocabulary: vocabularyWords("Orra", added: Date(timeIntervalSince1970: 1_000))
+            vocabulary: vocabularyWords("Orra", added: Date(timeIntervalSince1970: 1_000)),
+            dictationLanguage: .chinese
         )
         await controller.loadModel()
         speech.reply = "Orra 在二零二四年发布。"
@@ -1835,6 +1850,7 @@ struct PushToTalkControllerTests {
             listeningCueDelay: .zero,
             vocabulary: vocabularyWords("Orra", "通义千问", "Qwen", added: added),
             saveVocabulary: { saved.append($0) },
+            dictationLanguage: .chinese,
             now: { pasteTime }
         )
         await controller.loadModel()
@@ -1859,7 +1875,7 @@ struct PushToTalkControllerTests {
     }
 
     @Test func learningIsNeverRefusedBelowTheSanityCap() {
-        let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert)
+        let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, dictationLanguage: .chinese)
         controller.setVocabulary((0..<1_000).map { VocabularyWord("term\($0)", added: .distantPast) })
         #expect(controller.addToVocabulary("Orra") == .added)
         #expect(controller.addToVocabulary("orra") == .alreadyThere)
@@ -1883,7 +1899,8 @@ struct PushToTalkControllerTests {
             minimumHold: .zero,
             releaseTail: .zero,
             listeningCueDelay: .zero,
-            vocabulary: vocabulary
+            vocabulary: vocabulary,
+            dictationLanguage: .chinese
         )
         await controller.loadModel()
         return controller
@@ -2127,6 +2144,7 @@ struct PushToTalkControllerTests {
             capture: mic.capture,
             transcription: speech.transcription,
             insert: inserter.insert,
+            dictationLanguage: .chinese,
             saveDictationLanguage: { saved.append($0) }
         )
         #expect(controller.dictationLanguage == .chinese)
@@ -2790,7 +2808,8 @@ struct PushToTalkControllerTests {
             transcription: speech.transcription,
             insert: inserter.insert,
             handsFree: true,
-            saveHandsFree: { saved.append($0) }
+            saveHandsFree: { saved.append($0) },
+            dictationLanguage: .chinese
         )
         controller.setHandsFreeOn(false)
         controller.setHandsFreeOn(false)
@@ -2807,7 +2826,8 @@ struct PushToTalkControllerTests {
             transcription: speech.transcription,
             insert: inserter.insert,
             talkKey: .rightOption,
-            saveTalkKey: { saved.append($0) }
+            saveTalkKey: { saved.append($0) },
+            dictationLanguage: .chinese
         )
         #expect(controller.hasChosenTalkKey == false)
         controller.startChoosingKey(for: .talk)
@@ -2847,7 +2867,8 @@ struct PushToTalkControllerTests {
             capture: mic.capture,
             transcription: speech.transcription,
             insert: inserter.insert,
-            talkKey: .rightControl
+            talkKey: .rightControl,
+            dictationLanguage: .chinese
         )
         controller.startChoosingKey(for: .talk)
         controller.keyChoice(type: .keyDown, keyCode: 0x24, flags: [])
@@ -2867,7 +2888,8 @@ struct PushToTalkControllerTests {
             capture: mic.capture,
             transcription: speech.transcription,
             insert: inserter.insert,
-            talkKey: .fn
+            talkKey: .fn,
+            dictationLanguage: .chinese
         )
         controller.startChoosingKey(for: .talk)
         controller.keyChoice(type: .keyDown, keyCode: 0x00, flags: [])
@@ -2883,7 +2905,8 @@ struct PushToTalkControllerTests {
             capture: mic.capture,
             transcription: speech.transcription,
             insert: inserter.insert,
-            talkKey: .fn
+            talkKey: .fn,
+            dictationLanguage: .chinese
         )
         controller.startChoosingKey(for: .talk)
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [.maskControl, TalkKey.rightControl.downFlag])
@@ -2899,14 +2922,14 @@ struct PushToTalkControllerTests {
     // MARK: The translation key
 
     @Test func theTranslationKeyDefaultsToTheKeyBesideTheTalkKey() {
-        let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert)
+        let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, dictationLanguage: .chinese)
         #expect(controller.translationKey == .rightOption)
-        let optionTalker = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkKey: .rightOption)
+        let optionTalker = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkKey: .rightOption, dictationLanguage: .chinese)
         #expect(optionTalker.translationKey == .rightCommand)
-        let saved = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkKey: .fn, translationKey: .leftOption)
+        let saved = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkKey: .fn, translationKey: .leftOption, dictationLanguage: .chinese)
         #expect(saved.translationKey == .leftOption)
         // Never the talk key.
-        let clash = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkKey: .fn, translationKey: .fn)
+        let clash = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkKey: .fn, translationKey: .fn, dictationLanguage: .chinese)
         #expect(clash.translationKey == .rightOption)
     }
 
@@ -2919,7 +2942,8 @@ struct PushToTalkControllerTests {
             insert: inserter.insert,
             talkKey: .rightControl,
             saveTalkKey: { savedTalk.append($0) },
-            saveTranslationKey: { savedTranslation.append($0) }
+            saveTranslationKey: { savedTranslation.append($0) },
+            dictationLanguage: .chinese
         )
         controller.chooseTalkKey(.rightOption)
         #expect(controller.talkKey == .rightOption)
@@ -2945,7 +2969,8 @@ struct PushToTalkControllerTests {
             talkKey: .fn,
             saveTalkKey: { savedTalk.append($0) },
             translationKey: .rightOption,
-            saveTranslationKey: { savedTranslation.append($0) }
+            saveTranslationKey: { savedTranslation.append($0) },
+            dictationLanguage: .chinese
         )
         controller.startChoosingKey(for: .translation)
         #expect(controller.choosingKeySlot == .translation)
@@ -2970,7 +2995,7 @@ struct PushToTalkControllerTests {
     }
 
     @Test func recordingOneKeyStopsTheOther() {
-        let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert)
+        let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, dictationLanguage: .chinese)
         controller.startChoosingKey(for: .talk)
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
         controller.startChoosingKey(for: .translation)
@@ -3015,7 +3040,8 @@ struct PushToTalkControllerTests {
             transcription: speech.transcription,
             insert: inserter.insert,
             talkKey: .rightControl,
-            saveTalkKey: { saved.append($0) }
+            saveTalkKey: { saved.append($0) },
+            dictationLanguage: .chinese
         )
         #expect(controller.hasChosenTalkKey == false)
         controller.chooseTalkKey(.rightControl)
@@ -3028,7 +3054,7 @@ struct PushToTalkControllerTests {
     @Test func theTalkKeyCanStartAndStopWithAPress() async throws {
         let controller = try await startedController()
         var savedModes: [TriggerMode] = []
-        let saving = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, saveTriggerMode: { mode, _ in savedModes.append(mode) })
+        let saving = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, saveTriggerMode: { mode, _ in savedModes.append(mode) }, dictationLanguage: .chinese)
         saving.setTriggerMode(.toggle, for: .talk)
         saving.setTriggerMode(.toggle, for: .talk)
         #expect(savedModes == [.toggle])
@@ -3074,7 +3100,7 @@ struct PushToTalkControllerTests {
 
     @Test func aRecordedShortcutBecomesTheKey() {
         var saved: [Hotkey] = []
-        let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, saveTalkKey: { saved.append($0) })
+        let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, saveTalkKey: { saved.append($0) }, dictationLanguage: .chinese)
         controller.startChoosingKey(for: .talk)
         let flags = CGEventFlags.maskCommand.union(CGEventFlags(rawValue: 0x08)).union(.maskShift)
         controller.keyChoice(type: .flagsChanged, keyCode: 0x38, flags: .maskShift)

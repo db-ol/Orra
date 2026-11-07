@@ -467,7 +467,8 @@ struct CleanupIdleUnloadTests {
             frontmostApp: { 100 },
             minimumHold: .zero,
             releaseTail: .zero,
-            listeningCueDelay: .zero
+            listeningCueDelay: .zero,
+            dictationLanguage: .chinese
         )
         controller.setTranslationKeyOn(cleanup.translationIsOn)
         await controller.loadModel()

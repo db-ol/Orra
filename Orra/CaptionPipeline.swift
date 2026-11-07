@@ -58,7 +58,7 @@ struct CaptionEngines {
     var translate: (_ text: String, _ route: TranslationRoute) async throws -> String
     /// The user's dictation language at this moment, see DictationLanguage. Each sentence
     /// is checked with the one chosen when it is transcribed.
-    var language: () -> DictationLanguage = { .chinese }
+    var language: () -> DictationLanguage
 }
 
 extension CaptionEngines {
@@ -83,7 +83,7 @@ extension CaptionEngines {
     static func shared(
         transcription: Transcription,
         isSpeechReady: @escaping () -> Bool,
-        language: @escaping () -> DictationLanguage = { .chinese },
+        language: @escaping () -> DictationLanguage,
         canTranslate: @escaping () -> Bool,
         target: @escaping () -> TranslationTarget,
         complete: @escaping @Sendable (String, TranslationRoute) async throws -> String,

@@ -13,7 +13,7 @@ nonisolated enum VoiceScript {
     /// The language the user speaks in meetings, for a user who dictates in `language`:
     /// the source of a fixed translation direction as it acts for that language, and for
     /// the automatic one that language when Orra shows it, English otherwise.
-    static func language(direction: TranslationDirection, language: DictationLanguage = .chinese, interface: Locale = .interface) -> TranslationTarget {
+    static func language(direction: TranslationDirection, language: DictationLanguage, interface: Locale = .interface) -> TranslationTarget {
         let own = language.translationLanguage
         switch direction.effective(for: language) {
         case .english: return own

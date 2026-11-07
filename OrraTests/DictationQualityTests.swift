@@ -138,7 +138,8 @@ extension RealModelTests {
                 insert: inserter.insert,
                 frontmostApp: { 100 },
                 minimumHold: .zero,
-                releaseTail: .zero
+                releaseTail: .zero,
+                dictationLanguage: .chinese
             )
             await controller.loadModel()
             #expect(controller.modelState == .ready)
@@ -232,7 +233,7 @@ extension RealModelTests {
             }
             let seconds = Double(samples.count) / Double(Self.rate)
             let start = ContinuousClock.now
-            let pieces = try await transcription.transcribeInPieces(samples, vocabulary: [], audioSeconds: seconds)
+            let pieces = try await transcription.transcribeInPieces(samples, vocabulary: [], audioSeconds: seconds, language: .chinese)
             let latency = start.duration(to: .now)
             let transcript = RecordingPieces.transcript(of: pieces)
             let joined = TranscriptScoring.counts(references: [references.joined(separator: " ")], hypotheses: [transcript.text], dropFillers: dropFillers)

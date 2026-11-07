@@ -327,12 +327,14 @@ nonisolated struct TranslationCue: Equatable, Sendable {
     static let chinese = TranslationCue(direction: .chinese, language: .chinese)
 
     /// The badge: the one of the direction, with 訳 for Automatic in Japanese, which writes
-    /// that character in place of 译, and ⇄ in Spanish, whose speakers read neither.
+    /// that character in place of 译, and ⇄ in Spanish, whose speakers read neither. Each
+    /// dictation language names its badge for Automatic.
     var badge: String {
-        switch (language, direction) {
-        case (.japanese, .automatic): "訳"
-        case (.spanish, .automatic): "⇄"
-        default: direction.badge
+        guard direction == .automatic else { return direction.badge }
+        switch language {
+        case .chinese: return direction.badge
+        case .japanese: return "訳"
+        case .spanish: return "⇄"
         }
     }
 

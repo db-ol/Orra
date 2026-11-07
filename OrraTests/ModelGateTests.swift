@@ -780,7 +780,8 @@ struct ModelGateReservationTests {
             frontmostApp: { 100 },
             minimumHold: .zero,
             releaseTail: .zero,
-            listeningCueDelay: .zero
+            listeningCueDelay: .zero,
+            dictationLanguage: .chinese
         )
         controller.setTranslationKeyOn(true)
         await controller.loadModel()
@@ -842,7 +843,8 @@ struct ModelGateReservationTests {
             frontmostApp: { 100 },
             minimumHold: .zero,
             releaseTail: .zero,
-            listeningCueDelay: .zero
+            listeningCueDelay: .zero,
+            dictationLanguage: .chinese
         )
         await controller.loadModel()
         try await press(controller, .rightControl)

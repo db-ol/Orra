@@ -121,7 +121,8 @@ struct CleanupIdleUnloadMeasurementTests {
             },
             frontmostApp: { 100 },
             releaseTail: .zero,
-            listeningCueDelay: .zero
+            listeningCueDelay: .zero,
+            dictationLanguage: .chinese
         )
         await controller.loadModel()
 
@@ -200,7 +201,8 @@ struct CleanupIdleUnloadMeasurementTests {
                 return .pasted
             },
             frontmostApp: { 100 },
-            listeningCueDelay: .zero
+            listeningCueDelay: .zero,
+            dictationLanguage: .chinese
         )
         await controller.loadModel()
         var report = ""

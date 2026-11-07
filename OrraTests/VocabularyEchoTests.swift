@@ -107,7 +107,7 @@ extension RealModelTests {
                     // The first pass alone, as Orra worked before the guard.
                     let unguarded = Self.finalText(try await engine.transcribe(clip.samples, context: context), seconds: seconds)
                     let start = ContinuousClock.now
-                    let guarded = Self.finalText(try await transcription.transcribe(clip.samples, vocabulary: vocabulary, audioSeconds: seconds), seconds: seconds)
+                    let guarded = Self.finalText(try await transcription.transcribe(clip.samples, vocabulary: vocabulary, audioSeconds: seconds, language: .chinese), seconds: seconds)
                     let elapsed = start.duration(to: .now)
                     if !unguarded.isEmpty { echoes += 1 }
                     if !guarded.isEmpty { pasted += 1 }
@@ -171,7 +171,7 @@ extension RealModelTests {
                     let unguarded = Self.finalText(try await engine.transcribe(speech, context: Vocabulary.context(vocabulary)), seconds: seconds)
                     let onlyTerms = VocabularyEcho.isOnlyTerms(unguarded, of: vocabulary)
                     let start = ContinuousClock.now
-                    let text = Self.finalText(try await transcription.transcribe(speech, vocabulary: vocabulary, audioSeconds: seconds), seconds: seconds)
+                    let text = Self.finalText(try await transcription.transcribe(speech, vocabulary: vocabulary, audioSeconds: seconds, language: .chinese), seconds: seconds)
                     let elapsed = start.duration(to: .now)
                     let kept = VocabularyEcho.normalized(text).contains(key)
                     report.append("term \(index) with \(size) terms: only terms \(onlyTerms), term kept \(kept), \(text.count) chars, \(elapsed)")

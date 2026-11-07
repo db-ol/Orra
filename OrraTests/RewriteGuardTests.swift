@@ -55,6 +55,23 @@ struct RewriteGuardTests {
         #expect(RewriteGuard.check(source: "这个方案我觉得还可以再改改然后发给大家看看", output: "这个")?.description == "much shorter than source (2 vs 21)")
     }
 
+    /// A cleanup never writes Hangul syllables on its own, the block U+AC00 to U+D7AF.
+    /// Jamo on their own, such as ㅋㅋ, are not syllables in any of their forms, so they
+    /// pass.
+    @Test func onlyHangulSyllablesAreAForeignScript() {
+        for text in ["고마워요", "\u{AC00}", "\u{D7A3}", "\u{D7AF}"] {
+            #expect(RewriteGuard.hasForeignScript(text), "\(text)")
+            #expect(RewriteGuard.hasForeignScript(text, allowingKana: true), "\(text)")
+        }
+        // Compatibility, conjoining, extended and halfwidth jamo.
+        for text in ["\u{314B}\u{314B}", "\u{110F}\u{110F}", "\u{A960}", "\u{D7B0}", "\u{FFBE}\u{FFBE}"] {
+            #expect(!RewriteGuard.hasForeignScript(text), "\(text)")
+            #expect(!RewriteGuard.hasForeignScript(text, allowingKana: true), "\(text)")
+        }
+        #expect(RewriteGuard.check(source: "Sure, see you tomorrow.", output: "Sure, see you tomorrow. 고마워요") == .foreignScript)
+        #expect(RewriteGuard.check(source: "Sure, see you tomorrow.", output: "Sure, see you tomorrow ㅋㅋ") == nil)
+    }
+
     @Test func anEmptyOutputPassesOnlyForFillerAlone() {
         #expect(RewriteGuard.check(source: "嗯嗯", output: "") == nil)
         #expect(RewriteGuard.check(source: "我们明天开会", output: " ") == .empty)

@@ -48,7 +48,8 @@ struct GateSetEvaluationTests {
             lidIsClosed: { false },
             isTrusted: { true },
             minimumHold: .zero,
-            releaseTail: .zero
+            releaseTail: .zero,
+            dictationLanguage: .chinese
         )
         var latest: DictationTimings?
         controller.onTimings = { latest = $0 }

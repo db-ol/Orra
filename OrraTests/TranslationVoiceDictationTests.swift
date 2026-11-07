@@ -66,7 +66,8 @@ struct TranslationVoiceDictationTests {
             frontmostApp: { 100 },
             minimumHold: .zero,
             releaseTail: .zero,
-            listeningCueDelay: .zero
+            listeningCueDelay: .zero,
+            dictationLanguage: .chinese
         )
         let sample = VoiceSample(samples: (0..<96_000).map { sin(Float($0) * 0.05) * 0.3 }, sampleRate: 48_000)
         await #expect(throws: TranscriptionError.modelMissing) {

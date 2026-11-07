@@ -70,6 +70,7 @@ struct CaptionPipelineMeasurementTests {
         var engines = CaptionEngines.shared(
             transcription: .qwen3(speech),
             isSpeechReady: { true },
+            language: { .chinese },
             canTranslate: { translates },
             target: { target },
             complete: { try await rewrite.translate($0, into: $1).answer },

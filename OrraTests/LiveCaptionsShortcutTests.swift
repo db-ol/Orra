@@ -66,7 +66,8 @@ struct LiveCaptionsShortcutTests {
             translationKey: translationKey,
             liveCaptionsShortcut: shortcut,
             saveLiveCaptionsShortcut: saved,
-            registerShortcut: shortcuts.register
+            registerShortcut: shortcuts.register,
+            dictationLanguage: .chinese
         )
     }
 
