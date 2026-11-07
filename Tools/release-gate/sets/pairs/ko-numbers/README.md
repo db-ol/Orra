@@ -20,6 +20,5 @@ rate barely moves.
 `say` writes every number in Hangul as it is read, with the native numbers of hours and counts
 (세 시, 두 번째) and phone numbers digit by digit (공일공).
 
-The Korean text of this set was written and reviewed by an AI process, not by a native speaker,
-and waits for a native reader. Until one has read it, its references, its accepted spellings and
-every result on it rest on AI review only.
+No native speaker has read the Korean text of this set yet. Until one has, its references, its
+accepted spellings and every result on it are not confirmed by a native reader.

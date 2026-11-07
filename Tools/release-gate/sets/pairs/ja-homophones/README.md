@@ -15,6 +15,5 @@ which is not a common word. The other English words count only in Latin letters,
 katakana is the common word. Long vowel variants of other words count as the same word, such as
 パーサー and パーサ.
 
-The Japanese text of this set was written and reviewed by an AI process, not by a native
-speaker, and waits for a native reader. Until one has read it, its references, its accepted
-spellings and every result on it rest on AI review only.
+No native speaker has read the Japanese text of this set yet. Until one has, its references, its
+accepted spellings and every result on it are not confirmed by a native reader.

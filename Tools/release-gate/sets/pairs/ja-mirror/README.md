@@ -23,6 +23,5 @@ other spellings as accepted spellings, such as ["Slack", "スラック"] and ["�
 vowel variants such as サーバー and サーバ count as the same word. Numbers are digits, with 万 for ten
 thousands (5万ドル), and most list their kanji spelling.
 
-The Japanese text of this set was written and reviewed by an AI process, not by a native
-speaker, and waits for a native reader. Until one has read it, its references, its accepted
-spellings and every result on it rest on AI review only.
+No native speaker has read the Japanese text of this set yet. Until one has, its references, its
+accepted spellings and every result on it are not confirmed by a native reader.

@@ -13,6 +13,5 @@ A term with Latin letters matches with its case, so the plain words count as the
 only when the model writes them with a capital, and every common word sits inside its sentence,
 never first.
 
-The Spanish text of this set was written and reviewed by an AI process, not by a native speaker,
-and waits for a native reader. Until one has read it, its references, its accepted spellings and
-every result on it rest on AI review only.
+No native speaker has read the Spanish text of this set yet. Until one has, its references, its
+accepted spellings and every result on it are not confirmed by a native reader.

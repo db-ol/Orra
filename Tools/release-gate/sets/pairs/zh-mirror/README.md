@@ -19,6 +19,5 @@ The sentences are Chinese with English words in Latin letters, like the mixed se
 other Chinese sets. The reference is the text after the number rules, as in zh-numbers-negation:
 下午3点半, 15%, 5万美元 and 11月14号 in digits, and 两千个, 两点半 and 两百毫秒 in words, which the rules keep.
 
-The Chinese text of this set was written and reviewed by an AI process, not by a native speaker,
-and waits for a native reader. Until one has read it, its references, its accepted spellings and
-every result on it rest on AI review only.
+No native speaker has read the Chinese text of this set yet. Until one has, its references, its
+accepted spellings and every result on it are not confirmed by a native reader.
