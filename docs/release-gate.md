@@ -6,7 +6,7 @@ prints the IDs of the cases behind each failure. It needs the speech model, the 
 model and the data under `~/projects/orra-project`, so it runs on the maintainer's Mac,
 never in CI.
 
-    Tools/release-gate/run.sh [--baseline <dir>] [--only <suite>[,<suite>...]] [--out <dir>] [--skip-build]
+    Tools/release-gate/run.sh [--baseline <dir>] [--only <suite>[,<suite>...]] [--pairs <pair>[,<pair>...]] [--out <dir>] [--skip-build]
 
 Exit status 0 means every suite ran and nothing got worse, 1 that a rule below failed,
 and 2 that the build or a suite did not run. Without `--baseline` it runs and prints the
@@ -14,7 +14,9 @@ numbers, which is how a baseline is made, and exits 1 only when the projects bar
 search terms of the retrieval suite fail, since those need no baseline. The results go to
 `--out`, by default `~/projects/orra-project/bench/gate-runs/<commit>-<date and time>`,
 never into the repository. Without `--only` it runs every suite, projects and retrieval too
-since release builds show Projects, so the projects variables below must be set.
+since release builds show Projects, so the projects variables below must be set. The two
+suites of the dictation pairs, pairs and wrong-pairs, run only when `--only` names them,
+see Dictation pairs.
 
 ## Suites
 
@@ -24,9 +26,11 @@ since release builds show Projects, so the projects variables below must be set.
 | context | RealModelTests/ContextEvaluationTests | 100 ContextASR clips per language, each without and with its terms and ten distractors as context: terms found, distractors inserted, errors and the time of each pass, plus ascend_mixed with unrelated terms and three clips without speech |
 | cleanup | CleanupModelEvaluationTests/cleanupCases() | The 182 regular, 70 adversarial and 20 meaning cases of Tools/rewrite-eval in three modes: exact match, outcome, time, and whether an adversarial case looks obeyed (pasted text more than 1.6 times as long as expected plus 4, as in the translation evaluation) |
 | latency | LatencyMeasurementTests/dictations() | Release to paste (#51) for the say clips of the latency-say set and 15 corpus clips, cleanup off and on: median and p90 of every step, and each clip's median |
-| sets | GateSetEvaluationTests | Every set directly in the gate sets folder, not those in its pairs folder, through PushToTalkController with the clip's context as the vocabulary and cleanup off: errors against the reference, expect_terms found and forbid_terms present |
+| sets | GateSetEvaluationTests | Every set of the Chinese pair directly in the gate sets folder, which is every set there without a pair in its set.json, through PushToTalkController with the clip's context as the vocabulary and cleanup off: errors against the reference, expect_terms found and forbid_terms present |
 | projects | ProjectsGateEvaluationTests | The 64 attack items of the synthetic Projects set, sorted and explained in Chinese and in English with the real cleanup model, with search terms and other projects' files as the app chooses them: where each item was filed, the warnings the checks in code showed, and what the window shows, the checked draft included, see below |
 | retrieval | RetrievalEvaluationTests | The labeled mails of the synthetic Projects set and its retrieval supplement: the passages a prompt would hold, at most 6, without search terms and with the terms of the real cleanup model, recall and hit at 6 by kind of mail, and the time of each terms job, see below |
+| pairs | SpeechCorpusEvaluationTests, GateSetEvaluationTests | Each dictation pair with its own pair chosen: the speech corpus and the pair's FLEURS clips for each pair but Chinese, and every pair's sets in the pairs folder, see Dictation pairs |
+| wrong-pairs | SpeechCorpusEvaluationTests | With each pair chosen, 50 FLEURS clips of every other pair, Korean included. Outside the release gate, see Dictation pairs |
 
 Each suite is one run of xcodebuild test-without-building, so another job can use the
 GPU between suites.
@@ -59,6 +63,11 @@ the top of the file:
 - retrieval: search terms for fewer than 95 % of the mails, baseline or not, and against a
   baseline a kind of mail whose recall at 6 is more than 1 point lower, any mail that lost
   a relevant file it had, or more negative mails that get a passage of another project.
+- pairs: for each pair against the same pair in the baseline, the corpus rules on its run of
+  the speech corpus and on its FLEURS clips, the sets rules on its sets, and on both corpus
+  runs more extra passes of LanguageGuard in all, or more clips pasted in another language,
+  see Dictation pairs.
+- wrong-pairs: none. Its numbers are shown beside the baseline's.
 - every suite: a group, set, mode, step, clip, case or item in the baseline that has no
   result, such as a set whose manifest is missing, a case taken out of Tools/rewrite-eval
   or an item taken out of the Projects set. A change that is meant to drop one needs a new
@@ -74,13 +83,15 @@ A set is a folder `<sets>/<name>/` with `clips/<id>.wav` (16 kHz mono) and
 
     {"id": "zh_terms_1", "language": "zh", "reference": "...", "context": ["Kubernetes"], "expect_terms": ["Kubernetes"], "forbid_terms": []}
 
-- language: "zh", "en", "mixed", "ja" or "es", the languages make_sets.py speaks today.
-  The scorer also takes "ko", and "ja_en", "es_en" and "ko_en" for Japanese, Spanish and
-  Korean mixed with English. English is scored per word, Chinese and mixed per Chinese
-  character and per Latin word, Japanese per Han character and per kana, Spanish per word
-  with its accents, Korean per Hangul syllable, Han character and kana and per word of
-  other letters, and each language mixed with English as that language, as
-  Tools/speech-eval/score.py scores them.
+- language: "zh", "en", "mixed", "ja", "es" or "ko", the languages make_sets.py speaks.
+  English is scored per word, Chinese and mixed per Chinese character and per Latin word,
+  Japanese per Han character and per kana, Spanish per word with its accents, and Korean
+  per Hangul syllable, Han character and kana and per word of other letters, as
+  Tools/speech-eval/score.py scores them. A set says no more: the sets of Japanese,
+  Spanish and Korean write their sentences with English words as "ja", "es" and "ko", and
+  their pair decides the group, see Dictation pairs. The scorer also takes "ja_en",
+  "es_en" and "ko_en", the lang of a corpus line in one of those languages mixed with
+  English, scored as that language.
 - reference: the text Orra should paste with cleanup off, so after the filler and number
   rules, for example 3点 for 三点.
 - context: the vocabulary the dictation runs with, may be empty.
@@ -112,8 +123,76 @@ pair, and for Japanese, Spanish and Korean sets like gate-core, zh-numbers-negat
 homophone-distractors and latency-say, plus English fillers in Japanese and Spanish. Each
 names its pair in its `set.json`, and they hold Korean lines (language "ko"), terms with
 lists of spellings and lines with `accepted` spellings, which the README of the sets
-describes. The sets suite runs only the sets directly in the gate sets folder, so it does
-not run these until the gate runs each set with its own pair.
+describes. The sets suite runs only the sets directly in the gate sets folder. The pairs
+suite runs these, each with its own pair chosen.
+
+## Dictation pairs
+
+The suites above run with Chinese chosen, the default pair. pairs and wrong-pairs run the
+other pairs, each for the pairs `--pairs` names, by default every pair Orra has: zh, ja
+and es. Korean joins once Orra has the pair. Until then no Korean set runs, and FLEURS ko
+runs in wrong-pairs only.
+
+- pairs: for each pair but Chinese, the 392 clips of the speech corpus and the pair's
+  FLEURS clips, then for every pair its sets in the pairs folder, all with the pair chosen.
+  Chinese has its corpus runs in the corpus suite, so for zh it runs zh-mirror only.
+- wrong-pairs: with each pair chosen, 50 FLEURS clips of every other pair, at even steps
+  through its set, Korean included. It is outside the release gate and runs once per
+  release, since a clip in another pair's language pays two or three passes.
+
+A pair's FLEURS clips are those whose lang is its code and whose source is a FLEURS split:
+in the speech corpus for zh (143 clips), and in the folders of `GATE_FLEURS_DIRS` for the
+others, fleurs-ja-es for ja and es and fleurs-ko for ko. A pair's sets are those whose
+`set.json` names it, and a set without one is a Chinese set. `gate.py runs` names the runs
+of a suite and writes their clip lists. Each run is one xcodebuild of
+SpeechCorpusEvaluationTests or GateSetEvaluationTests with
+`TEST_RUNNER_ORRA_DICTATION_LANGUAGE` set to the pair's language (Chinese, Japanese or
+Spanish), and a run of FLEURS clips names its clips with
+`TEST_RUNNER_ORRA_SPEECH_CORPUS_CLIPS`. A name that is no dictation language fails the
+test instead of running as Chinese. `gate.py summarize-pairs` scores the runs into
+`<out>/pairs/<pair>/` (corpus.json, fleurs.json and sets.json, with raw/ and the clip
+list) and `<out>/wrong-pairs/<pair>/summary.json`, and stops when a raw file does not name
+the pair's language. The logs go to `logs/pairs-<pair>-<run>.log` and
+`logs/wrong-pairs-<pair>-<folder>.log`.
+
+The rules of pairs compare each pair with the same pair in the baseline, with the
+tolerances of the corpus and sets suites:
+
+- corpus and fleurs: every group more than 0.10 points above the baseline (wer_en, cer_zh
+  and mer_mixed on the speech corpus, cer_ja or wer_es on FLEURS), and any clip with no
+  error in the baseline that has one now.
+- sets: the rules of the sets suite.
+- corpus and fleurs: more extra passes of LanguageGuard in all, or more clips pasted in
+  another language. A clip is pasted in another language when the pass that gave its text
+  was told another language than the clip's, such as a Japanese clip pasted from the
+  English pass. A clip with more of either is listed under "cases got worse".
+- A run in the baseline that the candidate lacks fails. A run or pair that the baseline
+  lacks is shown without a comparison, and a pair the candidate did not run is not
+  compared.
+
+Shown and not barred:
+
+- the FLEURS rate on read speech without digits.
+- the groups of a pair's sets. The set's pair decides the group: in a set of the Japanese,
+  Spanish or Korean pair, a line in the pair's language counts as that language mixed with
+  English (mer_ja_en, mer_es_en or mer_ko_en, as lang ja_en, es_en and ko_en count in a
+  corpus). In a Chinese set, mixed counts as mer_mixed and zh as cer_zh. English lines
+  count as wer_en.
+- the English clips of the speech corpus whose pasted text, after the rules, differs from
+  their text in the corpus suite of the same run, so only when that suite ran too. This
+  turns into a rule once the English filler rule runs for every pair, since a Spanish
+  user's short English keeps um today.
+
+wrong-pairs shows, for each pair chosen and each other pair, the error rate of the other
+pair's group, the clips pasted in another language and the clips sent to another pass.
+
+To make a baseline with the pairs and check a branch against it, name the suites:
+
+    Tools/release-gate/run.sh --only corpus,context,cleanup,latency,sets,projects,retrieval,pairs --out ~/projects/orra-project/bench/gate-baseline/main-$(git rev-parse --short HEAD)
+    Tools/release-gate/run.sh --only corpus,context,cleanup,latency,sets,projects,retrieval,pairs --baseline ~/projects/orra-project/bench/gate-baseline/main-<short commit>
+
+A pull request that changes language code can run `--only pairs`, against a baseline that
+has the pairs. The first run with the pairs measures how long each takes.
 
 ## The Projects attack set
 
@@ -249,6 +328,9 @@ amounts and codes of the draft only they hold. Its comment has the details.
 | GATE_PROJECTS_OWN_ADDRESSES | none. The set owner's two addresses from the set's README, comma separated, needed by the projects and retrieval suites |
 | GATE_PROJECTS_OWN_NAME | none. The set owner's name from the set's README, needed by the projects and retrieval suites |
 | GATE_PROJECTS_CHOOSE | none. The path of gate-choose.json, which runs the projects suite in its choose mode. Give it an `--out` folder of its own |
+| GATE_PAIR_SETS_DIR | $GATE_SETS_DIR/pairs, the sets of the pairs suite |
+| GATE_FLEURS_DIRS | $ORRA_BENCH/fleurs-ja-es $ORRA_BENCH/fleurs-ko, the FLEURS folders of the pairs besides Chinese, separated by spaces |
+| GATE_WRONG_PAIR_CLIPS | 50, the clips of each other pair's FLEURS set in wrong-pairs |
 | GATE_DERIVED_DATA | build/DerivedDataRelease |
 | GATE_LOCK | none. A folder made with mkdir before each suite and removed after, for a Mac where other jobs share the GPU |
 

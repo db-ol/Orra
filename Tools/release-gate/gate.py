@@ -13,6 +13,12 @@ the cases that got worse, and exits 1 when a rule failed. docs/release-gate.md l
 rules and their tolerances, which are the constants below. The projects suite also has a
 bar of its own, which fails with or without a baseline, so show exits 1 when it fails, and
 so does the retrieval suite for its search terms.
+
+The suites of the dictation pairs, pairs and wrong-pairs, run one test per pair and corpus.
+run.sh asks which, and has their raw files scored into OUT/pairs and OUT/wrong-pairs:
+
+    python3 gate.py runs pairs|wrong-pairs OUT --corpus DIR --fleurs DIR ... --pair-sets DIR [--pairs zh,ja,es] [--count 50]
+    python3 gate.py summarize-pairs OUT --pair-sets DIR --corpora DIR ...
 """
 
 from __future__ import annotations
@@ -103,7 +109,10 @@ def rate(errors: int, tokens: int) -> float:
 # Summaries, one per suite, from OUT/raw.
 
 
-def summarize_corpus(raw: dict, manifest: dict[str, dict]) -> dict:
+def summarize_corpus(raw: dict, manifest: dict[str, dict], every_group: bool = True) -> dict:
+    """The groups and clips of a corpus run. The speech corpus keeps wer_en, cer_zh and
+    mer_mixed in every run. With every_group off, as for a pair's FLEURS clips, a group is
+    kept only when it has clips."""
     clips = {}
     groups = {}
     # Lenient rates only for a corpus with accepted spellings, whose clips with lists also
@@ -136,7 +145,7 @@ def summarize_corpus(raw: dict, manifest: dict[str, dict]) -> dict:
                     lenient_totals[name][0] += lenient
                     lenient_totals[name][1] += count
         # The groups of other languages only for a corpus with such clips.
-        groups[field] = {name: rate(*values) for name, values in totals.items() if values[1] or name not in speech_score.LANGUAGE_GROUPS}
+        groups[field] = {name: rate(*values) for name, values in totals.items() if values[1] or (every_group and name not in speech_score.LANGUAGE_GROUPS)}
         lenient_groups[field] = {name: rate(*lenient_totals[name]) for name in groups[field]}
     decode = [row["decode_seconds"] for row in raw["clips"].values() if not row.get("skipped_silent")]
     return {
@@ -668,26 +677,28 @@ def require_all(result: Result, suite: str, what: str, base: dict, cand: dict, p
         result.fail(f"{suite}: {what} in the baseline without a result", [f"{suite}/{prefix}{key}" for key in missing])
 
 
-def compare_corpus(base: dict, cand: dict, result: Result) -> None:
+def compare_corpus(base: dict, cand: dict, result: Result, name: str = "corpus") -> None:
+    """The corpus rules. name heads every line, rule and case, so the run of a dictation
+    pair on its FLEURS clips reads as fleurs."""
     for field in ("text", "ruled_text"):
-        require_all(result, "corpus", f"{field} groups", base["groups"][field], cand["groups"][field])
-    require_all(result, "corpus", "clips", base["clips"], cand["clips"])
+        require_all(result, name, f"{field} groups", base["groups"][field], cand["groups"][field])
+    require_all(result, name, "clips", base["clips"], cand["clips"])
     for field in ("text", "ruled_text"):
-        for name, value in cand["groups"][field].items():
-            old = base["groups"][field].get(name)
+        for group, value in cand["groups"][field].items():
+            old = base["groups"][field].get(group)
             if old is None:
-                result.lines.append(f"corpus {field} {name}: new, {value:.2f}%")
+                result.lines.append(f"{name} {field} {group}: new, {value:.2f}%")
                 continue
-            result.lines.append(f"corpus {field} {name}: {old:.2f}% -> {value:.2f}%")
+            result.lines.append(f"{name} {field} {group}: {old:.2f}% -> {value:.2f}%")
             if value - old > CORPUS_RATE_TOLERANCE:
-                result.fail(f"corpus {field} {name} rose by {value - old:.2f} points, more than {CORPUS_RATE_TOLERANCE}")
+                result.fail(f"{name} {field} {group} rose by {value - old:.2f} points, more than {CORPUS_RATE_TOLERANCE}")
     # The lenient rates of a corpus with accepted spellings, shown beside the strict ones and
     # not barred.
     for field, rates in cand.get("lenient_groups", {}).items():
-        for name, value in rates.items():
-            old = base.get("lenient_groups", {}).get(field, {}).get(name)
-            result.lines.append(f"corpus {field} {name} lenient: " + (f"{old:.2f}% -> {value:.2f}%" if old is not None else f"new, {value:.2f}%"))
-    result.lines.append(f"corpus decode p90: {base.get('decode_p90_s', 0):.3f} s -> {cand.get('decode_p90_s', 0):.3f} s")
+        for group, value in rates.items():
+            old = base.get("lenient_groups", {}).get(field, {}).get(group)
+            result.lines.append(f"{name} {field} {group} lenient: " + (f"{old:.2f}% -> {value:.2f}%" if old is not None else f"new, {value:.2f}%"))
+    result.lines.append(f"{name} decode p90: {base.get('decode_p90_s', 0):.3f} s -> {cand.get('decode_p90_s', 0):.3f} s")
     newly_wrong = []
     for clip_id, row in cand["clips"].items():
         old = base["clips"].get(clip_id)
@@ -695,14 +706,14 @@ def compare_corpus(base: dict, cand: dict, result: Result) -> None:
             continue
         for key in ("errors", "ruled_errors"):
             if row[key] > old[key]:
-                result.worse.append(f"corpus/{clip_id} {key} {old[key]} -> {row[key]}")
+                result.worse.append(f"{name}/{clip_id} {key} {old[key]} -> {row[key]}")
                 if old[key] == 0:
-                    newly_wrong.append(f"corpus/{clip_id}")
+                    newly_wrong.append(f"{name}/{clip_id}")
         for key, strict in (("lenient_errors", "errors"), ("ruled_lenient_errors", "ruled_errors")):
             if key in row and key in old and row[key] > old[key] and row[strict] <= old[strict]:
-                result.worse.append(f"corpus/{clip_id} {key} {old[key]} -> {row[key]}")
+                result.worse.append(f"{name}/{clip_id} {key} {old[key]} -> {row[key]}")
     if newly_wrong:
-        result.fail("corpus clips that were right and are now wrong", sorted(set(newly_wrong)))
+        result.fail(f"{name} clips that were right and are now wrong", sorted(set(newly_wrong)))
 
 
 def compare_context(base: dict, cand: dict, result: Result) -> None:
@@ -906,6 +917,370 @@ def compare_projects(base: dict, cand: dict, result: Result) -> None:
         result.fail("projects items that lost a warning the checks in code showed", lost)
 
 
+# Dictation pairs: the pairs and wrong-pairs suites, see docs/release-gate.md. The suites
+# above run with Chinese chosen. pairs runs each pair on its own sets, and each pair but
+# Chinese on the speech corpus and on its FLEURS clips, with the rules of the corpus and sets
+# suites. wrong-pairs runs FLEURS clips of the other pairs with each pair chosen, shown and
+# never barred. Each run writes its raw file into OUT/<suite>/<pair>/raw.
+
+PAIR_SUITES = ("pairs", "wrong-pairs")
+# The dictation pairs by the code of their language, as a set's set.json and the lang of a
+# manifest line write it, with the name TEST_RUNNER_ORRA_DICTATION_LANGUAGE takes. Korean
+# joins when Orra has the pair.
+PAIRS = {"zh": "Chinese", "ja": "Japanese", "es": "Spanish"}
+# The pairs whose FLEURS clips wrong-pairs runs with each other pair chosen, Korean included.
+FLEURS_PAIRS = ("zh", "ja", "es", "ko")
+# The passes of LanguageGuard, by the name language_pass gives them, that write the language
+# of a clip with this lang. A clip whose text came from another pass was pasted in another
+# language: a translation.
+OWN_PASSES = {
+    "en": {"english"}, "zh": {"chinese"}, "yue": {"chinese"}, "mixed": {"chinese", "english"},
+    "ja": {"japanese"}, "es": {"spanish"}, "ko": {"korean"},
+    "ja_en": {"japanese", "english"}, "es_en": {"spanish", "english"}, "ko_en": {"korean", "english"},
+}
+# An English clip pastes the same text whatever pair is chosen. Shown, and a rule once the
+# English filler rule runs for every pair, since a Spanish user's short English keeps um.
+ENGLISH_SAME_TEXT_BARRED = False
+
+
+def read_manifest_rows(folder: Path) -> list[dict]:
+    """The lines of a corpus folder's manifest.jsonl, in their order."""
+    path = folder / "manifest.jsonl"
+    if not path.is_file():
+        raise SystemExit(f"no manifest.jsonl in {folder}")
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def merged_manifest(folders: list[Path]) -> dict[str, dict]:
+    """The clips of the corpus folders by id. An id stands for one clip only."""
+    clips: dict[str, dict] = {}
+    for folder in folders:
+        for row in read_manifest_rows(folder):
+            if clips.setdefault(row["id"], row) != row:
+                raise SystemExit(f"clip {row['id']} has two different lines, one of them in {folder}")
+    return clips
+
+
+def fleurs_clips(rows: list[dict], pair: str) -> list[str]:
+    """The ids of the pair's FLEURS clips among the manifest lines, in their order."""
+    return [row["id"] for row in rows if row.get("lang") == pair and str(row.get("source", "")).startswith("fleurs")]
+
+
+def spread(ids: list[str], count: int) -> list[str]:
+    """count of the ids at even steps from the first, or all of them when there are no more."""
+    if len(ids) <= count:
+        return list(ids)
+    return [ids[index * len(ids) // count] for index in range(count)]
+
+
+def set_pair(folder: Path) -> str:
+    """The pair a set is for: the pair its set.json names, zh for a set without one, as
+    GateSetEvaluationTests reads it."""
+    settings = folder / "set.json"
+    return (read_json(settings).get("pair") if settings.exists() else None) or "zh"
+
+
+def plan_runs(suite: str, out: Path, pairs: list[str], corpus: Path, fleurs: list[Path], pair_sets: Path, count: int) -> list[dict]:
+    """The test runs of a pair suite, in order, and writes their clip lists. Each run has a
+    label, its kind (corpus or sets), the dictation language, the name of its raw file, its
+    folder, its clip list or None for every clip, and the folder of its raw file.
+
+    pairs: for each pair but Chinese, whose runs are the corpus suite, the speech corpus and
+    the pair's FLEURS clips, then the pair's sets. wrong-pairs: for each pair, count FLEURS
+    clips of every other pair, Korean included, one run per corpus folder."""
+    unknown = [pair for pair in pairs if pair not in PAIRS]
+    if unknown or not pairs:
+        raise SystemExit(f"no dictation pair {', '.join(unknown)}: Orra has {', '.join(PAIRS)}")
+    rows = {folder: read_manifest_rows(folder) for folder in dict.fromkeys([corpus, *fleurs])}
+
+    def holding(pair: str, folders: list[Path]) -> tuple[Path, list[str]]:
+        found = [(folder, ids) for folder in folders if (ids := fleurs_clips(rows[folder], pair))]
+        if len(found) != 1:
+            raise SystemExit(f"the FLEURS clips of {pair} must be in one of {', '.join(map(str, folders))}, they are in {len(found)}")
+        return found[0]
+
+    runs: list[dict] = []
+    for pair in pairs:
+        root = out / suite / pair
+        own: list[tuple[str, str, Path, list[str] | None]] = []
+        if suite == "pairs":
+            if pair != "zh":
+                own.append(("corpus", "corpus", corpus, None))
+                own.append(("corpus", "fleurs", *holding(pair, fleurs)))
+            if not any(set_pair(path.parent) == pair for path in pair_sets.glob("*/manifest.jsonl")):
+                raise SystemExit(f"no set of the {pair} pair in {pair_sets}")
+            own.append(("sets", "sets-raw", pair_sets, None))
+        else:
+            chosen: dict[Path, list[str]] = {}
+            for other in FLEURS_PAIRS:
+                if other != pair:
+                    folder, ids = holding(other, [corpus, *fleurs])
+                    chosen.setdefault(folder, []).extend(spread(ids, count))
+            own += [("corpus", folder.name, folder, ids) for folder, ids in chosen.items()]
+            if len({name for _, name, _, _ in own}) != len(own):
+                raise SystemExit(f"two corpus folders of {', '.join(str(folder) for folder in chosen)} have the same name")
+        for kind, name, folder, ids in own:
+            clips = None
+            if ids is not None:
+                clips = root / f"{name}-clips.txt"
+                root.mkdir(parents=True, exist_ok=True)
+                clips.write_text("".join(f"{clip_id}\n" for clip_id in ids), encoding="utf-8")
+            label = f"{suite}-{pair}-" + ("sets" if kind == "sets" else name)
+            runs.append({"label": label, "kind": kind, "language": PAIRS[pair], "name": name, "folder": folder, "clips": clips, "raw": root / "raw"})
+    return runs
+
+
+def check_language(document: dict, pair: str, path: Path) -> None:
+    """A raw file of a pair must say that it ran with the pair chosen."""
+    if document.get("dictation_language") != PAIRS.get(pair):
+        raise SystemExit(f"{path} ran with dictation language {document.get('dictation_language')!r}, not that of {pair}")
+
+
+def pass_counts(raw: dict, manifest: dict[str, dict]) -> dict:
+    """LanguageGuard on the clips with speech: the clips it sent to another pass, with the
+    passes it added, and the clips whose text came from a pass in another language than
+    their own (OWN_PASSES), such as a Japanese clip pasted from the English pass."""
+    clips, extra, other = 0, {}, []
+    for clip_id, row in sorted(raw["clips"].items()):
+        clip = manifest[clip_id]
+        if not clip["reference"]:
+            continue
+        clips += 1
+        if row.get("language_passes", 0):
+            extra[clip_id] = row["language_passes"]
+        if row.get("language_pass", "unhinted") not in {"unhinted", *OWN_PASSES.get(clip["lang"], ())}:
+            other.append(clip_id)
+    return {"clips": clips, "extra_passes": extra, "other_language": other}
+
+
+def english_unlike_chinese(raw: dict, chinese: dict | None, manifest: dict[str, dict]) -> dict | None:
+    """The English clips whose pasted text, ruled_text, differs from their text with Chinese
+    chosen in the corpus suite of the same run. None without that run."""
+    if chinese is None:
+        return None
+    ids = sorted(clip_id for clip_id in raw["clips"] if manifest[clip_id]["lang"] == "en" and clip_id in chinese["clips"])
+    unlike = [clip_id for clip_id in ids if raw["clips"][clip_id].get("ruled_text", "") != chinese["clips"][clip_id].get("ruled_text", "")]
+    return {"clips": len(ids), "unlike": unlike}
+
+
+def read_rates(raw: dict, manifest: dict[str, dict]) -> dict:
+    """Each group's rate in percent on the clips of read speech without digits, with their
+    count, on text and on ruled_text."""
+    rates = {}
+    for field in ("text", "ruled_text"):
+        texts = {clip_id: row.get(field, "") for clip_id, row in raw["clips"].items()}
+        rates[field] = {group: {"rate": round(100 * value, 3), "clips": count} for group, (value, count) in speech_score.without_digits(manifest, texts).items()}
+    return rates
+
+
+def set_group_clip(language: str, pair: str) -> dict:
+    """A clip of a set as the groups of score.py read a manifest line. The set's pair decides
+    the group: in a set of the Japanese, Spanish or Korean pair, a clip in the pair's
+    language counts as that language mixed with English (mer_ja_en, mer_es_en, mer_ko_en),
+    as the lang ja_en, es_en and ko_en of a corpus do, since those sets hold the pair's
+    language with English words and mark no sentence as mixed. The Chinese pair marks its
+    code switched sentences as mixed (mer_mixed)."""
+    lang = f"{language}_en" if pair != "zh" and language == pair else language
+    return {"lang": lang, "stratum": lang}
+
+
+def set_groups(summary: dict, sets_dir: Path, pair: str) -> dict:
+    """The error rate of each group over the clips of a pair's sets, and the lenient rate
+    when they have accepted spellings."""
+    totals: dict[str, list[int]] = {}
+    manifests: dict[str, dict] = {}
+    for key, scored in summary["clips"].items():
+        name, clip_id = key.split("/", 1)
+        if name not in manifests:
+            manifests[name] = load_set_manifest(sets_dir / name)
+        clip = set_group_clip(manifests[name][clip_id]["language"], pair)
+        for group, keep in speech_score.GROUPS.items():
+            if keep(clip):
+                total = totals.setdefault(group, [0, 0, 0])
+                total[0] += scored["errors"]
+                total[1] += scored.get("lenient_errors", scored["errors"])
+                total[2] += scored["tokens"]
+    groups = {"groups": {group: rate(errors, tokens) for group, (errors, _, tokens) in totals.items()}}
+    if any("lenient_errors" in scored for scored in summary["clips"].values()):
+        groups["lenient_groups"] = {group: rate(lenient, tokens) for group, (_, lenient, tokens) in totals.items()}
+    return groups
+
+
+def summarize_wrong_pair(documents: list[dict], manifest: dict[str, dict]) -> dict:
+    """For each pair whose FLEURS clips ran with another pair chosen, by its lang: the error
+    rate of its group on the pasted text, and the passes as pass_counts gives them."""
+    by_lang: dict[str, dict] = {}
+    for document in documents:
+        for clip_id, row in document["clips"].items():
+            by_lang.setdefault(manifest[clip_id]["lang"], {})[clip_id] = row
+    fleurs = {}
+    for lang, rows in sorted(by_lang.items()):
+        errors = tokens = 0
+        for clip_id, row in rows.items():
+            found, count = speech_score.clip_errors(manifest[clip_id], row.get("text", ""))
+            errors, tokens = errors + found, tokens + count
+        first = manifest[next(iter(rows))]
+        group = next((name for name, keep in speech_score.GROUPS.items() if keep(first)), lang)
+        fleurs[lang] = {"group": group, "error_rate": rate(errors, tokens), **pass_counts({"clips": rows}, manifest)}
+    return {"fleurs": fleurs}
+
+
+def summarize_pairs(out: Path, pair_sets: Path, corpora: list[Path]) -> list[str]:
+    """Scores the raw files in OUT/pairs and OUT/wrong-pairs against the manifests of the
+    corpus folders and the sets in pair_sets. A run without its raw file is left out, as
+    summarize leaves out a suite, and compare then misses it."""
+    manifest = merged_manifest(corpora)
+    chinese_file = out / "raw" / "corpus.json"
+    chinese = read_json(chinese_file) if chinese_file.exists() else None
+    written = []
+    for root in sorted(path for path in (out / "pairs").glob("*") if path.is_dir()):
+        pair, raw = root.name, root / "raw"
+        for name in ("corpus", "fleurs"):
+            path = raw / f"{name}.json"
+            if not path.exists():
+                continue
+            document = read_json(path)
+            check_language(document, pair, path)
+            summary = summarize_corpus(document, manifest, every_group=name == "corpus")
+            summary["passes"] = pass_counts(document, manifest)
+            if name == "corpus":
+                summary["english"] = english_unlike_chinese(document, chinese, manifest)
+            else:
+                summary["read_without_digits"] = read_rates(document, manifest)
+            write_json(root / f"{name}.json", summary)
+            written.append(f"pairs/{pair}/{name}")
+        path = raw / "sets-raw.json"
+        if path.exists():
+            document = read_json(path)
+            check_language(document, pair, path)
+            summary = summarize_sets(document, pair_sets)
+            summary.update(set_groups(summary, pair_sets, pair))
+            write_json(root / "sets.json", summary)
+            written.append(f"pairs/{pair}/sets")
+    for root in sorted(path for path in (out / "wrong-pairs").glob("*") if path.is_dir()):
+        documents = []
+        for path in sorted((root / "raw").glob("*.json")):
+            document = read_json(path)
+            check_language(document, root.name, path)
+            documents.append(document)
+        if documents:
+            write_json(root / "summary.json", summarize_wrong_pair(documents, manifest))
+            written.append(f"wrong-pairs/{root.name}")
+    return written
+
+
+def merge(result: Result, sub: Result, label: str, root: str) -> None:
+    """Takes the lines, rules and cases of one pair's comparison into result, each named with
+    the pair."""
+    result.lines += [f"{label} {line}" for line in sub.lines]
+    result.failures += [(f"{label} {rule}", [f"{root}/{case}" for case in ids]) for rule, ids in sub.failures]
+    result.worse += [f"{root}/{line}" for line in sub.worse]
+
+
+def compare_passes(base: dict, cand: dict, result: Result, name: str) -> None:
+    """The extra passes of LanguageGuard and the clips pasted in another language may not
+    rise. Clips with more of either are listed."""
+    old, new = base["passes"], cand["passes"]
+    old_total, new_total = sum(old["extra_passes"].values()), sum(new["extra_passes"].values())
+    result.lines.append(f"{name} extra passes: {old_total} -> {new_total}, on {len(old['extra_passes'])} -> {len(new['extra_passes'])} of {new['clips']} clips")
+    more = sorted(clip for clip, count in new["extra_passes"].items() if count > old["extra_passes"].get(clip, 0))
+    result.worse += [f"{name}/{clip} extra passes {old['extra_passes'].get(clip, 0)} -> {new['extra_passes'][clip]}" for clip in more]
+    if new_total > old_total:
+        result.fail(f"{name} extra passes rose from {old_total} to {new_total}", [f"{name}/{clip}" for clip in more])
+    old_other, new_other = old["other_language"], new["other_language"]
+    result.lines.append(f"{name} pasted in another language: {len(old_other)} -> {len(new_other)} of {new['clips']} clips")
+    added = sorted(set(new_other) - set(old_other))
+    result.worse += [f"{name}/{clip} pasted in another language" for clip in added]
+    if len(new_other) > len(old_other):
+        result.fail(f"{name} clips pasted in another language rose from {len(old_other)} to {len(new_other)}", [f"{name}/{clip}" for clip in added])
+
+
+def read_rate_lines(base: dict, cand: dict, result: Result, name: str) -> None:
+    """The rates of a FLEURS run on read speech without digits, shown and not barred."""
+    for field in ("text", "ruled_text"):
+        for group, value in cand.get("read_without_digits", {}).get(field, {}).items():
+            old = base.get("read_without_digits", {}).get(field, {}).get(group)
+            result.lines.append(
+                f"{name} {field} {group}, read speech without digits ({value['clips']}): "
+                + (f"{old['rate']:.2f}% -> {value['rate']:.2f}%" if old else f"new, {value['rate']:.2f}%")
+            )
+
+
+def english_line(summary: dict, result: Result, name: str) -> None:
+    """The English clips pasted unlike with Chinese chosen, a rule once
+    ENGLISH_SAME_TEXT_BARRED is on. It needs no baseline."""
+    english = summary.get("english")
+    if english is None:
+        result.lines.append(f"{name} English clips against Chinese chosen: no corpus suite in this run")
+        return
+    unlike = english["unlike"]
+    result.lines.append(f"{name} English clips pasted unlike with Chinese chosen: {len(unlike)} of {english['clips']}" + ("" if ENGLISH_SAME_TEXT_BARRED else ", not barred yet"))
+    if ENGLISH_SAME_TEXT_BARRED and unlike:
+        result.fail(f"{name} English clips pasted unlike with Chinese chosen", [f"{name}/{clip}" for clip in unlike])
+
+
+def set_group_lines(base: dict, cand: dict, result: Result) -> None:
+    """The groups of a pair's sets, shown beside the rules of each set and not barred."""
+    for key, title in (("groups", ""), ("lenient_groups", " lenient")):
+        for group, value in cand.get(key, {}).items():
+            old = base.get(key, {}).get(group)
+            result.lines.append(f"sets {group}{title}: " + (f"{old:.2f}% -> {value:.2f}%" if old is not None else f"new, {value:.2f}%"))
+
+
+def compare_pairs(baseline: Path, candidate: Path, result: Result) -> None:
+    """Each pair of the candidate against the same pair of the baseline, with the rules and
+    tolerances of the corpus and sets suites, and the rules of the passes. A pair the
+    candidate did not run is not compared."""
+    roots = sorted(path for path in (candidate / "pairs").glob("*") if path.is_dir())
+    if not roots:
+        result.fail(f"pairs: no result in {candidate}")
+        return
+    for root in roots:
+        pair, sub = root.name, Result()
+        for name in ("corpus", "fleurs", "sets"):
+            cand_file, base_file = root / f"{name}.json", baseline / "pairs" / pair / f"{name}.json"
+            if not cand_file.exists():
+                if base_file.exists():
+                    sub.fail(f"{name}: in the baseline without a result")
+                continue
+            cand = read_json(cand_file)
+            if name == "corpus":
+                english_line(cand, sub, name)
+            if not base_file.exists():
+                sub.lines.append(f"{name}: no baseline, nothing to compare")
+                continue
+            base = read_json(base_file)
+            if name == "sets":
+                compare_sets(base, cand, sub)
+                set_group_lines(base, cand, sub)
+            else:
+                compare_corpus(base, cand, sub, name)
+                read_rate_lines(base, cand, sub, name)
+                compare_passes(base, cand, sub, name)
+        merge(result, sub, f"pairs {pair}", f"pairs/{pair}")
+
+
+def compare_wrong_pairs(baseline: Path | None, candidate: Path, result: Result) -> None:
+    """The numbers of each pair on the FLEURS clips of the others, beside the baseline's when
+    one is given. They fail nothing."""
+    roots = sorted(path for path in (candidate / "wrong-pairs").glob("*") if (path / "summary.json").exists())
+    if not roots:
+        result.fail(f"wrong-pairs: no result in {candidate}")
+        return
+    for root in roots:
+        base_file = baseline / "wrong-pairs" / root.name / "summary.json" if baseline else None
+        base = read_json(base_file)["fleurs"] if base_file and base_file.exists() else {}
+        for lang, row in read_json(root / "summary.json")["fleurs"].items():
+            line = (
+                f"wrong-pairs {root.name} chosen, FLEURS {lang}: {row['clips']} clips, {row['group']} {row['error_rate']:.2f}%, "
+                f"pasted in another language {len(row['other_language'])}, sent to another pass {len(row['extra_passes'])}"
+            )
+            old = base.get(lang)
+            if old is not None:
+                line += f", baseline {old['error_rate']:.2f}%, {len(old['other_language'])} and {len(old['extra_passes'])}"
+            result.lines.append(line)
+
+
 COMPARERS = {
     "corpus": compare_corpus, "context": compare_context, "cleanup": compare_cleanup, "latency": compare_latency, "sets": compare_sets,
     "projects": compare_projects, "retrieval": compare_retrieval,
@@ -915,6 +1290,9 @@ COMPARERS = {
 def compare(baseline: Path, candidate: Path, only: list[str]) -> Result:
     result = Result()
     for suite in only:
+        if suite in PAIR_SUITES:
+            (compare_pairs if suite == "pairs" else compare_wrong_pairs)(baseline, candidate, result)
+            continue
         base_file, cand_file = baseline / f"{suite}.json", candidate / f"{suite}.json"
         if not cand_file.exists():
             result.fail(f"{suite}: no result in {candidate}")
@@ -951,6 +1329,14 @@ def show(out: Path) -> int:
                 for rule, ids in result.failures:
                     print(f"  {rule}: {' '.join(ids)}")
                 status = 1 if result.failures else status
+    # The pair suites, which have no bar of their own.
+    result = Result()
+    if (out / "pairs").is_dir():
+        compare_pairs(out, out, result)
+    if (out / "wrong-pairs").is_dir():
+        compare_wrong_pairs(None, out, result)
+    for line in result.lines:
+        print(line)
     return status
 
 
@@ -968,6 +1354,18 @@ def main() -> None:
     c.add_argument("--only", default=",".join(SUITES))
     w = sub.add_parser("show")
     w.add_argument("out", type=Path)
+    r = sub.add_parser("runs")
+    r.add_argument("suite", choices=PAIR_SUITES)
+    r.add_argument("out", type=Path)
+    r.add_argument("--pairs", default=",".join(PAIRS))
+    r.add_argument("--corpus", type=Path, required=True)
+    r.add_argument("--fleurs", type=Path, nargs="*", default=[])
+    r.add_argument("--pair-sets", type=Path, required=True)
+    r.add_argument("--count", type=int, default=50)
+    p = sub.add_parser("summarize-pairs")
+    p.add_argument("out", type=Path)
+    p.add_argument("--pair-sets", type=Path, required=True)
+    p.add_argument("--corpora", type=Path, nargs="+", required=True)
     arguments = parser.parse_args()
 
     if arguments.command == "summarize":
@@ -975,9 +1373,16 @@ def main() -> None:
         print("summarized: " + (", ".join(written) or "nothing"))
     elif arguments.command == "show":
         sys.exit(show(arguments.out))
+    elif arguments.command == "runs":
+        pairs = [pair for pair in arguments.pairs.split(",") if pair]
+        for run in plan_runs(arguments.suite, arguments.out, pairs, arguments.corpus, arguments.fleurs, arguments.pair_sets, arguments.count):
+            print("\t".join([run["label"], run["kind"], run["language"], run["name"], str(run["folder"]), str(run["clips"] or "-"), str(run["raw"])]))
+    elif arguments.command == "summarize-pairs":
+        written = summarize_pairs(arguments.out, arguments.pair_sets, arguments.corpora)
+        print("summarized: " + (", ".join(written) or "nothing"))
     else:
         only = [suite for suite in arguments.only.split(",") if suite]
-        unknown = set(only) - set(SUITES)
+        unknown = set(only) - set(SUITES) - set(PAIR_SUITES)
         if unknown:
             raise SystemExit(f"unknown suites: {', '.join(sorted(unknown))}")
         result = compare(arguments.baseline, arguments.candidate, only)
