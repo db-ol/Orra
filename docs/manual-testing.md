@@ -662,8 +662,9 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     stops two tokens before the first token two prompts differ in, that a prompt reads
     only the tokens after it, and that a prompt that does not start with it, or has
     nothing after it, reads the whole prompt instead. With the model's tokenizer, it checks
-    that every prompt of the cleanup evaluation, as written and after the rules, starts
-    with the cached start of 1143 tokens (892 before the prompt of 2026-10-13).
+    that every prompt of the regular, adversarial, meaning and repeat cases of the cleanup
+    evaluation, as written and after the rules, starts with the cached start of 1143
+    tokens (892 before the prompt of 2026-10-13).
   - RewriteTokenizerTests compares CleanupTokenizer, the tokenizer of swift-transformers,
     with the IDs that transformers in Python gave for the model on 20 strings and 4 whole
     prompts, decodes text back and loads it through the loader the engine uses. It needs
@@ -774,7 +775,8 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     the unload is the speech model running slower while the cleanup model loads.
   - CleanupModelEvaluationTests runs the real model on the 182 cleanup cases (178 before
     2026-10-16), the 70 adversarial cases and the 20 meaning cases of Tools/rewrite-eval,
-    only with TEST_RUNNER_ORRA_CLEANUP_EVAL=1.
+    and since 2026-11-06 on its 66 repeat cases and its 672 number cases, which expect
+    their input back, only with TEST_RUNNER_ORRA_CLEANUP_EVAL=1.
     Its timings hold for a Release build, since a Debug build runs MLX without
     optimization:
 
@@ -782,6 +784,40 @@ got worse than the baseline or has no result, see docs/release-gate.md.
 
     With TEST_RUNNER_ORRA_CLEANUP_COMPARE=1 as well, each case also runs without the prefix
     cache right after, and the report lists every case where the two differ.
+
+    On 2026-11-06 the gate before the model, CleanupStep.hasWorkForModel, gained repeats:
+    a Chinese character, an English word or a phrase of up to four of them said twice in a
+    row, also with a comma or a space between. So a dictation with a repeat and no filler
+    or correction cue goes to the model too. Main's gate had sent 8 of the 22 accidental
+    repeats of the repeat cases to the model, which cleaned up 7 of them. A Release build
+    on the same M5 Pro with the installed model, without the comparison, took 276 s for
+    cleanupCases. With the skip gate, main's gate in brackets:
+
+    | Set | Sent to the model | Exact |
+    |---|---|---|
+    | regular, 182 | 136 (133) | 164 (164) |
+    | adversarial, 70 | 19 (18) | 68 (68) |
+    | meaning, 20 | 13 (12) | 18 (18) |
+    | repeats, 46 | 46 (10) | 42 (32) |
+    | numbers, 672 | 56 (28) | 669 (669) |
+
+    The runs without the gate gave main's results case for case, and no case that was exact
+    on main changed. The accidental repeats went from 8 to 18 of 22 exact, and all 24
+    repeats that are meant stayed. The model still keeps a character said twice inside a
+    word (这这个, 客客户 and 中中英, the last one from a beta user) and leaves the comma in
+    所以，所以我们. The pasted adversarial outputs that differ from the expected text are
+    the same four as before. Three wordings of a third kind of change in the prompt, for
+    words said twice by accident, were measured the same day, and none is used, see
+    RewritePrompt.
+
+    20 more repeat cases, rp47 to rp66, were written after that measurement, and both
+    gates were measured again on all 66, each in a Release build on the same Mac. Every
+    case the new runs share with the first two gave the same result. With the skip gate,
+    60 of the 66 repeat cases were exact (43 with main's gate), 18 of the 20 new ones
+    (11), and all 11 new repeats that are meant stayed. Without the gate, the model got 26
+    of the 31 accidental repeats right and kept all 35 that are meant. The gate leaves out
+    rp55, a restart of six characters that the model gets right, since it looks for
+    phrases of up to four, and the model keeps the character said twice in 产产品.
 
     On 2026-10-13 the prompt gained rules and two examples that keep words with meaning:
     pronouns, phrases such as 我再想想 and 我考虑一下, both parts of 不是 X，是 Y that sets

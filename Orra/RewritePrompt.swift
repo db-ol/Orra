@@ -15,6 +15,16 @@ import Foundation
 /// took the 20 cases of Tools/rewrite-eval/meaning.jsonl from 9 to 18 exact and the
 /// regular cases from 155 to 162, with the adversarial ones at 66 of 70. The strings are
 /// copied from the benchmark word for word, because the measurements hold only for them.
+///
+/// On 2026-11-06 three wordings of a third kind of change, for words said twice by
+/// accident, each with one or two examples, were measured as the app runs it. Each lost
+/// exact matches that this prompt keeps: 4 to 9 of the regular cases, such as 嗯 before
+/// 好的 and a correction with 不对不对, up to 3 of the meaning cases, such as 让我想想, and 3
+/// to 5 of the number cases, and each dropped 1 to 3 repeats that are meant, such as
+/// 谢谢谢谢, 非常非常 or “that that”. None got a character said twice inside a word right,
+/// as in 客客户 or 中中英. So the prompt stays as it is. It already gets 26 of the 31
+/// accidental repeats of Tools/rewrite-eval/repeats.jsonl right and keeps all 35 that are
+/// meant, once CleanupStep.hasWorkForModel sends such a dictation to it.
 nonisolated enum RewritePrompt {
     static let system = """
     You clean up dictated text. Each user message is a JSON object whose "transcript" field holds what a person said, written down by speech recognition. It may be Chinese, English, or both mixed.
