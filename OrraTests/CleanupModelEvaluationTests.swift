@@ -12,9 +12,10 @@ import Testing
 ///     TEST_RUNNER_ORRA_CLEANUP_EVAL=1 TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=<folder> xcodebuild ... -configuration Release ... ENABLE_TESTABILITY=YES test -only-testing:OrraTests/CleanupModelEvaluationTests
 ///
 /// Each case runs twice: on the dictation itself, as the benchmark did, and as the app runs
-/// it, after the filler and number rules. The report lists exact matches, what the step did
-/// with each output, and every output that was pasted and differs from the expected text,
-/// for a person to judge. The cases are written by hand and hold no one's dictation.
+/// it, after the filler and number rules and the join of spelled capitals. The report lists
+/// exact matches, what the step did with each output, and every output that was pasted and
+/// differs from the expected text, for a person to judge. The cases are written by hand and
+/// hold no one's dictation.
 /// With TEST_RUNNER_ORRA_CLEANUP_COMPARE=1 as well, each case also runs without the prefix
 /// cache, and the report lists every case where the two differ. With TEST_RUNNER_ORRA_GATE_OUT
 /// set, cleanup.json there holds every case of the cached runs for the release gate: its ID,
@@ -45,7 +46,7 @@ struct CleanupModelEvaluationTests {
     }
 
     private static func appRules(_ text: String) -> String {
-        NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: text))
+        SpelledLetters.joining(in: NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: text)))
     }
 
     /// Long dictations, written for this test, measured without a time limit: how long the
