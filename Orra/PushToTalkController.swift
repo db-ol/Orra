@@ -1708,8 +1708,8 @@ final class PushToTalkController {
                 // checks. Numbers only.
                 logger.notice("Release to paste took \(pasted.total, privacy: .public) for \(recording.duration, privacy: .public) s of audio: \(pasted.summary, privacy: .public)")
                 onTimings(pasted)
-                // The words are in the text before translation.
-                markVocabularyUsed(in: isTranslation ? originalText ?? text : text)
+                // The words are in the text before translation or polish.
+                markVocabularyUsed(in: isTranslation || isPolish ? originalText ?? text : text)
                 // Orra never learns from a translated or polished paste: a fix of a rewritten
                 // text is no misheard word. Nor from Japanese or Spanish, since learning
                 // judges a fix by rules for Chinese and English: a Spanish accent fix, such

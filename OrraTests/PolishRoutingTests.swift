@@ -257,6 +257,31 @@ struct PolishRoutingTests {
         #expect(inserter.inserted.last == "I think we should ship on Monday.")
     }
 
+    /// A polished paste dates the vocabulary words of the text before the polish, as a
+    /// translated paste dates those before the translation, so a word the polish left out
+    /// still counts as used and stays among those the speech model gets.
+    @Test func aPolishedPasteDatesTheWordsOfTheTextBeforeIt() async throws {
+        let model = Model(polish: #"{"polished": "版本中秋前发出去，大家抓紧。"}"#)
+        let pasteTime = Date(timeIntervalSince1970: 5_000)
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            cleanup: model.closures(cleanupOn: false, style: .concise),
+            insert: inserter.insert,
+            frontmostApp: { [workspace] in workspace.frontmost },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero,
+            vocabulary: vocabularyWords("中秋节", "发版", added: Date(timeIntervalSince1970: 1_000)),
+            now: { pasteTime }
+        )
+        await controller.loadModel()
+        speech.reply = "这个版本中秋节之前要发出去，大家抓紧。"
+        try await dictate(controller)
+        #expect(inserter.inserted == ["版本中秋前发出去，大家抓紧。"])
+        #expect(controller.vocabulary.map(\.lastUsed) == [pasteTime, nil])
+    }
+
     /// A polish the model gave back as it was is the text the rules left: Orra may learn
     /// from it, and Paste Original Text has nothing to bring back.
     @Test func anUnchangedPolishIsNoRewrite() async throws {
