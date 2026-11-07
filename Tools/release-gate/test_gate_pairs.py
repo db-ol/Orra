@@ -217,9 +217,11 @@ class SummaryTests(unittest.TestCase):
         # 0002_ja holds a digit, so read speech without digits is the other two: 1 error in 14.
         self.assertEqual(rates["text"], {"cer_ja": {"rate": gate.rate(1, 14), "clips": 2}})
 
-    def write_pair_run(self, language: str = "Japanese") -> None:
+    def write_pair_run(self, language: str = "Japanese", english: str = "Send me the report.") -> None:
         out = self.data.out
         write_raw(out / "raw", "corpus", {"0000_en_short": row("send the report"), "0001_en_short": row("call me back")}, None)
+        # The sets suite with Chinese chosen, whose English line e01 the Japanese set holds too.
+        gate.write_json(out / "raw" / "sets-raw.json", {"suite": "sets", "clips": [{"set": "gate-core", "id": "e01", "text": "Send me the report."}]})
         raw = out / "pairs" / "ja" / "raw"
         write_raw(raw, "corpus", {
             "0000_en_short": row("send the report"), "0001_en_short": row("um call me back"),
@@ -229,7 +231,7 @@ class SummaryTests(unittest.TestCase):
         write_raw(raw, "fleurs", {"0000_ja": row("明日は雨です"), "0001_ja": row("駅で会いましょう"), "0002_ja": row("Start at three", passes=2, stood="english")}, language)
         sets = {"suite": "sets", "clips": [
             {"set": "ja-mirror", "id": "m01", "text": "午後のmeetingの前に"},
-            {"set": "ja-mirror", "id": "e01", "text": "Send me the report."},
+            {"set": "ja-mirror", "id": "e01", "text": english},
         ]}
         if language:
             sets["dictation_language"] = language
@@ -254,6 +256,21 @@ class SummaryTests(unittest.TestCase):
         # meeting is an accepted spelling of ミーティング, so the lenient rate is right.
         self.assertEqual((sets["groups"]["mer_ja_en"] > 0, sets["lenient_groups"]["mer_ja_en"]), (True, 0.0))
         self.assertEqual(sets["sets"]["ja-mirror"]["clips"], 2)
+        self.assertEqual(sets["english"], {"clips": 1, "unlike": []})
+
+    def test_english_set_lines_compare_with_the_chinese_sets_run(self):
+        self.write_pair_run(english="Send me the report, um.")
+        gate.summarize_pairs(self.data.out, self.data.sets, self.data.corpora())
+        self.assertEqual(gate.read_json(self.data.out / "pairs" / "ja" / "sets.json")["english"], {"clips": 1, "unlike": ["ja-mirror/e01"]})
+        # Without the sets suite in the run, there is nothing to compare with, and the
+        # Chinese pair's own sets need no comparison.
+        (self.data.out / "raw" / "sets-raw.json").unlink()
+        raw = self.data.out / "pairs" / "zh" / "raw"
+        raw.mkdir(parents=True)
+        gate.write_json(raw / "sets-raw.json", {"suite": "sets", "dictation_language": "Chinese", "clips": [{"set": "zh-mirror", "id": "m01", "text": "下午 meeting 之前"}]})
+        gate.summarize_pairs(self.data.out, self.data.sets, self.data.corpora())
+        self.assertIsNone(gate.read_json(self.data.out / "pairs" / "ja" / "sets.json")["english"])
+        self.assertNotIn("english", gate.read_json(self.data.out / "pairs" / "zh" / "sets.json"))
 
     def test_a_raw_file_of_another_language_stops_the_summary(self):
         for language in ("Spanish", None):
@@ -369,6 +386,11 @@ class CompareTests(unittest.TestCase):
         summary["english"] = None
         self.write(self.cand, "es", "corpus", summary)
         self.assertIn("pairs es corpus English clips against Chinese chosen: no corpus suite in this run", gate.compare(self.base, self.cand, ["pairs"]).lines)
+        # The English lines of the sets the same way.
+        sets = sets_summary(0)
+        sets["english"] = {"clips": 1, "unlike": ["es-core/en_terms_1"]}
+        self.write(self.cand, "es", "sets", sets)
+        self.assertIn("pairs es sets English clips pasted unlike with Chinese chosen: 1 of 1, not barred yet", gate.compare(self.base, self.cand, ["pairs"]).lines)
 
     def test_wrong_pairs_are_shown_and_never_fail(self):
         summary = {"fleurs": {"ko": {"group": "cer_ko", "error_rate": 40.0, "clips": 50, "extra_passes": {"0000_ko": 2}, "other_language": ["0000_ko"]}}}

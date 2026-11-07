@@ -179,9 +179,10 @@ Shown and not barred:
   corpus). In a Chinese set, mixed counts as mer_mixed and zh as cer_zh. English lines
   count as wer_en.
 - the English clips of the speech corpus whose pasted text, after the rules, differs from
-  their text in the corpus suite of the same run, so only when that suite ran too. This
-  turns into a rule once the English filler rule runs for every pair, since a Spanish
-  user's short English keeps um today.
+  their text in the corpus suite of the same run, and the English lines of a pair's sets,
+  which hold those of gate-core and latency-say unchanged, whose text differs from the sets
+  suite's. Each needs that suite in the same run. This turns into a rule once the English
+  filler rule runs for every pair, since a Spanish user's short English keeps um today.
 
 wrong-pairs shows, for each pair chosen and each other pair, the error rate of the other
 pair's group, the clips pasted in another language and the clips sent to another pass.

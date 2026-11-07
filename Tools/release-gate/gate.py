@@ -1063,6 +1063,26 @@ def english_unlike_chinese(raw: dict, chinese: dict | None, manifest: dict[str, 
     return {"clips": len(ids), "unlike": unlike}
 
 
+def english_set_lines(raw: dict, chinese: dict | None, sets_dir: Path) -> dict | None:
+    """The English lines of a pair's sets, which hold those of gate-core and latency-say
+    unchanged, whose text differs from the same line in the sets suite of the same run. None
+    without that run."""
+    if chinese is None:
+        return None
+    texts = {row["id"]: row["text"] for row in chinese["clips"]}
+    manifests: dict[str, dict] = {}
+    lines, unlike = [], []
+    for row in raw["clips"]:
+        if row["set"] not in manifests:
+            manifests[row["set"]] = load_set_manifest(sets_dir / row["set"])
+        if manifests[row["set"]][row["id"]]["language"] != "en" or row["id"] not in texts:
+            continue
+        lines.append(f"{row['set']}/{row['id']}")
+        if row["text"] != texts[row["id"]]:
+            unlike.append(lines[-1])
+    return {"clips": len(lines), "unlike": sorted(unlike)}
+
+
 def read_rates(raw: dict, manifest: dict[str, dict]) -> dict:
     """Each group's rate in percent on the clips of read speech without digits, with their
     count, on text and on ruled_text."""
@@ -1130,8 +1150,10 @@ def summarize_pairs(out: Path, pair_sets: Path, corpora: list[Path]) -> list[str
     corpus folders and the sets in pair_sets. A run without its raw file is left out, as
     summarize leaves out a suite, and compare then misses it."""
     manifest = merged_manifest(corpora)
-    chinese_file = out / "raw" / "corpus.json"
-    chinese = read_json(chinese_file) if chinese_file.exists() else None
+    # The runs of the corpus and sets suites with Chinese chosen, when they ran too.
+    corpus_file, sets_file = out / "raw" / "corpus.json", out / "raw" / "sets-raw.json"
+    chinese = read_json(corpus_file) if corpus_file.exists() else None
+    chinese_sets = read_json(sets_file) if sets_file.exists() else None
     written = []
     for root in sorted(path for path in (out / "pairs").glob("*") if path.is_dir()):
         pair, raw = root.name, root / "raw"
@@ -1155,6 +1177,8 @@ def summarize_pairs(out: Path, pair_sets: Path, corpora: list[Path]) -> list[str
             check_language(document, pair, path)
             summary = summarize_sets(document, pair_sets)
             summary.update(set_groups(summary, pair_sets, pair))
+            if pair != "zh":
+                summary["english"] = english_set_lines(document, chinese_sets, pair_sets)
             write_json(root / "sets.json", summary)
             written.append(f"pairs/{pair}/sets")
     for root in sorted(path for path in (out / "wrong-pairs").glob("*") if path.is_dir()):
@@ -1209,9 +1233,11 @@ def read_rate_lines(base: dict, cand: dict, result: Result, name: str) -> None:
 def english_line(summary: dict, result: Result, name: str) -> None:
     """The English clips pasted unlike with Chinese chosen, a rule once
     ENGLISH_SAME_TEXT_BARRED is on. It needs no baseline."""
-    english = summary.get("english")
+    if "english" not in summary:
+        return
+    english = summary["english"]
     if english is None:
-        result.lines.append(f"{name} English clips against Chinese chosen: no corpus suite in this run")
+        result.lines.append(f"{name} English clips against Chinese chosen: no {name} suite in this run")
         return
     unlike = english["unlike"]
     result.lines.append(f"{name} English clips pasted unlike with Chinese chosen: {len(unlike)} of {english['clips']}" + ("" if ENGLISH_SAME_TEXT_BARRED else ", not barred yet"))
@@ -1244,8 +1270,7 @@ def compare_pairs(baseline: Path, candidate: Path, result: Result) -> None:
                     sub.fail(f"{name}: in the baseline without a result")
                 continue
             cand = read_json(cand_file)
-            if name == "corpus":
-                english_line(cand, sub, name)
+            english_line(cand, sub, name)
             if not base_file.exists():
                 sub.lines.append(f"{name}: no baseline, nothing to compare")
                 continue
