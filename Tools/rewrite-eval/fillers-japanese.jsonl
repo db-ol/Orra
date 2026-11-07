@@ -1,0 +1,16 @@
+{"id": "fja01", "category": "filler_en", "lang": "ja", "input": "Um、明日の会議は3時からです。", "cleanup": "明日の会議は3時からです。", "rules": true, "notes": "Um with 、 at the start."}
+{"id": "fja02", "category": "filler_en", "lang": "ja", "input": "Um, 明日の会議は午後からです。", "cleanup": "明日の会議は午後からです。", "rules": true, "notes": "Um with an ASCII comma and a space."}
+{"id": "fja03", "category": "filler_en", "lang": "ja", "input": "この資料、uh, 金曜日までに確認してもらえますか？", "cleanup": "この資料、金曜日までに確認してもらえますか？", "rules": true, "notes": "uh with its comma after 、. The 、 stays."}
+{"id": "fja04", "category": "filler_en", "lang": "ja", "input": "Uh、すみません、もう一回言ってもらえますか？", "cleanup": "すみません、もう一回言ってもらえますか？", "rules": true, "notes": "Uh at the start of a request."}
+{"id": "fja05", "category": "filler_en", "lang": "ja", "input": "PRは、um、まだレビュー中です。", "cleanup": "PRは、まだレビュー中です。", "rules": true, "notes": "um between two 、. One stays."}
+{"id": "fja06", "category": "filler_en", "lang": "ja", "input": "Um、Slackで送っておきます。", "cleanup": "Slackで送っておきます。", "rules": true, "notes": "An English name after the filler keeps its capital."}
+{"id": "fja07", "category": "filler_en", "lang": "ja", "input": "明日の um 会議は uh 午後です。", "cleanup": "明日の会議は午後です。", "rules": true, "notes": "The spaces around a filler between Japanese words go with it."}
+{"id": "fja08", "category": "filler_en", "lang": "ja", "input": "このAPIはuh使いにくいです。", "cleanup": "このAPIは使いにくいです。", "rules": true, "notes": "uh right between kana and kanji."}
+{"id": "fja09", "category": "filler_en", "lang": "ja", "input": "今日はありがとうございました。Um、次回は来週です。", "cleanup": "今日はありがとうございました。次回は来週です。", "rules": true, "notes": "Um at the start of a second sentence."}
+{"id": "fja10", "category": "filler_en", "lang": "ja", "input": "Um… 少し考えさせてください。", "cleanup": "少し考えさせてください。", "rules": true, "notes": "An ellipsis goes with the filler."}
+{"id": "fja11", "category": "filler_en", "lang": "ja", "input": "Erm、それは来月の予定です。", "cleanup": "それは来月の予定です。", "rules": true, "notes": "Erm."}
+{"id": "fja12", "category": "control_keep", "lang": "ja", "input": "えーと、明日の会議は10時からです。", "cleanup": "えーと、明日の会議は10時からです。", "rules": true, "notes": "えーと is a Japanese filler, which the English rule does not know."}
+{"id": "fja13", "category": "control_keep", "lang": "ja", "input": "Um？今なんて言いましたか？", "cleanup": "Um？今なんて言いましたか？", "rules": true, "notes": "A filler before a question mark stays."}
+{"id": "fja14", "category": "control_keep", "lang": "ja", "input": "「um」と書かないでください。", "cleanup": "「um」と書かないでください。", "rules": true, "notes": "A quoted filler stays."}
+{"id": "fja15", "category": "control_keep", "lang": "ja", "input": "UMの資料を確認しました。", "cleanup": "UMの資料を確認しました。", "rules": true, "notes": "UM in capitals is an acronym."}
+{"id": "fja16", "category": "control_keep", "lang": "ja", "input": "umbrellaという単語です。", "cleanup": "umbrellaという単語です。", "rules": true, "notes": "um inside a word."}

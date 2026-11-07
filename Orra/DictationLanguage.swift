@@ -7,9 +7,10 @@ import Foundation
 /// Chinese, Mandarin and Cantonese, is how Orra has always worked. Japanese and Spanish are
 /// a beta. LanguageGuard accepts text in them in place of Chinese and asks the speech model
 /// for them before English, see LanguageGuard.verdict(on:for:). Their text skips what was
-/// made for Chinese and English: simplified characters, the filler and number rules, the
-/// cleanup model, whose prompt and RewriteGuard know those two languages only, and learning
-/// from corrections. English text of such a user takes them as before.
+/// made for Chinese and English: simplified characters, the Chinese fillers and the number
+/// rule, the cleanup model, whose prompt and RewriteGuard know those two languages only,
+/// and learning from corrections. It loses only its English fillers, such as um, see
+/// LanguageGuard.rules(for:language:). English text of such a user takes them all as before.
 nonisolated enum DictationLanguage: String, CaseIterable, Identifiable, Sendable {
     case chinese = "Chinese"
     case japanese = "Japanese"

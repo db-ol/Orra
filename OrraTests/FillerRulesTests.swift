@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Orra
 
-/// The filler rules on the evaluation set in Tools/rewrite-eval and on focused cases.
+/// The filler rules on the evaluation sets in Tools/rewrite-eval and on focused cases.
 struct FillerRulesTests {
     struct Case: Decodable, CustomTestStringConvertible {
         let id: String
@@ -15,17 +15,24 @@ struct FillerRulesTests {
     }
 
     /// The cases of the evaluation set, read from the source tree.
-    static let cases: [Case] = {
+    static let cases = read("cases.jsonl")
+
+    /// The rule cases of the other dictation languages: English fillers in Japanese,
+    /// Spanish and Korean sentences, and sentences that keep what looks like one.
+    static let pairCases = ["fillers-japanese.jsonl", "fillers-spanish.jsonl", "fillers-korean.jsonl"].flatMap { read($0) }
+
+    /// The cases of a file of Tools/rewrite-eval.
+    private static func read(_ file: String) -> [Case] {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Tools/rewrite-eval/cases.jsonl")
+            .appendingPathComponent("Tools/rewrite-eval/\(file)")
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
         let decoder = JSONDecoder()
         return text.split(separator: "\n").compactMap { line in
             try? decoder.decode(Case.self, from: Data(line.utf8))
         }
-    }()
+    }
 
     /// The filler, particle and control cases that the rules alone should get right.
     static let ruleCases = cases.filter { item in
@@ -45,6 +52,32 @@ struct FillerRulesTests {
         #expect(FillerRules.removingFillers(from: item.input) == item.cleanup)
     }
 
+    @Test func thePairSetsAreRead() {
+        #expect(Self.pairCases.count == 47)
+        #expect(Self.pairCases.allSatisfy { $0.rules })
+        #expect(Set(Self.pairCases.map(\.id)).count == Self.pairCases.count)
+    }
+
+    /// Text in Japanese or Spanish takes the English filler rule alone, see
+    /// LanguageGuard.rules(for:language:), and Korean text will once it has a pair.
+    @Test(arguments: pairCases)
+    func pairCase(_ item: Case) {
+        #expect(FillerRules.removingFillers(from: item.input, englishOnly: true) == item.cleanup)
+    }
+
+    /// A Korean speaker gets every rule today, since every text takes the steps of the
+    /// Chinese pair, and the Korean cases hold there too.
+    @Test(arguments: pairCases.filter { $0.id.hasPrefix("fko") })
+    func koreanCaseWithEveryRule(_ item: Case) {
+        #expect(FillerRules.removingFillers(from: item.input) == item.cleanup)
+    }
+
+    /// The English rule alone leaves the Chinese fillers as they are.
+    @Test(arguments: ["呃，我们走吧。", "我觉得呃这样不好。", "嗯，我们先开会。", "额，文件发你了。", "啊，我忘了带钥匙。"])
+    func theEnglishRuleAloneKeepsChineseFillers(_ input: String) {
+        #expect(FillerRules.removingFillers(from: input, englishOnly: true) == input)
+    }
+
     /// The space where a filler stood stays between two Latin words, also with accents,
     /// between Chinese and a Latin word, also with accents, and between two Hangul words,
     /// but not between Chinese or Japanese characters.
@@ -58,6 +91,7 @@ struct FillerRulesTests {
     ])
     func theSpaceBetweenWordsStays(_ input: String, _ expected: String) {
         #expect(FillerRules.removingFillers(from: input) == expected)
+        #expect(FillerRules.removingFillers(from: input, englishOnly: true) == expected)
     }
 
     /// A Latin letter with an accent is part of the word, and so is Hangul right after an

@@ -25,6 +25,10 @@ import Foundation
 /// A filler in quotation marks is quoted, not spoken, and stays. Um and Uh after a title
 /// such as Dr. are surnames.
 ///
+/// With `englishOnly` only the English fillers go. That is for a sentence in a dictation
+/// language other than Chinese, such as Japanese or Spanish, which the Chinese rules were
+/// not made for, see LanguageGuard.rules(for:language:).
+///
 /// 吧, 呢, 嘛, 呀, a 啊 at the end of a sentence, 那个, 这个, like and repeated words such as
 /// 看看 are never touched, because they often mean something. A filler before a question
 /// mark stays too (嗯？). The comma or space a filler leaves behind goes with it, but a
@@ -63,13 +67,13 @@ nonisolated enum FillerRules {
         var isCapitalizedWord: Bool
     }
 
-    static func removingFillers(from text: String) -> String {
+    static func removingFillers(from text: String, englishOnly: Bool = false) -> String {
         var characters = Array(text)
         var output: [Character] = []
         var removedAny = false
         var index = 0
         while index < characters.count {
-            guard let filler = filler(at: index, in: characters, after: output) else {
+            guard let filler = filler(at: index, in: characters, after: output, englishOnly: englishOnly) else {
                 output.append(characters[index])
                 index += 1
                 continue
@@ -83,8 +87,8 @@ nonisolated enum FillerRules {
         return result
     }
 
-    private static func filler(at index: Int, in characters: [Character], after output: [Character]) -> Filler? {
-        guard let found = unquotedFiller(at: index, in: characters, after: output) else { return nil }
+    private static func filler(at index: Int, in characters: [Character], after output: [Character], englishOnly: Bool) -> Filler? {
+        guard let found = englishOnly ? englishFiller(at: index, in: characters) : unquotedFiller(at: index, in: characters, after: output) else { return nil }
         if found.start > 0, quotes.contains(characters[found.start - 1]) { return nil }
         if found.end < characters.count, quotes.contains(characters[found.end]) { return nil }
         return found

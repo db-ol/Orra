@@ -16,11 +16,11 @@ import Testing
 ///     TEST_RUNNER_ORRA_TRANSLATION_PAIR_EVAL=both TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=<folder> xcodebuild ... -configuration Release ... ENABLE_TESTABILITY=YES test -only-testing:OrraTests/TranslationPairEvaluationTests
 ///
 /// Each case runs as the app runs it for a user who dictates in that language: English text
-/// after the filler and number rules and Japanese or Spanish text as heard, through the
-/// translation step with cleanup on, once into each target of the pair. The report scores
-/// the automatic direction, which picks one of the two runs, and each fixed target, as
-/// TranslationModelEvaluationTests does, with how often the direction rule gave the
-/// labelled language, the checks that held translations back, and the times. It holds
+/// after the filler and number rules and Japanese or Spanish text after the English filler
+/// rule, through the translation step with cleanup on, once into each target of the pair.
+/// The report scores the automatic direction, which picks one of the two runs, and each
+/// fixed target, as TranslationModelEvaluationTests does, with how often the direction rule
+/// gave the labelled language, the checks that held translations back, and the times. It holds
 /// counts, times and case IDs only. With TEST_RUNNER_ORRA_TRANSLATION_DETAILS=<file> it
 /// also writes every run with its text, one JSON object per line, for a person to judge.
 ///
@@ -133,10 +133,9 @@ struct TranslationPairEvaluationTests {
     }
 
     /// The text the step gets in the app: English through the filler and number rules, the
-    /// dictation language and other text as heard.
+    /// dictation language through the English filler rule, and other text as heard.
     private static func source(_ input: String, _ language: DictationLanguage) -> (text: String, takesSteps: Bool) {
-        let takes = LanguageGuard.takesChineseAndEnglishSteps(input, for: language)
-        return (takes ? NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: input)) : input, takes)
+        (DictationRules.ruled(input, for: language), LanguageGuard.takesChineseAndEnglishSteps(input, for: language))
     }
 
     private static func run(_ source: String, on route: TranslationRoute, cleansUp: Bool, engine: RewriteEngine) async -> Run {
