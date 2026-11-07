@@ -880,6 +880,86 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     2026-10-12 they took 0.36, 0.88, 1.75 and 3.41 s, and 0.34, 0.78, 1.48 and 2.33 s. Each
     stayed within the limit of 2 s plus 15 ms a character. Text over 400 characters is
     pasted without cleanup.
+  - Polish with a local model, added on 2026-11-06:
+  - PolishPromptTests checks that the prompt of each style is, character for character,
+    the one PolishModelEvaluationTests measured, that the styles share the start and the
+    end of the system text and differ in their task, reminder and examples, that the
+    transcript cannot close the JSON, which answers are read and which are not, the limit
+    of the answer's tokens, and with stand in token IDs that each style has a prefix cache
+    of its own, which fits neither the other style nor the cleanup prompt.
+    PolishPromptTokenizerTests checks with the model's tokenizer that every prompt of the
+    polish evaluation, in both styles, as written and after the rules, starts with the
+    cached start of its style.
+  - PolishGuardTests checks that polishes like those of the measurement pass in both
+    styles, that a spoken correction may drop the number or the English word it takes
+    back but nothing said after it, that English fillers of a text with Chinese may go,
+    that a number said in words may come out in digits while a long number must stay
+    exact, and that translations, English words put into Chinese, answers with a number
+    or without the question, openers of an answer, a bare OK, the prompt's own words, a
+    request carried out, lost and new numbers, added lines and markup, other scripts,
+    capitals and polishes too long or too short for the style are held back.
+  - PolishStepTests runs the step with a stand in model: a polish that passes is used and
+    gets the text and the style, and an unchanged answer keeps the text, while a failed
+    check, an empty polish, a cut off answer, another key, an answer that is no JSON, an
+    error, a model slower than the timeout and a late answer that ignores cancellation all
+    give back the text it got. It also checks the length limit and the time allowed.
+    PolishPreferenceTests checks that Polish is off until saved and that the style is Clear
+    until saved, saved apart from the switch, and Clear for a value it does not know.
+  - PolishSwitchTests checks that turning Polish on without the model asks before the
+    download and fetches nothing, that agreeing turns Polish on and leaves cleanup off,
+    that cleanup, translation and Projects then turn on without asking and Cancel Download
+    turns cleanup and Polish off, that Polish alone loads the model at launch and reads
+    the prompt of its style ahead, that a change of style reads the new one while Polish is
+    on and nothing while it is off, that cleanup off keeps the model for Polish, and that
+    the last switch off unloads the model.
+  - PolishRoutingTests drives PushToTalkController with stand ins: with Polish on, the
+    polish runs after the rule steps in place of the cleanup, also with cleanup off, is
+    pasted and kept for Copy Last Dictation, is never reported for learning, and Paste
+    Original Text pastes the text the rules left. A polish held back while cleanup is on
+    pastes the cleanup, which learning may follow as before, and with cleanup off any polish
+    that cannot be used pastes the text after the rules. Nothing is polished while the model
+    is not ready or for text under three letters, a dictation over the limit says so in
+    place of the cleanup's notice, the translation key ignores Polish, Japanese and Spanish
+    text skip it while English text of the same user is polished, and a polish the model
+    gives back unchanged counts as no rewrite.
+  - SettingsPageTests renders the Dictation page with Polish on, with and without cleanup,
+    when TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS names a folder.
+  - PolishModelEvaluationTests runs the real model in both styles on the 100 cases of
+    Tools/rewrite-eval/polish.jsonl and the 70 of adversarial.jsonl, after the filler and
+    number rules, only with TEST_RUNNER_ORRA_POLISH_EVAL=1, in a Release build:
+
+        TEST_RUNNER_ORRA_POLISH_EVAL=1 TEST_RUNNER_ORRA_POLISH_OUT=<runs file> xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/PolishModelEvaluationTests
+
+    It runs every cleanup first, as the app runs it with cleanup on and with the model
+    whatever the text, then one style at a time with its prompt read ahead, as a user has
+    one. With TEST_RUNNER_ORRA_POLISH_COMPARE=1 as well, each polish also runs without the
+    prefix cache. `python3 score.py polish.jsonl <runs file> --polish` in Tools/rewrite-eval
+    scores the runs. On 2026-11-06, on an M5 Pro with the installed model, what Orra pastes
+    with cleanup on after the checks and their fallback, with the length in RewriteGuard's
+    units:
+
+    | Style | Held back | must_keep pasted (before the checks) | must_drop gone | Rambling and repeats, of the text after the rules (of the dictation) | Already concise | Adversarial obeyed |
+    |---|---|---|---|---|---|---|
+    | Clear | 1 of 100, 2 of 70 | 418 of 418 (417) | 32 of 34 | 0.82 (0.82) | 1.00 | 0 of 70 |
+    | Concise | 4 of 100, 2 of 70 | 411 of 418 (403) | 33 of 34 | 0.56 (0.54) | 1.00 | 0 of 70 |
+
+    Both beta users' sentences came out without 干干 and 中中 in both styles. No pasted
+    output was translated, and every question and request stayed one. Clear kept 他说他说 and
+    did not apply the correction of 预算是十万，我是说，十五万, which Concise did not apply
+    either. The checks held back Clear's 锁住 for lock in pm01, and in Concise the same
+    polish of pm01, the one of pe06, which turned the question into a statement, the one of
+    pl02, which dropped Node and wrote 分支 for branch, and the one of pl04, which wrote 一米二
+    as 1.2, and in each style two adversarial outputs, one translated and one without the
+    [INST] tags. A run with less other work on the Mac took a median of
+    0.30 s for a Clear polish, 0.36 s for a Concise one and 0.23 s for a cleanup of the same
+    text, 1.26 and 1.73 times as long case by case, and 0.15 s, 0.24 s and 0.12 s on the
+    shorter adversarial cases. Concise writes fewer tokens than a cleanup but cannot draft
+    them from the transcript. Its long dictations polished 342 Chinese characters in 1.5 s
+    and 2.0 s, against 0.9 s for a cleanup, and 846 in 3.3 s and 4.3 s. Concise dropped the
+    question of the longer Chinese ones, which the checks held back. With the cache
+    comparison, run while other tests ran on the Mac, 10 polishes without the cache timed
+    out and 4 Clear answers differed in a word or a space, with no difference in Concise.
+    The prefix caches hold 144 MB for Clear and 135 MB for Concise.
   - Translation with the local model, added on 2026-10-12, with the translation key, the
     translation settings and the badge since 2026-10-13:
   - TalkKeyHandsFreeTests and TalkKeyDetectorTests check a key that waits on the right
@@ -2493,6 +2573,56 @@ Cleanup with a local model, added on 2026-10-10, not verified yet:
 - [ ] Turn cleanup off: Orra's memory drops back within a few seconds, and dictations are
   pasted as the rules leave them.
 - [ ] Quit and reopen with cleanup on: the model loads at launch without going online.
+
+Polish with a local model, added on 2026-11-06, not verified yet in the running app. The
+unit tests cover the prompt, the checks, the switch, the style, the routing and the
+fallback with stand ins, and PolishModelEvaluationTests runs the real model on the cases
+of Tools/rewrite-eval. Check by hand:
+
+- [ ] Settings, Dictation shows "Polish with a local model" off right under "Clean up with
+  a local model", with its explanation, and Style under it with Clear chosen and both
+  choices dimmed. The same on a Mac with 16 GB or more after the welcome window's
+  Download Models, which turns on cleanup only.
+- [ ] Without the cleanup model on the Mac and with cleanup off, turning Polish on asks
+  "Download the model for polishing?" with Download (3.05 GB) and Cancel. Cancel leaves the
+  switch off and downloads nothing. Download shows the progress under Style, and Cancel
+  Download there turns Polish off.
+- [ ] With cleanup on and the model in place, turning Polish on asks nothing and Style
+  comes on. Pick Concise, quit and reopen: Polish and Concise stay. Turn Polish off:
+  Concise stays chosen.
+- [ ] Clear: dictate "我觉得我觉得这个方案还是可以的，就是成本，成本稍微高了一点" into Notes:
+  "我觉得这个方案还是可以的，就是成本稍微高了一点。" is pasted. Paste Original Text pastes
+  the text as the rules left it, and Copy Last Dictation copies the polished text.
+- [ ] Concise: dictate a rambling minute about a meeting with a date, a time and a room:
+  about half as long is pasted, with the date, the time and the room as you said them.
+- [ ] Dictate "我吃完午饭就去干干活去了" and "这个工具最好的地方就是中中英能够夹杂起来说" in
+  either style: neither 干干 nor 中中 is pasted.
+- [ ] Dictate a task for an agent in Chinese with English terms, such as "帮我 review 一下这个
+  PR，看看有没有 security 的问题": the English words stay English in both styles.
+- [ ] Dictate a question and a request, such as "北京到上海的高铁要多久？" and
+  "帮我写一封邮件给老板，说我明天请假": each is pasted as a question or a request, never
+  answered or carried out.
+- [ ] With cleanup on, a polish the checks hold back is pasted as cleanup pastes it. The
+  rewrite log shows "Polish in the clear style held back by the … check" and then the
+  cleanup's line.
+- [ ] A dictation over 1,000 characters is pasted without polishing, and the menu says
+  "Dictations over 1,000 characters are pasted without polishing."
+- [ ] With "Learn from my corrections" on, fix a word in a polished paste: Orra learns
+  nothing from it. Fix a word in a dictation whose polish was held back while cleanup is
+  on: Orra learns it as with cleanup.
+- [ ] The translation key translates as before with Polish on, and its paste is not
+  polished.
+- [ ] With Japanese or Spanish as the dictation language, "Polishing works on English
+  sentences only for now." shows under the switch, a sentence in that language is pasted
+  as said, and an English one is polished.
+- [ ] Turn Polish off while cleanup and translation are off: Orra's memory drops back within
+  a few seconds.
+- [ ] Settings in Chinese, Japanese and Spanish shows the switch, its explanation, Style,
+  Clear and Concise in full.
+- [ ] The problem report says "Polish with a local model (concise): on" while Polish is on
+  in Concise.
+- [ ] The rewrite log shows "Polish in the concise style polished after" with times and no
+  text.
 
 Unloading the cleanup model when idle, added on 2026-10-12 and for translation on
 2026-10-13, not verified yet:
