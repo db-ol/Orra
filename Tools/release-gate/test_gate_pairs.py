@@ -37,7 +37,7 @@ def write_set(sets: Path, name: str, pair: str | None, rows: list[dict]) -> None
 
 class Folders:
     """A speech corpus with Chinese FLEURS clips, English, mixed and silence, FLEURS ja and es
-    in one folder and FLEURS ko in another, and one set per pair."""
+    in one folder and FLEURS ko in another, one set per pair, and say clips of ja and es."""
 
     def __init__(self, root: Path):
         self.root = root
@@ -70,6 +70,11 @@ class Folders:
         ])
         write_set(self.sets, "es-mirror", "es", [{"id": "m01", "language": "es", "reference": "antes de la meeting", "context": [], "expect_terms": ["meeting"], "forbid_terms": []}])
         write_set(self.sets, "ko-mirror", "ko", [{"id": "m01", "language": "ko", "reference": "오후 미팅 전에", "context": [], "expect_terms": [], "forbid_terms": []}])
+        # The say clips of the latency runs, without a manifest, so they add no set here.
+        for pair in ("ja", "es"):
+            say = self.sets / f"{pair}-latency" / "clips"
+            say.mkdir(parents=True)
+            (say / f"{pair}_short_1.wav").write_bytes(b"")
         self.out = root / "out"
 
     def plan(self, suite: str, pairs: list[str], count: int = 50) -> list[dict]:
@@ -91,21 +96,40 @@ def write_raw(folder: Path, name: str, clips: dict, language: str | None) -> Non
     gate.write_json(folder / f"{name}.json", document)
 
 
+def context_raw(found: int, gave_text: int = 0) -> dict:
+    """The raw file of the context suite with one contextasr_en clip of two terms."""
+    return {"suite": "context", "clips": [{
+        "set": "contextasr_en", "id": "c01", "terms": 2, "distractors": 10, "reference_tokens": 20, "audio_seconds": 30.0,
+        "plain": {"found": 1, "inserted": 0, "errors": 2, "seconds": 1.2},
+        "context": {"found": found, "inserted": 0, "errors": 1, "seconds": 1.3},
+    }], "summary": {"no_speech": {"clips": 3, "gave_text": gave_text}}}
+
+
+def latency_raw(p90: float) -> dict:
+    """The raw file of the latency suite with the total of one mode."""
+    return {"suite": "latency", "rounds": 2, "modes": {"cleanup_off": {
+        "dictations": 2, "steps": {"total": {"median": 300.0, "p90": p90}}, "clips": {"say ja_short_1": {"median": 300.0}},
+    }}}
+
+
 class PlanTests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.data = Folders(Path(self.folder.name))
 
-    def test_each_pair_runs_the_corpus_its_fleurs_clips_and_its_sets(self):
+    def test_each_pair_runs_the_corpus_its_fleurs_clips_the_context_and_latency_suites_and_its_sets(self):
         runs = self.data.plan("pairs", ["zh", "ja", "es"])
         self.assertEqual([run["label"] for run in runs], [
-            "pairs-zh-sets", "pairs-ja-corpus", "pairs-ja-fleurs", "pairs-ja-sets", "pairs-es-corpus", "pairs-es-fleurs", "pairs-es-sets",
+            "pairs-zh-sets",
+            "pairs-ja-corpus", "pairs-ja-fleurs", "pairs-ja-context", "pairs-ja-latency", "pairs-ja-sets",
+            "pairs-es-corpus", "pairs-es-fleurs", "pairs-es-context", "pairs-es-latency", "pairs-es-sets",
         ])
         by_label = {run["label"]: run for run in runs}
         # A pair named twice runs once.
         self.assertEqual([run["label"] for run in self.data.plan("pairs", ["zh", "zh"])], ["pairs-zh-sets"])
-        # Chinese has its corpus run in the corpus suite, so only its sets run here.
+        # Chinese has its corpus, context and latency runs in those suites, so only its sets
+        # run here.
         self.assertEqual(by_label["pairs-zh-sets"], {
             "label": "pairs-zh-sets", "kind": "sets", "language": "Chinese", "name": "sets-raw", "folder": self.data.sets, "clips": None,
             "raw": self.data.out / "pairs" / "zh" / "raw",
@@ -117,6 +141,12 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(fleurs["clips"].read_text(encoding="utf-8"), "0000_ja\n0001_ja\n0002_ja\n")
         self.assertEqual(by_label["pairs-es-fleurs"]["clips"].read_text(encoding="utf-8"), "0000_es\n0001_es\n")
         self.assertEqual(by_label["pairs-es-sets"]["language"], "Spanish")
+        # The context suite reads its own clips, the latency suite the pair's say clips.
+        raw = self.data.out / "pairs" / "ja" / "raw"
+        self.assertEqual(by_label["pairs-ja-context"], {"label": "pairs-ja-context", "kind": "context", "language": "Japanese", "name": "context", "folder": None, "clips": None, "raw": raw})
+        self.assertEqual(by_label["pairs-ja-latency"], {
+            "label": "pairs-ja-latency", "kind": "latency", "language": "Japanese", "name": "latency", "folder": self.data.sets / "ja-latency" / "clips", "clips": None, "raw": raw,
+        })
 
     def test_a_pair_needs_a_dictation_language_one_fleurs_folder_and_a_set(self):
         for pairs in (["ko"], ["ja", "fr"], []):
@@ -131,8 +161,14 @@ class PlanTests(unittest.TestCase):
             gate.plan_runs("pairs", self.data.out, ["ja"], self.data.corpus, [self.data.ko], self.data.sets, 50)
         with self.assertRaises(SystemExit):
             gate.plan_runs("pairs", self.data.out, ["ja"], self.data.corpus, [self.data.root / "nowhere"], self.data.sets, 50)
-        # No set of the pair.
-        (self.data.sets / "es-mirror" / "manifest.jsonl").unlink()
+        # No set of the pair, and for Chinese, which needs its sets only.
+        for name, pair in (("ja-mirror", "ja"), ("zh-mirror", "zh")):
+            (self.data.sets / name / "manifest.jsonl").unlink()
+            with self.subTest(pair=pair), self.assertRaises(SystemExit):
+                self.data.plan("pairs", [pair])
+        # No say clips of the pair, for its latency run.
+        self.data.plan("pairs", ["es"])
+        (self.data.sets / "es-latency" / "clips" / "es_short_1.wav").unlink()
         with self.assertRaises(SystemExit):
             self.data.plan("pairs", ["es"])
 
@@ -166,10 +202,12 @@ class PlanTests(unittest.TestCase):
         with mock.patch.object(sys, "argv", arguments), contextlib.redirect_stdout(printed):
             gate.main()
         lines = [line.split("\t") for line in printed.getvalue().splitlines()]
-        self.assertEqual([len(fields) for fields in lines], [7, 7, 7])
+        self.assertEqual([len(fields) for fields in lines], [7, 7, 7, 7, 7])
         self.assertEqual(lines[0], ["pairs-ja-corpus", "corpus", "Japanese", "corpus", str(self.data.corpus), "-", str(self.data.out / "pairs" / "ja" / "raw")])
         self.assertEqual(lines[1][3:6], ["fleurs", str(self.data.ja_es), str(self.data.out / "pairs" / "ja" / "fleurs-clips.txt")])
-        self.assertEqual(lines[2][:4], ["pairs-ja-sets", "sets", "Japanese", "sets-raw"])
+        self.assertEqual(lines[2], ["pairs-ja-context", "context", "Japanese", "context", "-", "-", str(self.data.out / "pairs" / "ja" / "raw")])
+        self.assertEqual(lines[3][:6], ["pairs-ja-latency", "latency", "Japanese", "latency", str(self.data.sets / "ja-latency" / "clips"), "-"])
+        self.assertEqual(lines[4][:4], ["pairs-ja-sets", "sets", "Japanese", "sets-raw"])
 
 
 class SummaryTests(unittest.TestCase):
@@ -238,12 +276,20 @@ class SummaryTests(unittest.TestCase):
         if language:
             sets["dictation_language"] = language
         gate.write_json(raw / "sets-raw.json", sets)
+        for name, document in (("context", context_raw(found=2)), ("latency", latency_raw(350.0))):
+            if language:
+                document["dictation_language"] = language
+            gate.write_json(raw / f"{name}.json", document)
 
     def test_summarize_pairs_writes_a_summary_per_run(self):
         self.write_pair_run()
         written = gate.summarize_pairs(self.data.out, self.data.sets, self.data.corpora())
-        self.assertEqual(written, ["pairs/ja/corpus", "pairs/ja/fleurs", "pairs/ja/sets"])
+        self.assertEqual(written, ["pairs/ja/corpus", "pairs/ja/fleurs", "pairs/ja/context", "pairs/ja/latency", "pairs/ja/sets"])
         folder = self.data.out / "pairs" / "ja"
+        # The context and latency runs are scored as their suites are.
+        self.assertEqual(gate.read_json(folder / "context.json"), gate.summarize_context(gate.read_json(folder / "raw" / "context.json")))
+        self.assertEqual(gate.read_json(folder / "context.json")["sets"]["contextasr_en"]["context"]["recall"], 100.0)
+        self.assertEqual(gate.read_json(folder / "latency.json"), gate.summarize_latency(gate.read_json(folder / "raw" / "latency.json")))
         corpus = gate.read_json(folder / "corpus.json")
         # The same groups as the corpus suite's, so the same rules compare them.
         self.assertEqual(set(corpus["groups"]["text"]), {"wer_en", "cer_zh", "mer_mixed"})
@@ -278,6 +324,13 @@ class SummaryTests(unittest.TestCase):
         for language in ("Spanish", None):
             with self.subTest(language=language):
                 self.write_pair_run(language)
+                with self.assertRaises(SystemExit):
+                    gate.summarize_pairs(self.data.out, self.data.sets, self.data.corpora())
+        # Each run is checked, those of the context and latency suites too.
+        for name, document in (("context", context_raw(found=2)), ("latency", latency_raw(350.0))):
+            with self.subTest(name=name):
+                self.write_pair_run()
+                gate.write_json(self.data.out / "pairs" / "ja" / "raw" / f"{name}.json", document)
                 with self.assertRaises(SystemExit):
                     gate.summarize_pairs(self.data.out, self.data.sets, self.data.corpora())
 
@@ -354,6 +407,23 @@ class CompareTests(unittest.TestCase):
         self.assertIn("pairs ja sets ja-mirror error rate rose by 10.00 points", rules)
         self.assertIn("pairs/ja/fleurs/0000_ja extra passes 0 -> 2", result.worse)
         self.assertIn("pairs/ja/fleurs/0000_ja pasted in another language", result.worse)
+
+    def test_the_rules_of_the_context_and_latency_suites_hold_per_pair(self):
+        self.write(self.base, "ja", "context", gate.summarize_context(context_raw(found=2)))
+        self.write(self.cand, "ja", "context", gate.summarize_context(context_raw(found=1, gave_text=1)))
+        self.write(self.base, "ja", "latency", gate.summarize_latency(latency_raw(400.0)))
+        self.write(self.cand, "ja", "latency", gate.summarize_latency(latency_raw(600.0)))
+        result = gate.compare(self.base, self.cand, ["pairs"])
+        rules = dict(result.failures)
+        self.assertIn("pairs ja context contextasr_en term recall fell by 50.0 points", rules)
+        self.assertEqual(rules["pairs ja context clips that found all their terms and now miss one"], ["pairs/ja/context/contextasr_en/c01"])
+        self.assertIn("pairs ja context no_speech gave_text rose from 0 to 1", rules)
+        self.assertIn("pairs ja latency cleanup_off total p90 rose from 400.0 to 600.0 ms, more than 20%", rules)
+        self.assertIn("pairs ja context contextasr_en: recall 100.0% -> 50.0%, inserted 0 -> 0, error 5.00% -> 5.00%, p90 1.30 s -> 1.30 s", result.lines)
+        self.assertIn("pairs ja latency cleanup_off total: median 300.0 -> 300.0 ms, p90 400.0 -> 600.0 ms", result.lines)
+        self.assertIn("pairs/ja/context/contextasr_en/c01 terms found 2 -> 1", result.worse)
+        # The same numbers pass.
+        self.assertEqual(gate.compare(self.base, self.base, ["pairs"]).failures, [])
 
     def test_a_clip_that_changes_places_is_listed_without_failing(self):
         self.write(self.base, "es", "fleurs", corpus_summary({"0000_es": 0, "0001_es": 0}, {"0000_es": 1}, ["0000_es"]))

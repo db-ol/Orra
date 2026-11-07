@@ -120,6 +120,20 @@ becomes 80km, one token, which counts against a reference that writes 80 km as a
 of 80km would. The strict rate is the rate as before. A clip without lists scores the same
 both ways, and a run without lists shows no lenient row.
 
+### The scorer of the Swift tests
+
+The evaluations in OrraTests that score text themselves, such as the long dictation and
+context checks, use TranscriptScoring in OrraTests/TestSupport.swift. It has one way for
+every language, the tokens of cer_ko: one per Han character, kana and Hangul syllable or
+jamo, and one per run of other letters and digits. It differs on purpose in a few places:
+it drops apostrophes and the model's `[UNK]`, keeps letters outside ASCII in their word
+where the Chinese and English ways of score.py drop or split them, and knows no accepted
+spellings. `token-cases.jsonl` holds strings in every language of the pairs, Chinese and
+English mixed and each language mixed with English, with the tokens and errors both give,
+and the differences with TranscriptScoring's own tokens and a note. test_score.py checks
+score.py against it and SupportTests checks TranscriptScoring, so the two cannot drift
+apart unnoticed.
+
 ## Steps
 
 1. Build the corpus, about 1 GB of downloads and 140 MB of clips, in a virtual environment

@@ -180,20 +180,31 @@ for suite in $suites; do
 done
 
 # Dictation pairs, runs: each test run of the plan, with its pair chosen, waiting for an
-# installed Orra and for the lock as the suites above do. Then gate.py scores them.
+# installed Orra and for the lock as the suites above do. Then gate.py scores them. A run
+# of the context or latency suite takes the variables of that suite above, the latency
+# suite with the pair's say clips.
 for line in $pair_runs; do
   fields=("${(@ps:\t:)line}")
   label=$fields[1] kind=$fields[2] language=$fields[3] name=$fields[4] folder=$fields[5] clips=$fields[6] raw=$fields[7]
   env=(TEST_RUNNER_ORRA_GATE_OUT=$raw TEST_RUNNER_ORRA_DICTATION_LANGUAGE=$language)
-  if [[ $kind == sets ]]; then
-    env+=(TEST_RUNNER_ORRA_GATE_SETS=$folder)
-    test_id=OrraTests/GateSetEvaluationTests
-  else
-    env+=(TEST_RUNNER_ORRA_SPEECH_EVAL=1 TEST_RUNNER_ORRA_SPEECH_CORPUS_DIR=$folder
-      TEST_RUNNER_ORRA_SPEECH_EVAL_OUT=$raw TEST_RUNNER_ORRA_SPEECH_EVAL_NAME=$name)
-    [[ $clips != - ]] && env+=(TEST_RUNNER_ORRA_SPEECH_CORPUS_CLIPS=$clips)
-    test_id=OrraTests/SpeechCorpusEvaluationTests
-  fi
+  case $kind in
+    corpus)
+      env+=(TEST_RUNNER_ORRA_SPEECH_EVAL=1 TEST_RUNNER_ORRA_SPEECH_CORPUS_DIR=$folder
+        TEST_RUNNER_ORRA_SPEECH_EVAL_OUT=$raw TEST_RUNNER_ORRA_SPEECH_EVAL_NAME=$name)
+      [[ $clips != - ]] && env+=(TEST_RUNNER_ORRA_SPEECH_CORPUS_CLIPS=$clips)
+      test_id=OrraTests/SpeechCorpusEvaluationTests ;;
+    context)
+      env+=(TEST_RUNNER_ORRA_CONTEXT_EVAL=1 TEST_RUNNER_ORRA_CONTEXT_COUNT=$context_count)
+      test_id=OrraTests/RealModelTests/ContextEvaluationTests ;;
+    latency)
+      env+=(TEST_RUNNER_ORRA_LATENCY=1 TEST_RUNNER_ORRA_LATENCY_CLIPS=$folder
+        TEST_RUNNER_ORRA_SPEECH_CORPUS_DIR=$corpus TEST_RUNNER_ORRA_LATENCY_REPORT=$out/logs/$label-report.txt)
+      test_id="OrraTests/LatencyMeasurementTests/dictations()" ;;
+    sets)
+      env+=(TEST_RUNNER_ORRA_GATE_SETS=$folder)
+      test_id=OrraTests/GateSetEvaluationTests ;;
+    *) echo "gate.py planned a run of an unknown kind: $line" >&2; exit 2 ;;
+  esac
   mkdir -p $raw
   while true; do
     wait_for_installed_orra

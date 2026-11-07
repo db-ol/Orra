@@ -29,7 +29,7 @@ see Dictation pairs.
 | sets | GateSetEvaluationTests | Every set of the Chinese pair directly in the gate sets folder, which is every set there without a pair in its set.json, through PushToTalkController with the clip's context as the vocabulary and cleanup off: errors against the reference, expect_terms found and forbid_terms present |
 | projects | ProjectsGateEvaluationTests | The 64 attack items of the synthetic Projects set, sorted and explained in Chinese and in English with the real cleanup model, with search terms and other projects' files as the app chooses them: where each item was filed, the warnings the checks in code showed, and what the window shows, the checked draft included, see below |
 | retrieval | RetrievalEvaluationTests | The labeled mails of the synthetic Projects set and its retrieval supplement: the passages a prompt would hold, at most 6, without search terms and with the terms of the real cleanup model, recall and hit at 6 by kind of mail, and the time of each terms job, see below |
-| pairs | SpeechCorpusEvaluationTests, GateSetEvaluationTests | Each dictation pair with its own pair chosen: the speech corpus and the pair's FLEURS clips for each pair but Chinese, and every pair's sets in the pairs folder, see Dictation pairs |
+| pairs | SpeechCorpusEvaluationTests, RealModelTests/ContextEvaluationTests, LatencyMeasurementTests/dictations(), GateSetEvaluationTests | Each dictation pair with its own pair chosen: the speech corpus, the pair's FLEURS clips, the context suite and the latency suite for each pair but Chinese, and every pair's sets in the pairs folder, see Dictation pairs |
 | wrong-pairs | SpeechCorpusEvaluationTests | With each pair chosen, 50 FLEURS clips of every other pair, Korean included. Outside the release gate, see Dictation pairs |
 
 Each suite is one run of xcodebuild test-without-building, so another job can use the
@@ -64,9 +64,9 @@ the top of the file:
   baseline a kind of mail whose recall at 6 is more than 1 point lower, any mail that lost
   a relevant file it had, or more negative mails that get a passage of another project.
 - pairs: for each pair against the same pair in the baseline, the corpus rules on its run of
-  the speech corpus and on its FLEURS clips, the sets rules on its sets, and on both corpus
-  runs more extra passes of LanguageGuard in all, or more clips pasted in another language,
-  see Dictation pairs.
+  the speech corpus and on its FLEURS clips, the context and latency rules on its runs of
+  those suites, the sets rules on its sets, and on both corpus runs more extra passes of
+  LanguageGuard in all, or more clips pasted in another language, see Dictation pairs.
 - wrong-pairs: none. Its numbers are shown beside the baseline's.
 - every suite: a group, set, mode, step, clip, case or item in the baseline that has no
   result, such as a set whose manifest is missing, a case taken out of Tools/rewrite-eval
@@ -133,36 +133,52 @@ other pairs, each for the pairs `--pairs` names, by default every pair Orra has:
 and es. Korean joins once Orra has the pair. Until then no Korean set runs, and FLEURS ko
 runs in wrong-pairs only.
 
-- pairs: for each pair but Chinese, the 392 clips of the speech corpus and the pair's
-  FLEURS clips, then for every pair its sets in the pairs folder, all with the pair chosen.
-  Chinese has its corpus runs in the corpus suite, so for zh it runs only its sets in the
-  pairs folder, zh-mirror today.
+- pairs: for each pair but Chinese, the 392 clips of the speech corpus, the pair's FLEURS
+  clips, the context suite and the latency suite, then for every pair its sets in the pairs
+  folder, all with the pair chosen. Chinese has those runs in the corpus, context and
+  latency suites, so for zh it runs only its sets in the pairs folder, zh-mirror today.
 - wrong-pairs: with each pair chosen, 50 FLEURS clips of every other pair, at even steps
   through its set, Korean included. It is outside the release gate and runs once per
   release, since a clip in another pair's language pays two or three passes.
+
+The context and latency runs of a pair are those of the two suites with the pair chosen,
+for the bars on silence with a vocabulary and on release to paste:
+
+- context: the 100 contextasr_en clips without and with their terms, and the three clips
+  without speech with the same unrelated terms as the Chinese run, for the bar that
+  silence, noise and hum give no text with a vocabulary. Every pass takes the path of a
+  dictation with the pair: its language check, the echo check of the vocabulary, and Han
+  characters as written. contextasr_zh and ascend_mixed are Chinese speech, another pair's
+  speech for it, so they do not run.
+- latency: the pair's say clips, `<pair>-latency/clips` in the pairs folder, and the six
+  English clips of the corpus, through PushToTalkController with the pair, cleanup off and
+  on. A say clip's name starts with its language and its length, and `ja_mixed_long_1` is
+  Japanese with English words.
 
 A pair's FLEURS clips are those whose lang is its code and whose source is a FLEURS split:
 in the speech corpus for zh (143 clips), and in the folders of `GATE_FLEURS_DIRS` for the
 others, fleurs-ja-es for ja and es and fleurs-ko for ko. A pair's sets are those whose
 `set.json` names it, and a set without one is a Chinese set. `gate.py runs` names the runs
-of a suite and writes their clip lists. Each run is one xcodebuild of
-SpeechCorpusEvaluationTests or GateSetEvaluationTests with
-`TEST_RUNNER_ORRA_DICTATION_LANGUAGE` set to the pair's language (Chinese, Japanese or
-Spanish), and a run of FLEURS clips names its clips with
+of a suite and writes their clip lists, and stops before the build when a pair has no
+FLEURS clips, no set or no say clips. Each run is one xcodebuild of
+SpeechCorpusEvaluationTests, ContextEvaluationTests, LatencyMeasurementTests or
+GateSetEvaluationTests with `TEST_RUNNER_ORRA_DICTATION_LANGUAGE` set to the pair's
+language (Chinese, Japanese or Spanish), and a run of FLEURS clips names its clips with
 `TEST_RUNNER_ORRA_SPEECH_CORPUS_CLIPS`. A name that is no dictation language fails the
 test instead of running as Chinese. `gate.py summarize-pairs` scores the runs into
-`<out>/pairs/<pair>/` (corpus.json, fleurs.json and sets.json, with raw/ and the clip
-list) and `<out>/wrong-pairs/<pair>/summary.json`, and stops when a raw file does not name
-the pair's language. The logs go to `logs/pairs-<pair>-<run>.log` and
+`<out>/pairs/<pair>/` (corpus.json, fleurs.json, context.json, latency.json and sets.json,
+with raw/ and the clip list) and `<out>/wrong-pairs/<pair>/summary.json`, and stops when a
+raw file does not name the pair's language. The logs go to `logs/pairs-<pair>-<run>.log`,
+with the latency report in `logs/pairs-<pair>-latency-report.txt`, and to
 `logs/wrong-pairs-<pair>-<folder>.log`.
 
 The rules of pairs compare each pair with the same pair in the baseline, with the
-tolerances of the corpus and sets suites:
+tolerances of the corpus, context, latency and sets suites:
 
 - corpus and fleurs: every group more than 0.10 points above the baseline (wer_en, cer_zh
   and mer_mixed on the speech corpus, cer_ja or wer_es on FLEURS), and any clip with no
   error in the baseline that has one now.
-- sets: the rules of the sets suite.
+- context, latency and sets: the rules of those suites.
 - corpus and fleurs: more extra passes of LanguageGuard in all, or more clips pasted in
   another language. A clip is pasted in another language when the pass that gave its text
   was told another language than the clip's, such as a Japanese clip pasted from the
@@ -195,6 +211,17 @@ To make a baseline with the pairs and check a branch against it, name the suites
 
 A pull request that changes language code can run `--only pairs`, against a baseline that
 has the pairs. The first run with the pairs measures how long each takes.
+
+The long dictation checks of RealModelTests/DictationQualityTests run by hand, outside the
+gate, for the bar that a long dictation is at most 3 points worse than its clips one by
+one. With a pair they join that pair's FLEURS clips, 58 s in one piece and about 290 s in
+pieces, and every recording takes the path of a dictation with the pair:
+
+    TEST_RUNNER_ORRA_DICTATION_LANGUAGE=Japanese TEST_RUNNER_ORRA_FLEURS_DIR=$HOME/projects/orra-project/bench/fleurs-ja-es xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:'OrraTests/RealModelTests/DictationQualityTests/longDictationStaysAccurate()' -only-testing:'OrraTests/RealModelTests/DictationQualityTests/minutesInPiecesStayAccurate(_:_:_:)'
+
+The context suite and these checks score their texts with TranscriptScoring in
+OrraTests/TestSupport.swift, which counts Hangul per syllable as score.py does, see the
+scorer of the Swift tests in Tools/speech-eval/README.md.
 
 ## The Projects attack set
 
@@ -330,7 +357,7 @@ amounts and codes of the draft only they hold. Its comment has the details.
 | GATE_PROJECTS_OWN_ADDRESSES | none. The set owner's two addresses from the set's README, comma separated, needed by the projects and retrieval suites |
 | GATE_PROJECTS_OWN_NAME | none. The set owner's name from the set's README, needed by the projects and retrieval suites |
 | GATE_PROJECTS_CHOOSE | none. The path of gate-choose.json, which runs the projects suite in its choose mode. Give it an `--out` folder of its own |
-| GATE_PAIR_SETS_DIR | $GATE_SETS_DIR/pairs, the sets of the pairs suite |
+| GATE_PAIR_SETS_DIR | $GATE_SETS_DIR/pairs, the sets of the pairs suite, with each pair's say clips in `<pair>-latency/clips` |
 | GATE_FLEURS_DIRS | $ORRA_BENCH/fleurs-ja-es $ORRA_BENCH/fleurs-ko, the FLEURS folders of the pairs besides Chinese, separated by spaces |
 | GATE_WRONG_PAIR_CLIPS | 50, the clips of each other pair's FLEURS set in wrong-pairs |
 | GATE_DERIVED_DATA | build/DerivedDataRelease |

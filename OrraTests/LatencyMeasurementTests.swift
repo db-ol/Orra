@@ -33,13 +33,21 @@ import Testing
 ///
 /// The report holds durations and counts only, never text. With TEST_RUNNER_ORRA_GATE_OUT
 /// set, `dictations` also writes latency.json there for the release gate.
+///
+/// TEST_RUNNER_ORRA_DICTATION_LANGUAGE picks the dictation pair of `dictations`, see
+/// DictationPair: Chinese by default, as before, or another pair, for its bar on release to
+/// paste in docs/release-gate.md. The controller then runs with that pair, the clips folder
+/// holds the pair's say clips, such as pairs/ja-latency in the gate sets, and of the corpus
+/// it takes only the English strata, since the corpus holds no speech of that pair.
+/// latency.json then names the pair.
 @Suite(.serialized, .enabled(if: LatencyMeasurement.isRequested))
 @MainActor
 struct LatencyMeasurementTests {
     @Test func dictations() async throws {
+        let language = try DictationPair.chosen()
         let speechFolder = try #require(RealModel.folder, "no speech model on this Mac")
         let cleanupFolder = try #require(RewriteTestModel.folder, "no cleanup model on this Mac")
-        let clips = try LatencyMeasurement.clips()
+        let clips = try LatencyMeasurement.clips(for: language)
         try #require(clips.count >= 12)
 
         let speech = Qwen3Engine(folder: { speechFolder })
@@ -101,7 +109,8 @@ struct LatencyMeasurementTests {
             frontmostApp: { 100 },
             lidIsClosed: { false },
             isTrusted: { true },
-            minimumHold: .zero
+            minimumHold: .zero,
+            dictationLanguage: language
         )
         var latest: DictationTimings?
         controller.onTimings = { latest = $0 }
@@ -146,13 +155,13 @@ struct LatencyMeasurementTests {
         }
         await rewrite.unload()
 
-        let report = LatencyReport(runs: runs, speechLoad: speechLoad, clips: clips).text
+        let report = LatencyReport(runs: runs, speechLoad: speechLoad, clips: clips, language: language).text
         print(report)
         Attachment.record(report, named: "latency.txt")
         if let path = LatencyMeasurement.environment["ORRA_LATENCY_REPORT"] {
             try report.write(toFile: path, atomically: true, encoding: .utf8)
         }
-        try GateOutput.write(LatencyReport(runs: runs, speechLoad: speechLoad, clips: clips).gateDocument, named: "latency")
+        try GateOutput.write(LatencyReport(runs: runs, speechLoad: speechLoad, clips: clips, language: language).gateDocument, named: "latency")
     }
 
     /// One pass of the speech model in three parts: the mel features, the audio encoder,
@@ -266,26 +275,43 @@ enum LatencyMeasurement {
         let name: String
         /// short, mid or long.
         let length: String
-        /// zh, en or mixed.
+        /// zh, en or mixed, or for the say clips of another pair its code, such as ja, or
+        /// its code and mixed, such as ja_mixed for Japanese with English words.
         let language: String
         let source: String
         let recording: AudioRecording
     }
 
-    /// The synthetic clips, then three clips of each short and mid stratum of the corpus.
-    static func clips() throws -> [Clip] {
+    /// The language and the length of a say clip from its file name,
+    /// `<language>_<length>_<number>.wav`, such as zh_short_1.wav or ja_mixed_long_1.wav.
+    static func languageAndLength(of name: String) throws -> (language: String, length: String) {
+        let parts = name.replacingOccurrences(of: ".wav", with: "").split(separator: "_")
+        let index = try #require(parts.firstIndex { ["short", "mid", "long"].contains($0) }, "\(name) names no length")
+        try #require(index > 0, "\(name) names no language")
+        return (parts[..<index].joined(separator: "_"), String(parts[index]))
+    }
+
+    /// The strata of the corpus to take clips of with the pair: Chinese, English and mixed
+    /// speech for Chinese, English for another pair.
+    static func corpusStrata(for language: DictationLanguage) -> [String] {
+        language == .chinese ? ["zh_short", "en_short", "mixed", "zh_mid", "en_mid"] : ["en_short", "en_mid"]
+    }
+
+    /// The synthetic clips, then three clips of each short and mid stratum of the corpus that
+    /// the pair takes, see `corpusStrata(for:)`.
+    static func clips(for language: DictationLanguage = .chinese) throws -> [Clip] {
         var clips: [Clip] = []
         if let path = environment["ORRA_LATENCY_CLIPS"] {
             let folder = URL(fileURLWithPath: path, isDirectory: true)
             let names = try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { $0.hasSuffix(".wav") }.sorted()
             for name in names {
-                let parts = name.split(separator: "_")
+                let (clipLanguage, length) = try languageAndLength(of: name)
                 let recording = try SpeechCorpus.recording(folder.appendingPathComponent(name))
-                clips.append(Clip(name: "say " + name.replacingOccurrences(of: ".wav", with: ""), length: String(parts[1]), language: String(parts[0]), source: "say", recording: at48kHz(recording)))
+                clips.append(Clip(name: "say " + name.replacingOccurrences(of: ".wav", with: ""), length: length, language: clipLanguage, source: "say", recording: at48kHz(recording)))
             }
         }
         if let corpus = SpeechCorpus.folder {
-            let strata = ["zh_short", "en_short", "mixed", "zh_mid", "en_mid"]
+            let strata = corpusStrata(for: language)
             let text = try String(contentsOf: corpus.appendingPathComponent("manifest.jsonl"), encoding: .utf8)
             var taken: [String: Int] = [:]
             for line in text.split(separator: "\n") {
@@ -362,11 +388,13 @@ struct LatencyReport {
     let runs: [LatencyMeasurementTests.Run]
     let speechLoad: Duration
     let clips: [LatencyMeasurement.Clip]
+    var language: DictationLanguage = .chinese
 
     private typealias M = LatencyMeasurement
 
     var text: String {
-        var out = "Release to paste, Release build, chip \(SpeechCorpus.chip()), \(clips.count) clips (\(clips.filter { $0.source == "say" }.count) say, \(clips.filter { $0.source == "corpus" }.count) corpus), \(M.rounds) rounds, speech model load \(M.f(M.ms(speechLoad), 0)) ms\n"
+        let chosen = language == .chinese ? "" : ", \(language.rawValue) chosen"
+        var out = "Release to paste, Release build, chip \(SpeechCorpus.chip()), \(clips.count) clips (\(clips.filter { $0.source == "say" }.count) say, \(clips.filter { $0.source == "corpus" }.count) corpus)\(chosen), \(M.rounds) rounds, speech model load \(M.f(M.ms(speechLoad), 0)) ms\n"
         out += "Audio seconds per clip: median \(M.f(M.percentile(clips.map(\.recording.duration), 0.5), 1)), max \(M.f(clips.map(\.recording.duration).max() ?? 0, 1))\n\n"
         for cleanupOn in [false, true] {
             let selected = runs.filter { $0.cleanupOn == cleanupOn }
@@ -375,8 +403,13 @@ struct LatencyReport {
             out += "\n"
         }
         out += "## Total by length and language, ms, median (p90)\n\n| group | n | cleanup off | cleanup on |\n|---|---|---|---|\n"
+        // The languages of another pair's say clips come after the three of Chinese.
+        var languages = ["zh", "en", "mixed"]
+        for clip in clips where !languages.contains(clip.language) {
+            languages.append(clip.language)
+        }
         let groups = ["short", "mid", "long"].map { length in (length, { (run: LatencyMeasurementTests.Run) in run.clip.length == length }) }
-            + ["zh", "en", "mixed"].map { language in (language, { (run: LatencyMeasurementTests.Run) in run.clip.language == language }) }
+            + languages.map { name in (name, { (run: LatencyMeasurementTests.Run) in run.clip.language == name }) }
         for (name, belongs) in groups {
             let off = runs.filter { !$0.cleanupOn && belongs($0) }.map { M.ms($0.timings.total) }
             let on = runs.filter { $0.cleanupOn && belongs($0) }.map { M.ms($0.timings.total) }
@@ -432,7 +465,11 @@ struct LatencyReport {
             }
             modes[cleanupOn ? "cleanup_on" : "cleanup_off"] = ["dictations": selected.count, "steps": steps, "clips": perClip]
         }
-        return ["suite": "latency", "rounds": M.rounds, "speech_load_ms": M.ms(speechLoad), "modes": modes]
+        var document: [String: Any] = ["suite": "latency", "rounds": M.rounds, "speech_load_ms": M.ms(speechLoad), "modes": modes]
+        if language != .chinese {
+            document["dictation_language"] = language.rawValue
+        }
+        return document
     }
 
     private func table(_ runs: [LatencyMeasurementTests.Run]) -> String {

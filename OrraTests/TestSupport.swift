@@ -11,7 +11,10 @@ import Testing
 /// baseline reads 3.73% on fleurs_en and 9.97% on ascend_mixed here, against 3.6 and 9.5 in
 /// the table of docs/asr-baseline.md. Kana and the marks 々 and 〆 count per character like
 /// Han, as Japanese is scored in Tools/speech-eval/score.py, and letters with accents stay in
-/// their word.
+/// their word. Hangul counts per syllable or jamo, as Korean is scored there, so a space
+/// between Korean words never counts. Tools/speech-eval/token-cases.jsonl holds strings that
+/// both count the same way and the few they count differently, such as an apostrophe in a
+/// word, which this drops. SupportTests and test_score.py check both against it.
 enum TranscriptScoring {
     static func tokens(_ text: String, dropFillers: Bool) -> [String] {
         var normalized = text.precomposedStringWithCompatibilityMapping
@@ -25,7 +28,13 @@ enum TranscriptScoring {
         var result: [String] = []
         var word = ""
         for character in normalized {
-            if character.unicodeScalars.contains(where: { isCharacterToken($0.value) }) {
+            let scalars = character.unicodeScalars
+            if scalars.contains(where: { isHangul($0.value) }) {
+                // One token per syllable or jamo, also where jamo that make no syllable, such
+                // as ㅋㅋ, are one Character.
+                if !word.isEmpty { result.append(word); word = "" }
+                result += scalars.filter { isHangul($0.value) }.map { String($0) }
+            } else if scalars.contains(where: { isCharacterToken($0.value) }) {
                 if !word.isEmpty { result.append(word); word = "" }
                 result.append(String(character))
             } else if character.isLetter || character.isNumber {
@@ -45,6 +54,16 @@ enum TranscriptScoring {
         switch value {
         case 0x3005...0x3006, 0x3041...0x3096, 0x309D...0x309F, 0x30A1...0x30FA, 0x30FC...0x30FF, 0x31F0...0x31FF,
              0x3400...0x9FFF, 0xF900...0xFAFF: true
+        default: false
+        }
+    }
+
+    /// Hangul syllables, jamo, compatibility jamo and the extended jamo, the blocks of HANGUL
+    /// in score.py. After the compatibility mapping, compatibility and half width jamo are
+    /// jamo.
+    private static func isHangul(_ value: UInt32) -> Bool {
+        switch value {
+        case 0xAC00...0xD7A3, 0x1100...0x11FF, 0x3131...0x318E, 0xA960...0xA97F, 0xD7B0...0xD7FF: true
         default: false
         }
     }

@@ -14,8 +14,9 @@ rules and their tolerances, which are the constants below. The projects suite al
 bar of its own, which fails with or without a baseline, so show exits 1 when it fails, and
 so does the retrieval suite for its search terms.
 
-The suites of the dictation pairs, pairs and wrong-pairs, run one test per pair and corpus.
-run.sh asks which, and has their raw files scored into OUT/pairs and OUT/wrong-pairs:
+The suites of the dictation pairs, pairs and wrong-pairs, run one test per pair and corpus,
+suite or folder of sets. run.sh asks which, and has their raw files scored into OUT/pairs
+and OUT/wrong-pairs:
 
     python3 gate.py runs pairs|wrong-pairs OUT --corpus DIR --fleurs DIR ... --pair-sets DIR [--pairs zh,ja,es] [--count 50]
     python3 gate.py summarize-pairs OUT --pair-sets DIR --corpora DIR ...
@@ -919,9 +920,10 @@ def compare_projects(base: dict, cand: dict, result: Result) -> None:
 
 # Dictation pairs: the pairs and wrong-pairs suites, see docs/release-gate.md. The suites
 # above run with Chinese chosen. pairs runs each pair on its own sets, and each pair but
-# Chinese on the speech corpus and on its FLEURS clips, with the rules of the corpus and sets
-# suites. wrong-pairs runs FLEURS clips of the other pairs with each pair chosen, shown and
-# never barred. Each run writes its raw file into OUT/<suite>/<pair>/raw.
+# Chinese on the speech corpus, on its FLEURS clips and in the context and latency suites,
+# with the rules of those suites. wrong-pairs runs FLEURS clips of the other pairs with each
+# pair chosen, shown and never barred. Each run writes its raw file into
+# OUT/<suite>/<pair>/raw.
 
 PAIR_SUITES = ("pairs", "wrong-pairs")
 # The dictation pairs by the code of their language, as a set's set.json and the lang of a
@@ -982,12 +984,14 @@ def set_pair(folder: Path) -> str:
 
 def plan_runs(suite: str, out: Path, pairs: list[str], corpus: Path, fleurs: list[Path], pair_sets: Path, count: int) -> list[dict]:
     """The test runs of a pair suite, in order, and writes their clip lists. Each run has a
-    label, its kind (corpus or sets), the dictation language, the name of its raw file, its
-    folder, its clip list or None for every clip, and the folder of its raw file.
+    label, its kind (corpus, context, latency or sets), the dictation language, the name of
+    its raw file, its folder (the corpus, the say clips of a latency run or the sets, None
+    for a context run), its clip list or None for every clip, and the folder of its raw file.
 
-    pairs: for each pair but Chinese, whose runs are the corpus suite, the speech corpus and
-    the pair's FLEURS clips, then the pair's sets. wrong-pairs: for each pair, count FLEURS
-    clips of every other pair, Korean included, one run per corpus folder."""
+    pairs: for each pair but Chinese, whose runs are the corpus, context and latency suites,
+    the speech corpus, the pair's FLEURS clips, the context suite and the latency suite with
+    the pair's say clips, then the pair's sets. wrong-pairs: for each pair, count FLEURS clips
+    of every other pair, Korean included, one run per corpus folder."""
     pairs = list(dict.fromkeys(pairs))
     unknown = [pair for pair in pairs if pair not in PAIRS]
     if unknown or not pairs:
@@ -1003,11 +1007,16 @@ def plan_runs(suite: str, out: Path, pairs: list[str], corpus: Path, fleurs: lis
     runs: list[dict] = []
     for pair in pairs:
         root = out / suite / pair
-        own: list[tuple[str, str, Path, list[str] | None]] = []
+        own: list[tuple[str, str, Path | None, list[str] | None]] = []
         if suite == "pairs":
             if pair != "zh":
                 own.append(("corpus", "corpus", corpus, None))
                 own.append(("corpus", "fleurs", *holding(pair, fleurs)))
+                own.append(("context", "context", None, None))
+                say = pair_sets / f"{pair}-latency" / "clips"
+                if not any(say.glob("*.wav")):
+                    raise SystemExit(f"no say clips of the {pair} pair in {say}")
+                own.append(("latency", "latency", say, None))
             if not any(set_pair(path.parent) == pair for path in pair_sets.glob("*/manifest.jsonl")):
                 raise SystemExit(f"no set of the {pair} pair in {pair_sets}")
             own.append(("sets", "sets-raw", pair_sets, None))
@@ -1172,6 +1181,15 @@ def summarize_pairs(out: Path, pair_sets: Path, corpora: list[Path]) -> list[str
                 summary["read_without_digits"] = read_rates(document, manifest)
             write_json(root / f"{name}.json", summary)
             written.append(f"pairs/{pair}/{name}")
+        # The context and latency suites with the pair chosen, scored as those suites are.
+        for name, function in (("context", summarize_context), ("latency", summarize_latency)):
+            path = raw / f"{name}.json"
+            if not path.exists():
+                continue
+            document = read_json(path)
+            check_language(document, pair, path)
+            write_json(root / f"{name}.json", function(document))
+            written.append(f"pairs/{pair}/{name}")
         path = raw / "sets-raw.json"
         if path.exists():
             document = read_json(path)
@@ -1256,15 +1274,15 @@ def set_group_lines(base: dict, cand: dict, result: Result) -> None:
 
 def compare_pairs(baseline: Path, candidate: Path, result: Result) -> None:
     """Each pair of the candidate against the same pair of the baseline, with the rules and
-    tolerances of the corpus and sets suites, and the rules of the passes. A pair the
-    candidate did not run is not compared."""
+    tolerances of the corpus, context, latency and sets suites, and the rules of the passes.
+    A pair the candidate did not run is not compared."""
     roots = sorted(path for path in (candidate / "pairs").glob("*") if path.is_dir())
     if not roots:
         result.fail(f"pairs: no result in {candidate}")
         return
     for root in roots:
         pair, sub = root.name, Result()
-        for name in ("corpus", "fleurs", "sets"):
+        for name in ("corpus", "fleurs", "context", "latency", "sets"):
             cand_file, base_file = root / f"{name}.json", baseline / "pairs" / pair / f"{name}.json"
             if not cand_file.exists():
                 if base_file.exists():
@@ -1279,6 +1297,8 @@ def compare_pairs(baseline: Path, candidate: Path, result: Result) -> None:
             if name == "sets":
                 compare_sets(base, cand, sub)
                 set_group_lines(base, cand, sub)
+            elif name in ("context", "latency"):
+                COMPARERS[name](base, cand, sub)
             else:
                 compare_corpus(base, cand, sub, name)
                 read_rate_lines(base, cand, sub, name)
@@ -1402,7 +1422,7 @@ def main() -> None:
     elif arguments.command == "runs":
         pairs = [pair for pair in arguments.pairs.split(",") if pair]
         for run in plan_runs(arguments.suite, arguments.out, pairs, arguments.corpus, arguments.fleurs, arguments.pair_sets, arguments.count):
-            print("\t".join([run["label"], run["kind"], run["language"], run["name"], str(run["folder"]), str(run["clips"] or "-"), str(run["raw"])]))
+            print("\t".join([run["label"], run["kind"], run["language"], run["name"], str(run["folder"] or "-"), str(run["clips"] or "-"), str(run["raw"])]))
     elif arguments.command == "summarize-pairs":
         written = summarize_pairs(arguments.out, arguments.pair_sets, arguments.corpora)
         print("summarized: " + (", ".join(written) or "nothing"))
