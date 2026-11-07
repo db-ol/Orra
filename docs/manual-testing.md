@@ -630,8 +630,12 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     runs, then on focused cases. It checks that iPhone X S, a lone capital, Latin words,
     capitals that touch letters, six spelled capitals, five dotted ones, 5G A 股, letters
     spelled on purpose as in Lee 的拼写是 L E E, and text without Chinese characters
-    (English, kana and Hangul) stay as they are. It also checks that applying the join
-    twice changes nothing more, that no text of Tools/rewrite-eval changes, and a long
+    (English, kana and Hangul) stay as they are. Versions, money and sizes join (G P T-4o,
+    100 U S D, 12 G B), and so does Japanese with kanji, while a version after a Latin word
+    (Mac O S 15) and a Latin word right after the letters keep them apart. It runs the
+    rule steps in the app's order with fillers between and around the letters, and writes
+    down the known costs (A B 两组, J.K. 罗琳, 5 G A 股). It also checks that applying the
+    join twice changes nothing more, that no text of Tools/rewrite-eval changes, and a long
     dictation. With TEST_RUNNER_ORRA_SPELLED_LETTERS_RUNS set, an opt in test writes the
     stored texts of gate runs after the join, so gate.py can score the change without a
     model. PushToTalkControllerTests checks that the paste joins the letters in Chinese
