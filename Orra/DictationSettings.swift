@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Dictation, a page of Settings: the language the user speaks, Clean Up Text with its two
-/// rules, and the two features that help recognition by reading what is on screen. The
-/// model and the rules of Clean Up Text sit on the page itself, so turning one on or off
-/// takes one click.
+/// Dictation, a page of Settings: the language the user speaks, Clean Up Text with Polish
+/// and its two rules, and the two features that help recognition by reading what is on
+/// screen. The model, Polish and the rules of Clean Up Text sit on the page itself, so
+/// turning one on or off takes one click.
 struct DictationSettings: View {
     let pushToTalk: PushToTalkController
     let cleanup: TextCleanup
@@ -20,6 +20,12 @@ struct DictationSettings: View {
                 CleanupToggle(cleanup: cleanup, language: pushToTalk.dictationLanguage)
                 if cleanup.isOn {
                     ModelStatusRow(cleanup: cleanup, use: .cleanup, symbol: "wand.and.sparkles")
+                }
+                PolishToggle(cleanup: cleanup, language: pushToTalk.dictationLanguage)
+                PolishStylePicker(cleanup: cleanup)
+                // While cleanup is on, the row under its switch shows the model already.
+                if cleanup.polishIsOn, !cleanup.isOn {
+                    ModelStatusRow(cleanup: cleanup, use: .polish, symbol: "pencil.line")
                 }
                 Toggle(isOn: Binding(
                     get: { pushToTalk.removesFillerWords },
@@ -122,6 +128,97 @@ private struct CleanupToggle: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("The model comes from Hugging Face or a mirror. Your text stays on this Mac.")
+        }
+    }
+}
+
+/// The switch for Polish with the local model, with what it does, and for Japanese and
+/// Spanish that it works on English sentences only. Turning it on without the model asks
+/// before the download, as the cleanup switch does.
+private struct PolishToggle: View {
+    @Bindable var cleanup: TextCleanup
+    let language: DictationLanguage
+
+    var body: some View {
+        let models = cleanup.models
+        let total = models.manifest.totalBytes
+        Toggle(isOn: Binding(
+            get: { cleanup.polishIsOn },
+            set: { $0 ? cleanup.turnOnPolish() : cleanup.turnOffPolish() }
+        )) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Polish with a local model")
+                    Group {
+                        Text("Rewrites what you say as clear, concise written text and keeps your meaning, names, numbers and the languages you mix. It uses the model of Clean Up Text and adds time to a dictation as cleanup does. Paste Original Text in the Orra menu brings back what you said.")
+                        if language != .chinese {
+                            Text("Polishing works on English sentences only for now.")
+                        }
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            } icon: {
+                Image(systemName: "pencil.line")
+            }
+        }
+        // Off while Orra looks for the model on disk, a moment at launch.
+        .disabled(!cleanup.polishIsOn && !cleanup.canTurnOn)
+        .help(Text("Dictations over \(PolishStep.maximumLength) characters are pasted without polishing, and so is a polish that fails Orra's checks or takes too long, so nothing you say is lost.") + Text(verbatim: "\n") + Text("Orra never learns corrections from a polished paste."))
+        .alert("Download the model for polishing?", isPresented: $cleanup.isConfirmingPolishDownload) {
+            Button(CleanupLabels.downloadButton(models.state, total: total)) {
+                cleanup.confirmPolishDownload()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The model comes from Hugging Face or a mirror. Your text stays on this Mac.")
+        }
+    }
+}
+
+/// The style of a polish as radio buttons, with what the chosen one does, like Translate
+/// into on the Translation page. Off while Polish is off, and kept while it is.
+private struct PolishStylePicker: View {
+    let cleanup: TextCleanup
+    @Environment(\.interfaceLocale) private var interfaceLocale
+
+    var body: some View {
+        Picker(selection: Binding(
+            get: { cleanup.polishStyle },
+            set: { cleanup.setPolishStyle($0) }
+        )) {
+            ForEach(PolishStyle.allCases) { style in
+                Text(verbatim: style.title(in: interfaceLocale)).tag(style)
+            }
+        } label: {
+            DescribedLabel(
+                title: "Style",
+                detail: cleanup.polishStyle.detail,
+                systemImage: "slider.horizontal.3"
+            )
+        }
+        .pickerStyle(.radioGroup)
+        .disabled(!cleanup.polishIsOn)
+    }
+}
+
+extension PolishStyle {
+    /// The name in the picker, in the language of `locale`. Clear has a key of its own in
+    /// the string catalog, since Clear is also the name of a key on the keyboard, see
+    /// KeyName, which other languages name otherwise.
+    func title(in locale: Locale = .interface) -> String {
+        switch self {
+        case .clear: String(localized: LocalizedStringResource("Clear (polish style)", defaultValue: "Clear", locale: locale, comment: "A style of Polish: clear, fluent written text"))
+        case .concise: String(localized: LocalizedStringResource("Concise", locale: locale, comment: "A style of Polish: only the points"))
+        }
+    }
+
+    /// What the style does, under the picker.
+    var detail: LocalizedStringKey {
+        switch self {
+        case .clear: "Clear, fluent written text that keeps nearly everything you said."
+        case .concise: "Only the points, usually about half as long as what you said."
         }
     }
 }
