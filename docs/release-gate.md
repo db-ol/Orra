@@ -32,8 +32,9 @@ see Dictation pairs.
 | pairs | SpeechCorpusEvaluationTests, RealModelTests/ContextEvaluationTests, LatencyMeasurementTests/dictations(), GateSetEvaluationTests | Each dictation pair with its own pair chosen: the speech corpus, the pair's FLEURS clips, the context suite and the latency suite for each pair but Chinese, and every pair's sets in the pairs folder, see Dictation pairs |
 | wrong-pairs | SpeechCorpusEvaluationTests | With each pair chosen, 50 FLEURS clips of every other pair, Korean included. Outside the release gate, see Dictation pairs |
 
-Each suite is one run of xcodebuild test-without-building, so another job can use the
-GPU between suites.
+Each suite but the two of the dictation pairs is one run of xcodebuild
+test-without-building, and those two are one run per pair and corpus, suite or folder of
+sets, so another job can use the GPU between runs.
 
 ## Rules
 
@@ -368,10 +369,10 @@ amounts and codes of the draft only they hold. Its comment has the details.
 | GATE_FLEURS_DIRS | $ORRA_BENCH/fleurs-ja-es $ORRA_BENCH/fleurs-ko, the FLEURS folders of the pairs besides Chinese, separated by spaces |
 | GATE_WRONG_PAIR_CLIPS | 50, the clips of each other pair's FLEURS set in wrong-pairs |
 | GATE_DERIVED_DATA | build/DerivedDataRelease |
-| GATE_LOCK | none. A folder made with mkdir before each suite and removed after, for a Mac where other jobs share the GPU |
+| GATE_LOCK | none. A folder made with mkdir before each run of xcodebuild test-without-building and removed after, for a Mac where other jobs share the GPU |
 
-Before each suite the script waits while an Orra runs from anywhere but a DerivedData
-folder, since the test host is an Orra app too.
+Before each of those runs the script waits while an Orra runs from anywhere but a
+DerivedData folder, since the test host is an Orra app too.
 
 ## ContextASR timing
 
