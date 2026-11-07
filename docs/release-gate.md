@@ -6,15 +6,16 @@ prints the IDs of the cases behind each failure. It needs the speech model, the 
 model and the data under `~/projects/orra-project`, so it runs on the maintainer's Mac,
 never in CI.
 
-    Tools/release-gate/run.sh [--baseline <dir>] [--only <suite>[,<suite>...]] [--out <dir>] [--skip-build]
+    Tools/release-gate/run.sh [--baseline <dir>] [--only <suite>[,<suite>...]] [--pairs <pair>[,<pair>...]] [--out <dir>] [--skip-build]
 
 Exit status 0 means every suite ran and nothing got worse, 1 that a rule below failed,
 and 2 that the build or a suite did not run. Without `--baseline` it runs and prints the
 numbers, which is how a baseline is made, and exits 1 only when the projects bar or the
 search terms of the retrieval suite fail, since those need no baseline. The results go to
 `--out`, by default `~/projects/orra-project/bench/gate-runs/<commit>-<date and time>`,
-never into the repository. Without `--only` it runs every suite, projects and retrieval too
-since release builds show Projects, so the projects variables below must be set.
+never into the repository. Without `--only` it runs every suite but pairs (see Pairs below),
+projects and retrieval too since release builds show Projects, so the projects variables
+below must be set.
 
 ## Suites
 
@@ -30,6 +31,41 @@ since release builds show Projects, so the projects variables below must be set.
 
 Each suite is one run of xcodebuild test-without-building, so another job can use the
 GPU between suites.
+
+## Pairs
+
+`--only pairs` measures the dictation pairs other than Chinese, for a pull request that
+changes how a language is handled. `--pairs` names them by their code, `ja` and `es`, both
+when it names none, and Korean joins when Orra has the pair. For each one the context and
+latency suites run again with that pair chosen, as a user picks it in Settings
+(`TEST_RUNNER_ORRA_DICTATION_LANGUAGE`, Japanese or Spanish):
+
+- context: the 100 contextasr_en clips without and with their terms, and the three clips
+  without speech with the same unrelated terms as the Chinese run, for the bar that silence,
+  noise and hum give no text with a vocabulary. Every pass takes the path of a dictation
+  with the pair: its language check, the echo check of the vocabulary, and Han characters
+  as written. contextasr_zh and ascend_mixed are Chinese speech, another pair's speech for
+  it, so they do not run.
+- latency: the pair's say clips, `pairs/<pair>-latency` in the gate sets, and the six
+  English clips of the corpus, through PushToTalkController with the pair, for the bar on
+  release to paste. A say clip's name starts with its language and its length, and
+  `ja_mixed_long_1` is Japanese with English words.
+
+Each pair's results are a results folder of their own, `<out>/pair-suites/<pair>`, compared
+with the same folder of the baseline by the rules of the two suites below, or shown when the
+baseline has none. Without a pair named, or with Chinese, every suite runs exactly as it ran
+before pairs were measured, so a baseline stays comparable.
+
+The long dictation checks of RealModelTests/DictationQualityTests run by hand, outside the
+gate, for the bar that a long dictation is at most 3 points worse than its clips one by one.
+With a pair they join that pair's FLEURS clips, 58 s in one piece and about 290 s in
+pieces, and every recording takes the path of a dictation with the pair:
+
+    TEST_RUNNER_ORRA_DICTATION_LANGUAGE=Japanese TEST_RUNNER_ORRA_FLEURS_DIR=$HOME/projects/orra-project/bench/fleurs-ja-es xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:'OrraTests/RealModelTests/DictationQualityTests/longDictationStaysAccurate()' -only-testing:'OrraTests/RealModelTests/DictationQualityTests/minutesInPiecesStayAccurate(_:_:_:)'
+
+The context suite and these checks score their texts with TranscriptScoring in
+OrraTests/TestSupport.swift, which counts Hangul per syllable as score.py does, see the
+scorer of the Swift tests in Tools/speech-eval/README.md.
 
 ## Rules
 
@@ -243,6 +279,7 @@ amounts and codes of the draft only they hold. Its comment has the details.
 | GATE_CORPUS_DIR | $ORRA_BENCH/speech-corpus |
 | GATE_SETS_DIR | $ORRA_BENCH/gate-sets |
 | GATE_LATENCY_CLIPS | $GATE_SETS_DIR/latency-say/clips |
+| GATE_PAIR_SETS_DIR | $GATE_SETS_DIR/pairs, where the latency suite of each pair finds `<pair>-latency/clips` |
 | GATE_CONTEXT_COUNT | 100 clips per ContextASR set |
 | GATE_CLEANUP_MODEL_DIR | the installed cleanup model |
 | GATE_PROJECTS_SET | $ORRA_BENCH/projects-testset |
