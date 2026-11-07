@@ -99,7 +99,7 @@ struct ScreenNamesEvaluationTests {
             for condition in conditions {
                 let names = condition == "none" ? [] : condition == "field" ? field : page
                 let before = passes
-                let raw = try await transcription.transcribe(samples, vocabulary: names, holdsScreenNames: !names.isEmpty, audioSeconds: seconds)
+                let raw = try await transcription.transcribe(samples, vocabulary: names, holdsScreenNames: !names.isEmpty, audioSeconds: seconds, language: .chinese)
                 passCount[condition, default: 0] += passes - before
                 var text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: seconds))
                 text = NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: text))

@@ -18,26 +18,26 @@ struct LanguageGuardTests {
     static let japaneseInHan = "東京駅"
 
     @Test func chineseEnglishAndTheirMixAreNotForeign() {
-        #expect(!LanguageGuard.isForeign(Self.chinese))
-        #expect(!LanguageGuard.isForeign(Self.english))
-        #expect(!LanguageGuard.isForeign("其实呢，badminton有一个就是badminton，因为basketball的话，主要是。"))
-        #expect(!LanguageGuard.isForeign("我们去了 Göteborg 和 Malmö 玩了三天。"))
+        #expect(!LanguageGuard.isForeign(Self.chinese, for: .chinese))
+        #expect(!LanguageGuard.isForeign(Self.english, for: .chinese))
+        #expect(!LanguageGuard.isForeign("其实呢，badminton有一个就是badminton，因为basketball的话，主要是。", for: .chinese))
+        #expect(!LanguageGuard.isForeign("我们去了 Göteborg 和 Malmö 玩了三天。", for: .chinese))
         // Cantonese is written in Han characters and counts as Chinese.
-        #expect(!LanguageGuard.isForeign("我哋今日去咗飲茶，啲點心好好食。"))
-        #expect(!LanguageGuard.isForeign("Since the foundation of Asunción in 1537, Paraguay has managed to keep a lot of its indigenous character."))
-        #expect(!LanguageGuard.isForeign("I met José and François at the café in São Paulo yesterday."))
-        #expect(!LanguageGuard.isForeign("Uh, I live in Hang Ho."))
-        #expect(!LanguageGuard.isForeign(""))
-        #expect(!LanguageGuard.isForeign("2026。"))
+        #expect(!LanguageGuard.isForeign("我哋今日去咗飲茶，啲點心好好食。", for: .chinese))
+        #expect(!LanguageGuard.isForeign("Since the foundation of Asunción in 1537, Paraguay has managed to keep a lot of its indigenous character.", for: .chinese))
+        #expect(!LanguageGuard.isForeign("I met José and François at the café in São Paulo yesterday.", for: .chinese))
+        #expect(!LanguageGuard.isForeign("Uh, I live in Hang Ho.", for: .chinese))
+        #expect(!LanguageGuard.isForeign("", for: .chinese))
+        #expect(!LanguageGuard.isForeign("2026。", for: .chinese))
     }
 
     @Test func otherLanguagesAreForeign() {
-        #expect(LanguageGuard.isForeign(Self.swedish))
-        #expect(LanguageGuard.isForeign("Ini adalah makan malam sederhana dengan roti dan minyak zaitun."))
-        #expect(LanguageGuard.isForeign("Das ist ein einfaches Abendessen mit Brot und Olivenöl."))
-        #expect(LanguageGuard.isForeign("これはパンとオリーブオイルの簡単な夕食です。"))
-        #expect(LanguageGuard.isForeign("빵과 올리브 오일로 만든 간단한 저녁입니다."))
-        #expect(LanguageGuard.isForeign("Это простой ужин с хлебом и оливковым маслом."))
+        #expect(LanguageGuard.isForeign(Self.swedish, for: .chinese))
+        #expect(LanguageGuard.isForeign("Ini adalah makan malam sederhana dengan roti dan minyak zaitun.", for: .chinese))
+        #expect(LanguageGuard.isForeign("Das ist ein einfaches Abendessen mit Brot und Olivenöl.", for: .chinese))
+        #expect(LanguageGuard.isForeign("これはパンとオリーブオイルの簡単な夕食です。", for: .chinese))
+        #expect(LanguageGuard.isForeign("빵과 올리브 오일로 만든 간단한 저녁입니다.", for: .chinese))
+        #expect(LanguageGuard.isForeign("Это простой ужин с хлебом и оливковым маслом.", for: .chinese))
     }
 
     /// Jamo on their own, such as ㅋㅋ, are letters of another script for every dictation
@@ -94,9 +94,9 @@ struct LanguageGuardTests {
 
     /// Chinese reads every text as before the choice, so Japanese and Spanish stay foreign.
     @Test func chineseReadsAsBeforeTheChoice() {
-        #expect(LanguageGuard.isForeign(Self.spanish))
-        #expect(LanguageGuard.isForeign(Self.japanese))
-        #expect(LanguageGuard.verdict(on: Self.japaneseInHan) == .chineseOrEnglish)
+        #expect(LanguageGuard.isForeign(Self.spanish, for: .chinese))
+        #expect(LanguageGuard.isForeign(Self.japanese, for: .chinese))
+        #expect(LanguageGuard.verdict(on: Self.japaneseInHan, for: .chinese) == .chineseOrEnglish)
         #expect(LanguageGuard.verdict(on: Self.chinese, for: .chinese) == .chineseOrEnglish)
         #expect(LanguageGuard.verdict(on: Self.swedish, for: .chinese) == .foreign)
     }
@@ -119,7 +119,7 @@ struct LanguageGuardTests {
 
     @Test func chineseOrEnglishTextIsTranscribedOnce() async throws {
         speech.reply = Self.chinese
-        let text = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1)
+        let text = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1, language: .chinese)
         #expect(text == Self.chinese)
         #expect(speech.receivedLanguages == [nil])
     }
@@ -127,7 +127,7 @@ struct LanguageGuardTests {
     @Test func aThirdLanguageIsTranscribedAgainInChinese() async throws {
         speech.reply = Self.swedish
         speech.replyInLanguage = [.chinese: Self.chinese, .english: Self.english]
-        let text = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1)
+        let text = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1, language: .chinese)
         #expect(text == Self.chinese)
         #expect(speech.receivedLanguages == [nil, .chinese])
         #expect(speech.receivedContexts == [nil, nil])
@@ -136,7 +136,7 @@ struct LanguageGuardTests {
     @Test func englishIsTriedWhenChineseDoesNotHelp() async throws {
         speech.reply = Self.swedish
         speech.replyInLanguage = [.chinese: Self.swedish, .english: Self.english]
-        let text = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1)
+        let text = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1, language: .chinese)
         #expect(text == Self.english)
         #expect(speech.receivedLanguages == [nil, .chinese, .english])
     }
@@ -182,13 +182,13 @@ struct LanguageGuardTests {
     @Test func anEmptyPassDoesNotReplaceTheText() async throws {
         speech.reply = Self.swedish
         speech.replyInLanguage = [.chinese: " ", .english: Self.english]
-        let text = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1)
+        let text = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1, language: .chinese)
         #expect(text == Self.english)
     }
 
     @Test func theTextStandsWhenNoPassHelps() async throws {
         speech.reply = Self.swedish
-        let text = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1)
+        let text = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1, language: .chinese)
         #expect(text == Self.swedish)
         #expect(speech.receivedLanguages == [nil, .chinese, .english])
     }
@@ -196,7 +196,7 @@ struct LanguageGuardTests {
     @Test func theVocabularyStaysOnTheSecondPass() async throws {
         speech.reply = Self.swedish
         speech.replyInLanguage = [.chinese: Self.chinese]
-        let text = try await speech.transcription.transcribe([0.1], vocabulary: ["Pa amb Oli", "Orra"], audioSeconds: 1)
+        let text = try await speech.transcription.transcribe([0.1], vocabulary: ["Pa amb Oli", "Orra"], audioSeconds: 1, language: .chinese)
         #expect(text == Self.chinese)
         #expect(speech.receivedContexts == ["Pa amb Oli\nOrra", "Pa amb Oli\nOrra"])
     }
@@ -209,7 +209,7 @@ struct LanguageGuardTests {
                 return Self.swedish
             }
         )
-        let text = try await failing.transcribe([0.1], vocabulary: [], audioSeconds: 1)
+        let text = try await failing.transcribe([0.1], vocabulary: [], audioSeconds: 1, language: .chinese)
         #expect(text == Self.swedish)
     }
 
@@ -222,7 +222,7 @@ struct LanguageGuardTests {
             }
         )
         await #expect(throws: CancellationError.self) {
-            try await cancelled.transcribe([0.1], vocabulary: [], audioSeconds: 1)
+            try await cancelled.transcribe([0.1], vocabulary: [], audioSeconds: 1, language: .chinese)
         }
     }
 
@@ -232,7 +232,7 @@ struct LanguageGuardTests {
         speech.reply = Self.swedish
         speech.replyInLanguage = [.chinese: "Pa amb Oli。"]
         speech.replyWithoutContext = ""
-        let text = try await speech.transcription.transcribe([0.1], vocabulary: ["Pa amb Oli"], audioSeconds: 1)
+        let text = try await speech.transcription.transcribe([0.1], vocabulary: ["Pa amb Oli"], audioSeconds: 1, language: .chinese)
         #expect(text == "")
         #expect(speech.receivedLanguages == [nil, .chinese, nil])
     }

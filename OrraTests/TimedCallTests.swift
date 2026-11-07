@@ -208,7 +208,8 @@ struct AbandonedCallTests {
             frontmostApp: { 100 },
             minimumHold: .zero,
             releaseTail: .zero,
-            listeningCueDelay: .zero
+            listeningCueDelay: .zero,
+            dictationLanguage: .chinese
         )
         await controller.loadModel()
         controller.handle(.pressed(isRepeat: false), key: .key(.rightControl))

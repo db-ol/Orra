@@ -46,11 +46,11 @@ struct VoiceRecordingTests {
 
     @Test func theScriptIsInTheLanguageTheUserSpeaksInMeetings() {
         // A fixed direction names the language the user does not speak.
-        #expect(VoiceScript.language(direction: .english, interface: Locale(identifier: "en")) == .chinese)
-        #expect(VoiceScript.language(direction: .chinese, interface: Locale(identifier: "zh-Hans")) == .english)
+        #expect(VoiceScript.language(direction: .english, language: .chinese, interface: Locale(identifier: "en")) == .chinese)
+        #expect(VoiceScript.language(direction: .chinese, language: .chinese, interface: Locale(identifier: "zh-Hans")) == .english)
         // The automatic direction goes by the language Orra shows.
-        #expect(VoiceScript.language(direction: .automatic, interface: Locale(identifier: "zh-Hans")) == .chinese)
-        #expect(VoiceScript.language(direction: .automatic, interface: Locale(identifier: "en")) == .english)
+        #expect(VoiceScript.language(direction: .automatic, language: .chinese, interface: Locale(identifier: "zh-Hans")) == .chinese)
+        #expect(VoiceScript.language(direction: .automatic, language: .chinese, interface: Locale(identifier: "en")) == .english)
     }
 
     @Test func eachScriptIsInItsOwnLanguageAndFitsTheSample() {
@@ -325,7 +325,7 @@ struct VoiceRecordingTests {
         let microphone = FakeMicrophone()
         let speech = FakeSpeech()
         let choice = MicrophoneChoice(uid: "usb", name: "USB Microphone")
-        let controller = PushToTalkController(capture: microphone.capture, transcription: speech.transcription, insert: FakeInserter().insert, minimumHold: .zero, releaseTail: .zero, listeningCueDelay: .zero, microphone: choice)
+        let controller = PushToTalkController(capture: microphone.capture, transcription: speech.transcription, insert: FakeInserter().insert, minimumHold: .zero, releaseTail: .zero, listeningCueDelay: .zero, microphone: choice, dictationLanguage: .chinese)
         await controller.loadModel()
         let cues = CueRecorder(controller)
         try await controller.startVoiceSample()
@@ -345,7 +345,7 @@ struct VoiceRecordingTests {
     @Test func theControllerRecordsNoSampleWithoutAccessOrDuringADictation() async throws {
         let microphone = FakeMicrophone()
         microphone.access = .denied
-        let controller = PushToTalkController(capture: microphone.capture, transcription: FakeSpeech().transcription, insert: FakeInserter().insert)
+        let controller = PushToTalkController(capture: microphone.capture, transcription: FakeSpeech().transcription, insert: FakeInserter().insert, dictationLanguage: .chinese)
         await #expect(throws: VoiceSampleCaptureError.busy) {
             try await controller.startVoiceSample()
         }
@@ -364,7 +364,7 @@ struct VoiceRecordingTests {
 
     @Test func aCancelledSampleStopsTheMicrophone() async throws {
         let microphone = FakeMicrophone()
-        let controller = PushToTalkController(capture: microphone.capture, transcription: FakeSpeech().transcription, insert: FakeInserter().insert)
+        let controller = PushToTalkController(capture: microphone.capture, transcription: FakeSpeech().transcription, insert: FakeInserter().insert, dictationLanguage: .chinese)
         try await controller.startVoiceSample()
         await controller.cancelVoiceSample()
         #expect(microphone.calls == ["start", "cancel"])

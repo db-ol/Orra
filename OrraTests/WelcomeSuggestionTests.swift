@@ -24,7 +24,7 @@ struct WelcomeSuggestionTests {
     }
 
     @Test func cleanupOffOffersSettings() {
-        let rows = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, locale: english)
+        let rows = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, language: .chinese, locale: english)
         #expect(rows.map(\.kind) == [.cleanup, .translation, .meeting])
         #expect(rows.map(\.title) == ["Cleanup", "Translation", "Meeting interpretation"])
         #expect(rows.map(\.line) == [
@@ -40,15 +40,15 @@ struct WelcomeSuggestionTests {
     }
 
     @Test func aFeatureThatIsOnShowsOnWithoutAButton() {
-        let rows = WelcomeSuggestion.all(cleanupOn: true, cleanupModelInstalled: true, translationOn: false, locale: english)
+        let rows = WelcomeSuggestion.all(cleanupOn: true, cleanupModelInstalled: true, translationOn: false, language: .chinese, locale: english)
         #expect(rows[0].isOn)
         #expect(rows[0].button == nil)
         #expect(rows[1].button == "Turn On in Settings…")
         #expect(WelcomeSuggestion.onLabel(locale: english) == "On")
-        let off = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: true, translationOn: false, locale: english)
+        let off = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: true, translationOn: false, language: .chinese, locale: english)
         #expect(!off[0].isOn)
         #expect(off[0].button == "Turn On in Settings…")
-        let both = WelcomeSuggestion.all(cleanupOn: true, cleanupModelInstalled: true, translationOn: true, locale: english)
+        let both = WelcomeSuggestion.all(cleanupOn: true, cleanupModelInstalled: true, translationOn: true, language: .chinese, locale: english)
         #expect(both.map(\.button) == [nil, nil, "Set Up in Settings…"])
     }
 
@@ -62,8 +62,8 @@ struct WelcomeSuggestionTests {
     /// with the memory it needs. It says that it is a preview that needs the Mail app, and
     /// shows On while it is on. Elsewhere the three rows stay.
     @Test func projectsShowsOnlyWhereItCanBeTurnedOn() {
-        #expect(WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, projectsAvailable: false, locale: english).map(\.kind) == [.cleanup, .translation, .meeting])
-        let rows = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, projectsAvailable: true, locale: english)
+        #expect(WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, language: .chinese, projectsAvailable: false, locale: english).map(\.kind) == [.cleanup, .translation, .meeting])
+        let rows = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, language: .chinese, projectsAvailable: true, locale: english)
         #expect(rows.map(\.kind) == [.cleanup, .translation, .meeting, .projects])
         let projects = rows[3]
         #expect(projects.title == "Projects")
@@ -73,10 +73,10 @@ struct WelcomeSuggestionTests {
         #expect(!projects.isOn)
         #expect(projects.symbol == "briefcase")
         #expect(Set(rows.map(\.symbol)).count == 4)
-        let on = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, projectsAvailable: true, projectsOn: true, locale: english)[3]
+        let on = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, language: .chinese, projectsAvailable: true, projectsOn: true, locale: english)[3]
         #expect(on.isOn)
         #expect(on.button == nil)
-        let inChinese = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, projectsAvailable: true, locale: chinese)[3]
+        let inChinese = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, language: .chinese, projectsAvailable: true, locale: chinese)[3]
         #expect(inChinese.title == "项目")
         #expect(inChinese.line == "把你的邮件分到各个项目里，并结合你各个项目里的文件解释每封邮件。")
         #expect(inChinese.note == "预览版，适用于这台 Mac 上的“邮件” App。")
@@ -86,7 +86,7 @@ struct WelcomeSuggestionTests {
     /// Step 1 offers the cleanup model's download then, so the row neither says On nor
     /// offers Settings.
     @Test func cleanupOnWithoutItsModelShowsNeitherOnNorAButton() {
-        let rows = WelcomeSuggestion.all(cleanupOn: true, cleanupModelInstalled: false, translationOn: false, locale: english)
+        let rows = WelcomeSuggestion.all(cleanupOn: true, cleanupModelInstalled: false, translationOn: false, language: .chinese, locale: english)
         #expect(!rows[0].isOn)
         #expect(rows[0].button == nil)
         #expect(rows[1].button == "Turn On in Settings…")
@@ -94,7 +94,7 @@ struct WelcomeSuggestionTests {
     }
 
     @Test func inChinese() {
-        let rows = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, locale: chinese)
+        let rows = WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, language: .chinese, locale: chinese)
         #expect(WelcomeSuggestion.heading(locale: chinese) == "还可以试试")
         #expect(rows.map(\.title) == ["整理", "翻译", "会议同传"])
         #expect(rows.map(\.line) == [
@@ -104,7 +104,7 @@ struct WelcomeSuggestionTests {
         ])
         #expect(rows.map(\.button) == ["在设置中打开…", "在设置中打开…", "前往设置…"])
         #expect(rows[2].note == "实时字幕和为对方朗读译文都在“会议同传”里，设置和 Orra 菜单中都有。朗读译文需要先打开翻译。")
-        let on = WelcomeSuggestion.all(cleanupOn: true, cleanupModelInstalled: true, translationOn: false, locale: chinese)
+        let on = WelcomeSuggestion.all(cleanupOn: true, cleanupModelInstalled: true, translationOn: false, language: .chinese, locale: chinese)
         #expect(on[0].button == nil)
         #expect(WelcomeSuggestion.onLabel(locale: chinese) == "已打开")
     }
@@ -127,7 +127,7 @@ struct WelcomeSuggestionTests {
     /// Orra menu does, so a user who kept Hold reads Hold.
     @Test func theTranslationLineFollowsTheKeyAndItsMode() {
         let line = { (key: Hotkey, mode: TriggerMode, locale: Locale) in
-            WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, translationKey: key, translationMode: mode, locale: locale)[1].line
+            WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, language: .chinese, translationKey: key, translationMode: mode, locale: locale)[1].line
         }
         #expect(line(.rightOption, .hold, english) == "Hold right Option to translate. Chinese becomes English, and English becomes Chinese.")
         #expect(line(.rightControl, .doubleTap, english) == "Press right Control twice to translate, and once more to finish. Chinese becomes English, and English becomes Chinese.")

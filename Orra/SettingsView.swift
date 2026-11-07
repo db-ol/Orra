@@ -1261,7 +1261,8 @@ private struct LiveCaptionsShortcutRecorder: View {
         pushToTalk: PushToTalkController(
             capture: .live(),
             transcription: .qwen3(),
-            insert: { _ in .nothingToInsert }
+            insert: { _ in .nothingToInsert },
+            dictationLanguage: .chinese
         ),
         inputs: AudioInputList { AudioInputList.Reading(inputs: [], defaultInput: nil, lidClosed: false) },
         feedback: RecordingFeedback(preferences: .init(), inputLevel: { 0 }, present: { _ in }, play: { _ in }, save: { _ in }),

@@ -47,7 +47,7 @@ nonisolated enum LanguageGuard {
 
     /// Whether the text looks written in a language other than the dictation language and
     /// English.
-    static func isForeign(_ text: String, for language: DictationLanguage = .chinese) -> Bool {
+    static func isForeign(_ text: String, for language: DictationLanguage) -> Bool {
         verdict(on: text, for: language) == .foreign
     }
 
@@ -65,7 +65,7 @@ nonisolated enum LanguageGuard {
     /// judge that is not English. For Japanese, kana and Han characters count as Japanese.
     /// For Spanish, Han characters and kana count as other scripts, and Latin text long
     /// enough to judge is Spanish, English or foreign, in that order.
-    static func verdict(on text: String, for language: DictationLanguage = .chinese) -> Verdict {
+    static func verdict(on text: String, for language: DictationLanguage) -> Verdict {
         var han = 0
         var latin = 0
         var kana = 0

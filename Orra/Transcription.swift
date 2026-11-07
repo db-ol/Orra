@@ -35,7 +35,7 @@ extension Transcription {
     /// to that pass, and so does a text that may be a list, see `checkingList`. A name said
     /// alone stays.
     /// Logs a timing and whether speech was heard, never the text.
-    func transcribe(_ samples: [Float], vocabulary terms: [String], holdsScreenNames: Bool = false, audioSeconds: Double, takingDigits: Bool = true, language: DictationLanguage = .chinese) async throws -> String {
+    func transcribe(_ samples: [Float], vocabulary terms: [String], holdsScreenNames: Bool = false, audioSeconds: Double, takingDigits: Bool = true, language: DictationLanguage) async throws -> String {
         let context = Vocabulary.context(terms)
         let text = try await checkingLanguage(try await transcribe(samples, context, nil), of: samples, context: context, language: language)
         guard !terms.isEmpty else { return text }
@@ -101,7 +101,7 @@ extension Transcription {
     /// gives no text and the others go on, while a cancellation ends them all. When no
     /// piece gave text and one failed, the first failure throws.
     /// Logs the number of pieces and their times, never the text.
-    func transcribeInPieces(_ samples: [Float], vocabulary terms: [String], holdsScreenNames: Bool = false, audioSeconds: Double, takingDigits: Bool = true, language: DictationLanguage = .chinese) async throws -> [TranscribedPiece] {
+    func transcribeInPieces(_ samples: [Float], vocabulary terms: [String], holdsScreenNames: Bool = false, audioSeconds: Double, takingDigits: Bool = true, language: DictationLanguage) async throws -> [TranscribedPiece] {
         // A recording of up to a minute needs no look for a cut.
         let isOnePiece = Double(samples.count) <= RecordingPieces.maximumSeconds * Double(RecordingLimits.sampleRate)
         let bounds = isOnePiece ? [samples.indices] : await Self.pieces(of: samples)
@@ -170,7 +170,7 @@ extension Transcription {
     /// 10 of 147 English clips. When neither pass helps or one fails, the text stands as
     /// it was.
     /// Logs a timing and the language that stood, never the text.
-    func checkingLanguage(_ text: String, of samples: [Float], context: String?, language: DictationLanguage = .chinese) async throws -> String {
+    func checkingLanguage(_ text: String, of samples: [Float], context: String?, language: DictationLanguage) async throws -> String {
         guard await Self.isForeign(text, for: language) else { return text }
         let started = ContinuousClock.now
         for pass in language.passes {

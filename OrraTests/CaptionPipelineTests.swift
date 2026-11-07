@@ -390,7 +390,8 @@ struct CaptionPipelineTests {
             canTranslate: engines.canTranslate,
             target: engines.target,
             // Chinese where English was asked for.
-            translate: { _, _ in #"{"cleaned": "请把这份报告发给我。", "translation": "请把这份报告发给我吧。"}"# }
+            translate: { _, _ in #"{"cleaned": "请把这份报告发给我。", "translation": "请把这份报告发给我吧。"}"# },
+            language: { .chinese }
         )
         let pipeline = CaptionPipeline(engines: failing) { reports.append($0) }
         pipeline.feed(FakeCaptionModels.audio(sentences: 1))
@@ -545,6 +546,7 @@ struct EngineTurnsTests {
         let engines = CaptionEngines.shared(
             transcription: transcription,
             isSpeechReady: { true },
+            language: { .chinese },
             canTranslate: { false },
             target: { .chinese },
             complete: { _, _ in "" },

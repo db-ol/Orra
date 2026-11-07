@@ -330,7 +330,7 @@ struct VocabularyTests {
 
     @MainActor
     @Test func removingFromTheTableForgetsLearnedWords() {
-        let controller = PushToTalkController(capture: FakeMicrophone().capture, transcription: FakeSpeech().transcription, insert: { _ in .pasted })
+        let controller = PushToTalkController(capture: FakeMicrophone().capture, transcription: FakeSpeech().transcription, insert: { _ in .pasted }, dictationLanguage: .chinese)
         let learning = CorrectionLearning(
             isOn: true,
             store: CorrectionStore(),
