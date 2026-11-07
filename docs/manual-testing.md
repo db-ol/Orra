@@ -775,7 +775,7 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     the unload is the speech model running slower while the cleanup model loads.
   - CleanupModelEvaluationTests runs the real model on the 182 cleanup cases (178 before
     2026-10-16), the 70 adversarial cases and the 20 meaning cases of Tools/rewrite-eval,
-    and since 2026-11-06 on its 46 repeat cases and its 672 number cases, which expect
+    and since 2026-11-06 on its 66 repeat cases and its 672 number cases, which expect
     their input back, only with TEST_RUNNER_ORRA_CLEANUP_EVAL=1.
     Its timings hold for a Release build, since a Debug build runs MLX without
     optimization:

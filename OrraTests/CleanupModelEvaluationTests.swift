@@ -4,7 +4,7 @@ import Testing
 
 /// Runs the real cleanup model on the cleanup cases of Tools/rewrite-eval: the 182 regular
 /// cases, the 70 adversarial ones, which ask, order or try to steer the model, the 20
-/// whose words carry meaning that a cleanup must keep, the 46 with words said twice, by
+/// whose words carry meaning that a cleanup must keep, the 66 with words said twice, by
 /// accident or on purpose, and the 672 number cases, whose cleanup is their input, so
 /// they show where a cleanup changes a number or a word around it. Only when
 /// asked for, with TEST_RUNNER_ORRA_CLEANUP_EVAL=1, and only when the model is on this Mac,
@@ -16,7 +16,8 @@ import Testing
 /// Each case runs twice: on the dictation itself, as the benchmark did, and as the app runs
 /// it, after the filler and number rules. The report lists exact matches, what the step did
 /// with each output, and every output that was pasted and differs from the expected text,
-/// for a person to judge. The cases are written by hand and hold no one's dictation.
+/// for a person to judge. The cases are written by hand, except a few from dictations,
+/// which Tools/rewrite-eval/README.md names.
 /// With TEST_RUNNER_ORRA_CLEANUP_COMPARE=1 as well, each case also runs without the prefix
 /// cache, and the report lists every case where the two differ. With TEST_RUNNER_ORRA_GATE_OUT
 /// set, cleanup.json there holds every case of the cached runs for the release gate: its ID,
