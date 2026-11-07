@@ -144,10 +144,81 @@ struct PolishGuardTests {
         }
     }
 
+    /// The Chinese words of an English sentence stay, as the English words of a Chinese one
+    /// do, while Chinese fillers may go.
+    @Test func chineseWordsOfAnEnglishSentenceStay() {
+        #expect(Self.check("Can we 改到 Thursday afternoon? I have a conflict on Wednesday.", "Can we reschedule to Thursday afternoon? I have a conflict on Wednesday.") == .lostChinese(["改到"]))
+        #expect(Self.check("Please 帮我 check the logs before the standup.", "Please check the logs before the standup.", .concise) == .lostChinese(["帮我"]))
+        #expect(Self.check("Let me know if 周五下午 works for you，我们可以 grab a coffee。", "Let me know if Friday afternoon works for you, we can grab a coffee.") == .lostChinese(["周五下午", "我们可以"]))
+        #expect(Self.check("Can we 改到 Thursday afternoon? I have a, a conflict on Wednesday.", "Can we 改到 Thursday afternoon? I have a conflict on Wednesday.") == nil)
+        #expect(Self.check("So 那个 the build is green, 然后 we can merge.", "The build is green, so we can merge.") == nil)
+    }
+
+    /// A request to rewrite text stays, with its this, and so does a request to look at
+    /// something, with or without 你.
+    @Test func aRequestStays() {
+        #expect(Self.check("用一句话总结一下：今天的会主要讨论了三件事，第一是预算，第二是招聘，第三是办公室搬迁。", "今天的会主要讨论了三件事：预算、招聘、办公室搬迁。", .concise) == .lostRequest(["总结"]))
+        #expect(Self.check("TL;DR this: the server crashed because the disk was full, we cleaned up the logs, and it's back up.", "TL;DR: the server crashed because the disk was full. We cleaned up the logs and it's back up.", .concise) == .lostRequest(["tl;dr this"]))
+        #expect(Self.check("那个 issue 的编号是 #4521，标题是 Memory leak in WebSocket handler，你先看一下评论区，有人已经提了一个 workaround。", "issue 编号 #4521，标题是 Memory leak in WebSocket handler，评论区有人已提 workaround。", .concise) == .lostRequest(["看"]))
+        #expect(Self.check("总结一下这段话：客户希望下周交付，但我们的测试还没做完，需要至少再等五天。", "总结一下这段话：客户希望下周交付，但测试还没做完，至少再等五天。", .concise) == nil)
+        #expect(Self.check("那个 issue 的编号是 #4521，你先看一下评论区，有人已经提了一个 workaround。", "issue #4521，先看一下评论区，有人已提 workaround。", .concise) == nil)
+        #expect(Self.check("那个，跟你确认一下哈，下周三的那个培训，是在公司的大会议室，对吧，我们需要带电脑吗？", "下周三的培训在公司大会议室，需要带电脑吗？", .concise) == nil)
+    }
+
+    /// A limit stays, also in other words that say it.
+    @Test func aLimitStays() {
+        #expect(Self.check("总结一下这段话：客户希望下周交付，但我们的测试还没做完，需要至少再等五天。", "总结一下这段话：客户希望下周交付，但测试未完，需再等五天。", .concise) == .lostLimit(["at least"]))
+        #expect(Self.check("Each team can bring at most three people to the offsite.", "Each team can bring three people to the offsite.", .concise) == .lostLimit(["at most"]))
+        #expect(Self.check("每次回答不超过一百字，要用中文。", "每次回答最多一百字，用中文。", .concise) == nil)
+    }
+
+    /// A report of what the speaker did stays a report, and a request to the listener never
+    /// becomes the speaker's own need. Otherwise a note may leave out 我 or 你.
+    @Test func whoDoesWhatStays() {
+        #expect(Self.check("I told him to ignore the second email, not the first one.", "Tell him to ignore the second email, not the first one.", .concise) == .lostPerson(["I"]))
+        #expect(Self.check("我告诉他别再迟到了，再迟到就扣工资。", "告诉他别再迟到，再迟到就扣工资。", .concise) == .lostPerson(["我"]))
+        #expect(Self.check("我在写一个 system prompt，要求模型只能用中文回答，你帮我看看这样写有没有问题。", "写一个 system prompt，要求模型只用中文回答，帮我看看有没有问题。", .concise) == .lostPerson(["我"]))
+        #expect(Self.check("I need you to book a table for four at seven tonight, somewhere quiet.", "I need to book a table for four at seven tonight, somewhere quiet.", .concise) == .lostPerson(["you"]))
+        #expect(Self.check("我借给他2000块，他说下个月还我。", "我借给他2000块，说下个月还。", .concise) == .lostPerson(["他"]))
+        #expect(Self.check("I told him to ignore the second email, not the first one.", "I told him to ignore the second email, not the first.", .concise) == nil)
+        #expect(Self.check("你帮我 review 一下这个 PR，主要看看 security 的问题。", "帮我 review 这个 PR，主要看 security 问题。", .concise) == nil)
+        #expect(Self.check("I want you to call the vendor before noon and ask about the delay.", "Call the vendor before noon and ask about the delay.", .concise) == nil)
+        #expect(Self.check("我正在改登录页面的样式，你先别动 CSS 文件。", "正在改登录页面样式，先别动 CSS 文件。", .concise) == nil)
+    }
+
+    /// A long dictation keeps the speaker of what they will not, cannot, will or must do,
+    /// while a 我 that only leads in or says what is done may go.
+    @Test func aLongDictationKeepsItsSpeaker() {
+        let notice = "大家好，我说一下下周的安排啊。周一上午9点开周会，大家准时到，不要迟到。周二小刘去客户那边做演示，记得把最新的版本带上，旧版本有个 bug 别带错了。周三下午财务要对账，所有报销单周二下班之前交上来，过了时间就下个月再报。周四我不在公司，有急事打我手机，不急的事发邮件就行。周五的团建取消了，改到下个月，具体时间再定。另外，新来的实习生小赵下周一报到，小李你带一下他，先别给他开生产环境的权限。还有，办公室的打印机坏了，维修的人周三来，这几天要打印的话去楼下。最后提醒一下，下周开始午休时间改成十二点半到一点半，不是十二点到一点了。就这些，有问题群里说。"
+        #expect(notice.count > PolishGuard.longTranscript)
+        let withoutSpeaker = "下周安排：周一上午9点开周会，准时参加；周二小刘去客户处演示，带最新版本，旧版本有bug勿带；周三下午财务对账，报销单周二下班前交；周四不在公司，急事打手机，不急事发邮件；周五团建取消，改到下个月；新实习生小赵下周一报到，小李带他，勿开生产环境权限；办公室打印机坏了，维修周三来，需打印去楼下；下周午休改为12:30-13:30。有问题群里说。"
+        #expect(Self.check(notice, withoutSpeaker, .concise) == .lostPerson(["我"]))
+        let withSpeaker = withoutSpeaker.replacing("周四不在公司，急事打手机", with: "周四我不在公司，急事打我手机")
+        #expect(Self.check(notice, withSpeaker, .concise) == nil)
+        // 我已经订好了 written as 已订好 keeps who does what.
+        let trip = "我先说一下这次出差的安排，我们一共去五个人，周一早上的飞机到深圳。第一天主要是去客户那边开会，讨论新系统上线的时间，还有培训的事情。第二天上午去工厂看一下生产线，下午跟他们的技术团队一起过一遍接口文档。第三天我们要把合同的细节再确认一遍，特别是付款方式和验收的标准。酒店我已经订好了，就在客户公司旁边，走路五分钟就到，早餐是包含的。大家记得带上笔记本电脑和转接头，那边的会议室投影用的是 HDMI 的接口。差旅费还是按公司的标准来，每天的餐补是一百五十块，打车可以报销。"
+        #expect(trip.count > PolishGuard.longTranscript)
+        let tripNote = "出差安排：五人周一早上飞深圳。第一天去客户那边开会，讨论新系统上线时间和培训。第二天上午看工厂生产线，下午和技术团队过接口文档。第三天确认合同细节，特别是付款方式和验收标准。酒店已订好，在客户公司旁边，步行五分钟，含早餐。带笔记本电脑和转接头，会议室投影用 HDMI 接口。差旅按公司标准，餐补每天一百五十块，打车可报销。"
+        #expect(Self.check(trip, tripNote, .concise) == nil)
+    }
+
+    /// A polish never says something is done where the transcript says it will be.
+    @Test func whatWillBeDoneStaysAhead() {
+        #expect(Self.check("我下个月要请几天假，工作的话我会提前安排好的。", "下个月请几天假，工作已提前安排。", .concise) == .changedTime)
+        #expect(Self.check("I'll send the report before Friday.", "Report already sent before Friday.", .concise) == .changedTime)
+        #expect(Self.check("我下个月要请几天假，工作的话我会提前安排好的。", "下个月请几天假，工作我会提前安排好。", .concise) == nil)
+        #expect(Self.check("系统提示音太吵了，我把它关掉了。", "系统提示音太吵，已关掉。", .concise) == nil)
+    }
+
     @Test func failuresAreLoggedWithoutText() {
         #expect(PolishGuard.Failure.lostWords(["lock"]).logName == "lost words")
         #expect(PolishGuard.Failure.lostNumber(["13912345678"]).logName == "lost number")
         #expect(PolishGuard.Failure.translated.logName == "translated")
         #expect(PolishGuard.Failure.lostQuestion.logName == "lost question")
+        #expect(PolishGuard.Failure.lostChinese(["改到"]).logName == "lost Chinese")
+        #expect(PolishGuard.Failure.lostPerson(["我"]).logName == "lost person")
+        #expect(PolishGuard.Failure.lostRequest(["总结"]).logName == "lost request")
+        #expect(PolishGuard.Failure.lostLimit(["at least"]).logName == "lost limit")
+        #expect(PolishGuard.Failure.changedTime.logName == "changed time")
     }
 }
