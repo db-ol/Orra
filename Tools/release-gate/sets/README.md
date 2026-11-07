@@ -1,29 +1,48 @@
 # Synthetic test sets for the release gate
 
-Each folder here is one set of sentences, written by hand and spoken with the macOS voices.
-Only the sentences live in the repository. The clips are made again on any Mac:
+Each folder here is one set of sentences, written by hand and spoken with the macOS voices,
+and so is each folder in `pairs/`, the sets of the four language pairs. Only the sentences
+live in the repository. The clips are made again on any Mac:
 
     python3 Tools/release-gate/sets/make_sets.py [SET ...]
 
 `make_sets.py` uses `say` (Samantha for English, Tingting for Chinese and mixed sentences,
-Kyoko for Japanese, Paulina for Spanish, or the `voice` of a line) and `afconvert` to 16 kHz
-mono 16 bit WAVE. Standard library only.
+Kyoko for Japanese, Paulina for Spanish, Yuna for Korean, or the `voice` of a line) and
+`afconvert` to 16 kHz mono 16 bit WAVE. Standard library only.
 It writes to `$ORRA_BENCH/gate-sets`, where the gate reads the sets, unless `--out` names
-another folder.
+another folder. A set is named by its folder, such as `gate-core` or `pairs/ja-core`, and
+`pairs` names every set in `pairs/`. With no set named, it makes every set. Before it makes
+any clip it checks every set it was given, and `--check` only checks them and writes
+nothing, on any system.
 
 ## Files of a set
 
 - `sentences.jsonl`: one sentence per line, `{"id", "language", "say", "reference",
   "expect_terms", "forbid_terms"}`. `say` is the text given to the voice, `reference` is the
-  text Orra should paste. `language` is `zh`, `en`, `mixed`, `ja` or `es`. A line may hold its own
-  `voice` and `context`.
-- `set.json`, optional: the context variants. Every sentence becomes one clip per variant, with the
+  text Orra should paste. `language` is `zh`, `en`, `mixed`, `ja`, `es` or `ko`. A line may hold its own
+  `voice` and `context`. `say` may also be a list of `[voice, text]` parts, which are spoken
+  one after another and joined into one clip, such as an English filler said by Samantha
+  inside a Japanese sentence said by Kyoko.
+- A term of `expect_terms` is one spelling, or a list of spellings: the one written in the
+  reference first, then the others that count as right, such as `["Slack", "슬랙"]` or
+  `["km", "킬로미터"]`. A line may also hold `accepted`, a list of such lists for words that
+  are not expected terms, such as `["フォルダー", "フォルダ"]`.
+- `set.json`, optional: the set's `pair` and its context variants. `pair` names the dictation
+  pair the set is for, `zh`, `ja`, `es` or `ko`. A set without one is for the Chinese pair.
+  Every sentence becomes one clip per variant, with the
   variant's `suffix` after its id and the variant's `context` (the vocabulary given to the
-  speech model). A variant without `context`, or a set without `set.json`, gives each clip
+  speech model). A variant without `context`, or a set without variants, gives each clip
   the context of its sentence.
+- `README.md`, optional: what the set holds and who wrote and checked its text.
+
+`make_sets.py` stops before it makes a set when a plain expected term, or the first spelling
+of a list, is not in the reference, or when a forbidden term is in it, matched as below.
 
 The output of a set is `clips/<id>.wav` and `manifest.jsonl`, one line per clip:
-`{"id", "language", "reference", "context", "expect_terms", "forbid_terms"}`.
+`{"id", "language", "reference", "context", "expect_terms", "forbid_terms"}`, and
+`accepted` with every list of spellings of the line, those of its expected terms first, when
+it has any. `set.json` and `README.md` are copied next to them. A set in `pairs/` goes to
+`pairs/<name>` in the output folder.
 
 ## Sets
 
@@ -56,6 +75,33 @@ before a counter (二十个人, 两千个请求), rough numbers (三百多), 万
 (不是三万，是三万五) and units the rules do not know (两百毫秒). `expect_terms` holds the
 numbers with their unit and the negation words, so a lost 不 or a wrong digit shows up even
 when the error rate barely moves.
+
+## Sets of the language pairs
+
+The sets in `pairs/` measure the four dictation pairs the same way, each set with its pair
+in `set.json`. `make_sets.py` builds them into `$ORRA_BENCH/gate-sets/pairs`, one level
+below the sets above. The release gate runs every set directly in its sets folder with the
+Chinese pair, so these sets stay apart until the gate runs each set with its own pair.
+
+| Set | zh | ja | es | ko |
+|---|---|---|---|---|
+| Mixed with English, 60 sentences (`<lang>-mirror`) | 60 clips | 60 clips | 60 clips | 60 clips |
+| Short dictation like gate-core (`<lang>-core`) | gate-core | 12 clips | 12 clips | 12 clips |
+| Numbers like zh-numbers-negation (`<lang>-numbers`) | zh-numbers-negation | 40 sentences, 80 clips | 40 sentences, 80 clips | 40 sentences, 80 clips |
+| Homophones like homophone-distractors (`<lang>-homophones`) | homophone-distractors | 36 clips | 36 clips | 36 clips |
+| Timing clips like latency-say (`<lang>-latency`) | latency-say | 13 clips | 13 clips | 13 clips |
+| English fillers (`<lang>-english-fillers`) | | 6 clips | 6 clips | |
+
+The four mirror sets hold the same 60 situations of `pairs/mirror-template.jsonl`, in
+English with their group: 20 with office and developer terms, 10 with names, 10 with
+numbers, 10 short replies and 10 self corrections. Each language says them the way a native
+speaker who mixes in English would, so their rates compare. Japanese and Korean `say` text
+spells English words as a speaker of the language says them (スラック, 슬랙), and the
+reference writes them as a user would type them, with the other spelling accepted. The core,
+latency and filler sets of a pair hold their English sentences unchanged from gate-core and
+latency-say, and the English filler sets have an English filler said by Samantha inside a
+Japanese or Spanish sentence. The README of each set says how it was written, which
+spellings it accepts and who checked its text.
 
 ## Matching terms
 
