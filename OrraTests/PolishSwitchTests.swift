@@ -163,12 +163,16 @@ struct PolishSwitchTests {
         #expect(cleanup.polishIsOn)
         #expect(!cleanup.isConfirmingPolishDownload)
         cleanup.turnOff()
+        // With Polish on alone, Projects needs no question either, and its page offers no
+        // Cancel Download, which would stop the download Polish waits for.
+        #expect(!cleanup.isOn)
+        #expect(!cleanup.translationIsOn)
+        #expect(cleanup.turnOnProjects())
+        #expect(!cleanup.isConfirmingProjectsDownload)
+        #expect(!cleanup.canCancelProjectsDownload)
         cleanup.turnOnTranslation()
         #expect(cleanup.translationIsOn)
         #expect(!cleanup.isConfirmingTranslationDownload)
-        // With Polish on, Projects needs no question either.
-        #expect(cleanup.turnOnProjects())
-        #expect(!cleanup.canCancelProjectsDownload)
         cleanup.cancelDownload()
         await cleanup.models.waitForDownload()
     }
