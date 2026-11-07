@@ -12,9 +12,10 @@ the sentence.
 
 `say` writes the vocabulary words as a Korean speaker says them (커서, 빔), and the reference has
 the vocabulary's spelling. Notion and Excel also count as right in Hangul (노션, 엑셀), which is not
-the common word, so a clip with 노선 or 액셀 forbids both spellings. Cursor, Miro and Vim count only
-in Latin letters, since their Hangul is the common word. 프론트엔드 and the standard spelling 프런트엔드
-count as the same word.
+the common word, so a clip with 노선 forbids both spellings. A clip with 액셀 forbids Excel only,
+since 엑셀 is a common misspelling of 액셀 even without a vocabulary, and finding it there would not
+show the vocabulary's fault. Cursor, Miro and Vim count only in Latin letters, since their Hangul
+is the common word. 프론트엔드 and the standard spelling 프런트엔드 count as the same word.
 
 The Korean text of this set was written and reviewed by an AI process, not by a native speaker,
 and waits for a native reader. Until one has read it, its references, its accepted spellings and
