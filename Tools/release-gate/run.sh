@@ -45,6 +45,10 @@ suites=(${(s:,:)only})
 pair_suites_known=(pairs)
 pair_suites=(${suites:*pair_suites_known})
 suites=(${suites:|pair_suites_known})
+if [[ -n $pairs_arg ]] && (( ! ${#pair_suites} )); then
+  echo "--pairs needs pairs in --only" >&2
+  exit 2
+fi
 for suite in $suites; do
   (( ${all_suites[(Ie)$suite]} )) || { echo "unknown suite $suite" >&2; exit 2 }
 done
@@ -57,7 +61,8 @@ pair_sets=${GATE_PAIR_SETS_DIR:-$sets/pairs}
 suite_pairs=()
 if (( ${pair_suites[(Ie)pairs]} )); then
   suite_pairs=(${(s:,:)${pairs_arg:-ja,es}})
-  suite_pairs=(${suite_pairs:#zh})
+  # A pair named twice runs once.
+  suite_pairs=(${(u)suite_pairs:#zh})
   for pair in $suite_pairs; do
     [[ -n ${pair_languages[$pair]:-} ]] || { echo "no dictation pair $pair: the pairs are zh, ja and es" >&2; exit 2 }
   done
