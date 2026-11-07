@@ -20,11 +20,11 @@ since release builds show Projects, so the projects variables below must be set.
 
 | Suite | Test | What it measures, per case |
 |---|---|---|
-| corpus | SpeechCorpusEvaluationTests | The 392 clips of the speech corpus (#40): errors per clip on the transcript and on the text after the filler and number rules and the join of spelled capitals, scored with Tools/speech-eval/score.py, so wer_en, cer_zh and mer_mixed |
+| corpus | SpeechCorpusEvaluationTests | The 392 clips of the speech corpus (#40): errors per clip on the transcript and on the text after the filler and number rules and the join of spelled capitals, scored with Tools/speech-eval/score.py, so wer_en, cer_zh and mer_mixed. Any output on silence and noise counts, one error per token in any script |
 | context | RealModelTests/ContextEvaluationTests | 100 ContextASR clips per language, each without and with its terms and ten distractors as context: terms found, distractors inserted, errors and the time of each pass, plus ascend_mixed with unrelated terms and three clips without speech |
 | cleanup | CleanupModelEvaluationTests/cleanupCases() | The 182 regular, 70 adversarial and 20 meaning cases of Tools/rewrite-eval in three modes: exact match, outcome, time, and whether an adversarial case looks obeyed (pasted text more than 1.6 times as long as expected plus 4, as in the translation evaluation) |
 | latency | LatencyMeasurementTests/dictations() | Release to paste (#51) for the say clips of the latency-say set and 15 corpus clips, cleanup off and on: median and p90 of every step, and each clip's median |
-| sets | GateSetEvaluationTests | Every set under the gate sets folder, through PushToTalkController with the clip's context as the vocabulary and cleanup off: errors against the reference, expect_terms found and forbid_terms present |
+| sets | GateSetEvaluationTests | Every set directly in the gate sets folder, not those in its pairs folder, through PushToTalkController with the clip's context as the vocabulary and cleanup off: errors against the reference, expect_terms found and forbid_terms present |
 | projects | ProjectsGateEvaluationTests | The 64 attack items of the synthetic Projects set, sorted and explained in Chinese and in English with the real cleanup model, with search terms and other projects' files as the app chooses them: where each item was filed, the warnings the checks in code showed, and what the window shows, the checked draft included, see below |
 | retrieval | RetrievalEvaluationTests | The labeled mails of the synthetic Projects set and its retrieval supplement: the passages a prompt would hold, at most 6, without search terms and with the terms of the real cleanup model, recall and hit at 6 by kind of mail, and the time of each terms job, see below |
 
@@ -50,7 +50,10 @@ the top of the file:
   baseline, with cleanup off or on. Clips whose median grew that much are listed.
 - sets: a set's error rate more than 0.5 points higher, any clip with no error that has
   one now, any clip that lost an expected term, or any clip with a forbidden term that
-  the baseline did not have. A new set or clip only fails on a forbidden term.
+  the baseline did not have. A new set or clip only fails on a forbidden term. These rules
+  take the strict numbers. The lenient numbers of a set with accepted spellings (see Test
+  sets) are shown beside them and fail nothing, and a clip that is only worse in them is
+  listed under "cases got worse".
 - projects: the bar below, baseline or not, and against a baseline any item that lost a
   warning the checks in code showed before.
 - retrieval: search terms for fewer than 95 % of the mails, baseline or not, and against a
@@ -71,16 +74,28 @@ A set is a folder `<sets>/<name>/` with `clips/<id>.wav` (16 kHz mono) and
 
     {"id": "zh_terms_1", "language": "zh", "reference": "...", "context": ["Kubernetes"], "expect_terms": ["Kubernetes"], "forbid_terms": []}
 
-- language: "zh", "en", "mixed", "ja" or "es". English is scored per word, Chinese and
-  mixed per Chinese character and per Latin word, Japanese per Han character and per kana,
-  and Spanish per word with its accents, as Tools/speech-eval/score.py scores them.
+- language: "zh", "en", "mixed", "ja" or "es", the languages make_sets.py speaks today.
+  The scorer also takes "ko", and "ja_en", "es_en" and "ko_en" for Japanese, Spanish and
+  Korean mixed with English. English is scored per word, Chinese and mixed per Chinese
+  character and per Latin word, Japanese per Han character and per kana, Spanish per word
+  with its accents, Korean per Hangul syllable, Han character and kana and per word of
+  other letters, and each language mixed with English as that language, as
+  Tools/speech-eval/score.py scores them.
 - reference: the text Orra should paste with cleanup off, so after the filler and number
   rules and the join of spelled capitals, for example 3点 for 三点 and PR for P R.
 - context: the vocabulary the dictation runs with, may be empty.
 - expect_terms: terms the text must hold. forbid_terms: terms it must not hold. Spaces
   inside a term are free (N P C matches NPC). A term with Latin letters matches with its
   case and not inside a longer word, so the plain word cursor is not the term Cursor and
-  trust does not hold Rust. Other terms match anywhere in the text.
+  trust does not hold Rust. Other terms match anywhere in the text. An expected term may
+  be a list of spellings, the form in the reference first, then the other spellings that
+  count as right, such as ["Slack", "슬랙"]. The strict check takes the first form and
+  the lenient check any form. A term is named by its first form.
+- accepted, optional: lists in the same form for words of the reference that are not
+  expected terms, such as ["km", "킬로미터"]. The lenient error rate scores the text with
+  every accepted spelling, those of expect_terms included, written as the reference
+  writes it, as Tools/speech-eval/README.md describes. A set without lists has no
+  lenient numbers, since they would equal the strict ones.
 
 The sentences, voices and references of each set are in
 `Tools/release-gate/sets/<name>/sentences.jsonl`, and
@@ -90,6 +105,15 @@ The sentences, voices and references of each set are in
 makes the clips of every set with macOS say into `$ORRA_BENCH/gate-sets`. Its README
 describes the set files. Clips stay
 outside the repository. No recording of a person goes into a set.
+
+The sets of the four language pairs are in `Tools/release-gate/sets/pairs` and go to
+`$ORRA_BENCH/gate-sets/pairs`: a mirror set of 60 sentences mixed with English for each
+pair, and for Japanese, Spanish and Korean sets like gate-core, zh-numbers-negation,
+homophone-distractors and latency-say, plus English fillers in Japanese and Spanish. Each
+names its pair in its `set.json`, and they hold Korean lines (language "ko"), terms with
+lists of spellings and lines with `accepted` spellings, which the README of the sets
+describes. The sets suite runs only the sets directly in the gate sets folder, so it does
+not run these until the gate runs each set with its own pair.
 
 ## The Projects attack set
 

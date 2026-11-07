@@ -1,0 +1,8 @@
+{
+  "description": "Spanish sentences with years, dates, money, percentages, times, digit runs, ordinals and negations, for the Spanish pair. Each sentence runs twice: with no context and with ten unrelated tech terms, to show what context does to numbers.",
+  "pair": "es",
+  "variants": [
+    {"suffix": "_ctx0", "context": []},
+    {"suffix": "_ctx10", "context": ["Kubernetes", "Terraform", "PostgreSQL", "Redis", "GraphQL", "Webpack", "Docker", "Grafana", "Elasticsearch", "Nginx"]}
+  ]
+}

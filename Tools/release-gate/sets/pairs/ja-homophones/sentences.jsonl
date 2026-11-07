@@ -1,0 +1,36 @@
+{"id": "hom01", "language": "ja", "say": "カーソルを行の最後まで移動してから、エンターを押してください。", "reference": "カーソルを行の最後まで移動してから、エンターを押してください。", "expect_terms": [], "forbid_terms": ["Cursor"]}
+{"id": "hom02", "language": "ja", "say": "文字を速く打つと、点滅しているカーソルが消えてしまいます。", "reference": "文字を速く打つと、点滅しているカーソルが消えてしまいます。", "expect_terms": [], "forbid_terms": ["Cursor"]}
+{"id": "hom03", "language": "ja", "say": "カーソルでプロジェクトを開いて、テストを実行しました。", "reference": "Cursorでプロジェクトを開いて、テストを実行しました。", "expect_terms": ["Cursor"], "forbid_terms": []}
+{"id": "hom04", "language": "ja", "say": "最近はフロントエンドをほとんどカーソルで書いています。", "reference": "最近はフロントエンドをほとんどCursorで書いています。", "expect_terms": ["Cursor"], "forbid_terms": []}
+{"id": "hom05", "language": "ja", "say": "今日がラストチャンスなので、絶対に申し込んでください。", "reference": "今日がラストチャンスなので、絶対に申し込んでください。", "expect_terms": [], "forbid_terms": ["Rust"]}
+{"id": "hom06", "language": "ja", "say": "ラストの曲で会場がいちばん盛り上がりました。", "reference": "ラストの曲で会場がいちばん盛り上がりました。", "expect_terms": [], "forbid_terms": ["Rust"]}
+{"id": "hom07", "language": "ja", "say": "去年、パーサーをラストで書き直しました。", "reference": "去年、パーサーをRustで書き直しました。", "expect_terms": ["Rust"], "forbid_terms": [], "accepted": [["パーサー", "パーサ"]]}
+{"id": "hom08", "language": "ja", "say": "このモジュールはラストで書かれています。", "reference": "このモジュールはRustで書かれています。", "expect_terms": ["Rust"], "forbid_terms": []}
+{"id": "hom09", "language": "ja", "say": "誕生日にルビーの指輪をもらいました。", "reference": "誕生日にルビーの指輪をもらいました。", "expect_terms": [], "forbid_terms": ["Ruby"]}
+{"id": "hom10", "language": "ja", "say": "子ども向けの本なので、漢字にルビを振ってください。", "reference": "子ども向けの本なので、漢字にルビを振ってください。", "expect_terms": [], "forbid_terms": ["Ruby"]}
+{"id": "hom11", "language": "ja", "say": "このサービスのバックエンドはルビーで書かれています。", "reference": "このサービスのバックエンドはRubyで書かれています。", "expect_terms": ["Ruby"], "forbid_terms": []}
+{"id": "hom12", "language": "ja", "say": "生産ラインが止まっているので、出荷が遅れます。", "reference": "生産ラインが止まっているので、出荷が遅れます。", "expect_terms": [], "forbid_terms": ["LINE"]}
+{"id": "hom13", "language": "ja", "say": "この白いラインより内側でお待ちください。", "reference": "この白いラインより内側でお待ちください。", "expect_terms": [], "forbid_terms": ["LINE"]}
+{"id": "hom14", "language": "ja", "say": "詳しいことはあとでラインで送りますね。", "reference": "詳しいことはあとでLINEで送りますね。", "expect_terms": ["LINE"], "forbid_terms": []}
+{"id": "hom15", "language": "ja", "say": "グレーのスラックスを買いました。", "reference": "グレーのスラックスを買いました。", "expect_terms": [], "forbid_terms": ["Slack"]}
+{"id": "hom16", "language": "ja", "say": "その件はスラックで共有しておきます。", "reference": "その件はSlackで共有しておきます。", "expect_terms": [["Slack", "スラック"]], "forbid_terms": []}
+{"id": "hom17", "language": "ja", "say": "スラックの通知がうるさいので、少し切っておきます。", "reference": "Slackの通知がうるさいので、少し切っておきます。", "expect_terms": [["Slack", "スラック"]], "forbid_terms": []}
+{"id": "hom18", "language": "ja", "say": "リニア新幹線はいつ開業する予定ですか？", "reference": "リニア新幹線はいつ開業する予定ですか？", "expect_terms": [], "forbid_terms": ["Linear"]}
+{"id": "hom19", "language": "ja", "say": "このバグはリニアにチケットを切っておきます。", "reference": "このバグはLinearにチケットを切っておきます。", "expect_terms": ["Linear"], "forbid_terms": []}
+{"id": "hom20", "language": "ja", "say": "コーヒーに砂糖は入れますか？", "reference": "コーヒーに砂糖は入れますか？", "expect_terms": [], "forbid_terms": ["佐藤"]}
+{"id": "hom21", "language": "ja", "say": "このレシピは砂糖を少し減らしたほうがいいです。", "reference": "このレシピは砂糖を少し減らしたほうがいいです。", "expect_terms": [], "forbid_terms": ["佐藤"]}
+{"id": "hom22", "language": "ja", "say": "佐藤さんに見積もりを送っておいてください。", "reference": "佐藤さんに見積もりを送っておいてください。", "expect_terms": ["佐藤"], "forbid_terms": []}
+{"id": "hom23", "language": "ja", "say": "今度の会議は木曜日に決まりました。", "reference": "今度の会議は木曜日に決まりました。", "expect_terms": [], "forbid_terms": ["近藤"]}
+{"id": "hom24", "language": "ja", "say": "今度、みんなでご飯に行きましょう。", "reference": "今度、みんなでご飯に行きましょう。", "expect_terms": [], "forbid_terms": ["近藤"]}
+{"id": "hom25", "language": "ja", "say": "近藤さんが資料をまとめてくれました。", "reference": "近藤さんが資料をまとめてくれました。", "expect_terms": ["近藤"], "forbid_terms": []}
+{"id": "hom26", "language": "ja", "say": "この車は四輪駆動なので、雪道でも安心です。", "reference": "この車は四輪駆動なので、雪道でも安心です。", "expect_terms": [], "forbid_terms": ["工藤"]}
+{"id": "hom27", "language": "ja", "say": "このおもちゃは電池で駆動します。", "reference": "このおもちゃは電池で駆動します。", "expect_terms": [], "forbid_terms": ["工藤"]}
+{"id": "hom28", "language": "ja", "say": "工藤さんに確認してから返事します。", "reference": "工藤さんに確認してから返事します。", "expect_terms": ["工藤"], "forbid_terms": []}
+{"id": "hom29", "language": "ja", "say": "猫が障子を破ってしまいました。", "reference": "猫が障子を破ってしまいました。", "expect_terms": [], "forbid_terms": ["東海林"]}
+{"id": "hom30", "language": "ja", "say": "古い障子を張り替えました。", "reference": "古い障子を張り替えました。", "expect_terms": [], "forbid_terms": ["東海林"]}
+{"id": "hom31", "language": "ja", "say": "しょうじさんから電話がありました。", "reference": "東海林さんから電話がありました。", "expect_terms": ["東海林"], "forbid_terms": []}
+{"id": "hom32", "language": "ja", "say": "しょうじさんの資料、すごく分かりやすかったです。", "reference": "東海林さんの資料、すごく分かりやすかったです。", "expect_terms": ["東海林"], "forbid_terms": []}
+{"id": "hom33", "language": "ja", "say": "カーソルのエディターで、カーソルの位置がずれます。", "reference": "Cursorのエディターで、カーソルの位置がずれます。", "expect_terms": ["Cursor"], "forbid_terms": [], "accepted": [["エディター", "エディタ"]]}
+{"id": "hom34", "language": "ja", "say": "ラストに、ラストのサンプルコードをお見せします。", "reference": "ラストに、Rustのサンプルコードをお見せします。", "expect_terms": ["Rust"], "forbid_terms": []}
+{"id": "hom35", "language": "ja", "say": "佐藤さんがコーヒーに砂糖を入れすぎました。", "reference": "佐藤さんがコーヒーに砂糖を入れすぎました。", "expect_terms": ["佐藤"], "forbid_terms": []}
+{"id": "hom36", "language": "ja", "say": "今度、近藤さんと打ち合わせがあります。", "reference": "今度、近藤さんと打ち合わせがあります。", "expect_terms": ["近藤"], "forbid_terms": []}
