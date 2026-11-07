@@ -988,10 +988,11 @@ def plan_runs(suite: str, out: Path, pairs: list[str], corpus: Path, fleurs: lis
     its raw file, its folder (the corpus, the say clips of a latency run or the sets, None
     for a context run), its clip list or None for every clip, and the folder of its raw file.
 
-    pairs: for each pair but Chinese, whose runs are the corpus, context and latency suites,
-    the speech corpus, the pair's FLEURS clips, the context suite and the latency suite with
-    the pair's say clips, then the pair's sets. wrong-pairs: for each pair, count FLEURS clips
-    of every other pair, Korean included, one run per corpus folder."""
+    pairs: for each pair but Chinese the speech corpus, the pair's FLEURS clips, the context
+    suite and the latency suite with the pair's say clips, then for every pair its sets.
+    Chinese has its runs of the corpus, context and latency suites in those suites.
+    wrong-pairs: for each pair, count FLEURS clips of every other pair, Korean included, one
+    run per corpus folder."""
     pairs = list(dict.fromkeys(pairs))
     unknown = [pair for pair in pairs if pair not in PAIRS]
     if unknown or not pairs:
