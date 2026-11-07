@@ -50,7 +50,7 @@ Un vocabulario personal de hasta 5,000 nombres y términos, para que Orra los es
 
 Opcional. Un modelo de texto en tu Mac elimina las muletillas que las reglas dejan pasar y aplica las rectificaciones que haces al hablar, así que “at three, oh wait, four” queda como “at four”. Pegar texto original siempre recupera lo que dijiste. Con japonés o español como idioma de dictado, por ahora la limpieza solo funciona con oraciones en inglés.
 
-Activa también Pulir y el mismo modelo reescribe lo que dices como texto escrito claro y conciso, en el estilo que elijas: Claro conserva casi todo y Conciso solo lo esencial. Los nombres, los números y los idiomas que mezclas quedan como los dijiste. Como la limpieza, por ahora el pulido solo funciona con oraciones en inglés si dictas en japonés o español. Novedad de la versión 0.7.0.
+Activa también Pulir y el mismo modelo reescribe lo que dices como texto escrito claro y conciso, en el estilo que elijas: Claro conserva casi todo y Conciso solo lo esencial. Orra revisa cada reescritura y, si no pasa las verificaciones, pega tu texto sin reescribir. Aun así, una reescritura puede omitir un detalle o cambiar lo que quisiste decir, y Pegar texto original recupera el texto de antes. Como la limpieza, por ahora el pulido solo funciona con oraciones en inglés si dictas en japonés o español. Novedad de la versión 0.7.0.
 
 </td>
 <td width="50%"><img src="docs/images/readme/es/cleanup.gif" alt="Con Limpiar texto activado, alguien dice en inglés “Let’s go over the quote at three, oh wait, four tomorrow.” En el correo queda “Let’s go over the quote at four tomorrow.”" width="100%"></td>
