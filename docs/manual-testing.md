@@ -499,7 +499,10 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     Qwen3, COVID 19 to COVID-19) still is. Dates, times and amounts are not learned, and
     names with numerals keep the known cost. In a replaced word a change of numbers only,
     from the pasted word or from what the model wrote, teaches nothing, and putting back
-    the number the model wrote still forgets the pair, also in another writing.
+    the number the model wrote still forgets the pair, also in another writing. For the
+    pairs an earlier version kept, it tells another number (十四 to 四十) from the same
+    number in another writing (Windows十一 to Windows11), with a formal numeral counted as
+    written.
     CorrectionWatcherTests drives the watcher with a scripted field, so no app is read: a
     reported fix, no watch at all after a paste into Orra's own process, and no reading
     after leaving the app, under secure input, in a field without the pasted text, or in a
@@ -518,7 +521,9 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     the system's word breaker finds, the longest spelling first, no chained replacements,
     and pairs that disagree replace nothing. A kept pair that changes only numbers, such
     as Qwen2 to Qwen3 from an earlier version, replaces nothing and makes no other pair
-    for its spelling disagree, while quen 3 to Qwen3 and COVID 19 to COVID-19 still
+    for its spelling disagree. So does one that puts a formal numeral in place of a plain
+    one, such as 大六 to 大陆. quen 3 to Qwen3, COVID 19 to COVID-19 and a pair that writes
+    the same number another way, such as Windows十一 to Windows11 or Qwen３ to Qwen3, still
     replace. It also covers what a fix of a replaced word teaches: the model's spelling
     with the new word, the pair forgotten when the user puts the model's spelling back,
     and nothing for a fix of part of a replaced word.
@@ -2215,6 +2220,8 @@ corrections on:
 - [ ] A learned pair for an ordinary word, such as there to their, never changes there.
 - [ ] In 0.7.0 or earlier, fix Qwen2 to Qwen3 so it is learned, then update: Qwen2 is
   pasted as the model wrote it, and Qwen3 stays in the vocabulary.
+- [ ] In 0.7.0 or earlier, fix a pasted Windows十一系统 to Windows11系统 so it is learned,
+  then update: where the model writes Windows十一 before Chinese, Windows11 is pasted.
 - [ ] With cleanup on, the cleaned text and Paste Original Text both have Claude.
 
 Use names on screen, added on 2026-10-17, not verified yet. Turn on Use names on screen
