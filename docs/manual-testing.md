@@ -624,23 +624,24 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     that English is untouched, ranges of times, versions after a Latin name, and a long
     dictation. PushToTalkControllerTests checks that the paste has digits after the fillers
     are gone while the setting is on, not while it is off, and that a change is saved.
-  - SpelledLettersTests, added on 2026-11-06, checks the join of spelled capitals on every
-    text it changes in the release gate run of the 0.6.4 candidate (P R as PR, 3.5G B as
-    3.5GB, 16 G B as 16GB, O.K. as OK and A.I. as AI) and on three more of earlier corpus
-    runs, then on focused cases. It checks that iPhone X S, a lone capital, Latin words,
-    capitals that touch letters, six spelled capitals, five dotted ones, 5G A 股, letters
-    spelled on purpose as in Lee 的拼写是 L E E, and text without Chinese characters
-    (English, kana and Hangul) stay as they are. Versions, money and sizes join (G P T-4o,
-    100 U S D, 12 G B), and so does Japanese with kanji, while a version after a Latin word
-    (Mac O S 15) and a Latin word right after the letters keep them apart. It runs the
-    rule steps in the app's order with fillers between and around the letters, and writes
-    down the known costs (A B 两组, J.K. 罗琳, 5 G A 股). It also checks that applying the
-    join twice changes nothing more, that no text of Tools/rewrite-eval changes, and a long
-    dictation. With TEST_RUNNER_ORRA_SPELLED_LETTERS_RUNS set, an opt in test writes the
-    stored texts of gate runs after the join, so gate.py can score the change without a
-    model. PushToTalkControllerTests checks that the paste joins the letters in Chinese
-    text after the number rules, also with both switches of the rules off, and that
-    English, and Japanese for a user who dictates in it, keep them.
+  - SpelledLettersTests, added on 2026-11-06, checks the join of spelled capitals on
+    every text it changes in the release gate run of the 0.6.4 candidate (P R as PR,
+    3.5G B as 3.5GB, 16 G B as 16GB, O.K. as OK and A.I. as AI) and on three more of
+    earlier corpus runs, then on focused cases. It checks that iPhone X S, a lone
+    capital, Latin words, capitals that touch letters, six spelled capitals, five dotted
+    ones, 5G A 股, letters spelled on purpose as in Lee 的拼写是 L E E, and text without
+    Chinese characters (English, kana and Hangul) stay as they are. Versions, money and
+    sizes join (G P T-4o, 100 U S D, 12 G B), and so does Japanese with kanji and
+    letters with a Latin word right after them (P R review), while a version after a
+    Latin word (Mac O S 15) keeps them apart. It runs the rule steps in the app's order
+    with fillers between and around the letters, and writes down the known costs (A B
+    两组, J.K. 罗琳, 5 G A 股). It also checks that applying the join twice changes nothing
+    more, that no text of Tools/rewrite-eval changes, and a long dictation. With
+    TEST_RUNNER_ORRA_SPELLED_LETTERS_RUNS set, an opt in test writes the stored texts of
+    gate runs after the join, so gate.py can score the change without a model.
+    PushToTalkControllerTests checks that the paste joins the letters in Chinese text
+    after the number rules, also with both switches of the rules off, and that English,
+    and Japanese for a user who dictates in it, keep them.
   - Cleanup with a local model, added on 2026-10-10:
   - RewriteGuardTests runs all 357 distinct cleanup outputs of the hardening benchmark
     (bench/hardening, five prompts on the 70 adversarial cases and three on the 178

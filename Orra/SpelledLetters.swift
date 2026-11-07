@@ -9,8 +9,9 @@ import Foundation
 /// text stays as dictated:
 /// - Two to five single capitals with one space between them become one word: 这个 P R 先别
 ///   merge is 这个 PR 先别 merge. A capital is single when no Latin letter touches it. The
-///   letters stay apart when a Latin word is one space away, as in iPhone X S, since they
-///   may belong to it.
+///   letters stay apart when a Latin word comes one space before them, as in iPhone X S,
+///   since they may belong to it. A Latin word after them does not keep them apart, so 提
+///   P R review 一下 is 提 PR review 一下.
 /// - A byte unit spelled after a number joins the number: 16 G B is 16GB and 3.5G B is
 ///   3.5GB. Other capitals glued to a digit stay, as in 5G A 股.
 /// - Two to four capitals that each end in a period lose the periods: O.K. is OK and A.I.
@@ -109,12 +110,11 @@ nonisolated enum SpelledLetters {
             let letters = stride(from: index, to: end, by: 2).map { characters[$0] }
             let isUnit = byteUnits.contains(String(letters))
             let before: Character? = index > 0 ? characters[index - 1] : nil
-            // A Latin word one space away, before or after the run.
+            // A Latin word one space before the run.
             let wordBefore = before == " " && index > 1 && characters[index - 2].isASCIILetter
-            let wordAfter = end + 1 < characters.count && characters[end] == " " && characters[end + 1].isASCIILetter
             let gluedToDigit = before.map(isDigit) ?? false
             let spellsAWord = words.contains(String(letters).lowercased())
-            if (2...5).contains(count), !wordBefore, !wordAfter, !gluedToDigit || isUnit, !spellsAWord {
+            if (2...5).contains(count), !wordBefore, !gluedToDigit || isUnit, !spellsAWord {
                 // The space between a number and its unit goes too.
                 if isUnit, before == " ", index > 1, isDigit(characters[index - 2]) {
                     output.removeLast()

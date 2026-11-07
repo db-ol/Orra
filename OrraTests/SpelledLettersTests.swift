@@ -20,6 +20,8 @@ struct SpelledLettersTests {
         ("对，然后我们 U G 的时候，我们每我们会有分那个。", "对，然后我们 UG 的时候，我们每我们会有分那个。"),
         ("因为 G P U 不是一个硬性条件嘛。", "因为 GPU 不是一个硬性条件嘛。"),
         ("A I可以就是很大很大程度上改善我们的生活，比如说什么一些translation啊，还有一些就是。", "AI可以就是很大很大程度上改善我们的生活，比如说什么一些translation啊，还有一些就是。"),
+        // 0302_mixed in earlier runs, with a Latin word right after the letters.
+        ("我们之前有聊过一个 A I Robert。", "我们之前有聊过一个 AI Robert。"),
     ]
 
     static let joined: [(String, String)] = [
@@ -50,8 +52,13 @@ struct SpelledLettersTests {
         ("一共 R M B 100 元", "一共 RMB 100 元"),
         ("12 G B 内存和 512 G B 硬盘", "12GB 内存和 512GB 硬盘"),
         ("这个文件 3.5 G B", "这个文件 3.5GB"),
-        // A Latin word in the sentence, but not one space away.
+        // A Latin word in the sentence, but not one space before the letters, and a Latin
+        // word right after them.
         ("这个 bug 的 P R 我看了", "这个 bug 的 PR 我看了"),
+        ("提 P R review 一下", "提 PR review 一下"),
+        ("等 C I pass 了再 merge", "等 CI pass 了再 merge"),
+        ("这个 A P I call 太慢", "这个 API call 太慢"),
+        ("I R S transcripts 我还没收到。", "IRS transcripts 我还没收到。"),
         // Japanese with kanji counts as text with Chinese characters. A Japanese dictation
         // skips the rule steps, see PushToTalkControllerTests.
         ("この P R を確認してください", "この PR を確認してください"),
@@ -68,8 +75,8 @@ struct SpelledLettersTests {
     ]
 
     static let kept = [
-        // A Latin word one space away.
-        "我的 iPhone X S 坏了。", "I R S transcripts 我还没收到。",
+        // A Latin word one space before the letters.
+        "我的 iPhone X S 坏了。",
         // A lone capital.
         "我们 A 组先上。", "选 A 还是 B？", "这件 T 恤",
         // Latin words, and letters already joined.
@@ -89,8 +96,8 @@ struct SpelledLettersTests {
         // No Chinese characters: English, kana and Hangul.
         "iPhone X S", "The P R and the C I are ready.", "O.K., the A.I. is here.", "この P R をみてください。",
         "P R 를 머지해 주세요.", "", "I said A B C",
-        // Versions after a Latin word one space away, and a Latin word right after.
-        "用 Mac O S 15 的时候", "升级到 i O S 18 了", "提 P R review 一下", "等 C I pass 了再 merge",
+        // Versions after a Latin word one space before the letters.
+        "用 Mac O S 15 的时候", "升级到 i O S 18 了",
         // Capitals glued to a number that are no byte unit, and a lone one after a number.
         "5P M 开会", "一共 100U S D", "月薪 20 K",
         // Capitals apart in other ways.
