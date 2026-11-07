@@ -249,7 +249,9 @@ The sets in ~/projects/orra-project/bench were all drawn with seed 20261004, the
 the speech corpus. The ja, es and yue sets were built in October 2026 by scripts that are
 lost. On 2026-11-06 `build` and `rebuild` both gave every stored manifest and clip of
 fleurs-ja-es and fleurs-yue byte for byte. fleurs-ko was built that day, from the ko_kr
-download pinned in fleurs.sha256, and rebuilds the same way.
+download pinned in fleurs.sha256, and rebuilds the same way. A rebuild the same day took
+미리 out of the spellings of mm, since it is a common word for in advance: one clip's
+accepted list changed, and the 200 clips stayed byte for byte the same.
 
 | Folder | FLEURS configs | Clips | With digits | Audio |
 |---|---|---|---|---|
