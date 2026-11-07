@@ -186,6 +186,7 @@ final class CorrectionWatcher {
             // word leaves one pair.
             var reported: [CorrectionFinder.Located] = []
             let characters = Array(pasted)
+            let replaced = replacements.map(\.span)
             @MainActor func translated(_ item: CorrectionFinder.Located) -> CorrectionFinder.Translation {
                 replacements.isEmpty ? .finding(item.finding) : CorrectionFinder.translate(item, pasted: characters, replacements: replacements)
             }
@@ -229,7 +230,7 @@ final class CorrectionWatcher {
                     latest = text
                     quiet = 0
                     tracker.update(to: text)
-                    let latest = await Self.find(pasted: pasted, edited: tracker.pasteNow)
+                    let latest = await Self.find(pasted: pasted, edited: tracker.pasteNow, replaced: replaced)
                     found.removeAll { earlier in latest.contains { $0.span.overlaps(earlier.span) } }
                     found += latest
                 } else {
@@ -250,8 +251,8 @@ final class CorrectionWatcher {
 
     /// Off the main actor, because the keyboard tap runs there.
     @concurrent
-    private static func find(pasted: String, edited: String) async -> [CorrectionFinder.Located] {
-        CorrectionFinder.locatedFindings(pasted: pasted, edited: edited)
+    private static func find(pasted: String, edited: String, replaced: [Range<Int>]) async -> [CorrectionFinder.Located] {
+        CorrectionFinder.locatedFindings(pasted: pasted, edited: edited, replaced: replaced)
     }
 
     func stop() {

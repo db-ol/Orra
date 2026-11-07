@@ -633,6 +633,26 @@ struct CorrectionLearningTests {
         #expect(learning.store.entries.map(\.correction) == [pair])
     }
 
+    /// 克劳德 to Claude is learned. Qwen2 to Qwen3 and 四点 to 十点 change only a number, so
+    /// neither is learned or offered, although each sounds alike.
+    @Test func aChangeOfOnlyANumberIsNotLearnedNextToAFix() async {
+        let pasted = "我在用克劳德和Qwen2写代码，明天四点开会"
+        let field = ScriptedField([pasted, pasted, "我在用Claude和Qwen3写代码，明天十点开会"])
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: field, vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        var offered: [WordSuggestion] = []
+        learning.onLearned = { learned.append($0) }
+        learning.onSuggest = { offered.append($0) }
+        learning.pasted(pasted, in: 42)
+        await waitForReads(field)
+        learning.isOn = false
+        #expect(learned.map(\.correction) == [pair])
+        #expect(offered.isEmpty)
+        #expect(vocabulary.words == ["Claude"])
+        #expect(learning.store.entries.map(\.correction) == [pair])
+    }
+
     /// Waits until the field's reads have stopped for a while.
     private func waitForReads(_ field: ScriptedField) async {
         var lastReads = -1
@@ -722,6 +742,23 @@ struct CorrectionLearningTests {
         #expect(learning.store.entries.isEmpty)
         #expect(learning.replacementPairs.isEmpty)
         #expect(vocabulary.words == ["Claude"])
+    }
+
+    /// A pair an earlier version learned from a change of number, such as Qwen2 to Qwen3,
+    /// still stops replacing when the user puts back the number the model wrote.
+    @Test func puttingBackTheNumberOfAReplacedWordForgetsItsOldPair() async {
+        let old = Correction(heard: "Qwen2", corrected: "Qwen3")
+        let pasted = "我在用Qwen3写代码"
+        let field = ScriptedField([pasted, pasted, "我在用Qwen2写代码"])
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: field, vocabulary: vocabulary)
+        learning.record(old)
+        #expect(learning.replacementPairs == [old])
+        learning.pasted(pasted, in: 42, replacements: [Replacement(span: 3..<8, heard: "Qwen2", corrected: "Qwen3", pair: old)])
+        await waitForReads(field)
+        #expect(learning.store.entries.isEmpty)
+        #expect(learning.replacementPairs.isEmpty)
+        #expect(vocabulary.words == ["Qwen3"])
     }
 
     /// A fix of a replaced word is learned with what the model wrote. The two pairs for 克劳德
