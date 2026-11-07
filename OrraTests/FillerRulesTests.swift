@@ -121,6 +121,21 @@ struct FillerRulesTests {
         #expect(FillerRules.removingFillers(from: input) == expected)
     }
 
+    /// An exclamation of nothing but a filler, such as ¡Uh!, goes with its ¡ and !, so no
+    /// mark is left without the other. An exclamation that goes on keeps both.
+    @Test(arguments: [
+        ("¡Uh! Se me olvidó la llave.", "Se me olvidó la llave."),
+        ("Bueno, ¡uh! ya llegamos.", "Bueno, ya llegamos."),
+        ("Hola. ¡Uh! Vamos.", "Hola. Vamos."),
+        ("¡Uh! ¡Vamos!", "¡Vamos!"),
+        ("¡Uh!! Vamos.", "Vamos."),
+        ("¡Uh, qué pena!", "¡Qué pena!"),
+    ])
+    func anExclamationOfOnlyAFillerGoesWhole(_ input: String, _ expected: String) {
+        #expect(FillerRules.removingFillers(from: input) == expected)
+        #expect(FillerRules.removingFillers(from: input, englishOnly: true) == expected)
+    }
+
     /// Cases that need a model may keep fillers the rules cannot judge, but the rules never
     /// take a word or a number away from them.
     @Test func casesForAModelLoseOnlyFillers() {
@@ -183,7 +198,7 @@ struct FillerRulesTests {
         "这个周末吧。", "他怎么还没来呢？", "别急嘛。", "金额不对。", "这个额度不够。", "额外的费用。",
         "他叫额尔敦。", "呃逆。", "Uh-huh, sure.", "Uh huh, sure.", "Uh oh, it broke.", "The UM campus.",
         "I like it.", "an umbrella", "Erm's not a word.", "我我我觉得可以。", "", "Dijo «um» dos veces.",
-        "El Sr. Um llegó tarde.", "La Dra. Um revisó el informe.",
+        "El Sr. Um llegó tarde.", "La Dra. Um revisó el informe.", "¡Uh!",
     ])
     func keeps(_ input: String) {
         #expect(FillerRules.removingFillers(from: input) == input)

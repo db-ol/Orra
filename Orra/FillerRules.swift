@@ -23,7 +23,8 @@ import Foundation
 ///   before a correction such as 哦，不是四点, where they carry the change of mind.
 ///
 /// A filler in quotation marks is quoted, not spoken, and stays. Um and Uh after a title
-/// such as Dr. or Sra. are surnames.
+/// such as Dr. or Sra. are surnames. An exclamation of nothing but a filler, such as ¡Uh!,
+/// goes with its marks.
 ///
 /// With `englishOnly` only the English fillers go. That is for a sentence in a dictation
 /// language other than Chinese, such as Japanese or Spanish, which the Chinese rules were
@@ -53,6 +54,7 @@ nonisolated enum FillerRules {
     private static let quotes: Set<Character> = ["\"", "'", "“", "”", "‘", "’", "「", "」", "『", "』", "«", "»"]
     /// The marks that open a question or an exclamation in Spanish.
     private static let openingMarks: Set<Character> = ["¿", "¡"]
+    private static let exclamationMarks: Set<Character> = ["!", "！"]
     /// English and Spanish titles before a surname.
     private static let titles = ["Mr.", "Mrs.", "Ms.", "Mx.", "Dr.", "Prof.", "Sr.", "Sra.", "Srta.", "Dra."]
     private static let ellipsis: Set<Character> = [".", "…"]
@@ -213,9 +215,23 @@ nonisolated enum FillerRules {
             index = afterEllipsis
         } else if index < characters.count {
             let next = characters[index]
-            // The comma that belongs to the filler, or the full stop of a filler that was a
-            // sentence of its own, such as "Um. Let me think."
-            if commas.contains(next) || (atSentenceStart && sentenceEnds.contains(next) && !questionMarks.contains(next)) {
+            if output.last == "¡", exclamationMarks.contains(next) {
+                // An exclamation of nothing but the filler, such as ¡Uh!, goes with its marks.
+                output.removeLast()
+                while let last = output.last, last.isWhitespace {
+                    output.removeLast()
+                    hadSpace = true
+                }
+                var marksEnd = index
+                while marksEnd < characters.count, exclamationMarks.contains(characters[marksEnd]) {
+                    marksEnd += 1
+                }
+                let afterMarks = skippingSpaces(from: marksEnd, in: characters)
+                hadSpace = hadSpace || afterMarks > marksEnd
+                index = afterMarks
+            } else if commas.contains(next) || (atSentenceStart && sentenceEnds.contains(next) && !questionMarks.contains(next)) {
+                // The comma that belongs to the filler, or the full stop of a filler that was
+                // a sentence of its own, such as "Um. Let me think."
                 let afterPunctuation = skippingSpaces(from: index + 1, in: characters)
                 hadSpace = hadSpace || afterPunctuation > index + 1
                 index = afterPunctuation
