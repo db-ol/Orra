@@ -38,6 +38,33 @@ struct SpelledLettersTests {
         // Dotted capitals.
         ("我同意，O.K.。", "我同意，OK。"),
         ("U.S.A. 的选举", "USA 的选举"),
+        ("N.B.A. 总决赛", "NBA 总决赛"),
+        ("U.S.-China 关系", "US-China 关系"),
+        // Versions and model names.
+        ("用 G P T-4o 写的", "用 GPT-4o 写的"),
+        ("Qwen3 A S R 很准", "Qwen3 ASR 很准"),
+        ("R L H F 和 D P O 的区别", "RLHF 和 DPO 的区别"),
+        // Dates, money and sizes.
+        ("11 月 6 号 P R 合并", "11 月 6 号 PR 合并"),
+        ("一共 100 U S D", "一共 100 USD"),
+        ("一共 R M B 100 元", "一共 RMB 100 元"),
+        ("12 G B 内存和 512 G B 硬盘", "12GB 内存和 512GB 硬盘"),
+        ("这个文件 3.5 G B", "这个文件 3.5GB"),
+        // A Latin word in the sentence, but not one space away.
+        ("这个 bug 的 P R 我看了", "这个 bug 的 PR 我看了"),
+        // Japanese with kanji counts as text with Chinese characters. A Japanese dictation
+        // skips the rule steps, see PushToTalkControllerTests.
+        ("この P R を確認してください", "この PR を確認してください"),
+    ]
+
+    /// Known costs of the rule, kept here so that a change of them is deliberate: letters
+    /// meant apart, initials of a name, and a capital after a number one space away that
+    /// belongs to it.
+    static let knownCosts: [(String, String)] = [
+        ("A B 两组", "AB 两组"),
+        ("有 S M L 三个尺码", "有 SML 三个尺码"),
+        ("J.K. 罗琳的新书", "JK 罗琳的新书"),
+        ("5 G A 股涨了", "5 GA 股涨了"),
     ]
 
     static let kept = [
@@ -61,7 +88,15 @@ struct SpelledLettersTests {
         "p r 先别合", "P  R 先别合", "Ｐ Ｒ 先别合", "O. K. 吧",
         // No Chinese characters: English, kana and Hangul.
         "iPhone X S", "The P R and the C I are ready.", "O.K., the A.I. is here.", "この P R をみてください。",
-        "P R 를 머지해 주세요.", "",
+        "P R 를 머지해 주세요.", "", "I said A B C",
+        // Versions after a Latin word one space away, and a Latin word right after.
+        "用 Mac O S 15 的时候", "升级到 i O S 18 了", "提 P R review 一下", "等 C I pass 了再 merge",
+        // Capitals glued to a number that are no byte unit, and a lone one after a number.
+        "5P M 开会", "一共 100U S D", "月薪 20 K",
+        // Capitals apart in other ways.
+        "从 A 到 B", "A、B 两组", "S.H.E 的歌", "U.S.A 的", "这个 M o E 模型",
+        // A dictation about letters.
+        "字母 A B C",
     ]
 
     @Test(arguments: stored)
@@ -79,8 +114,28 @@ struct SpelledLettersTests {
         #expect(SpelledLetters.joining(in: text) == text)
     }
 
+    @Test(arguments: knownCosts)
+    func joinsDespiteTheKnownCosts(_ input: String, _ expected: String) {
+        #expect(SpelledLetters.joining(in: input) == expected)
+    }
+
+    /// The rule steps in the order of the app: a filler between or around the letters goes
+    /// first, then the numbers, then the join.
+    @Test func joinsAfterTheFillerAndNumberRules() {
+        let cases = [
+            ("嗯，这个 P R 呃先别 merge，等 C I 跑完。", "这个 PR 先别 merge，等 CI 跑完。"),
+            ("这个 P 呃 R 先别合。", "这个 PR 先别合。"),
+            ("嗯 A B 测试呃做完了，用了两百五十六 G B。", "AB 测试做完了，用了256GB。"),
+            ("呃 O.K. 那就这样。", "OK 那就这样。"),
+        ]
+        for (input, expected) in cases {
+            let ruled = SpelledLetters.joining(in: NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: input)))
+            #expect(ruled == expected, "\(input)")
+        }
+    }
+
     @Test func applyingTwiceChangesNothingMore() {
-        for text in (Self.stored + Self.joined).flatMap({ [$0.0, $0.1] }) + Self.kept {
+        for text in (Self.stored + Self.joined + Self.knownCosts).flatMap({ [$0.0, $0.1] }) + Self.kept {
             let once = SpelledLetters.joining(in: text)
             #expect(SpelledLetters.joining(in: once) == once, "\(text)")
         }

@@ -1815,6 +1815,14 @@ struct PushToTalkControllerTests {
         #expect(inserter.inserted == ["这个 PR 先别 merge，等 CI 跑完，内存是16GB 吗？", "这台 MacBook 有16GB 内存，OK。", "The P R and the C I are ready."])
     }
 
+    /// A filler between spelled capitals goes first, so the letters join after it.
+    @Test func spelledCapitalsJoinAfterAFillerBetweenThem() async throws {
+        let controller = await controller(cleanup: .off)
+        speech.reply = "嗯，这个 P 呃 R 先别 merge。"
+        try await dictate(controller)
+        #expect(inserter.inserted == ["这个 PR 先别 merge。"])
+    }
+
     /// Japanese for a user who dictates in it skips the rule steps, so spelled capitals stay
     /// as written there.
     @Test func japaneseKeepsSpelledCapitals() async throws {
