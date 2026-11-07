@@ -484,6 +484,30 @@ struct NumbersOnlyTests {
         #expect(findings("I use Qwen 2.5 now", "I use Qwen2.5 now") == [.word(Correction(heard: "Qwen 2.5", corrected: "Qwen2.5"))])
     }
 
+    /// For the pairs an earlier version kept: another number changes what was said, while
+    /// the same number in another writing does not. A formal numeral counts as written.
+    @Test func anotherValueIsToldFromAnotherWritingOfTheSameNumber() {
+        #expect(CorrectionFinder.changesOnlyNumberValues("Qwen2", "Qwen3"))
+        #expect(CorrectionFinder.changesOnlyNumberValues("Qwen 2", "Qwen3"))
+        #expect(CorrectionFinder.changesOnlyNumberValues("Qwen2.5", "Qwen3"))
+        #expect(CorrectionFinder.changesOnlyNumberValues("Qwen2-7B", "Qwen3-7B"))
+        #expect(CorrectionFinder.changesOnlyNumberValues("十四", "四十"))
+        #expect(CorrectionFinder.changesOnlyNumberValues("三百五", "305"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("Windows十一", "Windows11"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("iPhone十五", "iPhone 15"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("Qwen３", "Qwen3"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("Office二零一九", "Office2019"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("三百五", "350"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("一千", "1,000"))
+        // A formal numeral is a word or a surname too.
+        #expect(CorrectionFinder.changesOnlyNumberValues("大六", "大陆"))
+        #expect(CorrectionFinder.changesOnlyNumberValues("五先生", "伍先生"))
+        // No change of numbers only.
+        #expect(!CorrectionFinder.changesOnlyNumberValues("quen 3", "Qwen3"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("Quen2", "Qwen3"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("Qwen3", "Qwen3"))
+    }
+
     @Test func datesTimesAndAmountsAreNeverLearned() {
         #expect(findings("三月四号开会", "三月五号开会").isEmpty)
         #expect(findings("十月一号放假", "四月一号放假").isEmpty)

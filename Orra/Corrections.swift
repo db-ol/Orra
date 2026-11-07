@@ -386,23 +386,68 @@ nonisolated enum CorrectionFinder {
         return a.rest == b.rest || (a.numbers != b.numbers && bare(a.rest) == bare(b.rest))
     }
 
+    /// Whether a fix changes only numbers, see `changesOnlyNumbers(_:_:)`, and gives them
+    /// other values, as Qwen2 to Qwen3 and 十四 to 四十 do. Windows十一 to Windows11 and Qwen３
+    /// to Qwen3 write the same numbers another way, so a pair kept from them never changes
+    /// what was said. A formal numeral, such as 陆 or 伍, counts as written, since it is a
+    /// word or a surname too: a pair of 大六 to 大陆 would turn 大六岁 into 大陆岁.
+    static func changesOnlyNumberValues(_ first: String, _ second: String) -> Bool {
+        changesOnlyNumbers(first, second) && numberValues(first) != numberValues(second)
+    }
+
     /// The numerals of a text, and the text without them.
     private static func numbersAndRest(_ text: String) -> (numbers: String, rest: String) {
         let characters = Array(text)
         var numbers = ""
         var rest = ""
         for (index, character) in characters.enumerated() {
-            // A decimal point or a comma between two digits, as in 2.5 and 1,000.
-            let joinsDigits = (character == "." || character == ",")
-                && index > 0 && index + 1 < characters.count
-                && isDigit(characters[index - 1]) && isDigit(characters[index + 1])
-            if isNumeral(character) || joinsDigits {
+            if isNumeral(character) || joinsDigits(at: index, in: characters) {
                 numbers.append(character)
             } else {
                 rest.append(character)
             }
         }
         return (numbers, rest)
+    }
+
+    /// The numbers of a text in order, each in ASCII digits where it reads as one number:
+    /// 15 for １５, 15 and 十五, and 2026 for 二零二六, as the number rules read Chinese
+    /// numerals. A run that is no one number, holds a formal numeral or mixes digits with
+    /// Chinese numerals stays as written.
+    private static func numberValues(_ text: String) -> [String] {
+        let characters = Array(text)
+        var values: [String] = []
+        var start = 0
+        while start < characters.count {
+            guard isNumeral(characters[start]) else {
+                start += 1
+                continue
+            }
+            var end = start + 1
+            while end < characters.count, isNumeral(characters[end]) || joinsDigits(at: end, in: characters) {
+                end += 1
+            }
+            let run = characters[start..<end]
+            if run.allSatisfy({ isDigit($0) || $0 == "." || $0 == "," }) {
+                // A comma between two digits only groups them, as in 1,000.
+                let digits = run.compactMap { character -> Character? in
+                    character == "." ? "." : character.wholeNumberValue.map { Character(String($0)) }
+                }
+                values.append(String(digits))
+            } else {
+                values.append(NumberRules.digits(of: run) ?? String(run))
+            }
+            start = end
+        }
+        return values
+    }
+
+    /// Whether the character at `index` is a decimal point or a comma between two digits, as
+    /// in 2.5 and 1,000.
+    private static func joinsDigits(at index: Int, in characters: [Character]) -> Bool {
+        (characters[index] == "." || characters[index] == ",")
+            && index > 0 && index + 1 < characters.count
+            && isDigit(characters[index - 1]) && isDigit(characters[index + 1])
     }
 
     /// The text without spaces and the marks that join a name, in lower case.

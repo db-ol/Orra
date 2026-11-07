@@ -143,6 +143,32 @@ struct WordReplacementTests {
         #expect(replaced("I asked GPT4 about it", [old, new], ["GPT-5", "GPT-4"]) == "I asked GPT-4 about it")
     }
 
+    /// A kept pair that writes the same number another way never changes what was said, so
+    /// it still replaces. Earlier versions learned such pairs, as from Qwen３ fixed to Qwen3,
+    /// or from Windows十一 fixed to Windows11 where the number rules leave it before Chinese.
+    @Test func aKeptPairThatWritesTheSameNumberAnotherWayStillReplaces() {
+        let pairs = [
+            Correction(heard: "Windows十一", corrected: "Windows11"),
+            Correction(heard: "Ubuntu二十四", corrected: "Ubuntu24"),
+            Correction(heard: "Qwen３", corrected: "Qwen3"),
+        ]
+        let vocabulary = ["Windows11", "Ubuntu24", "Qwen3"]
+        let text = "我在Windows十一系统里装了Ubuntu二十四版，跑的是Qwen３"
+        #expect(NumberRules.writingNumbersAsDigits(in: text) == text)
+        #expect(WordReplacement.usablePairs(pairs, vocabulary: vocabulary, ordinary: ordinary).count == 3)
+        #expect(replaced(text, pairs, vocabulary) == "我在Windows11系统里装了Ubuntu24版，跑的是Qwen3")
+    }
+
+    /// A formal numeral is a word or a surname too, such as 陆 in 大陆, so a kept pair that
+    /// puts one in place of a plain numeral replaces nothing: 大六 to 大陆 would turn 大六岁
+    /// into 大陆岁.
+    @Test func aKeptPairToAFormalNumeralReplacesNothing() {
+        let pairs = [Correction(heard: "大六", corrected: "大陆"), Correction(heard: "五先生", corrected: "伍先生")]
+        let vocabulary = ["大陆", "伍先生"]
+        #expect(WordReplacement.usablePairs(pairs, vocabulary: vocabulary, ordinary: ordinary).isEmpty)
+        #expect(replaced("他比我大六岁，五先生也来了", pairs, vocabulary) == "他比我大六岁，五先生也来了")
+    }
+
     // MARK: Ordinary words
 
     @Test func ordinaryWordsTakeCommonEndingsAndCompounds() {
