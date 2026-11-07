@@ -10,6 +10,5 @@ Ximena is said like Jimena, so `say` has Jimena and the reference the vocabulary
 Itzel Yáñez and Basecamp test a name and a product the model may not know. The number sentences
 list other spellings of each number in `accepted`.
 
-The Spanish text of this set was written and reviewed by an AI process, not by a native speaker,
-and waits for a native reader. Until one has read it, its references, its accepted spellings and
-every result on it rest on AI review only.
+No native speaker has read the Spanish text of this set yet. Until one has, its references, its
+accepted spellings and every result on it are not confirmed by a native reader.

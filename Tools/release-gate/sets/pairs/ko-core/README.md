@@ -12,6 +12,5 @@ the model may not know. The number sentences list other spellings of most number
 The building and the room number (2동, 403호) list none, since Korean writes them in digits only,
 and 이 동 would read as this building.
 
-The Korean text of this set was written and reviewed by an AI process, not by a native speaker,
-and waits for a native reader. Until one has read it, its references, its accepted spellings and
-every result on it rest on AI review only.
+No native speaker has read the Korean text of this set yet. Until one has, its references, its
+accepted spellings and every result on it are not confirmed by a native reader.

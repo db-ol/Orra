@@ -25,6 +25,5 @@ word is said (Slack으로, API는, ASAP로). Numbers are digits for dates, times
 (3시 반, 1,200달러), with 만 for ten thousands (5만 달러), and words for counts with native numbers (세
 명). Most numbers list their spelling in words.
 
-The Korean text of this set was written and reviewed by an AI process, not by a native speaker,
-and waits for a native reader. Until one has read it, its references, its accepted spellings and
-every result on it rest on AI review only.
+No native speaker has read the Korean text of this set yet. Until one has, its references, its
+accepted spellings and every result on it are not confirmed by a native reader.

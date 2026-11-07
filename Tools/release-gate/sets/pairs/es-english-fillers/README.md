@@ -8,6 +8,5 @@ did when this set was written, a filler the model writes stays in the text. en_u
 English (Um, okay.), which the Spanish pair counted as Spanish when this set was written, so
 Orra kept its Um.
 
-The Spanish text of this set was written and reviewed by an AI process, not by a native speaker,
-and waits for a native reader. Until one has read it, its references, its accepted spellings and
-every result on it rest on AI review only.
+No native speaker has read the Spanish text of this set yet. Until one has, its references, its
+accepted spellings and every result on it are not confirmed by a native reader.
