@@ -2,19 +2,20 @@ import Foundation
 import Observation
 import os
 
-/// Cleanup and translation with the local text model: the two settings, the model's
+/// Cleanup, Polish and translation with the local text model: their settings, the model's
 /// download and loading, and the closures PushToTalkController calls.
 ///
-/// Both are off until the user turns them on. They share one model, which translates as
-/// well as it cleans up. Turning either on asks first when the model still has to be
-/// downloaded and no download was agreed to for the other, and nothing goes online before
-/// the user confirms. While either is on the model is loaded at launch and stays loaded
+/// All three are off until the user turns them on. They share one model, which polishes
+/// and translates as well as it cleans up. Turning one on asks first when the model still
+/// has to be downloaded and no download was agreed to for another, and nothing goes online
+/// before the user confirms. While one is on the model is loaded at launch and stays loaded
 /// while the user dictates. After `idleUnloadDelay` without a dictation it is unloaded, and
 /// the next press of the talk key or the translation key loads it again while the user
 /// speaks, see `dictationStarted()`. Turning the last one off unloads it and stops a
 /// download. Translation works with cleanup off: the translation prompt cleans up and
 /// translates in one answer, and the cleanup in it is used only while cleanup is on, see
-/// TranslationStep. Meeting captions and Projects keep the model loaded while they need it,
+/// TranslationStep. Polish works with cleanup off too, and while it is on a dictation of
+/// the talk key gets a polish in place of the cleanup, see PolishStep. Meeting captions and Projects keep the model loaded while they need it,
 /// see `captionsStarted()` and `projectsStarted()`. Turning Projects on asks before its
 /// download too, see `turnOnProjects()`.
 @Observable
@@ -31,6 +32,12 @@ final class TextCleanup {
 
     /// Whether the user turned cleanup on. Saved through `save` whenever it changes.
     private(set) var isOn: Bool
+    /// Whether the user turned Polish on, so a dictation of the talk key gets a polish in
+    /// place of the cleanup. Saved through `savePolish` whenever it changes.
+    private(set) var polishIsOn: Bool
+    /// The style of a polish. Saved through `savePolishStyle` whenever it changes, and kept
+    /// while Polish is off.
+    private(set) var polishStyle: PolishStyle
     /// Whether the user turned translation on, so the translation key pastes translated
     /// text. Saved through `saveTranslation` whenever it changes.
     private(set) var translationIsOn: Bool
@@ -46,6 +53,8 @@ final class TextCleanup {
     private(set) var pickedCaptionTarget: TranslationTarget?
     /// True while the Clean Up Text page asks whether to download the model.
     var isConfirmingDownload = false
+    /// True while Settings asks whether to download the model for Polish.
+    var isConfirmingPolishDownload = false
     /// True while Settings asks whether to download the model for translation.
     var isConfirmingTranslationDownload = false
     /// Whether the model can run.
@@ -69,6 +78,8 @@ final class TextCleanup {
 
     @ObservationIgnored private let engine: CleanupEngine
     @ObservationIgnored private let save: (Bool) -> Void
+    @ObservationIgnored private let savePolish: (Bool) -> Void
+    @ObservationIgnored private let savePolishStyle: (PolishStyle) -> Void
     @ObservationIgnored private let saveTranslation: (Bool) -> Void
     @ObservationIgnored private let saveDirection: (TranslationDirection) -> Void
     @ObservationIgnored private let saveCaptionTarget: (TranslationTarget) -> Void
@@ -108,6 +119,10 @@ final class TextCleanup {
     /// - Parameters:
     ///   - isOn: Whether cleanup is on, as saved.
     ///   - save: Saves the setting after the user changes it.
+    ///   - polishIsOn: Whether Polish is on, as saved.
+    ///   - savePolish: Saves that setting after the user changes it.
+    ///   - polishStyle: The style of a polish, as saved.
+    ///   - savePolishStyle: Saves the style after the user changes it.
     ///   - translationIsOn: Whether translation is on, as saved.
     ///   - saveTranslation: Saves that setting after the user changes it.
     ///   - translationDirection: Which way to translate, as saved.
@@ -120,12 +135,16 @@ final class TextCleanup {
     ///     folders and a stand in network.
     ///   - engine: Loads and runs the model. Tests pass a stand in.
     ///   - idleUnloadDelay: How long the model stays loaded without a dictation, nil for
-    ///     as long as cleanup or translation is on.
+    ///     as long as cleanup, Polish or translation is on.
     ///   - loadWait: The longest a finished transcript waits for the model to load.
     ///   - sleep: Waits for a time. Tests pass a clock they move.
     init(
         isOn: Bool,
         save: @escaping (Bool) -> Void,
+        polishIsOn: Bool = false,
+        savePolish: @escaping (Bool) -> Void = { _ in },
+        polishStyle: PolishStyle = .clear,
+        savePolishStyle: @escaping (PolishStyle) -> Void = { _ in },
         translationIsOn: Bool = false,
         saveTranslation: @escaping (Bool) -> Void = { _ in },
         translationDirection: TranslationDirection = .automatic,
@@ -141,6 +160,10 @@ final class TextCleanup {
     ) {
         self.isOn = isOn
         self.save = save
+        self.polishIsOn = polishIsOn
+        self.savePolish = savePolish
+        self.polishStyle = polishStyle
+        self.savePolishStyle = savePolishStyle
         self.translationIsOn = translationIsOn
         self.saveTranslation = saveTranslation
         self.translationDirection = translationDirection
@@ -164,6 +187,10 @@ final class TextCleanup {
         TextCleanup(
             isOn: CleanupPreference.load(),
             save: { CleanupPreference.save($0) },
+            polishIsOn: PolishPreference.load(),
+            savePolish: { PolishPreference.save($0) },
+            polishStyle: PolishStylePreference.load(),
+            savePolishStyle: { PolishStylePreference.save($0) },
             translationIsOn: TranslationPreference.load(),
             saveTranslation: { TranslationPreference.save($0) },
             translationDirection: TranslationDirection.load(),
@@ -191,8 +218,8 @@ final class TextCleanup {
     /// takes too long.
     static let defaultLoadWait: Duration = .seconds(3)
 
-    /// At launch: looks for the model with local files only, and loads it when cleanup or
-    /// translation is on, so a failed load shows in Settings at once and the first
+    /// At launch: looks for the model with local files only, and loads it when cleanup,
+    /// Polish or translation is on, so a failed load shows in Settings at once and the first
     /// dictation needs no wait. Without a dictation it is unloaded after
     /// `idleUnloadDelay`. Never goes online.
     func start() async {
@@ -206,7 +233,10 @@ final class TextCleanup {
             waitUntilLoaded: { [weak self] in await self?.waitUntilLoaded() ?? false },
             dictationStarted: { [weak self] in self?.dictationStarted() },
             dictationEnded: { [weak self] in self?.dictationEnded() },
-            complete: engine.complete
+            complete: engine.complete,
+            polishStyle: { [weak self] in self?.polishIsOn == true ? self?.polishStyle : nil },
+            waitUntilLoadedForPolish: { [weak self] in await self?.waitUntilLoadedForPolish() ?? false },
+            polish: engine.polish
         )
     }
 
@@ -258,6 +288,11 @@ final class TextCleanup {
         await waitUntilLoaded(for: "translation") { $0.translationIsOn }
     }
 
+    /// Whether the model can polish the transcript now, the same way.
+    func waitUntilLoadedForPolish() async -> Bool {
+        await waitUntilLoaded(for: "polish") { $0.polishIsOn }
+    }
+
     /// True when the model is in memory and nothing unloads it before the next dictation.
     private var isLoaded: Bool {
         engineState == .ready
@@ -277,8 +312,8 @@ final class TextCleanup {
         return isWanted(self) && isLoaded
     }
 
-    /// Returns when the load under way ends, the last of cleanup and translation is turned
-    /// off, or `loadWait` passes.
+    /// Returns when the load under way ends, the last of cleanup, Polish and translation is
+    /// turned off, or `loadWait` passes.
     private func waitForLoadUnderWay() async {
         nextWaiter += 1
         let id = nextWaiter
@@ -305,8 +340,8 @@ final class TextCleanup {
         }
     }
 
-    /// Starts the idle timer again, unless cleanup and translation are off, a dictation is
-    /// under way, captions or Projects hold the model, or it is not loaded.
+    /// Starts the idle timer again, unless cleanup, Polish and translation are off, a
+    /// dictation is under way, captions or Projects hold the model, or it is not loaded.
     private func scheduleIdleUnload() {
         idleTimer?.cancel()
         idleTimer = nil
@@ -339,10 +374,10 @@ final class TextCleanup {
         )
     }
 
-    /// Whether the model is wanted: cleanup or translation is on, captions run, or Projects
-    /// holds it.
+    /// Whether the model is wanted: cleanup, Polish or translation is on, captions run, or
+    /// Projects holds it.
     var needsModel: Bool {
-        isOn || translationIsOn || captionsNeedModel || projectsNeedModel
+        isOn || polishIsOn || translationIsOn || captionsNeedModel || projectsNeedModel
     }
 
     /// True while the Projects window is open or a request of the user runs there, see
@@ -353,10 +388,10 @@ final class TextCleanup {
 
     /// True while a dictation runs and only Projects wants the model. A load then waits
     /// until the dictation is over, so it never competes with the speech model (AGENTS.md).
-    /// Cleanup, translation and captions want the model during a dictation too, so with one
-    /// of them on it loads at once.
+    /// Cleanup, Polish, translation and captions want the model during a dictation too, so
+    /// with one of them on it loads at once.
     private var loadWaitsForDictation: Bool {
-        isDictating && projectsNeedModel && !isOn && !translationIsOn && !captionsNeedModel
+        isDictating && projectsNeedModel && !isOn && !polishIsOn && !translationIsOn && !captionsNeedModel
     }
 
     /// Whether captions can translate now: they run and the model is in memory. Captions
@@ -383,8 +418,8 @@ final class TextCleanup {
         }
     }
 
-    /// Meeting captions stopped. Unloads the model and stops a download unless cleanup or
-    /// translation still need it, and otherwise starts the idle timer.
+    /// Meeting captions stopped. Unloads the model and stops a download unless cleanup,
+    /// Polish or translation still need it, and otherwise starts the idle timer.
     func captionsStopped() {
         guard captionsNeedModel else { return }
         captionsNeedModel = false
@@ -525,7 +560,7 @@ final class TextCleanup {
 
     /// The Projects switch in Settings is being turned on. True when Projects may go on at
     /// once: the model is in place or its download is being checked, or the user agreed to
-    /// its download already, for cleanup, translation or Projects. Otherwise the page asks
+    /// its download already, for cleanup, Polish, translation or Projects. Otherwise the page asks
     /// first, see `isConfirmingProjectsDownload` and `confirmProjectsDownload()`, and
     /// nothing goes online before the user agrees. That includes a download under way for
     /// captions alone, which stops when they do. False without asking while Orra still
@@ -537,7 +572,7 @@ final class TextCleanup {
         case .installed, .verifying:
             return true
         case .checking, .missing, .failed, .downloading:
-            if isOn || translationIsOn || projectsAgreedToDownload {
+            if isOn || polishIsOn || translationIsOn || projectsAgreedToDownload {
                 return true
             }
             isConfirmingProjectsDownload = true
@@ -555,16 +590,17 @@ final class TextCleanup {
         models.download()
     }
 
-    /// Whether Cancel Download may show on the Projects page: cleanup and translation are
-    /// off and captions do not run, so the cancel stops nothing they wait for. Otherwise
-    /// the cancel stays under the switch it turns off, or in the caption window.
+    /// Whether Cancel Download may show on the Projects page: cleanup, Polish and
+    /// translation are off and captions do not run, so the cancel stops nothing they wait
+    /// for. Otherwise the cancel stays under the switch it turns off, or in the caption
+    /// window.
     var canCancelProjectsDownload: Bool {
-        !isOn && !translationIsOn && !captionsNeedModel
+        !isOn && !polishIsOn && !translationIsOn && !captionsNeedModel
     }
 
     /// Cancel Download on the Projects page. The bytes stay for the next time, Projects
     /// stays on, and its page offers the download again. Does nothing while cleanup,
-    /// translation or captions need the model, see `canCancelProjectsDownload`.
+    /// Polish, translation or captions need the model, see `canCancelProjectsDownload`.
     func cancelProjectsDownload() {
         guard canCancelProjectsDownload else { return }
         projectsAgreedToDownload = false
@@ -572,7 +608,8 @@ final class TextCleanup {
     }
 
     /// Projects was turned off. Stops a download only Projects agreed to while nothing
-    /// else needs the model. A download agreed to for cleanup or translation goes on.
+    /// else needs the model. A download agreed to for cleanup, Polish or translation goes
+    /// on.
     func projectsTurnedOff() {
         isConfirmingProjectsDownload = false
         guard projectsAgreedToDownload else { return }
@@ -583,8 +620,8 @@ final class TextCleanup {
     }
 
     /// The switch on the Clean Up Text page was turned on. With the model in place cleanup
-    /// starts at once. While translation is on, the user agreed to the download already,
-    /// so cleanup is on at once and waits for the model like translation does. Otherwise
+    /// starts at once. While Polish or translation is on, the user agreed to the download
+    /// already, so cleanup is on at once and waits for the model like they do. Otherwise
     /// Settings asks before anything is downloaded. While Orra still looks for the model on
     /// disk, Settings keeps the switch off, see `canTurnOn`.
     func turnOn() {
@@ -592,10 +629,41 @@ final class TextCleanup {
         if case .installed(let folder) = models.state {
             setOn(true)
             load(from: folder)
-        } else if translationIsOn {
+        } else if polishIsOn || translationIsOn {
             setOn(true)
         } else {
             isConfirmingDownload = true
+        }
+    }
+
+    /// The Polish switch under Clean Up Text was turned on, which works like cleanup's
+    /// switch, see `turnOn`. With the model loaded already, the polish prompt of the user's
+    /// style is read ahead, so the first polish is fast. A model unloaded while idle is
+    /// left alone, and the next press of a key loads it and reads the prompt.
+    func turnOnPolish() {
+        guard !polishIsOn, canTurnOn else { return }
+        if case .installed(let folder) = models.state {
+            setPolishOn(true)
+            if isLoaded {
+                preparePolish()
+            } else if engineState != .unloadedWhileIdle {
+                load(from: folder)
+            }
+        } else if isOn || translationIsOn {
+            setPolishOn(true)
+        } else {
+            isConfirmingPolishDownload = true
+        }
+    }
+
+    /// The user picked a style of a polish. Reads its prompt ahead while Polish is on and
+    /// the model is loaded. The style is saved also while Polish is off.
+    func setPolishStyle(_ style: PolishStyle) {
+        guard style != polishStyle else { return }
+        polishStyle = style
+        savePolishStyle(style)
+        if polishIsOn, isLoaded {
+            preparePolish()
         }
     }
 
@@ -612,7 +680,7 @@ final class TextCleanup {
             } else if engineState != .unloadedWhileIdle {
                 load(from: folder)
             }
-        } else if isOn {
+        } else if isOn || polishIsOn {
             setTranslationOn(true)
         } else {
             isConfirmingTranslationDownload = true
@@ -702,6 +770,13 @@ final class TextCleanup {
         }
     }
 
+    /// The user agreed to download the model for Polish.
+    func confirmPolishDownload() {
+        isConfirmingPolishDownload = false
+        setPolishOn(true)
+        models.download()
+    }
+
     /// The user agreed to download the model for translation.
     func confirmTranslationDownload() {
         isConfirmingTranslationDownload = false
@@ -710,25 +785,26 @@ final class TextCleanup {
     }
 
     /// Download, Resume Download or Try Again under a switch, which name the size
-    /// themselves, while cleanup or translation is on.
+    /// themselves, while cleanup, Polish or translation is on.
     func download() {
         guard needsModel else { return }
         models.download()
     }
 
-    /// Cancel Download under a switch. The bytes stay for the next time, and cleanup and
-    /// translation are off until the user turns one on again, since neither works without
-    /// the model. A download Projects agreed to stops too. Projects stays on, and its page
-    /// offers the download again.
+    /// Cancel Download under a switch. The bytes stay for the next time, and cleanup,
+    /// Polish and translation are off until the user turns one on again, since none works
+    /// without the model. A download Projects agreed to stops too. Projects stays on, and
+    /// its page offers the download again.
     func cancelDownload() {
         models.cancel()
         projectsAgreedToDownload = false
         setOn(false)
+        setPolishOn(false)
         setTranslationOn(false)
     }
 
     /// The cleanup switch was turned off. Stops a download and unloads the model unless
-    /// translation still needs it.
+    /// Polish or translation still needs it.
     func turnOff() {
         guard isOn else { return }
         setOn(false)
@@ -736,10 +812,18 @@ final class TextCleanup {
     }
 
     /// The translation switch was turned off. Stops a download and unloads the model
-    /// unless cleanup still needs it.
+    /// unless cleanup or Polish still needs it.
     func turnOffTranslation() {
         guard translationIsOn else { return }
         setTranslationOn(false)
+        releaseModelIfUnneeded()
+    }
+
+    /// The Polish switch was turned off. Stops a download and unloads the model unless
+    /// cleanup or translation still needs it.
+    func turnOffPolish() {
+        guard polishIsOn else { return }
+        setPolishOn(false)
         releaseModelIfUnneeded()
     }
 
@@ -762,7 +846,8 @@ final class TextCleanup {
     /// loads them again, or leads back to Download when one is damaged. A model that is
     /// loaded, loading or unloaded while idle stays as it is, as when Try Loading Again in
     /// the Projects window is clicked after the model loaded from Settings. Otherwise
-    /// cleanup, translation and captions would go without it until the check is over.
+    /// cleanup, Polish, translation and captions would go without it until the check is
+    /// over.
     func retryLoading() async {
         guard engineState == .failed || engineState == .unloaded else { return }
         engineState = .unloaded
@@ -779,6 +864,12 @@ final class TextCleanup {
         guard on != translationIsOn else { return }
         translationIsOn = on
         saveTranslation(on)
+    }
+
+    private func setPolishOn(_ on: Bool) {
+        guard on != polishIsOn else { return }
+        polishIsOn = on
+        savePolish(on)
     }
 
     /// The targets whose translation prompts are read ahead for a direction of a user who
@@ -821,6 +912,28 @@ final class TextCleanup {
             // Unloaded, or translation off, since.
             guard let self, generation == loadGeneration else { return }
             await fillTranslationPrefixes()
+        }
+    }
+
+    /// Reads the polish prompt of the user's style ahead after the work queued before, see
+    /// RewriteEngine.preparePolish.
+    private func preparePolish() {
+        let generation = loadGeneration
+        enqueue { [weak self] in
+            // Unloaded since.
+            guard let self, generation == loadGeneration else { return }
+            await fillPolishPrefix()
+        }
+    }
+
+    /// Reads the polish prompt of the user's style ahead while Polish is on and the model
+    /// is loaded. A failure only costs the first polish the time to read it.
+    private func fillPolishPrefix() async {
+        guard polishIsOn, isLoaded else { return }
+        do {
+            try await engine.preparePolish(polishStyle)
+        } catch {
+            Logger.rewrite.error("Reading the polish prompt ahead failed with \(String(reflecting: type(of: error)), privacy: .public)")
         }
     }
 
@@ -889,9 +1002,11 @@ final class TextCleanup {
             guard generation == loadGeneration else { return }
             engineState = loaded ? .ready : .failed
             resumeAllWaiters()
-            // With translation on, its prompts are read before any other work on the model.
+            // With translation or Polish on, their prompts are read before any other work on
+            // the model.
             if loaded {
                 await fillTranslationPrefixes()
+                await fillPolishPrefix()
             }
             scheduleIdleUnload()
         }
@@ -950,6 +1065,10 @@ struct CleanupEngine {
     var complete: @Sendable (String) async throws -> String
     /// The model's answer for a transcript and a route, see RewriteEngine.translate.
     var translate: @Sendable (String, TranslationRoute) async throws -> String = { _, _ in throw RewriteError.notLoaded }
+    /// The model's answer for a transcript and a polish style, see RewriteEngine.polish.
+    var polish: @Sendable (String, PolishStyle) async throws -> String = { _, _ in throw RewriteError.notLoaded }
+    /// Reads the polish prompt of a style ahead, see RewriteEngine.preparePolish.
+    var preparePolish: @Sendable (PolishStyle) async throws -> Void = { _ in }
     /// Reads the translation prompt for a route ahead, see
     /// RewriteEngine.prepareTranslation.
     var prepareTranslation: @Sendable (TranslationRoute) async throws -> Void = { _ in }
@@ -978,6 +1097,8 @@ struct CleanupEngine {
             unload: { await engine.unload() },
             complete: { try await engine.cleanUp($0).answer },
             translate: { try await engine.translate($0, into: $1).answer },
+            polish: { try await engine.polish($0, style: $1).answer },
+            preparePolish: { try await engine.preparePolish($0) },
             prepareTranslation: { try await engine.prepareTranslation(into: $0) },
             keepTranslationPrefixes: { await engine.keepTranslationPrefixes($0) },
             startJob: { try await engine.startJob($0, maximumTokens: $1) },
