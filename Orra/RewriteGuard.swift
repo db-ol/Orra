@@ -285,11 +285,12 @@ nonisolated enum RewriteGuard {
         text.unicodeScalars.allSatisfy(\.isASCII)
     }
 
-    /// Kana, Hangul and Cyrillic, which a cleanup should never produce on its own. With
-    /// `allowingKana`, Hangul and Cyrillic only, for a translation that may hold kana.
+    /// Kana, Hangul syllables and Cyrillic, which a cleanup should never produce on its
+    /// own. With `allowingKana`, Hangul syllables and Cyrillic only, for a translation that
+    /// may hold kana.
     static func hasForeignScript(_ text: String, allowingKana: Bool = false) -> Bool {
         text.unicodeScalars.contains { scalar in
-            (!allowingKana && (0x3040...0x30FF).contains(scalar.value)) || (0xAC00...0xD7AF).contains(scalar.value) || (0x0400...0x04FF).contains(scalar.value)
+            (!allowingKana && (0x3040...0x30FF).contains(scalar.value)) || Hangul.isSyllable(scalar) || (0x0400...0x04FF).contains(scalar.value)
         }
     }
 
