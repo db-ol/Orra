@@ -126,8 +126,10 @@ nonisolated enum PolishGuard {
 
     /// Words of a spoken self correction. What the transcript says before the last of them
     /// may be gone from the polish, such as 8点 in 明天早上8点，啊不，9点. A 不 counts only
-    /// as a clause of its own, also after 啊 or 哦, since it is mostly a plain no.
-    static let correctionCue = TranslationGuard.regex(#"不对|哦不是|我是说|我的意思是|说错了|(?:^|[，,。])\s*[啊哦噢]?不\s*[，,]|\bi mean\b|\bsorry\b|scratch that|\bno wait\b|\bmake that\b|\bactually\b"#, .caseInsensitive)
+    /// as a clause of its own, also after 啊 or 哦, since it is mostly a plain no. Sorry and
+    /// actually do not count: sorry is mostly an apology and actually a filler, and either
+    /// would let a polish drop what came before it.
+    static let correctionCue = TranslationGuard.regex(#"不对|哦不是|我是说|我的意思是|说错了|(?:^|[，,。])\s*[啊哦噢]?不\s*[，,]|\bi mean\b|scratch that|\bno wait\b|\bmake that\b"#, .caseInsensitive)
 
     /// Nil when the polish may be pasted in place of the transcript.
     static func check(source: String, output: String, style: PolishStyle) -> Failure? {
@@ -189,7 +191,7 @@ nonisolated enum PolishGuard {
             return .longer(output: outputUnits, source: sourceUnits)
         }
         // A spoken correction may take back much of the text, as in "Send it to the whole
-        // team, actually, scratch that, just to the leads", so it gets the bound of Concise.
+        // team, no wait, scratch that, just to the leads", so it gets the bound of Concise.
         let floor = correction == nil ? shortest(style) : min(shortest(style), shortest(.concise))
         if sourceUnits >= shortnessFloor, outputUnits < sourceUnits * floor {
             return .muchShorter(output: outputUnits, source: sourceUnits)

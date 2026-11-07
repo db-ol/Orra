@@ -49,6 +49,18 @@ struct PolishGuardTests {
         #expect(Self.check("明天早上8点，啊不，9点集合。", "明天早上8点集合。") == .lostNumber(["9"]))
     }
 
+    /// Sorry is mostly an apology and actually a filler, so neither takes back what was
+    /// said before it, and neither gives Clear the bound of Concise.
+    @Test func sorryAndActuallyTakeNothingBack() {
+        #expect(Self.check("那个 PR 我还没 review 完，sorry，今天下午3点之前给你。", "今天下午3点之前给你。") == .lostWords(["pr", "review"]))
+        #expect(Self.check("明天上午10点在302开会，sorry 刚才没回你。", "刚才没回你。", .concise) == .lostNumber(["10", "302"]))
+        #expect(Self.check("We need 3 servers and 2 databases for the launch, and actually the deadline is Friday.", "The deadline is Friday.") == .lostNumber(["2", "3"]))
+        #expect(Self.check("用 Redis 做缓存，然后 actually 这周五要上线。", "这周五要上线。") == .lostWords(["redis"]))
+        let source = "So the venue is booked for Saturday, and actually the caterer confirmed the menu and the cake too."
+        let output = "The venue is booked for Saturday."
+        #expect(Self.check(source, output, .clear) == .muchShorter(output: RewriteGuard.units(output), source: RewriteGuard.units(source)))
+    }
+
     /// English fillers of a text with Chinese may go, every other English word stays.
     @Test func englishFillersMayGo() {
         #expect(Self.check("就是 you know 那个 deploy 的 script，um，又 fail 了。", "deploy 的 script 又 fail 了。", .concise) == nil)
