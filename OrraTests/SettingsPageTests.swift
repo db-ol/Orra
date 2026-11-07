@@ -219,6 +219,8 @@ struct SettingsPageTests {
         try await render(.dictation, name: "\(language)-1-dictation")
         try await render(.dictation, cleanupOn: true, height: 1000, name: "\(language)-1-dictation-cleanup-on")
         try await render(.dictation, dictating: .japanese, height: 1000, name: "\(language)-1-dictation-japanese")
+        try await render(.dictation, polishOn: true, height: 1100, name: "\(language)-1-dictation-polish-on")
+        try await render(.dictation, cleanupOn: true, polishOn: true, polishStyle: .concise, dictating: .japanese, height: 1200, name: "\(language)-1-dictation-polish-concise-japanese")
         try await render(.translation, name: "\(language)-2-translation")
         try await render(.translation, translationOn: true, name: "\(language)-2-translation-on")
         try await render(.translation, translationOn: true, dictating: .spanish, name: "\(language)-2-translation-spanish")
@@ -324,7 +326,7 @@ struct SettingsPageTests {
     /// say whether Mail runs and whether the bridge remembers the answer, see
     /// `mailAccess(answering:)`. With `downloading`, the cleanup model downloads from a
     /// stand in that never finishes. The window is `width` wide.
-    private func render(_ tab: SettingsTab, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, dictating: DictationLanguage = .chinese, talkKey: Hotkey = .defaultKey, talkMode: TriggerMode = .hold, translationMode: TriggerMode = .newTranslationKeyMode, cleanupInstalled: Bool = false, physicalMemory: UInt64 = 48 << 30, projectsData: Int = 0, projectsOn: Bool = false, mail: MailPermission? = nil, reading: Bool = false, ticks: Bool = true, mailRunning: Bool = true, remembers: Bool = true, downloading: Bool = false, scrollingTo section: SettingsSection? = nil, width: CGFloat = SettingsWindow.defaultSize.width, height: CGFloat? = nil, name: String) async throws {
+    private func render(_ tab: SettingsTab, cleanupOn: Bool = false, polishOn: Bool = false, polishStyle: PolishStyle = .clear, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, dictating: DictationLanguage = .chinese, talkKey: Hotkey = .defaultKey, talkMode: TriggerMode = .hold, translationMode: TriggerMode = .newTranslationKeyMode, cleanupInstalled: Bool = false, physicalMemory: UInt64 = 48 << 30, projectsData: Int = 0, projectsOn: Bool = false, mail: MailPermission? = nil, reading: Bool = false, ticks: Bool = true, mailRunning: Bool = true, remembers: Bool = true, downloading: Bool = false, scrollingTo section: SettingsSection? = nil, width: CGFloat = SettingsWindow.defaultSize.width, height: CGFloat? = nil, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
         // it is missing, or the files of the test model in place. A download gets half of
         // the first file and then waits until it is cancelled.
@@ -377,6 +379,8 @@ struct SettingsPageTests {
         let cleanup = TextCleanup(
             isOn: cleanupOn,
             save: { _ in },
+            polishIsOn: polishOn,
+            polishStyle: polishStyle,
             translationIsOn: translationOn,
             models: models,
             engine: CleanupEngine(load: { _ in }, unload: {}, complete: { $0 })

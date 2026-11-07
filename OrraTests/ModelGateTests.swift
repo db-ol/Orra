@@ -975,14 +975,20 @@ struct ModelGateWiringTests {
         try await eventually { gate.snapshot.waiting.count == 2 }
         let reading = Task { try await cleanup.prepareTranslation(.chinese(.english)) }
         try await eventually { gate.snapshot.waiting.count == 3 }
-        let unloading = Task { await cleanup.unload() }
+        let polishing = Task { try await cleanup.polish("Hello.", .clear) }
         try await eventually { gate.snapshot.waiting.count == 4 }
-        #expect(gate.snapshot.waiting == [.shared, .shared, .shared, .shared])
+        let readingPolish = Task { try await cleanup.preparePolish(.concise) }
+        try await eventually { gate.snapshot.waiting.count == 5 }
+        let unloading = Task { await cleanup.unload() }
+        try await eventually { gate.snapshot.waiting.count == 6 }
+        #expect(gate.snapshot.waiting == [.shared, .shared, .shared, .shared, .shared, .shared])
         voice.release()
         try await speaking.value
         await #expect(throws: RewriteError.notLoaded) { try await cleaning.value }
         await #expect(throws: RewriteError.notLoaded) { try await translating.value }
         await #expect(throws: RewriteError.notLoaded) { try await reading.value }
+        await #expect(throws: RewriteError.notLoaded) { try await polishing.value }
+        await #expect(throws: RewriteError.notLoaded) { try await readingPolish.value }
         await unloading.value
         #expect(gate.snapshot == ModelGate.Snapshot())
     }

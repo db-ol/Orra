@@ -50,6 +50,8 @@ A personal vocabulary of up to 5,000 names and terms, so Orra writes them your w
 
 Optional. A text model on your Mac removes the fillers the rules leave and applies spoken self corrections, so “at three, oh wait, four” becomes “at four”. Paste Original Text always brings back what you said.
 
+Turn on Polish as well, and the same model rewrites what you say as clear, concise written text in the style you pick: Clear keeps nearly everything, Concise only the points. Orra checks every rewrite and pastes your text without it when a check fails. A rewrite can still leave out a detail or change what you meant, and Paste Original Text brings back the text from before it. New in 0.7.0.
+
 </td>
 <td width="50%"><img src="docs/images/readme/en/cleanup.gif" alt="With Clean Up Text on, someone says “Let’s go over the quote at three, oh wait, four tomorrow.” The email gets “Let’s go over the quote at four tomorrow.”" width="100%"></td>
 </tr>
