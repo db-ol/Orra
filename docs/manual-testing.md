@@ -488,7 +488,13 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     They also cover separate fixes in one sentence judged one by one, a Chinese name
     widened to its unchanged characters, and the cap of 8 Chinese characters. Two words
     without an English key, such as 开会 and 十点 or A and B, are compared by their sound
-    only, and a Chinese numeral is no digit of a name.
+    only, and a Chinese numeral is no digit of a name. NumbersOnlyTests checks that a fix
+    of numbers only, digits in any width or Chinese numerals, such as Qwen2 to Qwen3,
+    十四 to 四十 or 第3版 to 第三版, is never learned, and one numeral fixed to another,
+    such as 四点 to 十点, never offered, also in a name such as 十郎 to 四郎, while 完克 to
+    万科, quen 3 to Qwen3, Quen2 to Qwen3 and 通一千问 to 通义千问 still are. In a replaced
+    word a change of numbers only, from the pasted word or from what the model wrote,
+    teaches nothing, and putting back the number the model wrote still forgets the pair.
     CorrectionWatcherTests drives the watcher with a scripted field, so no app is read: a
     reported fix, no watch at all after a paste into Orra's own process, and no reading
     after leaving the app, under secure input, in a field without the pasted text, or in a
@@ -496,8 +502,8 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     CorrectionLearningTests checks that nothing is read while learning is off, that the
     first fix adds the word and tells the user, a quiet new mishearing, Undo, that a
     learned word removed from the vocabulary is learned again, that after a cleanup only
-    a fix of a word the speech model wrote is learned, that a change of what was said next
-    to a fixed name is not learned,
+    a fix of a word the speech model wrote is learned, that a change of what was said or
+    of only a number next to a fixed name is not learned,
     and that Paste Original Text ends the watch of the cleaned paste. LearnedNoticeTests checks the notice and its panel.
   - WordReplacementTests covers putting the user's words back into a transcript: a kept
     pair replaces its heard spelling only while its word is in the vocabulary, Latin
@@ -510,9 +516,10 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     the model's spelling back, and nothing for a fix of part of a replaced word.
     CorrectionLearningTests checks that only kept pairs replace, and none while learning is
     off, after Undo or after the word left the vocabulary, and the learning side of those
-    fixes, also after a cleanup. PushToTalkControllerTests checks that the replacement
-    runs after the rule steps and before the cleanup model, and that Paste Original Text
-    keeps the replaced words.
+    fixes, also after a cleanup, and that putting back the number of a replaced word
+    forgets a pair an earlier version learned from a change of number.
+    PushToTalkControllerTests checks that the replacement runs after the rule steps and
+    before the cleanup model, and that Paste Original Text keeps the replaced words.
     OneCharacterFixTests and WordSuggestionLearningTests cover a fix of one Chinese
     character: grammar pairs and a change of number such as 两 to 三 never offered, the
     guessed word from the system tokenizer, and adding, editing and declining the offered
@@ -2139,8 +2146,8 @@ corrections under Recognition in Settings, Dictation first:
   word, see Replacing learned words below.
 - [ ] Changing a word's meaning, such as 明天 to 后天, 开会 to 十点 or Monday to Sunday,
   fixing one Chinese character as grammar such as 的 to 得, changing a number such as 两点
-  to 三点, deleting words, or rewriting the sentence adds nothing. Fixing a word and then
-  typing a period learns the word without the period.
+  to 三点, 四点 to 十点 or Qwen2 to Qwen3, deleting words, or rewriting the sentence adds
+  nothing. Fixing a word and then typing a period learns the word without the period.
 - [ ] Dictate 我用通义千问写代码 so it comes out as 通一千问 and fix the one character: no
   word is added, and a notice asks "Add a word to your vocabulary?" with 通义千问 in its
   field. The app you are in keeps the focus and typing there still works while the notice
