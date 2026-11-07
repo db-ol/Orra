@@ -120,4 +120,65 @@ struct SpelledLettersTests {
         #expect(result == String(repeating: expected, count: 500))
         #expect(elapsed < .seconds(5))
     }
+
+    /// Gate run folders named in TEST_RUNNER_ORRA_SPELLED_LETTERS_RUNS, separated by colons.
+    static var storedRuns: [URL]? {
+        guard let paths = ProcessInfo.processInfo.environment["ORRA_SPELLED_LETTERS_RUNS"], !paths.isEmpty else { return nil }
+        return paths.split(separator: ":").map { URL(fileURLWithPath: (String($0) as NSString).expandingTildeInPath, isDirectory: true) }
+    }
+
+    /// Joins the stored texts of release gate runs, so the change can be scored without a
+    /// model. Only when asked for, with TEST_RUNNER_ORRA_SPELLED_LETTERS_RUNS naming the run
+    /// folders and TEST_RUNNER_ORRA_SPELLED_LETTERS_OUT a folder for the results:
+    ///
+    ///     TEST_RUNNER_ORRA_SPELLED_LETTERS_RUNS=<run>[:<run>...] TEST_RUNNER_ORRA_SPELLED_LETTERS_OUT=<folder> xcodebuild ... test -only-testing:OrraTests/SpelledLettersTests
+    ///
+    /// For each run it writes <folder>/<run>.json with two maps: corpus, the ruled_text of
+    /// every clip of raw/corpus.json after the join, where the dictation language of the
+    /// corpus evaluation takes the rule steps, and sets, the text of every clip of
+    /// raw/sets-raw.json after the join, by set and ID. The set evaluation dictates in
+    /// Chinese, so every text takes the rule steps. Copies of the run with these texts can
+    /// then be scored with Tools/release-gate/gate.py. Counts only on the console.
+    @Test(.enabled(if: SpelledLettersTests.storedRuns != nil))
+    @MainActor
+    func joinTheStoredTextsOfGateRuns() throws {
+        let runs = try #require(Self.storedRuns)
+        let path = try #require(ProcessInfo.processInfo.environment["ORRA_SPELLED_LETTERS_OUT"], "no TEST_RUNNER_ORRA_SPELLED_LETTERS_OUT")
+        let out = URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        for run in runs {
+            var corpus: [String: String] = [:]
+            var sets: [String: String] = [:]
+            var changed = 0
+            let corpusFile = run.appendingPathComponent("raw/corpus.json")
+            if FileManager.default.fileExists(atPath: corpusFile.path) {
+                let document = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: corpusFile)) as? [String: Any])
+                let clips = try #require(document["clips"] as? [String: [String: Any]])
+                for (id, row) in clips {
+                    let text = row["text"] as? String ?? ""
+                    let ruled = row["ruled_text"] as? String ?? text
+                    let takesSteps = LanguageGuard.takesChineseAndEnglishSteps(text, for: SpeechCorpus.dictationLanguage)
+                    corpus[id] = takesSteps ? SpelledLetters.joining(in: ruled) : ruled
+                    changed += corpus[id] == ruled ? 0 : 1
+                }
+            }
+            let setsFile = run.appendingPathComponent("raw/sets-raw.json")
+            if FileManager.default.fileExists(atPath: setsFile.path) {
+                let document = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: setsFile)) as? [String: Any])
+                let clips = try #require(document["clips"] as? [[String: Any]])
+                for row in clips {
+                    let set = try #require(row["set"] as? String)
+                    let id = try #require(row["id"] as? String)
+                    let key = "\(set)/\(id)"
+                    let text = row["text"] as? String ?? ""
+                    sets[key] = SpelledLetters.joining(in: text)
+                    changed += sets[key] == text ? 0 : 1
+                }
+            }
+            try #require(!corpus.isEmpty || !sets.isEmpty, "no stored texts in \(run.path)")
+            let data = try JSONSerialization.data(withJSONObject: ["corpus": corpus, "sets": sets], options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+            try data.write(to: out.appendingPathComponent("\(run.lastPathComponent).json"))
+            print("\(run.lastPathComponent): \(corpus.count) corpus texts, \(sets.count) set texts, \(changed) changed")
+        }
+    }
 }
