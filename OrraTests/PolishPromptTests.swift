@@ -353,6 +353,6 @@ struct PolishPromptTokenizerTests {
                 }
             }
         }
-        #expect(count == 2 * 2 * (100 + 70))
+        #expect(count == 2 * 2 * (113 + 70))
     }
 }

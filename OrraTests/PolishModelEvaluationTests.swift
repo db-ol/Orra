@@ -3,7 +3,7 @@ import Testing
 @testable import Orra
 
 /// Runs the real cleanup model on the polish cases of Tools/rewrite-eval in both styles: the
-/// 100 cases of polish.jsonl, written for Polish, and the 70 adversarial ones, which ask,
+/// 113 cases of polish.jsonl, written for Polish, and the 70 adversarial ones, which ask,
 /// order or try to steer the model. Each runs after the filler and number rules, as the app
 /// runs it. Only when asked for, with TEST_RUNNER_ORRA_POLISH_EVAL=1, and only when the
 /// model is on this Mac, see RewriteTestModel. It loads 3 GB, so run it on its own, in a

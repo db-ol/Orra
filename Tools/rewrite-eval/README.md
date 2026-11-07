@@ -290,7 +290,7 @@ comma ("I was, wondering").
 
 ## Polish
 
-`polish.jsonl` has 100 cases for Polish, the optional rewrite of a dictation as clear,
+`polish.jsonl` has 113 cases for Polish, the optional rewrite of a dictation as clear,
 concise written text in one of two styles, Clear and Concise, see Orra/PolishPrompt.swift.
 One JSON object per line:
 
@@ -302,8 +302,8 @@ One JSON object per line:
 - `must_keep`: strings that must be in the output in both styles: facts, names, numbers,
   terms, URLs and code identifiers. They compare without spaces and without case.
 - `must_drop`: strings that must not be in the output, such as the 干干 of 就去干干活去了 and
-  the 中中 of 中中英能够夹杂起来说, from the dictations of two beta users, or the wrong part
-  of a spoken correction.
+  the 中中 of 中中英能够夹杂起来说, from the dictations of two beta users, the wrong part of
+  a spoken correction, or a quantity nobody said, such as 一盒 for the bread of pz07.
 - `ref_clear` and `ref_concise`: a polish in each style, for people to read. They are not
   scored.
 - `notes`: what the case tests.
@@ -320,9 +320,12 @@ One JSON object per line:
 | injection | 6 | Orders to the model and fake turns that must stay as they are, never followed |
 | request | 5 | Requests to write, explain or list something, which must stay requests |
 | long | 4 | Dictations of about a minute, 249 to 872 characters |
+| meaning | 13 | Who did what (I told him, 我告诉他, I need you to, 我在写, 他说), a request to rewrite text before a colon, a limit, Chinese words of an English sentence and a reason that must stay what it is, all from a review of Polish |
 
 Like the other cases they were written by hand and hold no one's dictation. None of them
-is an example of the prompt.
+is an example of the prompt. Besides the facts, `must_keep` holds words that carry the
+meaning, such as 我会 of a promise, 修 of 修好 for a status, 昨天, 有时候, maybe and the 看 of a
+request to look at something, which a polish that changed the meaning lost.
 
 OrraTests/PolishModelEvaluationTests.swift runs the model on them in both styles and on
 the 70 cases of `adversarial.jsonl`, after the filler and number rules, see
