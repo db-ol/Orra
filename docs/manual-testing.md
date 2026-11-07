@@ -492,9 +492,14 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     of numbers only, digits in any width or Chinese numerals, such as Qwen2 to Qwen3,
     十四 to 四十 or 第3版 to 第三版, is never learned, and one numeral fixed to another,
     such as 四点 to 十点, never offered, also in a name such as 十郎 to 四郎, while 完克 to
-    万科, quen 3 to Qwen3, Quen2 to Qwen3 and 通一千问 to 通义千问 still are. In a replaced
-    word a change of numbers only, from the pasted word or from what the model wrote,
-    teaches nothing, and putting back the number the model wrote still forgets the pair.
+    万科, quen 3 to Qwen3, Quen2 to Qwen3 and 通一千问 to 通义千问 still are. A version with
+    a decimal point counts as a number (Qwen2.5 to Qwen3), and a changed number with a
+    space, a hyphen or a case changed beside it (Qwen 2 to Qwen3, GPT4 to GPT-5, qwen2 to
+    Qwen3) is not learned either, while the same number in another writing (Qwen 3 to
+    Qwen3, COVID 19 to COVID-19) still is. Dates, times and amounts are not learned, and
+    names with numerals keep the known cost. In a replaced word a change of numbers only,
+    from the pasted word or from what the model wrote, teaches nothing, and putting back
+    the number the model wrote still forgets the pair, also in another writing.
     CorrectionWatcherTests drives the watcher with a scripted field, so no app is read: a
     reported fix, no watch at all after a paste into Orra's own process, and no reading
     after leaving the app, under secure input, in a field without the pasted text, or in a
