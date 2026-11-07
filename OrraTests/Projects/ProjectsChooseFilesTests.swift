@@ -101,9 +101,16 @@ struct ProjectsChooseFilesTests {
         let runtime = projects.fixture.runtime
         let model = ProjectsWindowModel(runtime: runtime)
         let email = try await Self.email(in: projects.kiln.id, runtime: runtime)
+        // A project has a section only once the index lists its files, which under load can
+        // take longer than the wait in projects(). So wait for the six files of both.
+        for _ in 0..<2_000 where (await runtime.projectFiles()).count < 6 {
+            try await Task.sleep(for: .milliseconds(5))
+        }
         let choice = await Self.choice(for: email, runtime: runtime, model: model)
         #expect(choice.sections.map(\.title) == ["Kiln studio (This Email's Project)", "Harbor lobby"])
         #expect(choice.sections.map(\.kind) == [.project(projects.kiln.id), .project(projects.harbor.id)])
+        // A section read by its place that is not there would stop the test host.
+        try #require(choice.sections.count == 2)
         let kilnFiles = Set(choice.sections[0].rows.map(\.url.lastPathComponent))
         #expect(kilnFiles == ["lamps-plan.md", "notes.txt", "lobby.dwg"])
         #expect(Set(choice.sections[1].rows.map(\.url.lastPathComponent)) == ["schedule.txt", "budget.xlsx", "plan.dwg"])
