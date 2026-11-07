@@ -1350,7 +1350,9 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     that everything else and any vocabulary term with a numeral stays, and with a stand
     in engine that the second pass runs only with a vocabulary and a possible number, and
     that a failed pass keeps the text and cancellation still ends the dictation.
-- SupportTests covers the test scoring helper, the memory footprint helper, that the
+- SupportTests covers the test scoring helper, which counts Hangul per syllable and gives
+    the tokens and errors of Tools/speech-eval/token-cases.jsonl that score.py gives, the
+    memory footprint helper, that the
     model loads only from a complete installed folder, tokenizer files included, and that
     the engine reports a missing model without loading anything.
   - ModelFilesTests covers the pinned files, their sizes and hashes, the three server
