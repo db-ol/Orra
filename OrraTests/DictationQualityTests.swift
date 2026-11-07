@@ -12,6 +12,14 @@ import Testing
 /// TEST_RUNNER_ORRA_FULL_EVAL=1 runs all 600 evaluation clips, and TEST_RUNNER_ORRA_SOAK=1
 /// runs 200 dictations in a row to watch memory.
 ///
+/// The long dictation checks, longDictationStaysAccurate and minutesInPiecesStayAccurate,
+/// also run with another dictation pair, for its bar on a long dictation in
+/// docs/release-gate.md: TEST_RUNNER_ORRA_DICTATION_LANGUAGE names the pair, see
+/// DictationPair, and TEST_RUNNER_ORRA_FLEURS_DIR a folder of its FLEURS clips. They then
+/// join the pair's FLEURS clips, and every recording takes the path of a dictation with that
+/// pair, the clips one by one too. With Chinese, the default, they run as before on
+/// fleurs_zh and ascend_mixed. The other checks always run with Chinese.
+///
 /// Attachments hold numbers only, never transcript text.
 extension RealModelTests {
     @MainActor
@@ -19,9 +27,42 @@ extension RealModelTests {
     struct DictationQualityTests {
         nonisolated private static let rate = RecordingLimits.sampleRate
 
-        /// The processing PushToTalkController applies before pasting.
-        private static func finalText(_ raw: String, samples: [Float]) -> String {
-            ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: Double(samples.count) / Double(rate)))
+        /// The processing PushToTalkController applies before pasting: loops cut, and
+        /// traditional characters converted where the pair simplifies, as Chinese does.
+        private static func finalText(_ raw: String, samples: [Float], language: DictationLanguage = .chinese) -> String {
+            let guarded = TranscriptGuard.clean(raw, audioSeconds: Double(samples.count) / Double(rate))
+            return language.simplifiesCharacters ? ChineseText.simplified(guarded) : guarded
+        }
+
+        /// The sets of a long dictation check with their target lengths: those given for
+        /// Chinese, or the pair's FLEURS clips, which hold no fillers.
+        nonisolated private static func longSets(_ language: DictationLanguage, chinese: [(String, Bool, Double)], target: Double) -> [(String, Bool, Double)] {
+            language == .chinese ? chinese : [("fleurs_\(DictationPair.code(language))", false, target)]
+        }
+
+        /// The sets of minutesInPiecesStayAccurate. A pair the app does not know keeps the
+        /// Chinese sets here, and the test fails on it.
+        nonisolated static var piecesSets: [(String, Bool, Double)] {
+            longSets((try? DictationPair.chosen()) ?? .chinese, chinese: [("fleurs_zh", false, 290.0), ("ascend_mixed", true, 150.0)], target: 290.0)
+        }
+
+        /// The clips of a set: of the evaluation folder with Chinese, of the pair's FLEURS
+        /// folder with another pair.
+        private static func clips(in set: String, count: Int, language: DictationLanguage) throws -> [(name: String, reference: String)] {
+            language == .chinese ? try EvaluationData.clips(in: set, count: count) : try DictationPair.fleursClips(language, count: count)
+        }
+
+        private static func samples(set: String, name: String, language: DictationLanguage) throws -> [Float] {
+            language == .chinese ? try EvaluationData.samples(set: set, name: name) : try DictationPair.fleursSamples(name)
+        }
+
+        /// The text of a recording of up to a minute before the rule steps: with Chinese the
+        /// speech model's pass, as these checks always ran, with another pair the path of a
+        /// dictation, see DictationPair.transcribe.
+        private static func text(of samples: [Float], engine: Qwen3Engine, transcription: Transcription, language: DictationLanguage) async throws -> String {
+            guard language != .chinese else { return finalText(try await engine.transcribe(samples), samples: samples) }
+            let raw = try await DictationPair.transcribe(samples, vocabulary: [], language: language, transcription: transcription)
+            return finalText(raw, samples: samples, language: language)
         }
 
         private static func silence(seconds: Double) -> [Float] {
@@ -176,20 +217,22 @@ extension RealModelTests {
         }
 
         @Test func longDictationStaysAccurate() async throws {
+            let language = try DictationPair.chosen()
             let engine = RealModel.engine()
             try await engine.load()
+            let transcription = Transcription(load: { try await engine.load() }, transcribe: { try await engine.transcribe($0, context: $1, language: $2) })
             var report: [String] = []
-            for (set, dropFillers, target) in [("fleurs_zh", false, 58.0), ("ascend_mixed", true, 30.0)] {
+            for (set, dropFillers, target) in Self.longSets(language, chinese: [("fleurs_zh", false, 58.0), ("ascend_mixed", true, 30.0)], target: 58.0) {
                 // Clips joined with short pauses, up to the target length, never past the
                 // minute that is one piece.
                 var samples: [Float] = []
                 var references: [String] = []
                 var single = (errors: 0, tokens: 0)
-                for clip in try EvaluationData.clips(in: set, count: 40) {
-                    let speech = try EvaluationData.samples(set: set, name: clip.name)
+                for clip in try Self.clips(in: set, count: 40, language: language) {
+                    let speech = try Self.samples(set: set, name: clip.name, language: language)
                     let next = samples.count + speech.count + Self.rate / 2
                     guard Double(next) / Double(Self.rate) <= target else { continue }
-                    let alone = Self.finalText(try await engine.transcribe(speech), samples: speech)
+                    let alone = try await Self.text(of: speech, engine: engine, transcription: transcription, language: language)
                     let counts = TranscriptScoring.counts(references: [clip.reference], hypotheses: [alone], dropFillers: dropFillers)
                     single = (single.errors + counts.errors, single.tokens + counts.tokens)
                     samples += speech + Self.silence(seconds: 0.5)
@@ -197,7 +240,7 @@ extension RealModelTests {
                 }
                 let seconds = Double(samples.count) / Double(Self.rate)
                 let start = ContinuousClock.now
-                let text = Self.finalText(try await engine.transcribe(samples), samples: samples)
+                let text = try await Self.text(of: samples, engine: engine, transcription: transcription, language: language)
                 let latency = start.duration(to: .now)
                 let joined = TranscriptScoring.counts(references: [references.joined(separator: " ")], hypotheses: [text], dropFillers: dropFillers)
                 let joinedRate = 100 * Double(joined.errors) / Double(max(joined.tokens, 1))
@@ -212,19 +255,20 @@ extension RealModelTests {
         /// Minutes of speech, up to the longest dictation, transcribed in pieces of at most a
         /// minute the way a dictation is, stay as accurate as the clips one by one, with no
         /// piece lost.
-        @Test(arguments: [("fleurs_zh", false, 290.0), ("ascend_mixed", true, 150.0)])
+        @Test(arguments: DictationQualityTests.piecesSets)
         func minutesInPiecesStayAccurate(_ set: String, _ dropFillers: Bool, _ target: Double) async throws {
+            let language = try DictationPair.chosen()
             let engine = RealModel.engine()
             try await engine.load()
             let transcription = Transcription(load: { try await engine.load() }, transcribe: { try await engine.transcribe($0, context: $1, language: $2) })
             var samples: [Float] = []
             var references: [String] = []
             var single = (errors: 0, tokens: 0)
-            for clip in try EvaluationData.clips(in: set, count: 200) {
-                let speech = try EvaluationData.samples(set: set, name: clip.name)
+            for clip in try Self.clips(in: set, count: 200, language: language) {
+                let speech = try Self.samples(set: set, name: clip.name, language: language)
                 let next = samples.count + speech.count + Self.rate / 2
                 guard Double(next) / Double(Self.rate) <= target else { continue }
-                let alone = Self.finalText(try await engine.transcribe(speech), samples: speech)
+                let alone = try await Self.text(of: speech, engine: engine, transcription: transcription, language: language)
                 let counts = TranscriptScoring.counts(references: [clip.reference], hypotheses: [alone], dropFillers: dropFillers)
                 single = (single.errors + counts.errors, single.tokens + counts.tokens)
                 samples += speech + Self.silence(seconds: 0.5)
@@ -232,9 +276,9 @@ extension RealModelTests {
             }
             let seconds = Double(samples.count) / Double(Self.rate)
             let start = ContinuousClock.now
-            let pieces = try await transcription.transcribeInPieces(samples, vocabulary: [], audioSeconds: seconds)
+            let pieces = try await transcription.transcribeInPieces(samples, vocabulary: [], audioSeconds: seconds, language: language)
             let latency = start.duration(to: .now)
-            let transcript = RecordingPieces.transcript(of: pieces)
+            let transcript = RecordingPieces.transcript(of: pieces, simplifying: language.simplifiesCharacters)
             let joined = TranscriptScoring.counts(references: [references.joined(separator: " ")], hypotheses: [transcript.text], dropFillers: dropFillers)
             let joinedRate = 100 * Double(joined.errors) / Double(max(joined.tokens, 1))
             let singleRate = 100 * Double(single.errors) / Double(max(single.tokens, 1))

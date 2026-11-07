@@ -720,7 +720,11 @@ got worse than the baseline or has no result, see docs/release-gate.md.
 
     A clip is made with, for example,
     `say -v Tingting -o zh_short_1.wav --data-format=LEI16@16000 "明天下午三点开会。"`, and
-    its file name starts with the language and the length, as in zh_short_1.wav. The app's
+    its file name starts with the language and the length, as in zh_short_1.wav. With
+    TEST_RUNNER_ORRA_DICTATION_LANGUAGE set to Japanese or Spanish, the controller runs with
+    that pair, the clips are that pair's say clips, such as gate-sets/pairs/ja-latency/clips,
+    where ja_mixed_long_1.wav is Japanese with English words, and of the corpus it takes the
+    English strata only. The app's
     log line "Release to paste took" lists the same steps for every real dictation, in
     milliseconds. One run on 2026-10-13 on the M5 Pro, 28 clips (13 say clips and 15
     corpus clips, 1.9 to 40.4 s of audio), two rounds, 56 dictations each way, in ms:
@@ -1355,6 +1359,11 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     memory footprint helper, that the
     model loads only from a complete installed folder, tokenizer files included, and that
     the engine reports a missing model without loading anything.
+  - DictationPairTests, added on 2026-11-06, covers what the evaluations per dictation pair
+    do without a model: Chinese when TEST_RUNNER_ORRA_DICTATION_LANGUAGE names no pair, a
+    name the app does not know failing rather than running as Chinese, a pair's FLEURS clips
+    read from a manifest, the language and length of the pairs' say clips, and the strata of
+    the corpus a pair's latency run takes.
   - ModelFilesTests covers the pinned files, their sizes and hashes, the three server
     addresses and their order, the Debug launch argument that forces one server, the
     app's folder paths, the size and SHA-256 checks, and what launch does with local files
@@ -1400,7 +1409,10 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     60 s of speech in one dictation stays as accurate as the clips one by one, and since
     2026-10-17 about 5 minutes of Chinese and 2.5 minutes of mixed speech, transcribed in
     pieces the way a dictation is, stay as accurate as the clips one by one with no piece
-    lost. With
+    lost. With TEST_RUNNER_ORRA_DICTATION_LANGUAGE set to Japanese or Spanish and
+    TEST_RUNNER_ORRA_FLEURS_DIR to a folder of that pair's FLEURS clips, those two checks
+    join the pair's FLEURS clips instead, each recording through the path of a dictation
+    with the pair (docs/release-gate.md, Pairs). With
     TEST_RUNNER_ORRA_FULL_EVAL=1 it also runs all 600 evaluation clips, and with
     TEST_RUNNER_ORRA_SOAK=1 it runs 200 dictations in a row to watch memory. Both real
     model suites sit under RealModelTests, which runs them one at a time. They load the
