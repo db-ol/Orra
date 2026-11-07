@@ -603,6 +603,18 @@ nonisolated enum NumberRules {
         return .compound(value, large: large)
     }
 
+    /// A run of Chinese numerals in ASCII digits, as the rules read it: 15 for 十五, 350 for
+    /// 三百五 and 2026 for 二零二六, read digit by digit. Nil when the run is no one number,
+    /// such as 二三十, or holds a character that is none of the rules' numerals.
+    static func digits(of run: ArraySlice<Character>) -> String? {
+        switch parse(run) {
+        case .single(let value, _)?: String(value)
+        case .reading(let digits)?: digits
+        case .compound(let value, _)?: String(value)
+        case nil: nil
+        }
+    }
+
     /// The value of a single digit or a number with powers of ten, nil for a reading.
     private static func wholeNumber(_ spoken: Spoken) -> Int? {
         switch spoken {

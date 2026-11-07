@@ -100,6 +100,75 @@ struct WordReplacementTests {
         #expect(WordReplacement.usablePairs([claude, other], vocabulary: ["Claude", "Clyde"], ordinary: ordinary).isEmpty)
     }
 
+    // MARK: Pairs that change only numbers
+
+    /// Learning no longer keeps a fix that changes only numbers, but earlier versions kept
+    /// such pairs. They replace nothing, so the number the speech model wrote stays.
+    @Test func aKeptPairThatChangesOnlyNumbersReplacesNothing() {
+        let pairs = [
+            Correction(heard: "Qwen2", corrected: "Qwen3"),
+            Correction(heard: "GPT4", corrected: "GPT-5"),
+            Correction(heard: "Qwen2.5", corrected: "Qwen3"),
+            Correction(heard: "iPhone15", corrected: "iPhone16"),
+        ]
+        let vocabulary = ["Qwen3", "GPT-5", "iPhone16"]
+        // Each passes the other checks.
+        #expect(pairs.allSatisfy { !ordinary.holdsOnlyOrdinaryWords($0.heard) })
+        let text = "我在用Qwen2和Qwen2.5写代码，问了GPT4，买了iPhone15"
+        #expect(replaced(text, pairs, vocabulary) == text)
+        #expect(WordReplacement.usablePairs(pairs, vocabulary: vocabulary, ordinary: ordinary).isEmpty)
+    }
+
+    /// A kept pair that changes more than a number, or writes the same number another way,
+    /// still replaces next to one that changes only a number.
+    @Test func aKeptPairThatChangesMoreThanNumbersStillReplaces() {
+        let pairs = [
+            Correction(heard: "Qwen2", corrected: "Qwen3"),
+            Correction(heard: "quen 3", corrected: "Qwen3"),
+            Correction(heard: "COVID 19", corrected: "COVID-19"),
+            Correction(heard: "Kwen", corrected: "Qwen"),
+        ]
+        #expect(replaced("I said quen 3 beats Qwen2 and Kwen, and COVID 19 is gone", pairs, ["Qwen3", "COVID-19", "Qwen"])
+            == "I said Qwen3 beats Qwen2 and Qwen, and COVID-19 is gone")
+        #expect(replaced("我在用克劳德和Qwen2写代码", pairs + [claude], ["Qwen3", "Claude"]) == "我在用Claude和Qwen2写代码")
+    }
+
+    /// A pair that changes only a number is no fix of its heard spelling, so it makes no
+    /// other pair for that spelling disagree. GPT4 to GPT-4, taught after an earlier version
+    /// kept GPT4 to GPT-5, replaces GPT4.
+    @Test func aKeptPairThatChangesOnlyNumbersMakesNoOtherPairDisagree() {
+        let old = Correction(heard: "GPT4", corrected: "GPT-5")
+        let new = Correction(heard: "GPT4", corrected: "GPT-4")
+        #expect(WordReplacement.usablePairs([old, new], vocabulary: ["GPT-5", "GPT-4"], ordinary: ordinary) == [new])
+        #expect(replaced("I asked GPT4 about it", [old, new], ["GPT-5", "GPT-4"]) == "I asked GPT-4 about it")
+    }
+
+    /// A kept pair that writes the same number another way never changes what was said, so
+    /// it still replaces. Earlier versions learned such pairs, as from Qwen３ fixed to Qwen3,
+    /// or from Windows十一 fixed to Windows11 where the number rules leave it before Chinese.
+    @Test func aKeptPairThatWritesTheSameNumberAnotherWayStillReplaces() {
+        let pairs = [
+            Correction(heard: "Windows十一", corrected: "Windows11"),
+            Correction(heard: "Ubuntu二十四", corrected: "Ubuntu24"),
+            Correction(heard: "Qwen３", corrected: "Qwen3"),
+        ]
+        let vocabulary = ["Windows11", "Ubuntu24", "Qwen3"]
+        let text = "我在Windows十一系统里装了Ubuntu二十四版，跑的是Qwen３"
+        #expect(NumberRules.writingNumbersAsDigits(in: text) == text)
+        #expect(WordReplacement.usablePairs(pairs, vocabulary: vocabulary, ordinary: ordinary).count == 3)
+        #expect(replaced(text, pairs, vocabulary) == "我在Windows11系统里装了Ubuntu24版，跑的是Qwen3")
+    }
+
+    /// A formal numeral is a word or a surname too, such as 陆 in 大陆, so a kept pair that
+    /// puts one in place of a plain numeral replaces nothing: 大六 to 大陆 would turn 大六岁
+    /// into 大陆岁.
+    @Test func aKeptPairToAFormalNumeralReplacesNothing() {
+        let pairs = [Correction(heard: "大六", corrected: "大陆"), Correction(heard: "五先生", corrected: "伍先生")]
+        let vocabulary = ["大陆", "伍先生"]
+        #expect(WordReplacement.usablePairs(pairs, vocabulary: vocabulary, ordinary: ordinary).isEmpty)
+        #expect(replaced("他比我大六岁，五先生也来了", pairs, vocabulary) == "他比我大六岁，五先生也来了")
+    }
+
     // MARK: Ordinary words
 
     @Test func ordinaryWordsTakeCommonEndingsAndCompounds() {
