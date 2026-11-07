@@ -103,6 +103,8 @@ class PlanTests(unittest.TestCase):
             "pairs-zh-sets", "pairs-ja-corpus", "pairs-ja-fleurs", "pairs-ja-sets", "pairs-es-corpus", "pairs-es-fleurs", "pairs-es-sets",
         ])
         by_label = {run["label"]: run for run in runs}
+        # A pair named twice runs once.
+        self.assertEqual([run["label"] for run in self.data.plan("pairs", ["zh", "zh"])], ["pairs-zh-sets"])
         # Chinese has its corpus run in the corpus suite, so only its sets run here.
         self.assertEqual(by_label["pairs-zh-sets"], {
             "label": "pairs-zh-sets", "kind": "sets", "language": "Chinese", "name": "sets-raw", "folder": self.data.sets, "clips": None,

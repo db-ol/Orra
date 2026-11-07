@@ -988,9 +988,10 @@ def plan_runs(suite: str, out: Path, pairs: list[str], corpus: Path, fleurs: lis
     pairs: for each pair but Chinese, whose runs are the corpus suite, the speech corpus and
     the pair's FLEURS clips, then the pair's sets. wrong-pairs: for each pair, count FLEURS
     clips of every other pair, Korean included, one run per corpus folder."""
+    pairs = list(dict.fromkeys(pairs))
     unknown = [pair for pair in pairs if pair not in PAIRS]
     if unknown or not pairs:
-        raise SystemExit(f"no dictation pair {', '.join(unknown)}: Orra has {', '.join(PAIRS)}")
+        raise SystemExit(f"no dictation pair {', '.join(unknown) or 'named'}: Orra has {', '.join(PAIRS)}")
     rows = {folder: read_manifest_rows(folder) for folder in dict.fromkeys([corpus, *fleurs])}
 
     def holding(pair: str, folders: list[Path]) -> tuple[Path, list[str]]:
@@ -1128,7 +1129,7 @@ def set_groups(summary: dict, sets_dir: Path, pair: str) -> dict:
 
 def summarize_wrong_pair(documents: list[dict], manifest: dict[str, dict]) -> dict:
     """For each pair whose FLEURS clips ran with another pair chosen, by its lang: the error
-    rate of its group on the pasted text, and the passes as pass_counts gives them."""
+    rate of its group on the transcript (text), and the passes as pass_counts gives them."""
     by_lang: dict[str, dict] = {}
     for document in documents:
         for clip_id, row in document["clips"].items():
