@@ -1,7 +1,8 @@
 import AppKit
 
 /// Puts text on a pasteboard for the user to paste: the dictation TextInserter pastes, Copy
-/// Last Dictation, the copy of Live Captions, and the draft of a Projects reply.
+/// Last Dictation, the copy of Live Captions, the Copy of Transcribe File, and the draft of
+/// a Projects reply.
 ///
 /// The text is marked with org.nspasteboard.ConcealedType so clipboard managers skip it,
 /// and kept on this Mac, so Universal Clipboard does not offer it to other devices. Code in

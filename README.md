@@ -76,6 +76,18 @@ New in 0.4.0.
 <td width="50%"><img src="docs/images/readme/en/meeting.gif" alt="In a video call, Alex speaks English and the Live Captions window shows each sentence with its Chinese translation. At its top, Both and Chinese are chosen, next to the Copy button. Then the user presses the translation key, says 可以，我周三之前把测试做完 and presses it again, and the call hears “Sure, I’ll finish testing by Wednesday.” from Orra Microphone." width="100%"></td>
 </tr>
 <tr>
+<td width="50%" valign="middle">
+
+### Transcribe a file
+
+Choose Transcribe File… in Orra's menu and drop an audio or video file on the window, such as a voice memo, a recorded call or a video, in a format macOS plays, such as M4A, MP3, WAV, MP4 or MOV. Orra writes down what is said on your Mac with the speech model, dictation language and vocabulary of your dictations, and shows each sentence with its time as it goes. Copy the text, or save it as text or as subtitles for a video player. Your dictations go first while a file runs.
+
+New in 0.7.0.
+
+</td>
+<td width="50%"><img src="docs/images/readme/en/transcribe.gif" alt="A file named Team meeting.m4a is dragged onto the Transcribe File window. Its sentences come in one by one with their start times while a progress bar fills, and the window says less than a minute is left. Then Save as Subtitles… is clicked, and the saved Team meeting.srt shows its first two numbered subtitles with their times." width="100%"></td>
+</tr>
+<tr>
 <td colspan="2" valign="middle">
 
 ### Projects (Preview)

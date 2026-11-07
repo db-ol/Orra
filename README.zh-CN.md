@@ -76,6 +76,18 @@
 <td width="50%"><img src="docs/images/readme/zh/meeting.gif" alt="视频会议里，Alex 说英文，“实时字幕”窗口逐句显示原文和中文译文。窗口顶部选的是“双语”和“中文”，旁边是拷贝按钮。然后用户按一下翻译键，说“可以，我周三之前把测试做完”，再按一下，通话里从 Orra Microphone 听到“Sure, I’ll finish testing by Wednesday.”" width="100%"></td>
 </tr>
 <tr>
+<td width="50%" valign="middle">
+
+### 转写文件
+
+在 Orra 菜单中选择“转写文件…”，把音频或视频文件拖到窗口里，比如语音备忘录、通话录音或视频，只要是 macOS 能播放的格式，比如 M4A、MP3、WAV、MP4 或 MOV。Orra 在你的 Mac 上用听写时的语音模型、听写语言和个人词库写下其中说的话，边转写边显示每一句和它的时间。你可以拷贝文字，也可以保存为文本，或保存为视频播放器用的字幕。转写文件时，你的听写优先。
+
+0.7.0 新增。
+
+</td>
+<td width="50%"><img src="docs/images/readme/zh/transcribe.gif" alt="一个名为“团队周会.m4a”的文件被拖到“转写文件”窗口里。进度条前进时，句子带着开始时间逐句出现，窗口提示剩余不到 1 分钟。然后点按“保存为字幕…”，保存的“团队周会.srt”显示前两条带编号和时间的字幕。" width="100%"></td>
+</tr>
+<tr>
 <td colspan="2" valign="middle">
 
 ### 项目（预览版）
