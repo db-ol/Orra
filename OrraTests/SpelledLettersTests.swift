@@ -5,7 +5,7 @@ import Testing
 /// The join of spelled capitals on what Orra pasted in stored runs and on focused cases.
 struct SpelledLettersTests {
     /// Every text that the join changes in the release gate run of the 0.6.4 candidate
-    /// (2026-11-05), and three more from earlier runs of the speech corpus evaluation.
+    /// (2026-11-05), and four more from earlier runs of the speech corpus evaluation.
     static let stored: [(String, String)] = [
         // gate-core/mixed_terms_2, with PR and CI in the vocabulary.
         ("这个 P R 先别 merge，等 C I 跑完再说。", "这个 PR 先别 merge，等 CI 跑完再说。"),

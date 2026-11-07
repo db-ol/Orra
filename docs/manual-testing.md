@@ -626,7 +626,7 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     are gone while the setting is on, not while it is off, and that a change is saved.
   - SpelledLettersTests, added on 2026-11-06, checks the join of spelled capitals on
     every text it changes in the release gate run of the 0.6.4 candidate (P R as PR,
-    3.5G B as 3.5GB, 16 G B as 16GB, O.K. as OK and A.I. as AI) and on three more of
+    3.5G B as 3.5GB, 16 G B as 16GB, O.K. as OK and A.I. as AI) and on four more of
     earlier corpus runs, then on focused cases. It checks that iPhone X S, a lone
     capital, Latin words, capitals that touch letters, six spelled capitals, five dotted
     ones, 5G A 股, letters spelled on purpose as in Lee 的拼写是 L E E, and text without
