@@ -14,9 +14,9 @@ import Testing
 /// It takes the path a dictation takes up to the transcript: the same resampling and
 /// silence check, Qwen3Engine with Orra's decoding options and no vocabulary, then
 /// TranscriptGuard and ChineseText.simplified. A clip of pure zeros is skipped, as a
-/// dictation is. The filler and number rules, on by default, give ruled_text beside it.
-/// The cleanup model is not run. Clips run whole, also the long ones over Orra's 60 s
-/// recording limit.
+/// dictation is. The filler and number rules, on by default, and the join of spelled
+/// capitals give ruled_text beside it. The cleanup model is not run. Clips run whole, also
+/// the long ones over Orra's 60 s recording limit.
 ///
 /// LanguageGuard is part of that path. language_passes counts the passes it added to a
 /// clip, and language_pass names the pass that gave text: chinese or english for one of
@@ -106,7 +106,7 @@ struct SpeechCorpusEvaluationTests {
                 row["text"] = text
                 // As PushToTalkController runs the rules.
                 let takesSteps = LanguageGuard.takesChineseAndEnglishSteps(text, for: language)
-                row["ruled_text"] = takesSteps ? NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: text)) : text
+                row["ruled_text"] = takesSteps ? SpelledLetters.joining(in: NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: text))) : text
                 row["language_verdict"] = "\(LanguageGuard.verdict(on: text, for: language))"
                 row["decode_seconds"] = decodeSeconds
                 // Which post step changed the model's text, for reading the differences.

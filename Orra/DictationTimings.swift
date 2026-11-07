@@ -22,6 +22,7 @@ nonisolated struct DictationTimings: Equatable, Sendable {
         /// TranscriptGuard and the conversion to simplified Chinese.
         case transcriptGuard
         case fillers
+        /// The number rules, and the join of spelled capitals after them, see SpelledLetters.
         case numbers
         case wordReplacement
         /// The translation step, almost nothing for a dictation of the talk key.

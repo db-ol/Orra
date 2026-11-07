@@ -136,9 +136,10 @@ both ways, and a run without lists shows no lenient row.
 2. Run Orra on it. OrraTests/SpeechCorpusEvaluationTests does what a dictation does up to
    the transcript: the resampling and the silence check, Qwen3Engine with Orra's decoding
    options and no vocabulary, then TranscriptGuard and ChineseText.simplified. It writes
-   `text`, `ruled_text` (after the filler and number rules, which are on by default),
-   `audio_seconds`, `decode_seconds` and which post step changed the text, per clip, to
-   one JSON file. Run it in Release, since a Debug build runs MLX without optimization:
+   `text`, `ruled_text` (after the filler and number rules, which are on by default, and
+   the join of spelled capitals), `audio_seconds`, `decode_seconds` and which post step
+   changed the text, per clip, to one JSON file. Run it in Release, since a Debug build
+   runs MLX without optimization:
 
        TEST_RUNNER_ORRA_SPEECH_EVAL=1 TEST_RUNNER_ORRA_SPEECH_CORPUS_DIR=$HOME/projects/orra-project/bench/speech-corpus TEST_RUNNER_ORRA_SPEECH_EVAL_OUT=$HOME/projects/orra-project/bench/speech-corpus/results xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/SpeechCorpusEvaluationTests
 

@@ -1800,6 +1800,38 @@ struct PushToTalkControllerTests {
         #expect(saved == [false, true])
     }
 
+    /// Capitals that the speech model spelled one by one are joined in Chinese text after
+    /// the number rules, also with both switches of the rules off. English keeps them.
+    @Test func spelledCapitalsAreJoinedInChineseText() async throws {
+        let controller = await controller(cleanup: .off)
+        speech.reply = "这个 P R 先别 merge，等 C I 跑完，内存是十六 G B 吗？"
+        try await dictate(controller)
+        controller.setRemovesFillerWords(false)
+        controller.setWritesNumbersAsDigits(false)
+        speech.reply = "这台 MacBook 有16 G B 内存，O.K.。"
+        try await dictate(controller)
+        speech.reply = "The P R and the C I are ready."
+        try await dictate(controller)
+        #expect(inserter.inserted == ["这个 PR 先别 merge，等 CI 跑完，内存是16GB 吗？", "这台 MacBook 有16GB 内存，OK。", "The P R and the C I are ready."])
+    }
+
+    /// A filler between spelled capitals goes first, so the letters join after it.
+    @Test func spelledCapitalsJoinAfterAFillerBetweenThem() async throws {
+        let controller = await controller(cleanup: .off)
+        speech.reply = "嗯，这个 P 呃 R 先别 merge。"
+        try await dictate(controller)
+        #expect(inserter.inserted == ["这个 PR 先别 merge。"])
+    }
+
+    /// Japanese for a user who dictates in it skips the rule steps, so spelled capitals stay
+    /// as written there.
+    @Test func japaneseKeepsSpelledCapitals() async throws {
+        let controller = await controller(cleanup: .off, language: .japanese)
+        speech.reply = "この P R は明日見ます。"
+        try await dictate(controller)
+        #expect(inserter.inserted == ["この P R は明日見ます。"])
+    }
+
     @Test func withAVocabularyNumbersComeFromASecondPassOnlyWhileTheSettingIsOn() async throws {
         let controller = PushToTalkController(
             capture: mic.capture,
