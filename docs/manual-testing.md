@@ -516,15 +516,20 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     spelling of ordinary English words, of one character or of one word of the system's
     Chinese lexicon, never inside a vocabulary word, the word of another pair or a word
     the system's word breaker finds, the longest spelling first, no chained replacements,
-    and pairs that disagree replace nothing. It also covers what a fix of a replaced word
-    teaches: the model's spelling with the new word, the pair forgotten when the user puts
-    the model's spelling back, and nothing for a fix of part of a replaced word.
+    and pairs that disagree replace nothing. A kept pair that changes only numbers, such
+    as Qwen2 to Qwen3 from an earlier version, replaces nothing and makes no other pair
+    for its spelling disagree, while quen 3 to Qwen3 and COVID 19 to COVID-19 still
+    replace. It also covers what a fix of a replaced word teaches: the model's spelling
+    with the new word, the pair forgotten when the user puts the model's spelling back,
+    and nothing for a fix of part of a replaced word.
     CorrectionLearningTests checks that only kept pairs replace, and none while learning is
     off, after Undo or after the word left the vocabulary, and the learning side of those
     fixes, also after a cleanup, and that putting back the number of a replaced word
     forgets a pair an earlier version learned from a change of number.
     PushToTalkControllerTests checks that the replacement runs after the rule steps and
-    before the cleanup model, and that Paste Original Text keeps the replaced words.
+    before the cleanup model, that Paste Original Text keeps the replaced words, and that
+    a kept pair that changes only a number replaces nothing while a word typed in Settings
+    still goes to the model.
     OneCharacterFixTests and WordSuggestionLearningTests cover a fix of one Chinese
     character: grammar pairs and a change of number such as 两 to 三 never offered, the
     guessed word from the system tokenizer, and adding, editing and declining the offered
@@ -2208,6 +2213,8 @@ corrections on:
 - [ ] Remove Claude from the vocabulary in Settings, or Undo the notice, or turn Learn from
   my corrections off: 克劳德 is pasted as the model wrote it.
 - [ ] A learned pair for an ordinary word, such as there to their, never changes there.
+- [ ] In 0.7.0 or earlier, fix Qwen2 to Qwen3 so it is learned, then update: Qwen2 is
+  pasted as the model wrote it, and Qwen3 stays in the vocabulary.
 - [ ] With cleanup on, the cleaned text and Paste Original Text both have Claude.
 
 Use names on screen, added on 2026-10-17, not verified yet. Turn on Use names on screen
