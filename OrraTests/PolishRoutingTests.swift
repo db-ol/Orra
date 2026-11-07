@@ -203,6 +203,35 @@ struct PolishRoutingTests {
         #expect(model.polished.withLock { $0 }.count == 1)
     }
 
+    /// A dictation of the translation key that is not translated, since it is too long or
+    /// the model is not ready, is pasted as it would be without Polish, never polished.
+    @Test func theTranslationKeyNeverPolishesAnUntranslatedDictation() async throws {
+        let sentence = "我们下周二下午3点在3楼开会，大家记得带电脑。"
+        let spoken = String(repeating: sentence, count: 15)
+        #expect(spoken.count > TranslationStep.maximumLength)
+        #expect(spoken.count <= PolishStep.maximumLength)
+        let model = Model(polish: #"{"polished": "\#(String(repeating: sentence, count: 14))"}"#)
+        let translation = PushToTalkControllerTests.FakeTranslation()
+        let controller = await controller(cleanup: model.closures(cleanupOn: false, style: .concise), translation: translation)
+        // Long enough for the text, which the speech model's guard cuts to what the
+        // recording could hold, and short enough for one piece.
+        mic.recording = AudioRecording(samples: FakeMicrophone.tone(count: 15 * 16_000), sampleRate: 16_000)
+        speech.reply = spoken
+        try await dictate(controller, with: .rightOption)
+        #expect(translation.received.isEmpty)
+        #expect(model.polished.withLock { $0 }.isEmpty)
+        #expect(inserter.inserted == [spoken])
+        #expect(controller.notice == String(localized: "Dictations over \(TranslationStep.maximumLength) characters are pasted without translation."))
+        // The model not ready for translation.
+        translation.ready = false
+        mic.recording = AudioRecording(samples: FakeMicrophone.tone(count: 16_000), sampleRate: 16_000)
+        speech.reply = sentence
+        try await dictate(controller, with: .rightOption)
+        #expect(model.polished.withLock { $0 }.isEmpty)
+        #expect(inserter.inserted.last == sentence)
+        #expect(controller.notice == String(localized: "The local model is not ready, so the text was pasted without translation."))
+    }
+
     /// Japanese and Spanish text skip Polish, as they skip the cleanup model, while English
     /// of the same user is polished.
     @Test func onlyTextOfChineseAndEnglishIsPolished() async throws {

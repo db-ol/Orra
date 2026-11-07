@@ -1645,8 +1645,9 @@ final class PushToTalkController {
             timings.lap(.translation)
             // While Polish is on, a dictation of the talk key gets a polish in place of the
             // cleanup. One that cannot be used leaves the steps below to paste what they
-            // would without Polish.
-            let polished = translated == nil && takesSteps ? await polish(text, timings: &timings) : nil
+            // would without Polish. A dictation of the translation key is never polished,
+            // also when it is not translated, such as one over the translation's limit.
+            let polished = translating == nil && takesSteps ? await polish(text, timings: &timings) : nil
             if let translated {
                 // In place of the cleanup step, since the translation prompt cleans up too.
                 text = translated.text
