@@ -810,6 +810,15 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     words said twice by accident, were measured the same day, and none is used, see
     RewritePrompt.
 
+    20 more repeat cases, rp47 to rp66, were written after that measurement, and both
+    gates were measured again on all 66, each in a Release build on the same Mac. Every
+    case the new runs share with the first two gave the same result. With the skip gate,
+    60 of the 66 repeat cases were exact (43 with main's gate), 18 of the 20 new ones
+    (11), and all 11 new repeats that are meant stayed. Without the gate, the model got 26
+    of the 31 accidental repeats right and kept all 35 that are meant. The gate leaves out
+    rp55, a restart of six characters that the model gets right, since it looks for
+    phrases of up to four, and the model keeps the character said twice in 产产品.
+
     On 2026-10-13 the prompt gained rules and two examples that keep words with meaning:
     pronouns, phrases such as 我再想想 and 我考虑一下, both parts of 不是 X，是 Y that sets
     a document or someone else right, and the text as it is when a correction is unclear.

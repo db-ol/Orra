@@ -22,8 +22,8 @@ import Foundation
 /// 好的 and a correction with 不对不对, up to 3 of the meaning cases, such as 让我想想, and 3
 /// to 5 of the number cases, and each dropped 1 to 3 repeats that are meant, such as
 /// 谢谢谢谢, 非常非常 or “that that”. None got a character said twice inside a word right,
-/// as in 客客户 or 中中英. So the prompt stays as it is. It already gets 18 of the 22
-/// accidental repeats of Tools/rewrite-eval/repeats.jsonl right and keeps all 24 that are
+/// as in 客客户 or 中中英. So the prompt stays as it is. It already gets 26 of the 31
+/// accidental repeats of Tools/rewrite-eval/repeats.jsonl right and keeps all 35 that are
 /// meant, once CleanupStep.hasWorkForModel sends such a dictation to it.
 nonisolated enum RewritePrompt {
     static let system = """
