@@ -45,6 +45,48 @@ struct FillerRulesTests {
         #expect(FillerRules.removingFillers(from: item.input) == item.cleanup)
     }
 
+    /// The space where a filler stood stays between two Latin words, also with accents,
+    /// between Chinese and a Latin word, also with accents, and between two Hangul words,
+    /// but not between Chinese or Japanese characters.
+    @Test(arguments: [
+        ("Llegó um él solo.", "Llegó él solo."),
+        ("我们去了 Malmö um 然后回家了。", "我们去了 Malmö 然后回家了。"),
+        ("내일 um 회의가 있어요.", "내일 회의가 있어요."),
+        ("회의는 uh, 다음 주로 미뤘어요.", "회의는 다음 주로 미뤘어요."),
+        ("我们 um 开会吧。", "我们开会吧。"),
+        ("明日の um 会議です。", "明日の会議です。"),
+    ])
+    func theSpaceBetweenWordsStays(_ input: String, _ expected: String) {
+        #expect(FillerRules.removingFillers(from: input) == expected)
+    }
+
+    /// A Latin letter with an accent is part of the word, and so is Hangul right after an
+    /// English word, where a Korean particle makes um a word that is meant. Hangul before
+    /// it does not join it, as a Chinese character does not.
+    @Test(arguments: [
+        ("El Muséum de París abre hoy.", "El Muséum de París abre hoy."),
+        ("um이라는 단어는 쓰지 마세요.", "um이라는 단어는 쓰지 마세요."),
+        ("회의um 시작해요.", "회의 시작해요."),
+    ])
+    func wordsWithAccentsAndKoreanParticles(_ input: String, _ expected: String) {
+        #expect(FillerRules.removingFillers(from: input) == expected)
+    }
+
+    /// A sentence that began with a capitalized filler starts with a capital again, also
+    /// on an accented letter and after ¿ or ¡, and the space before ¿ stays. A letter
+    /// such as ß, which has no capital of one letter, stays as it is.
+    @Test(arguments: [
+        ("Um, él llega mañana.", "Él llega mañana."),
+        ("¿Um, vienes a la reunión?", "¿Vienes a la reunión?"),
+        ("Um, ¡qué bien!", "¡Qué bien!"),
+        ("Bueno, um, ¿lo vemos el lunes?", "Bueno, ¿lo vemos el lunes?"),
+        ("Hola. ¿Uh, vienes?", "Hola. ¿Vienes?"),
+        ("Um, ßa.", "ßa."),
+    ])
+    func capitalsAndSpanishMarks(_ input: String, _ expected: String) {
+        #expect(FillerRules.removingFillers(from: input) == expected)
+    }
+
     /// Cases that need a model may keep fillers the rules cannot judge, but the rules never
     /// take a word or a number away from them.
     @Test func casesForAModelLoseOnlyFillers() {
@@ -106,7 +148,7 @@ struct FillerRulesTests {
         "Um? What?", "好啊，走吧。", "是啊，对呀。", "今天天气真好啊！", "哦？真的吗？", "那个文件我看看。",
         "这个周末吧。", "他怎么还没来呢？", "别急嘛。", "金额不对。", "这个额度不够。", "额外的费用。",
         "他叫额尔敦。", "呃逆。", "Uh-huh, sure.", "Uh huh, sure.", "Uh oh, it broke.", "The UM campus.",
-        "I like it.", "an umbrella", "Erm's not a word.", "我我我觉得可以。", "",
+        "I like it.", "an umbrella", "Erm's not a word.", "我我我觉得可以。", "", "Dijo «um» dos veces.",
     ])
     func keeps(_ input: String) {
         #expect(FillerRules.removingFillers(from: input) == input)

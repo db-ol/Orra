@@ -16,7 +16,9 @@ import Foundation
 ///   comes before a reply such as 嗯，好的, 嗯对 or 嗯，是的, or starts an interjection such
 ///   as 嗯哼, 嗯呢 or 嗯哪 as a word of its own (嗯哼，你说得对).
 /// - um, umm, uh, uhh, uhm and erm as whole words in any case, except in capitals, which is
-///   an acronym such as UM, and in replies such as uh-huh, uh huh and uh oh.
+///   an acronym such as UM, and in replies such as uh-huh, uh huh and uh oh. A Latin letter
+///   with or without an accent joins the word, so um in Muséum stays. So does Hangul right
+///   after it, since a Korean particle follows its word, as in um이라는 (the word um).
 /// - 啊 and 哦 only at the start of a clause and before a comma, as in 啊，我忘了, and not
 ///   before a correction such as 哦，不是四点, where they carry the change of mind.
 ///
@@ -25,9 +27,11 @@ import Foundation
 ///
 /// 吧, 呢, 嘛, 呀, a 啊 at the end of a sentence, 那个, 这个, like and repeated words such as
 /// 看看 are never touched, because they often mean something. A filler before a question
-/// mark stays too (嗯？). The comma or space a filler leaves behind goes with it, and an
-/// English sentence that began with a capitalized filler begins with a capital again.
-/// When nothing would be left, the dictation stays as it was.
+/// mark stays too (嗯？). The comma or space a filler leaves behind goes with it, but a
+/// space stays between two Latin words, accented or not, between Chinese and a Latin word,
+/// and between two Hangul words, so 내일 um 회의가 becomes 내일 회의가. A sentence that
+/// began with a capitalized filler begins with a capital again, also after ¿ or ¡ and on
+/// an accented letter, as in Él. When nothing would be left, the dictation stays as it was.
 nonisolated enum FillerRules {
     private static let commas: Set<Character> = ["，", ",", "、"]
     private static let sentenceEnds: Set<Character> = ["。", ".", "！", "!", "？", "?"]
@@ -42,7 +46,9 @@ nonisolated enum FillerRules {
     private static let interjectionEnds: Set<Character> = ["哼", "呢", "哪", "呐"]
     /// The first characters of a clause that corrects the one before.
     private static let correctionStarts: Set<Character> = ["不", "没", "错", "别"]
-    private static let quotes: Set<Character> = ["\"", "'", "“", "”", "‘", "’", "「", "」", "『", "』"]
+    private static let quotes: Set<Character> = ["\"", "'", "“", "”", "‘", "’", "「", "」", "『", "』", "«", "»"]
+    /// The marks that open a question or an exclamation in Spanish.
+    private static let openingMarks: Set<Character> = ["¿", "¡"]
     private static let titles = ["Mr.", "Mrs.", "Ms.", "Mx.", "Dr.", "Prof."]
     private static let ellipsis: Set<Character> = [".", "…"]
     /// Characters of written Cantonese that Mandarin rarely uses. The speech model writes
@@ -156,7 +162,7 @@ nonisolated enum FillerRules {
         while end < characters.count, characters[end].isASCIILetter {
             end += 1
         }
-        if end < characters.count, isWordPart(characters[end]) { return nil }
+        if end < characters.count, isWordPart(characters[end]) || isHangul(characters[end]) { return nil }
         let word = String(characters[index..<end])
         guard englishFillers.contains(word.lowercased()) else { return nil }
         // UM or UH in capitals is an acronym, such as a university.
@@ -186,7 +192,9 @@ nonisolated enum FillerRules {
             output.removeLast()
             hadSpace = true
         }
-        let atSentenceStart = output.last.map { sentenceEnds.contains($0) } ?? true
+        // A sentence starts at the start of the text, after the end of one, and after the
+        // ¿ or ¡ that opens it there.
+        let atSentenceStart = output.last(where: { !$0.isWhitespace && !openingMarks.contains($0) }).map { sentenceEnds.contains($0) } ?? true
         var index = skippingSpaces(from: filler.end, in: characters)
         hadSpace = hadSpace || index > filler.end
         // An ellipsis after the filler belongs to it: "Um... I think" or "呃……我想".
@@ -234,25 +242,35 @@ nonisolated enum FillerRules {
         return index
     }
 
-    /// Capitalizes a word written all in lowercase, so "iPhone" stays as it is.
+    /// Capitalizes a word written all in lowercase, so "iPhone" stays as it is, also after
+    /// the ¿ or ¡ that opens it.
     private static func capitalizeWord(at index: Int, in characters: inout [Character]) {
-        guard index < characters.count, characters[index].isLowercase, characters[index].isASCIILetter else { return }
-        var end = index + 1
+        var start = index
+        while start < characters.count, openingMarks.contains(characters[start]) {
+            start += 1
+        }
+        guard start < characters.count, characters[start].isLowercase, isLatinLetter(characters[start]) else { return }
+        var end = start + 1
         while end < characters.count, characters[end].isLetter {
             if characters[end].isUppercase { return }
             end += 1
         }
-        characters[index] = Character(characters[index].uppercased())
+        // A letter such as ß has no capital of one letter.
+        let capital = characters[start].uppercased()
+        guard capital.count == 1 else { return }
+        characters[start] = Character(capital)
     }
 
-    /// Whether a space goes where a filler was, given that there was one: between English
-    /// words, after English punctuation, and between Chinese and English, the way the
-    /// speech model writes it. Never next to Chinese punctuation or before punctuation.
+    /// Whether a space goes where a filler was, given that there was one: between Latin
+    /// words, with or without accents, after English punctuation, between Chinese and a
+    /// Latin word, the way the speech model writes it, between two Hangul words, and before
+    /// the ¿ or ¡ that opens a Spanish question or exclamation. Never next to Chinese
+    /// punctuation, before other punctuation, or between Chinese or Japanese characters.
     private static func needsSpace(between last: Character, and next: Character) -> Bool {
-        if isPunctuation(next) { return false }
+        if isPunctuation(next), !openingMarks.contains(next) { return false }
         if last.isASCII, isPunctuation(last) { return true }
         if isPunctuation(last) { return false }
-        return last.isASCIILetterOrDigit || next.isASCIILetterOrDigit
+        return isLatinLetterOrDigit(last) || isLatinLetterOrDigit(next) || (isHangul(last) && isHangul(next))
     }
 
     private static func runEnd(of character: Character, from index: Int, in characters: [Character]) -> Int {
@@ -277,10 +295,31 @@ nonisolated enum FillerRules {
         return clauseEnds.contains(last)
     }
 
-    /// Latin letters, digits, hyphens and apostrophes join a word, so um in "umbrella",
-    /// "uh-huh" and "um's" is not a filler. A Chinese character does not, so uh in 我uh觉得 is.
+    /// Latin letters with or without accents, digits, hyphens and apostrophes join a word,
+    /// so um in "umbrella", "uh-huh", "um's" and "Muséum" is not a filler. A Chinese
+    /// character does not, so uh in 我uh觉得 is.
     private static func isWordPart(_ character: Character) -> Bool {
-        character.isASCIILetterOrDigit || character == "-" || character == "'" || character == "’"
+        isLatinLetterOrDigit(character) || character == "-" || character == "'" || character == "’"
+    }
+
+    /// Latin letters, with or without accents.
+    private static func isLatinLetter(_ character: Character) -> Bool {
+        character.unicodeScalars.first.map(LanguageGuard.isLatin) ?? false
+    }
+
+    private static func isLatinLetterOrDigit(_ character: Character) -> Bool {
+        character.isASCIILetterOrDigit || isLatinLetter(character)
+    }
+
+    /// Hangul syllables and jamo, with the compatibility and halfwidth jamo. Korean puts a
+    /// space between words and writes a particle right after the word it belongs to, also
+    /// after an English one, as in API를.
+    private static func isHangul(_ character: Character) -> Bool {
+        guard let scalar = character.unicodeScalars.first else { return false }
+        switch scalar.value {
+        case 0x1100...0x11FF, 0x3130...0x318F, 0xA960...0xA97F, 0xAC00...0xD7A3, 0xD7B0...0xD7FF, 0xFFA0...0xFFDC: return true
+        default: return false
+        }
     }
 
     /// Whether a reply such as 好的 starts here and stands as a word of its own.
