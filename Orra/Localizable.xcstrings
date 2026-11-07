@@ -3922,6 +3922,58 @@
         }
       }
     },
+    "Clear (polish style)" : {
+      "comment" : "A style of Polish: clear, fluent written text",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Clear"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claro"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "明快"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通顺"
+          }
+        }
+      }
+    },
+    "Clear, fluent written text that keeps nearly everything you said." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texto escrito claro y fluido que conserva casi todo lo que dijiste."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読みやすい書き言葉に整えます。話した内容はほぼすべて残ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "改成通顺的书面文字，你说的内容基本都保留。"
+          }
+        }
+      }
+    },
     "Click Record, then read the text above." : {
       "localizations" : {
         "es-419" : {
@@ -4046,6 +4098,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "对照邮件原文"
+          }
+        }
+      }
+    },
+    "Concise" : {
+      "comment" : "A style of Polish: only the points",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conciso"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "簡潔"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "简洁"
           }
         }
       }
@@ -4756,6 +4831,50 @@
         }
       }
     },
+    "Dictations over %lld characters are pasted without polishing, and so is a polish that fails Orra's checks or takes too long. The checks catch some changes of meaning, not all of them." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los dictados de más de %lld caracteres se pegan sin pulir. Lo mismo pasa cuando un pulido no supera las verificaciones de Orra o tarda demasiado. Las verificaciones detectan algunos cambios de sentido, no todos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld文字を超える音声入力は、推敲せずにペーストされます。推敲の結果がOrraのチェックに通らない場合や時間がかかりすぎる場合も同様です。チェックで見つかるのは、意味の変化の一部だけです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超过 %lld 个字符的听写不会润色。润色结果没通过 Orra 的检查或者用时太长时也一样，会粘贴不润色时的文字。这些检查能发现一部分意思上的改变，但不是全部。"
+          }
+        }
+      }
+    },
+    "Dictations over %lld characters are pasted without polishing." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los dictados de más de %lld caracteres se pegan sin pulir."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld文字を超える音声入力は、推敲せずにペーストされます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超过 %lld 个字符的听写不会润色，会直接粘贴。"
+          }
+        }
+      }
+    },
     "Dictations over %lld characters are pasted without translation, and so is a translation that fails Orra's checks or takes too long, so nothing you say is lost." : {
       "localizations" : {
         "es-419" : {
@@ -5106,6 +5225,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "要下载整理模型吗？"
+          }
+        }
+      }
+    },
+    "Download the model for polishing?" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Descargar el modelo para pulir?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推敲用のモデルをダウンロードしますか?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要下载润色用的模型吗？"
           }
         }
       }
@@ -10913,6 +11054,28 @@
         }
       }
     },
+    "Only the points. Rambling speech often comes out about half as long." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Solo los puntos clave. Un dictado con muchos rodeos suele quedar en cerca de la mitad."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要点だけを残します。冗長な話は、多くの場合半分ほどの長さになります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只留要点。啰嗦的话通常会缩短到一半左右。"
+          }
+        }
+      }
+    },
     "Only while dictating" : {
       "localizations" : {
         "es-419" : {
@@ -12147,6 +12310,28 @@
         }
       }
     },
+    "Orra never learns corrections from a polished paste." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra nunca aprende correcciones de un texto que pegó pulido."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推敲してペーストしたテキストから、Orraが修正を学習することはありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 不会从润色后粘贴的文字中学习更正。"
+          }
+        }
+      }
+    },
     "Orra never learns corrections from a translated paste." : {
       "localizations" : {
         "es-419" : {
@@ -12915,6 +13100,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "开始和停止录音时播放提示音"
+          }
+        }
+      }
+    },
+    "Polish with a local model" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulir con un modelo local"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ローカルモデルで推敲"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用本地模型润色文字"
+          }
+        }
+      }
+    },
+    "Polishing works on English sentences only for now." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Por ahora, el pulido solo funciona con oraciones en inglés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推敲は、今のところ英語の文にのみ対応しています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "润色目前只处理英文句子。"
           }
         }
       }
@@ -15429,6 +15658,28 @@
         }
       }
     },
+    "Rewrites what you say as clear, concise written text with the model of Clean Up Text, which adds time to a dictation as cleanup does. A rewrite can leave out a detail or change what you meant, most often in Concise. Paste Original Text in the Orra menu brings back the text from before it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reescribe lo que dices como texto escrito claro y conciso con el modelo de Limpiar texto, que, como la limpieza, agrega tiempo al dictado. Una reescritura puede omitir un detalle o cambiar lo que quisiste decir, sobre todo con Conciso. Pegar texto original, en el menú de Orra, recupera el texto de antes de la reescritura."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“テキストを整える”のモデルで、話した内容を明快で簡潔な書き言葉に書き直します。整文と同じように音声入力の処理に時間がかかります。書き直しで細かい点が抜けたり意味が変わったりすることがあり、特に“簡潔”で起こりやすくなります。Orraメニューの“原文をペースト”で書き直す前のテキストを戻せます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用“整理文字”的模型把你说的话改写成清楚简洁的书面文字，和整理一样会让听写多花一些时间。改写可能漏掉细节或改变你的意思，“简洁”更容易出现这种情况。Orra 菜单中的“粘贴原文”可以找回改写前的文字。"
+          }
+        }
+      }
+    },
     "Right Arrow" : {
       "comment" : "A key name",
       "localizations" : {
@@ -17334,6 +17585,28 @@
         }
       }
     },
+    "Style" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estilo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スタイル"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "润色风格"
+          }
+        }
+      }
+    },
     "Subject:" : {
       "localizations" : {
         "es-419" : {
@@ -17903,6 +18176,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这台 Mac 上还没有整理模型。下载好之前，Orra 会粘贴未经整理的文字。"
+          }
+        }
+      }
+    },
+    "The cleanup model is not on this Mac yet. Until it is, Orra pastes the text without polishing." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El modelo de limpieza todavía no está en esta Mac. Hasta que se descargue, Orra pega el texto sin pulir."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacにはまだ整文モデルがありません。ダウンロードするまで、Orraは推敲せずにテキストをペーストします。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上还没有整理模型。下载好之前，Orra 会粘贴未经润色的文字。"
           }
         }
       }

@@ -35,7 +35,9 @@ text always recoverable, is allowed. It is off by default, except that on a Mac 
 of memory or more, a new user's Download Models in the welcome window also downloads the
 cleanup model and turns cleanup on. The button shows the total size of both models, and
 the user can turn cleanup off in Settings. A saved choice is never changed. The
-maintainer approved this on 2026-10-15.
+maintainer approved this on 2026-10-15. Polish, which rewrites a dictation of the talk
+key as clear, concise written text with the same model, is off by default for everyone,
+also on a Mac with 16 GB, and the welcome window never turns it on.
 
 ## Build discipline
 Build (run in the repository root):
@@ -201,7 +203,7 @@ trusted once in Xcode. docs/dependencies.md has the details.
   asks for, Sleep or a closed lid.
 - Orra goes online only for the speech model download the user starts from the menu or the
   welcome window, the cleanup model download the user agrees to in Settings, for Clean Up
-  Text, Translation or Projects, or starts in the welcome window (with the speech model
+  Text, Polish, Translation or Projects, or starts in the welcome window (with the speech model
   through Download Models, or alone while cleanup is on), and for
   update checks through Sparkle that the user allowed or started.
   Launching must never touch the network before the user allowed update checks. Any other
