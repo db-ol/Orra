@@ -40,6 +40,16 @@ struct LanguageGuardTests {
         #expect(LanguageGuard.isForeign("Это простой ужин с хлебом и оливковым маслом."))
     }
 
+    /// Jamo on their own, such as ㅋㅋ, are letters of another script for every dictation
+    /// language, in each of their forms: compatibility, conjoining and halfwidth.
+    @Test func hangulJamoAreForeign() {
+        for language in [DictationLanguage.chinese, .japanese, .spanish] {
+            for text in ["\u{314B}\u{314B}\u{314B}", "\u{1112}\u{1112}\u{1112}", "\u{FFBE}\u{FFBE}\u{FFBE}"] {
+                #expect(LanguageGuard.isForeign(text, for: language), "\(text) \(language)")
+            }
+        }
+    }
+
     /// With Japanese chosen, kana and Han characters are Japanese, also mixed with English,
     /// and Latin text is English or foreign as for Chinese.
     @Test func japaneseTakesKanaHanCharactersAndEnglish() {

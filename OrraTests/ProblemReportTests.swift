@@ -51,6 +51,14 @@ struct ProblemReportTests {
         #expect(redacted == "Microphone: <user>的AirPods Pro, <user>的AirPods, <user>的 iPhone 麦克风, Janet的AirPods")
     }
 
+    /// Every letter of the Hangul script, jamo too, counts as a word boundary and makes a
+    /// name of two letters long enough, as \p{Hangul} has them.
+    @Test func redactsNamesNextToHangulAndJamo() {
+        let text = "Microphone: 민준의 AirPods, Jane\u{314B}\u{314B}, \u{314B}\u{314B}Jane, \u{FFBE}Jane\u{FFBE}, \u{3141}\u{3148}의 iPhone, Janet의 AirPods"
+        let redacted = ProblemReport.redact(text, home: "/Users/jane", userNames: ["Jane", "민준", "\u{3141}\u{3148}"], computerName: nil)
+        #expect(redacted == "Microphone: <user>의 AirPods, <user>\u{314B}\u{314B}, \u{314B}\u{314B}<user>, \u{FFBE}<user>\u{FFBE}, <user>의 iPhone, Janet의 AirPods")
+    }
+
     @Test func redactsNamePartsInTheMicrophoneOnly() {
         var facts = Self.facts
         facts.microphone = "Mark的AirPods Pro, Mark’s iPhone"

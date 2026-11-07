@@ -34,6 +34,21 @@ struct SpeechCheckTests {
         #expect(SpeechCheck.expectedSeconds(for: "") == 0)
     }
 
+    /// Hangul syllables, the block U+AC00 to U+D7AF, are read one by one like Han
+    /// characters. Jamo on their own, such as ㅋㅋ, are not syllables in any of their
+    /// forms, so a run of them counts as a word.
+    @Test func hangulSyllablesAreCharactersAndJamoAWord() {
+        for scalar: Unicode.Scalar in ["한", "\u{AC00}", "\u{D7A3}", "\u{D7AF}"] {
+            #expect(SpeechCheck.isCharacterScript(scalar), "\(scalar)")
+        }
+        // Compatibility, conjoining, extended and halfwidth jamo.
+        for scalar: Unicode.Scalar in ["\u{314B}", "\u{110F}", "\u{A960}", "\u{D7B0}", "\u{FFBE}"] {
+            #expect(!SpeechCheck.isCharacterScript(scalar), "\(scalar)")
+        }
+        #expect(abs(SpeechCheck.expectedSeconds(for: "한국어") - 3 * SpeechCheck.secondsPerCharacter) < 1e-9)
+        #expect(abs(SpeechCheck.expectedSeconds(for: "\u{314B}\u{314B}") - SpeechCheck.secondsPerWord) < 1e-9)
+    }
+
     /// Clips about as long as the text, from slow to fast, pass, also with pauses at
     /// both ends.
     @Test func aPlausibleReadingPasses() {
