@@ -370,13 +370,44 @@ nonisolated enum CorrectionFinder {
     }
 
     /// Qwen2 and Qwen3, 四点 and 十点, 十四 and 四十: the same once the numbers are taken out
-    /// of both, digits in any width and Chinese numerals. Such a fix is never learned as a
-    /// misheard word, even when the two sound alike, as 四 and 十 do. Most often it changes
-    /// what was said, and a pair learned from it would change that number in later
-    /// dictations. A name that differs only in a numeral, such as 一郎 and 二郎, is left out
-    /// too. Number words of other languages, such as two, do not count.
+    /// of both, digits in any width, with a decimal point or a comma between two of them as
+    /// in Qwen2.5, and Chinese numerals. Such a fix is never learned as a misheard word, even
+    /// when the two sound alike, as 四 and 十 do. Most often it changes what was said, and a
+    /// pair learned from it would change that number in later dictations. When the number
+    /// changed, a space, a mark that joins a name or the case of a letter changed beside it
+    /// does not make a misheard word either, as in Qwen 2 to Qwen3, GPT4 to GPT-5 and qwen2
+    /// to Qwen3. With the same number such a fix is judged by its sound as before, so Qwen 3
+    /// to Qwen3 is learned. A name that differs only in a numeral, such as 一郎 and 二郎, is
+    /// left out too. Number words of other languages, such as two, do not count.
     static func changesOnlyNumbers(_ first: String, _ second: String) -> Bool {
-        first != second && first.filter { !isNumeral($0) } == second.filter { !isNumeral($0) }
+        guard first != second else { return false }
+        let a = numbersAndRest(first)
+        let b = numbersAndRest(second)
+        return a.rest == b.rest || (a.numbers != b.numbers && bare(a.rest) == bare(b.rest))
+    }
+
+    /// The numerals of a text, and the text without them.
+    private static func numbersAndRest(_ text: String) -> (numbers: String, rest: String) {
+        let characters = Array(text)
+        var numbers = ""
+        var rest = ""
+        for (index, character) in characters.enumerated() {
+            // A decimal point or a comma between two digits, as in 2.5 and 1,000.
+            let joinsDigits = (character == "." || character == ",")
+                && index > 0 && index + 1 < characters.count
+                && isDigit(characters[index - 1]) && isDigit(characters[index + 1])
+            if isNumeral(character) || joinsDigits {
+                numbers.append(character)
+            } else {
+                rest.append(character)
+            }
+        }
+        return (numbers, rest)
+    }
+
+    /// The text without spaces and the marks that join a name, in lower case.
+    private static func bare(_ text: String) -> String {
+        text.filter { !$0.isWhitespace && !"-_.".contains($0) }.lowercased()
     }
 
     /// Chinese numerals, with the formal forms used for amounts, such as 壹 and 贰.
@@ -384,7 +415,22 @@ nonisolated enum CorrectionFinder {
 
     /// A digit in any width, such as 3 and ３, or a Chinese numeral.
     private static func isNumeral(_ character: Character) -> Bool {
-        chineseNumerals.contains(character) || character.unicodeScalars.contains { $0.properties.numericType == .decimal }
+        chineseNumerals.contains(character) || isDigit(character)
+    }
+
+    /// A digit in any width, such as 3 and ３.
+    private static func isDigit(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { $0.properties.numericType == .decimal }
+    }
+
+    /// Whether a fix of a word Orra replaced only changes a number. That needs a pair that
+    /// would change the number the speech model wrote, and a fix of numbers only from what
+    /// the model wrote or from the word Orra pasted. So a user who puts back the model's
+    /// number in another writing, such as GPT-4 where the model wrote GPT4 and Orra pasted
+    /// GPT-5, teaches a pair that stops the old one.
+    private static func changesOnlyNumbers(heard: String, pasted: String, corrected: String) -> Bool {
+        numbersAndRest(heard).numbers != numbersAndRest(corrected).numbers
+            && (changesOnlyNumbers(heard, corrected) || changesOnlyNumbers(pasted, corrected))
     }
 
 }
@@ -406,7 +452,7 @@ nonisolated extension CorrectionFinder {
     /// the model's spelling, and when it puts that spelling back, the pairs that replaced it
     /// are reported as reverted. A fix of part of a replaced word, or an offered word that
     /// takes in one, teaches nothing. Nor does a change of numbers only, from the pasted word
-    /// or from what the model wrote, unless it puts back what the model wrote.
+    /// or from what the model wrote, unless it puts back the number the model wrote.
     static func translate(_ item: Located, pasted: [Character], replacements: [Replacement]) -> Translation {
         let touched = replacements.filter { $0.span.overlaps(item.span) }.sorted { $0.span.lowerBound < $1.span.lowerBound }
         guard !touched.isEmpty else { return .finding(item.finding) }
@@ -426,7 +472,7 @@ nonisolated extension CorrectionFinder {
             return .reverted(touched.map(\.pair))
         }
         guard isWordLike(heard), fits(heard), hanCount(heard) != 1, !differsOnlyInEnding(heard, corrected),
-              !changesOnlyNumbers(correction.heard, corrected), !changesOnlyNumbers(heard, corrected),
+              !changesOnlyNumbers(heard: heard, pasted: correction.heard, corrected: corrected),
               SoundAlike.soundsAlike(heard, corrected) else { return .dropped }
         return .finding(.word(Correction(heard: heard, corrected: corrected)))
     }
