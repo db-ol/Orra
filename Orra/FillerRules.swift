@@ -23,7 +23,7 @@ import Foundation
 ///   before a correction such as 哦，不是四点, where they carry the change of mind.
 ///
 /// A filler in quotation marks is quoted, not spoken, and stays. Um and Uh after a title
-/// such as Dr. are surnames.
+/// such as Dr. or Sra. are surnames.
 ///
 /// With `englishOnly` only the English fillers go. That is for a sentence in a dictation
 /// language other than Chinese, such as Japanese or Spanish, which the Chinese rules were
@@ -53,7 +53,8 @@ nonisolated enum FillerRules {
     private static let quotes: Set<Character> = ["\"", "'", "“", "”", "‘", "’", "「", "」", "『", "』", "«", "»"]
     /// The marks that open a question or an exclamation in Spanish.
     private static let openingMarks: Set<Character> = ["¿", "¡"]
-    private static let titles = ["Mr.", "Mrs.", "Ms.", "Mx.", "Dr.", "Prof."]
+    /// English and Spanish titles before a surname.
+    private static let titles = ["Mr.", "Mrs.", "Ms.", "Mx.", "Dr.", "Prof.", "Sr.", "Sra.", "Srta.", "Dra."]
     private static let ellipsis: Set<Character> = [".", "…"]
     /// Characters of written Cantonese that Mandarin rarely uses. The speech model writes
     /// them for Cantonese speech, and ChineseText leaves them as they are.

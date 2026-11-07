@@ -183,6 +183,7 @@ struct FillerRulesTests {
         "这个周末吧。", "他怎么还没来呢？", "别急嘛。", "金额不对。", "这个额度不够。", "额外的费用。",
         "他叫额尔敦。", "呃逆。", "Uh-huh, sure.", "Uh huh, sure.", "Uh oh, it broke.", "The UM campus.",
         "I like it.", "an umbrella", "Erm's not a word.", "我我我觉得可以。", "", "Dijo «um» dos veces.",
+        "El Sr. Um llegó tarde.", "La Dra. Um revisó el informe.",
     ])
     func keeps(_ input: String) {
         #expect(FillerRules.removingFillers(from: input) == input)
