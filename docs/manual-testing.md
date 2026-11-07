@@ -622,7 +622,10 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     as a Korean speaker gets them with 中文 + English. It checks that the space where a
     filler stood stays between two Latin words with or without accents and between two
     Hangul words, that um stays inside Muséum and before a Korean particle, as in um이라는,
-    and that a Spanish sentence starts with a capital again after ¿ or ¡.
+    that a Spanish sentence starts with a capital again after ¿ or ¡, that an exclamation of
+    nothing but a filler, such as ¡Uh!, goes with its ¡ and !, and that Um after a Spanish
+    title such as Sr. stays. It runs English fillers in Chinese text with every rule and with
+    the English rule alone.
     PushToTalkControllerTests checks that the paste has the fillers removed while the
     setting is on and not while it is off, and that a change is saved. It also checks that
     English fillers leave Japanese and Spanish for a user who dictates in it while the

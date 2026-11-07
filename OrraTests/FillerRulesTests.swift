@@ -53,7 +53,7 @@ struct FillerRulesTests {
     }
 
     @Test func thePairSetsAreRead() {
-        #expect(Self.pairCases.count == 47)
+        #expect(Self.pairCases.count == 68)
         #expect(Self.pairCases.allSatisfy { $0.rules })
         #expect(Set(Self.pairCases.map(\.id)).count == Self.pairCases.count)
     }
@@ -134,6 +134,25 @@ struct FillerRulesTests {
     func anExclamationOfOnlyAFillerGoesWhole(_ input: String, _ expected: String) {
         #expect(FillerRules.removingFillers(from: input) == expected)
         #expect(FillerRules.removingFillers(from: input, englishOnly: true) == expected)
+    }
+
+    /// English fillers in Chinese text, which the Chinese pair takes with every rule and the
+    /// Japanese pair with the English rule alone, since Han characters count as Japanese
+    /// there. The English rule alone keeps the Chinese fillers.
+    @Test func englishFillersInChineseText() {
+        let cases: [(input: String, everyRule: String, englishOnly: String)] = [
+            ("我uh觉得可以。", "我觉得可以。", "我觉得可以。"),
+            ("呃，um，我们走吧。", "我们走吧。", "呃，我们走吧。"),
+            ("这个 um API 不好用。", "这个 API 不好用。", "这个 API 不好用。"),
+            ("我们去 Malmö um 开会。", "我们去 Malmö 开会。", "我们去 Malmö 开会。"),
+            ("这个 umbrella 不错。", "这个 umbrella 不错。", "这个 umbrella 不错。"),
+            ("UM 的校区很大。", "UM 的校区很大。", "UM 的校区很大。"),
+            ("「um」不是一个词。", "「um」不是一个词。", "「um」不是一个词。"),
+        ]
+        for item in cases {
+            #expect(FillerRules.removingFillers(from: item.input) == item.everyRule, "\(item.input)")
+            #expect(FillerRules.removingFillers(from: item.input, englishOnly: true) == item.englishOnly, "\(item.input)")
+        }
     }
 
     /// Cases that need a model may keep fillers the rules cannot judge, but the rules never

@@ -14,3 +14,8 @@
 {"id": "fja14", "category": "control_keep", "lang": "ja", "input": "「um」と書かないでください。", "cleanup": "「um」と書かないでください。", "rules": true, "notes": "A quoted filler stays."}
 {"id": "fja15", "category": "control_keep", "lang": "ja", "input": "UMの資料を確認しました。", "cleanup": "UMの資料を確認しました。", "rules": true, "notes": "UM in capitals is an acronym."}
 {"id": "fja16", "category": "control_keep", "lang": "ja", "input": "umbrellaという単語です。", "cleanup": "umbrellaという単語です。", "rules": true, "notes": "um inside a word."}
+{"id": "fja17", "category": "filler_en", "lang": "ja", "input": "明日の　um　会議は10時です。", "cleanup": "明日の会議は10時です。", "rules": true, "notes": "Ideographic spaces around a filler between Japanese words go with it."}
+{"id": "fja18", "category": "filler_en", "lang": "ja", "input": "Um 明日は休みです。", "cleanup": "明日は休みです。", "rules": true, "notes": "A filler at the start with a space before Japanese."}
+{"id": "fja19", "category": "filler_en", "lang": "ja", "input": "えーと、um、明日です。", "cleanup": "えーと、明日です。", "rules": true, "notes": "The Japanese filler stays, and the English one goes with its 、."}
+{"id": "fja20", "category": "control_keep", "lang": "ja", "input": "このalbumとumbrellaは英語です。", "cleanup": "このalbumとumbrellaは英語です。", "rules": true, "notes": "um inside English words stays."}
+{"id": "fja21", "category": "control_keep", "lang": "ja", "input": "Uh-huh、そうですね。", "cleanup": "Uh-huh、そうですね。", "rules": true, "notes": "A reply stays."}
