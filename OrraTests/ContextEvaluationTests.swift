@@ -25,7 +25,7 @@ import Testing
 /// DictationPair.transcribe, and keeps Han characters as written. Such a run takes only
 /// contextasr_en, since Chinese speech is another pair's speech for it, and the three clips
 /// without speech, with the same vocabulary as with Chinese. It writes
-/// context-evaluation-<pair>.txt, and context.json names the pair.
+/// context-evaluation-<pair>.txt. With the variable, context.json names the pair.
 extension RealModelTests {
     @MainActor
     @Suite
@@ -218,16 +218,12 @@ extension RealModelTests {
             report.append("no speech with \(unrelated.count) terms as context: \(spoken) of \(quiet.count) gave text")
 
             let text = report.joined(separator: "\n")
-            let name = language == .chinese ? "context-evaluation.txt" : "context-evaluation-\(DictationPair.code(language)).txt"
+            let name = language == .chinese ? "context-evaluation.txt" : "context-evaluation-\(language.pairCode).txt"
             Attachment.record(text, named: name)
             let results = EvaluationData.root.appendingPathComponent("results", isDirectory: true)
             try? FileManager.default.createDirectory(at: results, withIntermediateDirectories: true)
             try text.write(to: results.appendingPathComponent(name), atomically: true, encoding: .utf8)
-            var document: [String: Any] = ["suite": "context", "clips_per_set": count, "clips": rows, "summary": summary]
-            if language != .chinese {
-                document["dictation_language"] = language.rawValue
-            }
-            try GateOutput.write(document, named: "context")
+            try GateOutput.write(DictationPair.marked(["suite": "context", "clips_per_set": count, "clips": rows, "summary": summary]), named: "context")
         }
     }
 }

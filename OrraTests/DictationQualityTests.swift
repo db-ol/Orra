@@ -37,7 +37,7 @@ extension RealModelTests {
         /// The sets of a long dictation check with their target lengths: those given for
         /// Chinese, or the pair's FLEURS clips, which hold no fillers.
         nonisolated private static func longSets(_ language: DictationLanguage, chinese: [(String, Bool, Double)], target: Double) -> [(String, Bool, Double)] {
-            language == .chinese ? chinese : [("fleurs_\(DictationPair.code(language))", false, target)]
+            language == .chinese ? chinese : [("fleurs_\(language.pairCode)", false, target)]
         }
 
         /// The sets of minutesInPiecesStayAccurate. A pair the app does not know keeps the

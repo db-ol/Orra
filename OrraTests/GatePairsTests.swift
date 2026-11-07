@@ -3,28 +3,14 @@ import Testing
 @testable import Orra
 
 /// What the release gate's runs of the dictation pairs decide without a model: the sets a
-/// run takes for its dictation language, the name of that language, the clip list of the
-/// corpus evaluation and the count of the speech corpus. The evaluations themselves run only
-/// when asked for, see GateSetEvaluationTests and SpeechCorpusEvaluationTests.
+/// run takes for its dictation language, the other languages, the clip list of the corpus
+/// evaluation and the count of the speech corpus. The evaluations themselves run only when
+/// asked for, see GateSetEvaluationTests and SpeechCorpusEvaluationTests, and DictationPair
+/// reads their language.
 struct GatePairsTests {
-    @Test func everyPairHasTheCodeOfItsLanguage() {
-        #expect(DictationLanguage.allCases.map(\.pairCode) == ["zh", "ja", "es"])
-    }
-
     /// A clip in the language of a pair but Chinese also runs with its language as the hint.
     @Test func theOtherLanguagesAreThoseOfThePairsButChinese() {
         #expect(SpeechCorpus.otherLanguages == ["ja": .japanese, "es": .spanish])
-    }
-
-    /// A name that is no dictation language must not run as Chinese.
-    @Test func aDictationLanguageIsNamedAsTheChoiceIs() {
-        #expect(SpeechCorpus.dictationLanguage(named: nil) == .chinese)
-        #expect(SpeechCorpus.dictationLanguage(named: "Chinese") == .chinese)
-        #expect(SpeechCorpus.dictationLanguage(named: "Japanese") == .japanese)
-        #expect(SpeechCorpus.dictationLanguage(named: "Spanish") == .spanish)
-        #expect(SpeechCorpus.dictationLanguage(named: "japanese") == nil)
-        #expect(SpeechCorpus.dictationLanguage(named: "ja") == nil)
-        #expect(SpeechCorpus.dictationLanguage(named: "") == nil)
     }
 
     @Test func aListOfClipsRunsInTheManifestsOrder() throws {

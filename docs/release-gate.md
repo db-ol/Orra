@@ -164,13 +164,20 @@ FLEURS clips, no set or no say clips. Each run is one xcodebuild of
 SpeechCorpusEvaluationTests, ContextEvaluationTests, LatencyMeasurementTests or
 GateSetEvaluationTests with `TEST_RUNNER_ORRA_DICTATION_LANGUAGE` set to the pair's
 language (Chinese, Japanese or Spanish), and a run of FLEURS clips names its clips with
-`TEST_RUNNER_ORRA_SPEECH_CORPUS_CLIPS`. A name that is no dictation language fails the
-test instead of running as Chinese. `gate.py summarize-pairs` scores the runs into
+`TEST_RUNNER_ORRA_SPEECH_CORPUS_CLIPS`. `gate.py summarize-pairs` scores the runs into
 `<out>/pairs/<pair>/` (corpus.json, fleurs.json, context.json, latency.json and sets.json,
-with raw/ and the clip list) and `<out>/wrong-pairs/<pair>/summary.json`, and stops when a
-raw file does not name the pair's language. The logs go to `logs/pairs-<pair>-<run>.log`,
-with the latency report in `logs/pairs-<pair>-latency-report.txt`, and to
-`logs/wrong-pairs-<pair>-<folder>.log`.
+with raw/ and the clip list) and `<out>/wrong-pairs/<pair>/summary.json`. The logs go to
+`logs/pairs-<pair>-<run>.log`, with the latency report in
+`logs/pairs-<pair>-latency-report.txt`, and to `logs/wrong-pairs-<pair>-<folder>.log`.
+
+Every test reads the variable the same way, through DictationPair in OrraTests. Without
+it a test runs with Chinese and writes exactly what it wrote before the pairs, so the
+suites above and their baselines stay as they were. With it, the value must be the name
+of a dictation language, as DictationLanguage spells it, or the test fails instead of
+running as Chinese, also when the value is empty. The raw file then names the language in
+`dictation_language`, Chinese included. Every run of a pair sets the variable, so
+summarize-pairs stops when a raw file does not name the pair's language, such as one from
+a test build older than the pairs.
 
 The rules of pairs compare each pair with the same pair in the baseline, with the
 tolerances of the corpus, context, latency and sets suites:

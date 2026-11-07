@@ -3,11 +3,12 @@ import Testing
 @testable import Orra
 
 /// The dictation pair an opt in evaluation runs with, for the measurements of each pair in
-/// docs/release-gate.md: the language TEST_RUNNER_ORRA_DICTATION_LANGUAGE names, such as
-/// Japanese, as for SpeechCorpusEvaluationTests, and Chinese when it names none. With Chinese
-/// an evaluation runs exactly as it did before it took a pair, so its numbers stay
-/// comparable with the gate's baselines. With another pair it runs the way the app runs for
-/// that pair, see DictationLanguage.
+/// docs/release-gate.md, read the same way by every evaluation that takes one. Without
+/// TEST_RUNNER_ORRA_DICTATION_LANGUAGE an evaluation runs with Chinese, the default, and
+/// writes exactly what it wrote before it took a pair, so its numbers stay comparable with
+/// the gate's baselines. With the variable it runs the way the app runs for the pair it
+/// names, see DictationLanguage, and its gate file names that pair in dictation_language,
+/// Chinese included, which gate.py checks for every run of a pair.
 nonisolated enum DictationPair {
     /// A name that is no dictation language, such as Korean before the app has it.
     struct UnknownLanguage: Error, CustomStringConvertible {
@@ -18,22 +19,24 @@ nonisolated enum DictationPair {
         }
     }
 
-    /// The pair the environment names, Chinese for none. A name the app does not know
-    /// throws, so a run never measures Chinese under the name of another pair.
+    /// The pair the environment names, Chinese without the variable. Its value must be a
+    /// dictation language as DictationLanguage spells it, such as Japanese. Any other value,
+    /// an empty one too, throws, so a run never measures Chinese under another pair's name.
     static func chosen(in environment: [String: String] = ProcessInfo.processInfo.environment) throws -> DictationLanguage {
-        guard let name = environment["ORRA_DICTATION_LANGUAGE"], !name.isEmpty else { return .chinese }
+        guard let name = environment["ORRA_DICTATION_LANGUAGE"] else { return .chinese }
         guard let language = DictationLanguage(rawValue: name) else { throw UnknownLanguage(name: name) }
         return language
     }
 
-    /// The pair's code in the names of its sets, as in bench/gate-sets/pairs, and in the lang
-    /// of a FLEURS manifest.
-    static func code(_ language: DictationLanguage) -> String {
-        switch language {
-        case .chinese: "zh"
-        case .japanese: "ja"
-        case .spanish: "es"
-        }
+    /// A gate file's document with the pair in dictation_language when the variable names
+    /// one, and as it is without the variable, so a run without a pair writes what it always
+    /// wrote. Every run of a pair sets the variable, so gate.py refuses a file of a pair
+    /// without the key.
+    static func marked(_ document: [String: Any], in environment: [String: String] = ProcessInfo.processInfo.environment) throws -> [String: Any] {
+        guard environment["ORRA_DICTATION_LANGUAGE"] != nil else { return document }
+        var marked = document
+        marked["dictation_language"] = try chosen(in: environment).rawValue
+        return marked
     }
 
     /// The speech model's text for a recording the way PushToTalkController gets it with the
@@ -66,12 +69,12 @@ nonisolated enum DictationPair {
         var clips: [(name: String, reference: String)] = []
         for line in try String(contentsOf: root.appendingPathComponent("manifest.jsonl"), encoding: .utf8).split(separator: "\n") {
             let object = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
-            guard object["lang"] as? String == code(language) else { continue }
+            guard object["lang"] as? String == language.pairCode else { continue }
             let id = try #require(object["id"] as? String)
             let reference = try #require(object["reference"] as? String)
             clips.append((name: id, reference: reference))
         }
-        try #require(!clips.isEmpty, "no clip with lang \(code(language)) in \(root.path)")
+        try #require(!clips.isEmpty, "no clip with lang \(language.pairCode) in \(root.path)")
         return Array(clips.sorted { $0.name < $1.name }.prefix(count))
     }
 
@@ -79,5 +82,19 @@ nonisolated enum DictationPair {
     static func fleursSamples(_ name: String, in folder: URL? = fleursFolder) throws -> [Float] {
         let root = try #require(folder, "set TEST_RUNNER_ORRA_FLEURS_DIR to a folder with the FLEURS clips of the pair")
         return AudioResampler.monoAt16kHz(try SpeechCorpus.recording(root.appendingPathComponent("clips/\(name).wav")))
+    }
+}
+
+extension DictationLanguage {
+    /// The code of the pair in the release gate's files, the one table of them in the tests:
+    /// the pair a set's set.json names, run.sh's --pairs, the lang of a manifest line in the
+    /// pair's language, and the names of a pair's sets and reports. gate.py's PAIRS holds the
+    /// same codes. A switch, so a new pair needs its code here.
+    var pairCode: String {
+        switch self {
+        case .chinese: "zh"
+        case .japanese: "ja"
+        case .spanish: "es"
+        }
     }
 }

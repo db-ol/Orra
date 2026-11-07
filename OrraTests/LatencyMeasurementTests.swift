@@ -38,8 +38,8 @@ import Testing
 /// DictationPair: Chinese by default, as before, or another pair, for its bar on release to
 /// paste in docs/release-gate.md. The controller then runs with that pair, the clips folder
 /// holds the pair's say clips, such as pairs/ja-latency in the gate sets, and of the corpus
-/// it takes only the English strata, since the corpus holds no speech of that pair.
-/// latency.json then names the pair.
+/// it takes only the English strata, since the corpus holds no speech of that pair. With
+/// the variable, latency.json names the pair.
 @Suite(.serialized, .enabled(if: LatencyMeasurement.isRequested))
 @MainActor
 struct LatencyMeasurementTests {
@@ -161,7 +161,7 @@ struct LatencyMeasurementTests {
         if let path = LatencyMeasurement.environment["ORRA_LATENCY_REPORT"] {
             try report.write(toFile: path, atomically: true, encoding: .utf8)
         }
-        try GateOutput.write(LatencyReport(runs: runs, speechLoad: speechLoad, clips: clips, language: language).gateDocument, named: "latency")
+        try GateOutput.write(DictationPair.marked(LatencyReport(runs: runs, speechLoad: speechLoad, clips: clips, language: language).gateDocument), named: "latency")
     }
 
     /// One pass of the speech model in three parts: the mel features, the audio encoder,
@@ -465,11 +465,7 @@ struct LatencyReport {
             }
             modes[cleanupOn ? "cleanup_on" : "cleanup_off"] = ["dictations": selected.count, "steps": steps, "clips": perClip]
         }
-        var document: [String: Any] = ["suite": "latency", "rounds": M.rounds, "speech_load_ms": M.ms(speechLoad), "modes": modes]
-        if language != .chinese {
-            document["dictation_language"] = language.rawValue
-        }
-        return document
+        return ["suite": "latency", "rounds": M.rounds, "speech_load_ms": M.ms(speechLoad), "modes": modes]
     }
 
     private func table(_ runs: [LatencyMeasurementTests.Run]) -> String {

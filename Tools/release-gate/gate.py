@@ -1041,9 +1041,14 @@ def plan_runs(suite: str, out: Path, pairs: list[str], corpus: Path, fleurs: lis
 
 
 def check_language(document: dict, pair: str, path: Path) -> None:
-    """A raw file of a pair must say that it ran with the pair chosen."""
-    if document.get("dictation_language") != PAIRS.get(pair):
-        raise SystemExit(f"{path} ran with dictation language {document.get('dictation_language')!r}, not that of {pair}")
+    """A raw file of a pair must say that it ran with the pair chosen. The tests write
+    dictation_language exactly when TEST_RUNNER_ORRA_DICTATION_LANGUAGE is set, Chinese
+    included (OrraTests/DictationPair.swift), and every run of a pair sets it, so a file
+    without it ran without the pair, such as one from a test build older than the pairs."""
+    if "dictation_language" not in document:
+        raise SystemExit(f"{path} names no dictation language, so it ran without the {pair} pair chosen")
+    if document["dictation_language"] != PAIRS.get(pair):
+        raise SystemExit(f"{path} ran with dictation language {document['dictation_language']!r}, not that of {pair}")
 
 
 def pass_counts(raw: dict, manifest: dict[str, dict]) -> dict:

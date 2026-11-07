@@ -1360,10 +1360,14 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     model loads only from a complete installed folder, tokenizer files included, and that
     the engine reports a missing model without loading anything.
   - DictationPairTests, added on 2026-11-06, covers what the evaluations per dictation pair
-    do without a model: Chinese when TEST_RUNNER_ORRA_DICTATION_LANGUAGE names no pair, a
-    name the app does not know failing rather than running as Chinese, a pair's FLEURS clips
-    read from a manifest, the language and length of the pairs' say clips, and the strata of
-    the corpus a pair's latency run takes.
+    do without a model: Chinese without TEST_RUNNER_ORRA_DICTATION_LANGUAGE, a value the
+    app does not know, an empty one too, failing rather than running as Chinese,
+    dictation_language written exactly when the variable is set, the code of each pair, a
+    pair's FLEURS clips read from a manifest, the language and length of the pairs' say
+    clips, and the strata of the corpus a pair's latency run takes. GatePairsTests, added
+    the same day, covers what the release gate's runs per pair decide without a model: the
+    other languages of the corpus evaluation, its list of clips, the count of 392 for the
+    speech corpus only, and the sets each pair's run takes.
   - ModelFilesTests covers the pinned files, their sizes and hashes, the three server
     addresses and their order, the Debug launch argument that forces one server, the
     app's folder paths, the size and SHA-256 checks, and what launch does with local files

@@ -165,8 +165,9 @@ apart unnoticed.
    `text_english`, each clip transcribed with that language as the hint, and their times.
 
    `TEST_RUNNER_ORRA_DICTATION_LANGUAGE` picks the dictation language as a user picks it
-   in Settings: `Chinese`, the default, `Japanese` or `Spanish`. Another name fails the
-   test, so a typo never runs as Chinese. With `Japanese` or
+   in Settings: `Chinese`, the default, `Japanese` or `Spanish`. Another value fails the
+   test, an empty one too, so a typo never runs as Chinese, and with the variable the
+   results file names the language in `dictation_language`. With `Japanese` or
    `Spanish`, LanguageGuard accepts that language and English, its passes are that
    language and then English, into `text_pass_japanese` or `text_pass_spanish`, Han
    characters stay as written, and `ruled_text` has the rules only where

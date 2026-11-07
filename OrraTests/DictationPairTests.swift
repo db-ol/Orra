@@ -6,15 +6,32 @@ import Testing
 struct DictationPairTests {
     @Test func thePairComesFromTheEnvironmentWithChineseWithoutOne() throws {
         #expect(try DictationPair.chosen(in: [:]) == .chinese)
-        #expect(try DictationPair.chosen(in: ["ORRA_DICTATION_LANGUAGE": ""]) == .chinese)
         #expect(try DictationPair.chosen(in: ["ORRA_DICTATION_LANGUAGE": "Chinese"]) == .chinese)
         #expect(try DictationPair.chosen(in: ["ORRA_DICTATION_LANGUAGE": "Japanese"]) == .japanese)
         #expect(try DictationPair.chosen(in: ["ORRA_DICTATION_LANGUAGE": "Spanish"]) == .spanish)
-        // A name the app does not know never runs as Chinese.
-        #expect(throws: DictationPair.UnknownLanguage.self) {
-            try DictationPair.chosen(in: ["ORRA_DICTATION_LANGUAGE": "Korean"])
+        // A value that is no dictation language never runs as Chinese, an empty one neither.
+        for name in ["Korean", "japanese", "ja", ""] {
+            #expect(throws: DictationPair.UnknownLanguage.self) {
+                try DictationPair.chosen(in: ["ORRA_DICTATION_LANGUAGE": name])
+            }
         }
-        #expect([DictationPair.code(.chinese), DictationPair.code(.japanese), DictationPair.code(.spanish)] == ["zh", "ja", "es"])
+    }
+
+    /// The key gate.py checks, written exactly when the variable is set, so a file of a run
+    /// without it stays as it was.
+    @Test func aGateFileNamesThePairOnlyWhenTheVariableIsSet() throws {
+        let document: [String: Any] = ["suite": "sets", "clips": [String]()]
+        #expect(try DictationPair.marked(document, in: [:]).keys.sorted() == ["clips", "suite"])
+        #expect(try DictationPair.marked(document, in: ["ORRA_DICTATION_LANGUAGE": "Chinese"])["dictation_language"] as? String == "Chinese")
+        #expect(try DictationPair.marked(document, in: ["ORRA_DICTATION_LANGUAGE": "Spanish"])["dictation_language"] as? String == "Spanish")
+        #expect(throws: DictationPair.UnknownLanguage.self) {
+            try DictationPair.marked(document, in: ["ORRA_DICTATION_LANGUAGE": "Korean"])
+        }
+    }
+
+    /// The codes of gate.py's PAIRS, in the order of the cases.
+    @Test func everyPairHasTheCodeOfItsLanguage() {
+        #expect(DictationLanguage.allCases.map(\.pairCode) == ["zh", "ja", "es"])
     }
 
     @Test func theFleursClipsOfAPairAreItsOwnInTheOrderOfTheirIDs() throws {

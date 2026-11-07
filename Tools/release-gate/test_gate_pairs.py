@@ -321,11 +321,14 @@ class SummaryTests(unittest.TestCase):
         self.assertNotIn("english", gate.read_json(self.data.out / "pairs" / "zh" / "sets.json"))
 
     def test_a_raw_file_of_another_language_stops_the_summary(self):
-        for language in ("Spanish", None):
+        # Another language, or none, which the tests write only without the variable that
+        # every run of a pair sets.
+        for language, message in (("Spanish", "ran with dictation language 'Spanish', not that of ja"), (None, "names no dictation language")):
             with self.subTest(language=language):
                 self.write_pair_run(language)
-                with self.assertRaises(SystemExit):
+                with self.assertRaises(SystemExit) as stop:
                     gate.summarize_pairs(self.data.out, self.data.sets, self.data.corpora())
+                self.assertIn(message, str(stop.exception))
         # Each run is checked, those of the context and latency suites too.
         for name, document in (("context", context_raw(found=2)), ("latency", latency_raw(350.0))):
             with self.subTest(name=name):

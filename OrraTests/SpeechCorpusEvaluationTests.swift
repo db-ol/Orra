@@ -27,13 +27,13 @@ import Testing
 /// text_english, the clip transcribed with each language as the hint, and their times.
 ///
 /// TEST_RUNNER_ORRA_DICTATION_LANGUAGE picks the dictation language, Chinese by default,
-/// or Japanese or Spanish, as the user picks it in Settings, see DictationLanguage. A name
-/// that is no dictation language fails the test instead of running as Chinese, and the
-/// file then names the language in dictation_language. With Japanese or Spanish, the passes
-/// are that language and then English, into text_pass_japanese or text_pass_spanish, the
-/// text keeps its Han characters as written, and ruled_text has the rules only for text
-/// LanguageGuard reads as English. language_verdict holds LanguageGuard's verdict on the
-/// text.
+/// or Japanese or Spanish, as the user picks it in Settings, see DictationLanguage and
+/// DictationPair. A name that is no dictation language fails the test instead of running as
+/// Chinese, and with the variable the file names the language in dictation_language. With
+/// Japanese or Spanish, the passes are that language and then English, into
+/// text_pass_japanese or text_pass_spanish, the text keeps its Han characters as written,
+/// and ruled_text has the rules only for text LanguageGuard reads as English.
+/// language_verdict holds LanguageGuard's verdict on the text.
 ///
 /// Another corpus in the same layout runs too, such as FLEURS ja_jp, es_419 and ko_kr, where
 /// each manifest line has its lang. A clip in the language of a dictation pair other than
@@ -59,7 +59,7 @@ struct SpeechCorpusEvaluationTests {
         let output = try #require(SpeechCorpus.environment["ORRA_SPEECH_EVAL_OUT"], "set TEST_RUNNER_ORRA_SPEECH_EVAL_OUT to a folder for the results")
         let modelFolder = try #require(SpeechCorpus.modelFolder, "no speech model on this Mac, or TEST_RUNNER_ORRA_SPEECH_MODEL_DIR is not a folder")
         let modelID = SpeechCorpus.environment["ORRA_SPEECH_MODEL_ID"] ?? SpeechModel.id
-        let language = try #require(SpeechCorpus.dictationLanguage(named: SpeechCorpus.environment["ORRA_DICTATION_LANGUAGE"]), "TEST_RUNNER_ORRA_DICTATION_LANGUAGE names no dictation language")
+        let language = try DictationPair.chosen()
         let listed = try SpeechCorpus.listedClips()
         let clips = try SpeechCorpus.clips(SpeechCorpus.manifest(in: corpus), listed: listed)
         // The speech corpus. Another corpus, or a list of clips, has a count of its own.
@@ -162,18 +162,14 @@ struct SpeechCorpusEvaluationTests {
         #else
         let build = "Release"
         #endif
-        var document: [String: Any] = [
+        let document = try DictationPair.marked([
             "model_folder": modelFolder.lastPathComponent,
             "model_id": modelID,
             "device": SpeechCorpus.chip(),
             "build": build,
             "load_seconds": loadSeconds,
             "clips": results,
-        ]
-        // Only when named, so a run without the variable writes what it always wrote.
-        if SpeechCorpus.environment["ORRA_DICTATION_LANGUAGE"] != nil {
-            document["dictation_language"] = language.rawValue
-        }
+        ])
         let name = SpeechCorpus.environment["ORRA_SPEECH_EVAL_NAME"] ?? "orra-\(modelFolder.lastPathComponent)"
         let folder = URL(fileURLWithPath: output, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -226,19 +222,6 @@ enum SpeechCorpus {
     /// The langs of the speech corpus: Chinese, English, code switched speech, and none for
     /// the clips without speech.
     static let speechCorpusLanguages: Set<String> = ["zh", "en", "mixed", "none"]
-
-    /// The dictation language named in TEST_RUNNER_ORRA_DICTATION_LANGUAGE, such as
-    /// Japanese, or Chinese without one.
-    static var dictationLanguage: DictationLanguage {
-        dictationLanguage(named: environment["ORRA_DICTATION_LANGUAGE"]) ?? .chinese
-    }
-
-    /// The dictation language a name stands for: Chinese for no name, and nil for a name that
-    /// is none, such as japanese, which the evaluations refuse instead of running as Chinese.
-    static func dictationLanguage(named name: String?) -> DictationLanguage? {
-        guard let name else { return .chinese }
-        return DictationLanguage(rawValue: name)
-    }
 
     /// The ids in the file TEST_RUNNER_ORRA_SPEECH_CORPUS_CLIPS names, one per line, or nil
     /// without the variable, for every clip.
@@ -304,18 +287,5 @@ enum SpeechCorpus {
         var bytes = [CChar](repeating: 0, count: size)
         sysctlbyname("machdep.cpu.brand_string", &bytes, &size, nil, 0)
         return String(decoding: bytes.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
-    }
-}
-
-extension DictationLanguage {
-    /// The code of the pair in the release gate's files: the pair a set's set.json names,
-    /// run.sh's --pairs, and the lang of a manifest line in the pair's language. A switch, so
-    /// a new pair needs its code here.
-    var pairCode: String {
-        switch self {
-        case .chinese: "zh"
-        case .japanese: "ja"
-        case .spanish: "es"
-        }
     }
 }

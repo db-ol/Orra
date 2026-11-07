@@ -14,10 +14,10 @@ import Testing
 /// docs/release-gate.md. The sets hold synthetic speech made with macOS say from the
 /// sentences in Tools/release-gate/sets.
 ///
-/// A run has one dictation language, from TEST_RUNNER_ORRA_DICTATION_LANGUAGE as in
-/// SpeechCorpusEvaluationTests, Chinese by default, and runs the sets of that pair: those
-/// whose set.json names its code as their pair, and for Chinese the sets without one. With
-/// the variable, the file names the language in dictation_language.
+/// A run has one dictation language, from TEST_RUNNER_ORRA_DICTATION_LANGUAGE as
+/// DictationPair reads it, Chinese by default, and runs the sets of that pair: those whose
+/// set.json names its code as their pair, and for Chinese the sets without one. With the
+/// variable, the file names the language in dictation_language.
 ///
 /// It drives PushToTalkController as the app does, with the clip's context as the
 /// vocabulary and the run's dictation language: the real speech model with the language
@@ -30,7 +30,7 @@ struct GateSetEvaluationTests {
     @Test func transcribeTheSets() async throws {
         let root = try #require(GateSets.folder)
         let speechFolder = try #require(RealModel.folder, "no speech model on this Mac")
-        let language = try #require(SpeechCorpus.dictationLanguage(named: SpeechCorpus.environment["ORRA_DICTATION_LANGUAGE"]), "TEST_RUNNER_ORRA_DICTATION_LANGUAGE names no dictation language")
+        let language = try DictationPair.chosen()
         let sets = try GateSets.sets(in: root, for: language)
         try #require(!sets.isEmpty, "no set of the \(language.pairCode) pair with a manifest.jsonl in \(root.path)")
 
@@ -87,12 +87,7 @@ struct GateSetEvaluationTests {
                 rows.append(row)
             }
         }
-        var document: [String: Any] = ["suite": "sets", "load_seconds": loadSeconds, "sets": sets, "clips": rows]
-        // Only when named, so a run without the variable writes what it always wrote.
-        if SpeechCorpus.environment["ORRA_DICTATION_LANGUAGE"] != nil {
-            document["dictation_language"] = language.rawValue
-        }
-        try GateOutput.write(document, named: "sets-raw")
+        try GateOutput.write(DictationPair.marked(["suite": "sets", "load_seconds": loadSeconds, "sets": sets, "clips": rows]), named: "sets-raw")
         // Numbers only.
         print("\(rows.count) clips in \(sets.count) sets")
     }
