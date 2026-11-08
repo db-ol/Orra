@@ -54,8 +54,9 @@ updates, and the languages are en, zh, ja and es.
   GIFs have their interface in Japanese or Latin American Spanish, with Orra's own strings
   and Sparkle's own texts in the update window. Their speech is in their own language, with
   these limits:
-  - dictation says no filler, since the filler rule knows Chinese and English fillers and
-    does not run on a Japanese or Spanish sentence. The sentence is pasted as it is said.
+  - dictation says no filler, since the filler rule removes only English fillers from a
+    Japanese or Spanish sentence and keeps its own, such as えーと or eh. The sentence is
+    pasted as it is said.
   - vocabulary corrects an English sentence, since with Japanese or Spanish Orra learns
     from corrections of English sentences only. The next dictation is in the GIF's
     language, since the vocabulary and the learned word work in every language.

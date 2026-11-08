@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Orra
 
-/// The filler rules on the evaluation set in Tools/rewrite-eval and on focused cases.
+/// The filler rules on the evaluation sets in Tools/rewrite-eval and on focused cases.
 struct FillerRulesTests {
     struct Case: Decodable, CustomTestStringConvertible {
         let id: String
@@ -15,17 +15,24 @@ struct FillerRulesTests {
     }
 
     /// The cases of the evaluation set, read from the source tree.
-    static let cases: [Case] = {
+    static let cases = read("cases.jsonl")
+
+    /// The rule cases of the other dictation languages: English fillers in Japanese,
+    /// Spanish and Korean sentences, and sentences that keep what looks like one.
+    static let pairCases = ["fillers-japanese.jsonl", "fillers-spanish.jsonl", "fillers-korean.jsonl"].flatMap { read($0) }
+
+    /// The cases of a file of Tools/rewrite-eval.
+    private static func read(_ file: String) -> [Case] {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Tools/rewrite-eval/cases.jsonl")
+            .appendingPathComponent("Tools/rewrite-eval/\(file)")
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
         let decoder = JSONDecoder()
         return text.split(separator: "\n").compactMap { line in
             try? decoder.decode(Case.self, from: Data(line.utf8))
         }
-    }()
+    }
 
     /// The filler, particle and control cases that the rules alone should get right.
     static let ruleCases = cases.filter { item in
@@ -43,6 +50,109 @@ struct FillerRulesTests {
     @Test(arguments: ruleCases)
     func evaluationCase(_ item: Case) {
         #expect(FillerRules.removingFillers(from: item.input) == item.cleanup)
+    }
+
+    @Test func thePairSetsAreRead() {
+        #expect(Self.pairCases.count == 68)
+        #expect(Self.pairCases.allSatisfy { $0.rules })
+        #expect(Set(Self.pairCases.map(\.id)).count == Self.pairCases.count)
+    }
+
+    /// Text in Japanese or Spanish takes the English filler rule alone, see
+    /// LanguageGuard.rules(for:language:), and Korean text will once it has a pair.
+    @Test(arguments: pairCases)
+    func pairCase(_ item: Case) {
+        #expect(FillerRules.removingFillers(from: item.input, englishOnly: true) == item.cleanup)
+    }
+
+    /// A Korean speaker gets every rule today, since every text takes the steps of the
+    /// Chinese pair, and the Korean cases hold there too.
+    @Test(arguments: pairCases.filter { $0.id.hasPrefix("fko") })
+    func koreanCaseWithEveryRule(_ item: Case) {
+        #expect(FillerRules.removingFillers(from: item.input) == item.cleanup)
+    }
+
+    /// The English rule alone leaves the Chinese fillers as they are.
+    @Test(arguments: ["呃，我们走吧。", "我觉得呃这样不好。", "嗯，我们先开会。", "额，文件发你了。", "啊，我忘了带钥匙。"])
+    func theEnglishRuleAloneKeepsChineseFillers(_ input: String) {
+        #expect(FillerRules.removingFillers(from: input, englishOnly: true) == input)
+    }
+
+    /// The space where a filler stood stays between two Latin words, also with accents,
+    /// between Chinese and a Latin word, also with accents, and between two Hangul words,
+    /// but not between Chinese or Japanese characters.
+    @Test(arguments: [
+        ("Llegó um él solo.", "Llegó él solo."),
+        ("我们去了 Malmö um 然后回家了。", "我们去了 Malmö 然后回家了。"),
+        ("내일 um 회의가 있어요.", "내일 회의가 있어요."),
+        ("회의는 uh, 다음 주로 미뤘어요.", "회의는 다음 주로 미뤘어요."),
+        ("我们 um 开会吧。", "我们开会吧。"),
+        ("明日の um 会議です。", "明日の会議です。"),
+    ])
+    func theSpaceBetweenWordsStays(_ input: String, _ expected: String) {
+        #expect(FillerRules.removingFillers(from: input) == expected)
+        #expect(FillerRules.removingFillers(from: input, englishOnly: true) == expected)
+    }
+
+    /// A Latin letter with an accent is part of the word, and so is Hangul right after an
+    /// English word, where a Korean particle makes um a word that is meant. Hangul before
+    /// it does not join it, as a Chinese character does not.
+    @Test(arguments: [
+        ("El Muséum de París abre hoy.", "El Muséum de París abre hoy."),
+        ("um이라는 단어는 쓰지 마세요.", "um이라는 단어는 쓰지 마세요."),
+        ("회의um 시작해요.", "회의 시작해요."),
+    ])
+    func wordsWithAccentsAndKoreanParticles(_ input: String, _ expected: String) {
+        #expect(FillerRules.removingFillers(from: input) == expected)
+    }
+
+    /// A sentence that began with a capitalized filler starts with a capital again, also
+    /// on an accented letter and after ¿ or ¡, and the space before ¿ stays. A letter
+    /// such as ß, which has no capital of one letter, stays as it is.
+    @Test(arguments: [
+        ("Um, él llega mañana.", "Él llega mañana."),
+        ("¿Um, vienes a la reunión?", "¿Vienes a la reunión?"),
+        ("Um, ¡qué bien!", "¡Qué bien!"),
+        ("Bueno, um, ¿lo vemos el lunes?", "Bueno, ¿lo vemos el lunes?"),
+        ("Hola. ¿Uh, vienes?", "Hola. ¿Vienes?"),
+        ("Um, ßa.", "ßa."),
+    ])
+    func capitalsAndSpanishMarks(_ input: String, _ expected: String) {
+        #expect(FillerRules.removingFillers(from: input) == expected)
+    }
+
+    /// An exclamation of nothing but a filler, such as ¡Uh!, goes with its ¡ and !, so no
+    /// mark is left without the other. An exclamation that goes on keeps both.
+    @Test(arguments: [
+        ("¡Uh! Se me olvidó la llave.", "Se me olvidó la llave."),
+        ("Bueno, ¡uh! ya llegamos.", "Bueno, ya llegamos."),
+        ("Hola. ¡Uh! Vamos.", "Hola. Vamos."),
+        ("¡Uh! ¡Vamos!", "¡Vamos!"),
+        ("¡Uh!! Vamos.", "Vamos."),
+        ("¡Uh, qué pena!", "¡Qué pena!"),
+    ])
+    func anExclamationOfOnlyAFillerGoesWhole(_ input: String, _ expected: String) {
+        #expect(FillerRules.removingFillers(from: input) == expected)
+        #expect(FillerRules.removingFillers(from: input, englishOnly: true) == expected)
+    }
+
+    /// English fillers in Chinese text, which the Chinese pair takes with every rule and the
+    /// Japanese pair with the English rule alone, since Han characters count as Japanese
+    /// there. The English rule alone keeps the Chinese fillers.
+    @Test func englishFillersInChineseText() {
+        let cases: [(input: String, everyRule: String, englishOnly: String)] = [
+            ("我uh觉得可以。", "我觉得可以。", "我觉得可以。"),
+            ("呃，um，我们走吧。", "我们走吧。", "呃，我们走吧。"),
+            ("这个 um API 不好用。", "这个 API 不好用。", "这个 API 不好用。"),
+            ("我们去 Malmö um 开会。", "我们去 Malmö 开会。", "我们去 Malmö 开会。"),
+            ("这个 umbrella 不错。", "这个 umbrella 不错。", "这个 umbrella 不错。"),
+            ("UM 的校区很大。", "UM 的校区很大。", "UM 的校区很大。"),
+            ("「um」不是一个词。", "「um」不是一个词。", "「um」不是一个词。"),
+        ]
+        for item in cases {
+            #expect(FillerRules.removingFillers(from: item.input) == item.everyRule, "\(item.input)")
+            #expect(FillerRules.removingFillers(from: item.input, englishOnly: true) == item.englishOnly, "\(item.input)")
+        }
     }
 
     /// Cases that need a model may keep fillers the rules cannot judge, but the rules never
@@ -106,7 +216,8 @@ struct FillerRulesTests {
         "Um? What?", "好啊，走吧。", "是啊，对呀。", "今天天气真好啊！", "哦？真的吗？", "那个文件我看看。",
         "这个周末吧。", "他怎么还没来呢？", "别急嘛。", "金额不对。", "这个额度不够。", "额外的费用。",
         "他叫额尔敦。", "呃逆。", "Uh-huh, sure.", "Uh huh, sure.", "Uh oh, it broke.", "The UM campus.",
-        "I like it.", "an umbrella", "Erm's not a word.", "我我我觉得可以。", "",
+        "I like it.", "an umbrella", "Erm's not a word.", "我我我觉得可以。", "", "Dijo «um» dos veces.",
+        "El Sr. Um llegó tarde.", "La Dra. Um revisó el informe.", "¡Uh!",
     ])
     func keeps(_ input: String) {
         #expect(FillerRules.removingFillers(from: input) == input)

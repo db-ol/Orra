@@ -1,0 +1,19 @@
+{"id": "fko01", "category": "filler_en", "lang": "ko", "input": "내일 um 회의가 있어요.", "cleanup": "내일 회의가 있어요.", "rules": true, "notes": "The space between two Korean words stays."}
+{"id": "fko02", "category": "filler_en", "lang": "ko", "input": "Um, 내일 회의가 있어요.", "cleanup": "내일 회의가 있어요.", "rules": true, "notes": "Um at the start."}
+{"id": "fko03", "category": "filler_en", "lang": "ko", "input": "이번 release에서 uh 버그를 고쳤어요.", "cleanup": "이번 release에서 버그를 고쳤어요.", "rules": true, "notes": "uh after an English word with a particle."}
+{"id": "fko04", "category": "filler_en", "lang": "ko", "input": "회의는 uh, 다음 주로 미뤘어요.", "cleanup": "회의는 다음 주로 미뤘어요.", "rules": true, "notes": "uh with its comma. The space stays."}
+{"id": "fko05", "category": "filler_en", "lang": "ko", "input": "PR 리뷰는 um 오늘 끝낼게요.", "cleanup": "PR 리뷰는 오늘 끝낼게요.", "rules": true, "notes": "um between Korean words."}
+{"id": "fko06", "category": "filler_en", "lang": "ko", "input": "Uh, 슬랙으로 보내 주세요.", "cleanup": "슬랙으로 보내 주세요.", "rules": true, "notes": "Uh before a request."}
+{"id": "fko07", "category": "filler_en", "lang": "ko", "input": "자료는 금요일까지 um... 보내 드릴게요.", "cleanup": "자료는 금요일까지 보내 드릴게요.", "rules": true, "notes": "An ellipsis goes with the filler."}
+{"id": "fko08", "category": "filler_en", "lang": "ko", "input": "고마워요. Um, 다음 주에 봬요.", "cleanup": "고마워요. 다음 주에 봬요.", "rules": true, "notes": "Um at the start of a second sentence."}
+{"id": "fko09", "category": "filler_en", "lang": "ko", "input": "Erm 그건 다음 달 일정이에요.", "cleanup": "그건 다음 달 일정이에요.", "rules": true, "notes": "Erm without a comma."}
+{"id": "fko10", "category": "control_keep", "lang": "ko", "input": "um이라는 단어는 쓰지 마세요.", "cleanup": "um이라는 단어는 쓰지 마세요.", "rules": true, "notes": "A particle right after um makes it a word."}
+{"id": "fko11", "category": "control_keep", "lang": "ko", "input": "uh를 빼고 다시 써 주세요.", "cleanup": "uh를 빼고 다시 써 주세요.", "rules": true, "notes": "A particle right after uh makes it a word."}
+{"id": "fko12", "category": "control_keep", "lang": "ko", "input": "음, 내일 회의가 있어요.", "cleanup": "음, 내일 회의가 있어요.", "rules": true, "notes": "음 is a Korean filler, which the English rule does not know."}
+{"id": "fko13", "category": "control_keep", "lang": "ko", "input": "Um? 뭐라고 하셨어요?", "cleanup": "Um? 뭐라고 하셨어요?", "rules": true, "notes": "A filler before a question mark stays."}
+{"id": "fko14", "category": "filler_en", "lang": "ko", "input": "API를 um 보내 주세요.", "cleanup": "API를 보내 주세요.", "rules": true, "notes": "um after an English word with its particle. The space stays."}
+{"id": "fko15", "category": "filler_en", "lang": "ko", "input": "ㅋㅋ um ㅎㅎ 좋아요.", "cleanup": "ㅋㅋ ㅎㅎ 좋아요.", "rules": true, "notes": "The space between two words of jamo stays."}
+{"id": "fko16", "category": "filler_en", "lang": "ko", "input": "회의는 um 3시에 시작해요.", "cleanup": "회의는 3시에 시작해요.", "rules": true, "notes": "The space before a number stays."}
+{"id": "fko17", "category": "control_keep", "lang": "ko", "input": "uh는 영어 필러예요.", "cleanup": "uh는 영어 필러예요.", "rules": true, "notes": "A particle right after uh makes it a word."}
+{"id": "fko18", "category": "control_keep", "lang": "ko", "input": "erm을 빼 주세요.", "cleanup": "erm을 빼 주세요.", "rules": true, "notes": "A particle right after erm makes it a word."}
+{"id": "fko19", "category": "control_keep", "lang": "ko", "input": "앨범은 album이라고 해요.", "cleanup": "앨범은 album이라고 해요.", "rules": true, "notes": "um inside an English word with a particle stays."}

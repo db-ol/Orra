@@ -170,8 +170,9 @@ apart unnoticed.
    results file names the language in `dictation_language`. With `Japanese` or
    `Spanish`, LanguageGuard accepts that language and English, its passes are that
    language and then English, into `text_pass_japanese` or `text_pass_spanish`, Han
-   characters stay as written, and `ruled_text` has the rules only where
-   `language_verdict` is `chineseOrEnglish`, as in a dictation. `language_verdict` holds
+   characters stay as written, and `ruled_text` has every rule where `language_verdict`
+   is `chineseOrEnglish` and the English filler rule alone where it is `japanese` or
+   `spanish`, as in a dictation. `language_verdict` holds
    LanguageGuard's verdict on `text`.
 
    Optional: `TEST_RUNNER_ORRA_SPEECH_MODEL_DIR` for another model folder,

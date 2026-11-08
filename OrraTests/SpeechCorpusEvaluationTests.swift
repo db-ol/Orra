@@ -32,8 +32,9 @@ import Testing
 /// Chinese, and with the variable the file names the language in dictation_language. With
 /// Japanese or Spanish, the passes are that language and then English, into
 /// text_pass_japanese or text_pass_spanish, the text keeps its Han characters as written,
-/// and ruled_text has the rules only for text LanguageGuard reads as English.
-/// language_verdict holds LanguageGuard's verdict on the text.
+/// and ruled_text has every rule for text LanguageGuard reads as English and the English
+/// filler rule alone for text in that language, see DictationRules. language_verdict holds
+/// LanguageGuard's verdict on the text.
 ///
 /// Another corpus in the same layout runs too, such as FLEURS ja_jp, es_419 and ko_kr, where
 /// each manifest line has its lang. A clip in the language of a dictation pair other than
@@ -109,9 +110,7 @@ struct SpeechCorpusEvaluationTests {
                 let guarded = TranscriptGuard.clean(raw, audioSeconds: audioSeconds)
                 let text = language.simplifiesCharacters ? ChineseText.simplified(guarded) : guarded
                 row["text"] = text
-                // As PushToTalkController runs the rules.
-                let takesSteps = LanguageGuard.takesChineseAndEnglishSteps(text, for: language)
-                row["ruled_text"] = takesSteps ? NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: text)) : text
+                row["ruled_text"] = DictationRules.ruled(text, for: language)
                 row["language_verdict"] = "\(LanguageGuard.verdict(on: text, for: language))"
                 row["decode_seconds"] = decodeSeconds
                 // Which post step changed the model's text, for reading the differences.

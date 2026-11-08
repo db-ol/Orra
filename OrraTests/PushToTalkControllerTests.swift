@@ -2024,8 +2024,9 @@ struct PushToTalkControllerTests {
     }
 
     /// Japanese for a user who dictates in it: one pass of the speech model, its Han
-    /// characters as written, and no rules or cleanup model, although "um" is a filler and
-    /// a cue. English of the same user takes them as before.
+    /// characters as written, and of the rules only the English filler rule, so um goes
+    /// while 二〇二六年 stays in kanji. The cleanup model skips it, although um is a cue.
+    /// English of the same user takes every step as before.
     @Test func japaneseIsPastedAsWrittenAndEnglishIsCleanedUp() async throws {
         let received = Mutex<[String]>([])
         let controller = await controller(cleanup: CleanupModel(waitUntilLoaded: { true }, complete: { text in
@@ -2038,7 +2039,7 @@ struct PushToTalkControllerTests {
         try await dictate(controller)
         #expect(speech.receivedLanguages == [nil, nil])
         #expect(received.withLock { $0 }.isEmpty)
-        #expect(inserter.inserted == [LanguageGuardTests.japaneseInHan, "この會議は、um、二〇二六年です。"])
+        #expect(inserter.inserted == [LanguageGuardTests.japaneseInHan, "この會議は、二〇二六年です。"])
         #expect(controller.originalText == nil)
         speech.reply = "Um, let's meet at the station."
         try await dictate(controller)
@@ -2071,6 +2072,39 @@ struct PushToTalkControllerTests {
         #expect(received.withLock { $0 }.isEmpty)
         #expect(inserter.inserted == [LanguageGuardTests.spanish])
         #expect(controller.originalText == nil)
+    }
+
+    /// English fillers leave Spanish for a user who dictates in it, also short English that
+    /// counts as Spanish, and the sentence starts with a capital again. Text in a language
+    /// the user does not dictate in keeps them, as it keeps every other word.
+    @Test func englishFillersLeaveSpanishButNotAnotherLanguage() async throws {
+        let controller = await controller(cleanup: .off, language: .spanish)
+        for said in ["Uh, la reunión es mañana.", "Um, okay.", "Um, ¿él viene a la reunión?"] {
+            speech.reply = said
+            try await dictate(controller)
+        }
+        #expect(speech.receivedLanguages == [nil, nil, nil])
+        #expect(inserter.inserted == ["La reunión es mañana.", "Okay.", "¿Él viene a la reunión?"])
+        #expect(controller.originalText == nil)
+        // Chinese stays foreign after the passes in Spanish and English.
+        speech.reply = "呃，um，我们走吧。"
+        try await dictate(controller)
+        #expect(speech.receivedLanguages.suffix(3) == [nil, .spanish, .english])
+        #expect(inserter.inserted.last == "呃，um，我们走吧。")
+    }
+
+    /// The evaluations stand in for a dictation with DictationRules, so it must give what
+    /// a dictation pastes, with every dictation language.
+    @Test func dictationRulesGiveWhatADictationPastes() async throws {
+        for language in DictationLanguage.allCases {
+            let controller = await controller(cleanup: .off, language: language)
+            for text in DictationRules.samples {
+                speech.reply = text
+                try await dictate(controller)
+                let heard = language.simplifiesCharacters ? ChineseText.simplified(text) : text
+                #expect(inserter.inserted.last == DictationRules.ruled(heard, for: language), "\(language) \(text)")
+            }
+        }
     }
 
     /// Chinese for a user who dictates in Spanish goes to the pass in Spanish, which

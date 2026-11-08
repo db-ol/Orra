@@ -1603,15 +1603,17 @@ final class PushToTalkController {
             // The text as heard, before the filler rule, for the cleanup gate: a filler
             // cue the rule removed still asks for the model.
             let heard = text
-            // Japanese or Spanish skips the rules and the cleanup model, which were made for
-            // Chinese and English. With Chinese chosen every text takes them, as before.
+            // Japanese or Spanish skips the steps made for Chinese and English, the number
+            // rule and the cleanup model among them, and loses only its English fillers.
+            // With Chinese chosen every text takes them all, as before.
             var takesSteps = true
+            var takesEnglishFillers = true
             if spoken != .chinese {
-                takesSteps = await Self.takesChineseAndEnglishSteps(heard, for: spoken)
+                (takesSteps, takesEnglishFillers) = await Self.rules(for: heard, language: spoken)
             }
             timings.lap(.transcriptGuard)
-            if removesFillerWords, takesSteps {
-                text = FillerRules.removingFillers(from: text)
+            if removesFillerWords, takesEnglishFillers {
+                text = FillerRules.removingFillers(from: text, englishOnly: !takesSteps)
             }
             timings.lap(.fillers)
             if writesNumbersAsDigits, takesSteps {
@@ -1811,8 +1813,8 @@ final class PushToTalkController {
 
     /// Off the main actor, since NLLanguageRecognizer reads the whole text.
     @concurrent
-    nonisolated private static func takesChineseAndEnglishSteps(_ text: String, for language: DictationLanguage) async -> Bool {
-        LanguageGuard.takesChineseAndEnglishSteps(text, for: language)
+    nonisolated private static func rules(for text: String, language: DictationLanguage) async -> (chineseAndEnglish: Bool, englishFillers: Bool) {
+        LanguageGuard.rules(for: text, language: language)
     }
 
     /// Off the main actor, since the first use reads the word lists, see OrdinaryWords.
