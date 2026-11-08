@@ -366,3 +366,291 @@ struct CorrectionStoreTests {
         #expect(CorrectionStore.load(from: url.appendingPathExtension("missing")) == CorrectionStore())
     }
 }
+
+/// A fix that changes only numbers, digits or Chinese numerals, and gives them other values
+/// is never a misheard word, so it is neither learned nor offered, even when the two sides
+/// sound alike. A fix that writes the same numbers another way is judged as any other.
+struct NumbersOnlyTests {
+    private func findings(_ pasted: String, _ edited: String) -> [Finding] {
+        CorrectionFinder.findings(pasted: pasted, edited: edited)
+    }
+
+    @Test func theTwoSidesAreComparedWithoutTheirNumbers() {
+        #expect(CorrectionFinder.changesOnlyNumbers("Qwen2", "Qwen3"))
+        #expect(CorrectionFinder.changesOnlyNumbers("GPT-4", "GPT-5"))
+        #expect(CorrectionFinder.changesOnlyNumbers("四点", "十点"))
+        #expect(CorrectionFinder.changesOnlyNumbers("十四", "四十"))
+        #expect(!CorrectionFinder.changesOnlyNumbers("完克", "万科"))
+        #expect(!CorrectionFinder.changesOnlyNumbers("通一千问", "通义千问"))
+        #expect(!CorrectionFinder.changesOnlyNumbers("quen 3", "Qwen3"))
+        // The known cost: a name that differs only in a numeral.
+        #expect(CorrectionFinder.changesOnlyNumbers("一郎", "二郎"))
+        // Full width digits and the formal numerals count.
+        #expect(CorrectionFinder.changesOnlyNumbers("Qwen３", "Qwen3"))
+        #expect(CorrectionFinder.changesOnlyNumbers("三点", "叁点"))
+        #expect(CorrectionFinder.changesOnlyNumbers("壹佰", "一百"))
+        // The same word is no change.
+        #expect(!CorrectionFinder.changesOnlyNumbers("Qwen3", "Qwen3"))
+    }
+
+    @Test func aChangeOfOnlyANumberIsNeverLearned() {
+        // Each of these sounds alike, and each was learned.
+        #expect(findings("I use Qwen2 now", "I use Qwen3 now").isEmpty)
+        #expect(findings("我在用Qwen2写代码", "我在用Qwen3写代码").isEmpty)
+        #expect(findings("I asked GPT-4 about it", "I asked GPT-5 about it").isEmpty)
+        #expect(findings("I asked GPT-4o about it", "I asked GPT-5o about it").isEmpty)
+        #expect(findings("buy an iPhone15 today", "buy an iPhone16 today").isEmpty)
+        #expect(findings("我今年十四岁", "我今年四十岁").isEmpty)
+        // An added version number.
+        #expect(findings("I use Qwen now", "I use Qwen3 now").isEmpty)
+    }
+
+    @Test func aChangeOfOneNumeralIsNeverOffered() {
+        // 四 and 十 sound alike, si and shi, so 四点 to 十点 offered a word.
+        #expect(findings("明天四点开会", "明天十点开会").isEmpty)
+        #expect(findings("今天三点见", "今天叁点见").isEmpty)
+        // The known cost: a name that differs only in a numeral is not offered either.
+        #expect(findings("我叫十郎", "我叫四郎").isEmpty)
+        #expect(findings("我叫一郎", "我叫二郎").isEmpty)
+    }
+
+    @Test func misheardWordsWithNumbersAreStillLearned() {
+        #expect(findings("我们去完克看房", "我们去万科看房") == [.word(Correction(heard: "完克", corrected: "万科"))])
+        #expect(findings("I use quen 3 now", "I use Qwen3 now") == [.word(Correction(heard: "quen 3", corrected: "Qwen3"))])
+        #expect(findings("I use Qwen 3 now", "I use Qwen3 now") == [.word(Correction(heard: "Qwen 3", corrected: "Qwen3"))])
+        // A numeral fixed to a character that is none is still offered.
+        #expect(findings("我用通一千问写代码", "我用通义千问写代码") == [.suggestion(WordSuggestion(
+            change: Correction(heard: "一", corrected: "义"),
+            pair: Correction(heard: "通一千问", corrected: "通义千问")
+        ))])
+    }
+
+    @Test func aFixOfLettersAndDigitsIsLeftToTheSoundCheck() {
+        // The letters changed too, so the fix is judged by its sound, as before.
+        #expect(!CorrectionFinder.changesOnlyNumbers("Quen2", "Qwen3"))
+        #expect(findings("I use Quen2 now", "I use Qwen3 now") == [.word(Correction(heard: "Quen2", corrected: "Qwen3"))])
+    }
+
+    @Test func aLoneNumberInAnotherWritingIsNoWord() {
+        // 第3版 to 第三版 only writes the number another way, so the number check lets it
+        // pass. The edit is 3 to 三 alone, which is no word to learn either way.
+        #expect(CorrectionFinder.changesOnlyNumbers("第3版", "第三版"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("第3版", "第三版"))
+        #expect(findings("这是第3版", "这是第三版").isEmpty)
+        #expect(findings("这是第三版", "这是第3版").isEmpty)
+        // Number words of other languages do not count, so 2 to two is no change of numbers
+        // only. It is still not learned, since 2 is no word.
+        #expect(!CorrectionFinder.changesOnlyNumbers("2", "two"))
+        #expect(findings("I have 2 cats", "I have two cats").isEmpty)
+        #expect(findings("I have two cats", "I have 2 cats").isEmpty)
+    }
+
+    @Test func sidesWithNothingButNumbers() {
+        // Both sides are empty without their numbers.
+        #expect(CorrectionFinder.changesOnlyNumbers("十四", "四十"))
+        #expect(CorrectionFinder.changesOnlyNumbers("3", "三"))
+        #expect(CorrectionFinder.changesOnlyNumbers("１２", "12"))
+        // Only one side is: numerals heard for a name are still a misheard word.
+        #expect(!CorrectionFinder.changesOnlyNumbers("一一", "依依"))
+        #expect(findings("我叫一一", "我叫依依") == [.word(Correction(heard: "一一", corrected: "依依"))])
+    }
+
+    @Test func aVersionWithADecimalPointCountsAsANumber() {
+        #expect(CorrectionFinder.changesOnlyNumbers("Qwen2.5", "Qwen3"))
+        #expect(CorrectionFinder.changesOnlyNumbers("Qwen2.5-VL", "Qwen3-VL"))
+        #expect(findings("I use Qwen2.5 now", "I use Qwen3 now").isEmpty)
+        #expect(findings("我在用Qwen3写代码", "我在用Qwen3.5写代码").isEmpty)
+        #expect(findings("I asked GPT-4.5 about it", "I asked GPT-5 about it").isEmpty)
+        #expect(findings("I wrote it in Python3.11", "I wrote it in Python3.12").isEmpty)
+        // A period after the number ends the word, and stays out of the number.
+        #expect(CorrectionFinder.changesOnlyNumbers("Qwen2.", "Qwen3."))
+        // Only the point tells these apart: without it both hold the digits 25, and the
+        // fix would go to the sound check, which reads letters only, and be learned.
+        #expect(CorrectionFinder.changesOnlyNumbers("Qwen25", "Qwen2.5"))
+        #expect(CorrectionFinder.changesOnlyNumberValues("Qwen25", "Qwen2.5"))
+        #expect(findings("I use Qwen25 now", "I use Qwen2.5 now").isEmpty)
+    }
+
+    @Test func aChangeOfNumberWithASpaceAMarkOrACaseBesideItIsNeverLearned() {
+        // Each of these sounds alike, and each was learned.
+        #expect(findings("I use Qwen 2 now", "I use Qwen3 now").isEmpty)
+        #expect(findings("I use Qwen2 now", "I use Qwen 3 now").isEmpty)
+        #expect(findings("I asked GPT4 about it", "I asked GPT-5 about it").isEmpty)
+        #expect(findings("I asked GPT 4 about it", "I asked GPT-5 about it").isEmpty)
+        #expect(findings("I asked GPT-4 about it", "I asked GPT 5 about it").isEmpty)
+        #expect(findings("I use qwen2 now", "I use Qwen3 now").isEmpty)
+        #expect(findings("I asked gpt4 about it", "I asked GPT5 about it").isEmpty)
+        #expect(findings("升级到 iOS 17 了", "升级到 iOS18 了").isEmpty)
+        #expect(CorrectionFinder.changesOnlyNumbers("第 3 版", "第三版"))
+    }
+
+    @Test func theSameNumberInAnotherWritingIsStillJudgedByItsSound() {
+        #expect(!CorrectionFinder.changesOnlyNumbers("Qwen 3", "Qwen3"))
+        #expect(!CorrectionFinder.changesOnlyNumbers("COVID 19", "COVID-19"))
+        #expect(findings("COVID 19 is gone", "COVID-19 is gone") == [.word(Correction(heard: "COVID 19", corrected: "COVID-19"))])
+        #expect(findings("I use Qwen 2.5 now", "I use Qwen2.5 now") == [.word(Correction(heard: "Qwen 2.5", corrected: "Qwen2.5"))])
+    }
+
+    /// The same numbers in other numerals or another width are no other value, so such a
+    /// fix is judged by its sound as any other and learned, as in 0.7.0. The same fixes to
+    /// another number are not learned.
+    @Test func theSameNumberInOtherNumeralsOrAnotherWidthIsLearned() {
+        #expect(findings("我在Windows十一系统里装了", "我在Windows11系统里装了") == [.word(Correction(heard: "Windows十一", corrected: "Windows11"))])
+        #expect(findings("我装了Ubuntu二十四版", "我装了Ubuntu24版") == [.word(Correction(heard: "Ubuntu二十四", corrected: "Ubuntu24"))])
+        #expect(findings("I use Qwen３ now", "I use Qwen3 now") == [.word(Correction(heard: "Qwen３", corrected: "Qwen3"))])
+        #expect(findings("我在Windows十一系统里装了", "我在Windows12系统里装了").isEmpty)
+        #expect(findings("我装了Ubuntu二十四版", "我装了Ubuntu22版").isEmpty)
+        #expect(findings("I use Qwen３ now", "I use Qwen2 now").isEmpty)
+        // A fix of one Chinese character between two numerals offers nothing. 二 and 两 are
+        // the only two of one value there, and they do not sound alike.
+        #expect(!SoundAlike.soundsAlike("二", "两"))
+        #expect(findings("二个人", "两个人").isEmpty)
+    }
+
+    /// For learning and for the pairs an earlier version kept: another number changes what
+    /// was said, while the same number in another writing does not. A formal numeral counts
+    /// as written.
+    @Test func anotherValueIsToldFromAnotherWritingOfTheSameNumber() {
+        #expect(CorrectionFinder.changesOnlyNumberValues("Qwen2", "Qwen3"))
+        #expect(CorrectionFinder.changesOnlyNumberValues("Qwen 2", "Qwen3"))
+        #expect(CorrectionFinder.changesOnlyNumberValues("Qwen2.5", "Qwen3"))
+        #expect(CorrectionFinder.changesOnlyNumberValues("Qwen2-7B", "Qwen3-7B"))
+        #expect(CorrectionFinder.changesOnlyNumberValues("十四", "四十"))
+        #expect(CorrectionFinder.changesOnlyNumberValues("三百五", "305"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("Windows十一", "Windows11"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("iPhone十五", "iPhone 15"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("Qwen３", "Qwen3"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("Office二零一九", "Office2019"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("三百五", "350"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("一千", "1,000"))
+        // A formal numeral is a word or a surname too.
+        #expect(CorrectionFinder.changesOnlyNumberValues("大六", "大陆"))
+        #expect(CorrectionFinder.changesOnlyNumberValues("五先生", "伍先生"))
+        // No change of numbers only.
+        #expect(!CorrectionFinder.changesOnlyNumberValues("quen 3", "Qwen3"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("Quen2", "Qwen3"))
+        #expect(!CorrectionFinder.changesOnlyNumberValues("Qwen3", "Qwen3"))
+    }
+
+    @Test func datesTimesAndAmountsAreNeverLearned() {
+        #expect(findings("三月四号开会", "三月五号开会").isEmpty)
+        #expect(findings("十月一号放假", "四月一号放假").isEmpty)
+        #expect(findings("3月4号开会", "3月5号开会").isEmpty)
+        #expect(findings("明天四点半开会", "明天十点半开会").isEmpty)
+        #expect(findings("下周四见", "下周三见").isEmpty)
+        #expect(findings("一百块钱", "两百块钱").isEmpty)
+        #expect(findings("花了一千块", "花了一万块").isEmpty)
+        // A formal numeral counts as written, so 叁佰 is no other writing of 三百.
+        #expect(findings("花了三百元", "花了叁佰元").isEmpty)
+        #expect(findings("付了$100", "付了$200").isEmpty)
+        #expect(findings("新的M4芯片", "新的M5芯片").isEmpty)
+    }
+
+    @Test func chineseNamesWithNumerals() {
+        // The known cost: a name that differs only in a numeral, also a surname written
+        // with a formal numeral, as 伍 and 陆 are.
+        #expect(findings("我叫陈十一", "我叫陈四一").isEmpty)
+        #expect(findings("我是五先生", "我是伍先生").isEmpty)
+        #expect(findings("我是六先生", "我是陆先生").isEmpty)
+        // A numeral fixed to a character that is none, or the other way, is still offered.
+        let changes = [
+            ("找王亦博签名", "找王一博签名", Correction(heard: "亦", corrected: "一")),
+            ("我叫张三", "我叫张山", Correction(heard: "三", corrected: "山")),
+            ("我叫李四", "我叫李斯", Correction(heard: "四", corrected: "斯")),
+        ]
+        for (pasted, edited, change) in changes {
+            let found = findings(pasted, edited)
+            guard found.count == 1, case .suggestion(let suggestion) = found[0] else {
+                Issue.record("\(pasted) to \(edited) offered nothing: \(found)")
+                continue
+            }
+            #expect(suggestion.change == change)
+        }
+    }
+
+    // MARK: A word Orra replaced
+
+    private func translated(pasted: String, edited: String, _ replacements: [Replacement]) -> [CorrectionFinder.Translation] {
+        CorrectionFinder.locatedFindings(pasted: pasted, edited: edited, replaced: replacements.map(\.span)).map {
+            CorrectionFinder.translate($0, pasted: Array(pasted), replacements: replacements)
+        }
+    }
+
+    /// A pair an earlier version learned from a change of number still stops replacing when
+    /// the user puts back the number the model wrote.
+    @Test func puttingBackANumberTheModelWroteForgetsTheOldPair() {
+        let pair = Correction(heard: "Qwen2", corrected: "Qwen3")
+        let replacement = Replacement(span: 3..<8, heard: "Qwen2", corrected: "Qwen3", pair: pair)
+        #expect(translated(pasted: "我在用Qwen3写代码", edited: "我在用Qwen2写代码", [replacement]) == [.reverted([pair])])
+    }
+
+    @Test func aChangeOfNumberInAReplacedWordIsNotLearned() {
+        // Qwen3 to Qwen2 changes only the number of the pasted word, where the model wrote
+        // quen 3.
+        let quen = Correction(heard: "quen 3", corrected: "Qwen3")
+        let replacedQuen = Replacement(span: 3..<8, heard: "quen 3", corrected: "Qwen3", pair: quen)
+        #expect(translated(pasted: "我在用Qwen3写代码", edited: "我在用Qwen2写代码", [replacedQuen]) == [.dropped])
+        // GPT-4 to GPT5 changes more than the number of the pasted word, but the pair would
+        // be GPT4 to GPT5, since the model wrote GPT4.
+        let gpt = Correction(heard: "GPT4", corrected: "GPT-4")
+        let replacedGPT = Replacement(span: 8..<13, heard: "GPT4", corrected: "GPT-4", pair: gpt)
+        #expect(translated(pasted: "I asked GPT-4 today", edited: "I asked GPT5 today", [replacedGPT]) == [.dropped])
+    }
+
+    @Test func aChangeOfNumberInAReplacedWordIsNotLearnedInAnyWriting() {
+        // Qwen3 to Qwen2.5, where the model wrote Qwen2: the pair would change its number.
+        let qwen = Correction(heard: "Qwen2", corrected: "Qwen3")
+        let replacedQwen = Replacement(span: 3..<8, heard: "Qwen2", corrected: "Qwen3", pair: qwen)
+        #expect(translated(pasted: "我在用Qwen3写代码", edited: "我在用Qwen2.5写代码", [replacedQwen]) == [.dropped])
+        // Qwen3.5 to Qwen3 changes only the number of the pasted word, where the model
+        // wrote quen 3.5.
+        let quen = Correction(heard: "quen 3.5", corrected: "Qwen3.5")
+        let replacedQuen = Replacement(span: 3..<10, heard: "quen 3.5", corrected: "Qwen3.5", pair: quen)
+        #expect(translated(pasted: "我在用Qwen3.5写代码", edited: "我在用Qwen3写代码", [replacedQuen]) == [.dropped])
+        // Qwen3 to Qwen 2 changes the number of the pasted word and a space beside it.
+        let quen3 = Correction(heard: "quen 3", corrected: "Qwen3")
+        let replacedQuen3 = Replacement(span: 3..<8, heard: "quen 3", corrected: "Qwen3", pair: quen3)
+        #expect(translated(pasted: "我在用Qwen3写代码", edited: "我在用Qwen 2写代码", [replacedQuen3]) == [.dropped])
+    }
+
+    /// The model's number put back in another writing is a fix of the replaced word with
+    /// the model's number, so it is learned, and the old pair stops replacing.
+    @Test func theModelsNumberPutBackInAnotherWritingIsLearned() {
+        let gpt = Correction(heard: "GPT4", corrected: "GPT-5")
+        let replacedGPT = Replacement(span: 8..<13, heard: "GPT4", corrected: "GPT-5", pair: gpt)
+        #expect(translated(pasted: "I asked GPT-5 today", edited: "I asked GPT-4 today", [replacedGPT])
+            == [.finding(.word(Correction(heard: "GPT4", corrected: "GPT-4")))])
+        let qwen = Correction(heard: "Qwen2", corrected: "Qwen3")
+        let replacedQwen = Replacement(span: 3..<8, heard: "Qwen2", corrected: "Qwen3", pair: qwen)
+        #expect(translated(pasted: "我在用Qwen3写代码", edited: "我在用Qwen 2写代码", [replacedQwen])
+            == [.finding(.word(Correction(heard: "Qwen2", corrected: "Qwen 2")))])
+    }
+
+    /// The same for the model's number put back in other numerals: Windows11 where the model
+    /// wrote Windows十一 and an earlier pair pasted Windows12.
+    @Test func theModelsNumberPutBackInOtherNumeralsIsLearned() {
+        let old = Correction(heard: "Windows十一", corrected: "Windows12")
+        let replaced = Replacement(span: 2..<11, heard: "Windows十一", corrected: "Windows12", pair: old)
+        #expect(translated(pasted: "我在Windows12系统里装了", edited: "我在Windows11系统里装了", [replaced])
+            == [.finding(.word(Correction(heard: "Windows十一", corrected: "Windows11")))])
+    }
+
+    /// A fix of a replaced word that writes the same number another way is learned with the
+    /// model's spelling, as any other fix, while one that gives the number another value is
+    /// not. Putting back the model's spelling still forgets the pair.
+    @Test func theSameNumberInAnotherWritingOfAReplacedWordIsLearned() {
+        let windows = Correction(heard: "Windows十一", corrected: "Windows11")
+        let replacedWindows = Replacement(span: 2..<11, heard: "Windows十一", corrected: "Windows11", pair: windows)
+        let pasted = "我在Windows11系统里装了"
+        #expect(translated(pasted: pasted, edited: "我在Windows 11系统里装了", [replacedWindows])
+            == [.finding(.word(Correction(heard: "Windows十一", corrected: "Windows 11")))])
+        #expect(translated(pasted: pasted, edited: "我在Windows12系统里装了", [replacedWindows]) == [.dropped])
+        #expect(translated(pasted: pasted, edited: "我在Windows十一系统里装了", [replacedWindows]) == [.reverted([windows])])
+        // Qwen３ for Qwen3 only writes the pasted number another way, so it is judged as any
+        // other fix, also where the pair gave the model's 2 another value, as Quen2 to Qwen3.
+        let quen = Correction(heard: "Quen2", corrected: "Qwen3")
+        let replacedQuen = Replacement(span: 3..<8, heard: "Quen2", corrected: "Qwen3", pair: quen)
+        #expect(translated(pasted: "我在用Qwen3写代码", edited: "我在用Qwen３写代码", [replacedQuen])
+            == [.finding(.word(Correction(heard: "Quen2", corrected: "Qwen３")))])
+    }
+}

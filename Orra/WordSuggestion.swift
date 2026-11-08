@@ -75,7 +75,8 @@ nonisolated enum OneCharacterFix {
     }
 
     /// The suggestion for a fix of the one Han character at `oldIndex` in the pasted text,
-    /// `newIndex` in the edited text, when the two sound alike and are not grammar. The
+    /// `newIndex` in the edited text, when the two sound alike and are neither grammar nor
+    /// two numerals, such as 四 and 十, see `CorrectionFinder.changesOnlyNumbers(_:_:)`. The
     /// guessed word stays within `bounds` of the edited text, the unchanged text around the
     /// fix, so it never takes in another edit.
     static func suggestion(paste: [Character], edited: [Character], at oldIndex: Int, _ newIndex: Int, within bounds: Range<Int>) -> WordSuggestion? {
@@ -87,6 +88,7 @@ nonisolated enum OneCharacterFix {
         let heard = paste[oldIndex]
         let corrected = edited[newIndex]
         guard heard.isHan, corrected.isHan, !isGrammar(heard, corrected),
+              !CorrectionFinder.changesOnlyNumbers(String(heard), String(corrected)),
               SoundAlike.sound(String(heard)) == SoundAlike.sound(String(corrected))
                 || SoundAlike.soundsAlike(String(heard), String(corrected)) else { return nil }
         let range = guess(in: edited, at: newIndex, within: bounds)
