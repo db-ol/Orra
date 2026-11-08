@@ -632,6 +632,10 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     number rule and the cleanup model leave that text alone, that text in a language the
     user does not dictate in keeps them, and that DictationRules, which the evaluations
     use in place of a dictation, gives what a dictation pastes.
+    FileTranscriptionTests checks that a segment of a file gets what DictationRules gives
+    with every dictation language, so English fillers leave a Japanese or Spanish segment
+    too, and that a segment of nothing but English fillers is left out with every dictation
+    language, while a Chinese hum alone stays with 日本語 + English, as in a dictation.
   - NumberRulesTests runs the number rules on every case of
     Tools/rewrite-eval/numbers.jsonl and checks that applying them twice changes nothing
     more. It checks that every cleanup in cases.jsonl without a number stays as it is,
@@ -3781,6 +3785,10 @@ the list follows the newest sentence. FileTranscriptionEndToEndTests transcribes
 - [ ] With the window behind other apps or minimized, the file goes on at the same pace.
 - [ ] In Chinese, Japanese and Spanish the menu item and the window read well, and the
   buttons fit at the smallest size of the window.
+- [ ] With 日本語 + English and with Español + English, a file of sentences with um or uh in
+  them, and a pause around a lone um: the sentences come without um and uh, as a dictation
+  pastes them, with Japanese and Spanish fillers such as えーと or eh kept, and the lone um
+  gives no sentence.
 - [ ] VoiceOver reads the file's name, the progress and each sentence.
 - [ ] The log shows durations, counts, timings and error codes, never text or the file's
   name:

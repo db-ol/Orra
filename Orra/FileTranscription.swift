@@ -474,23 +474,29 @@ final class FileTranscription {
 
     /// A segment's text as a dictation's before the paste: through TranscriptGuard, into
     /// simplified characters for Chinese, without fillers and with numbers as digits when
-    /// the switches say so, which Japanese and Spanish skip, as in a dictation. Off the main
-    /// actor, since the language check may run NLLanguageRecognizer.
+    /// the switches say so. The rules that take the text are those of a dictation in the
+    /// same language, see LanguageGuard.rules(for:language:), so Japanese or Spanish text
+    /// loses only its English fillers and skips the number rule. Off the main actor, since
+    /// the language check may run NLLanguageRecognizer.
     ///
     /// Unlike a dictation, a segment of nothing but fillers, such as “Um.” or “嗯。” between
-    /// two pauses, is left out while fillers are removed, see FillerRules.isOnlyFillers(_:).
+    /// two pauses, is left out while fillers are removed, see
+    /// FillerRules.isOnlyFillers(_:englishOnly:). Where the English filler rule runs alone,
+    /// only English fillers count, so “嗯。” stays with Japanese chosen, where Han
+    /// characters count as Japanese.
     @concurrent
     nonisolated static func text(_ raw: String, seconds: Double, settings: FileTranscriptionSettings) async -> String {
         let guarded = TranscriptGuard.clean(raw, audioSeconds: seconds)
         var text = settings.language.simplifiesCharacters ? ChineseText.simplified(guarded) : guarded
-        let takesSteps = settings.language == .chinese || LanguageGuard.takesChineseAndEnglishSteps(text, for: settings.language)
-        if settings.removesFillers, takesSteps {
-            if FillerRules.isOnlyFillers(text) {
+        let rules = LanguageGuard.rules(for: text, language: settings.language)
+        if settings.removesFillers, rules.englishFillers {
+            let englishOnly = !rules.chineseAndEnglish
+            if FillerRules.isOnlyFillers(text, englishOnly: englishOnly) {
                 return ""
             }
-            text = FillerRules.removingFillers(from: text)
+            text = FillerRules.removingFillers(from: text, englishOnly: englishOnly)
         }
-        if settings.writesDigits, takesSteps {
+        if settings.writesDigits, rules.chineseAndEnglish {
             text = NumberRules.writingNumbersAsDigits(in: text)
         }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)

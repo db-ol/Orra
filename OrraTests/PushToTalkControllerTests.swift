@@ -2096,14 +2096,9 @@ struct PushToTalkControllerTests {
     /// The evaluations stand in for a dictation with DictationRules, so it must give what
     /// a dictation pastes, with every dictation language.
     @Test func dictationRulesGiveWhatADictationPastes() async throws {
-        let said = [
-            "Um、明日の会議は三時です。", "Uh, la reunión es mañana.", "Um, okay.", "呃，我们下午两点开会。",
-            "Um, let's meet at two.", "呃，um，我们走吧。", "내일 um 회의가 있어요.",
-            "¡Uh! Se me olvidó la llave.", "El Sr. Um llegó tarde.",
-        ]
         for language in DictationLanguage.allCases {
             let controller = await controller(cleanup: .off, language: language)
-            for text in said {
+            for text in DictationRules.samples {
                 speech.reply = text
                 try await dictate(controller)
                 let heard = language.simplifiesCharacters ? ChineseText.simplified(text) : text

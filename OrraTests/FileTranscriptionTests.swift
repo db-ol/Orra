@@ -154,7 +154,7 @@ struct FileTranscriptionTests {
             try await finished(transcription)
             #expect(transcription.segments.map(\.text) == [expected])
         }
-        // Japanese text skips the Chinese and English rules, as in a dictation.
+        // Japanese text skips the Chinese fillers and the number rule, as in a dictation.
         let japanese = "えーと、三時に会いましょう。"
         let source = FakeFileSource(starts: [0], duration: 4)
         let speech = FakeFileSpeech()
@@ -163,6 +163,32 @@ struct FileTranscriptionTests {
         transcription.start(url)
         try await finished(transcription)
         #expect(transcription.segments.map(\.text) == [japanese])
+    }
+
+    /// A segment takes the rules of a dictation in the same dictation language, see
+    /// LanguageGuard.rules(for:language:). English fillers leave a Japanese or Spanish
+    /// segment, also short English that counts as Spanish, while the Chinese fillers and
+    /// the number rule leave it alone.
+    @Test func englishFillersLeaveASegmentInEveryDictationLanguage() async {
+        let japanese = FileTranscriptionSettings(language: .japanese)
+        #expect(await FileTranscription.text("Um、明日の会議は三時です。", seconds: 3, settings: japanese) == "明日の会議は三時です。")
+        #expect(await FileTranscription.text("呃，um，我们走吧。", seconds: 3, settings: japanese) == "呃，我们走吧。")
+        let spanish = FileTranscriptionSettings(language: .spanish)
+        #expect(await FileTranscription.text("Uh, la reunión es mañana.", seconds: 3, settings: spanish) == "La reunión es mañana.")
+        #expect(await FileTranscription.text("Um, okay.", seconds: 1, settings: spanish) == "Okay.")
+        #expect(await FileTranscription.text("¡Uh! Se me olvidó la llave.", seconds: 3, settings: spanish) == "Se me olvidó la llave.")
+        var keepingFillers = spanish
+        keepingFillers.removesFillers = false
+        #expect(await FileTranscription.text("Uh, la reunión es mañana.", seconds: 3, settings: keepingFillers) == "Uh, la reunión es mañana.")
+        // What a dictation pastes, with every dictation language, see DictationRules.
+        for language in DictationLanguage.allCases {
+            let settings = FileTranscriptionSettings(language: language)
+            for said in DictationRules.samples {
+                let guarded = TranscriptGuard.clean(said, audioSeconds: 3)
+                let heard = language.simplifiesCharacters ? ChineseText.simplified(guarded) : guarded
+                #expect(await FileTranscription.text(said, seconds: 3, settings: settings) == DictationRules.ruled(heard, for: language), "\(language) \(said)")
+            }
+        }
     }
 
     /// A segment of nothing but fillers between two pauses, such as “Um.” or “嗯。”, is left
@@ -182,6 +208,35 @@ struct FileTranscriptionTests {
         var keepingFillers = settings
         keepingFillers.removesFillers = false
         #expect(await FileTranscription.text("Um.", seconds: 1, settings: keepingFillers) == "Um.")
+    }
+
+    /// Where the English filler rule runs alone, a segment of nothing but English fillers
+    /// is left out too, and a Chinese hum or a filler of the segment's own language stays,
+    /// as the rule leaves it in a dictation. With Japanese chosen Han characters count as
+    /// Japanese, and with Spanish chosen short Latin text counts as Spanish.
+    @Test func aSegmentOfNothingButEnglishFillersIsLeftOutInEveryPair() async {
+        for language in [DictationLanguage.japanese, .spanish] {
+            let settings = FileTranscriptionSettings(language: language)
+            for filler in ["Um.", "Uh.", "Um, uh.", "Erm…", "¡Uh!"] {
+                #expect(await FileTranscription.text(filler, seconds: 1, settings: settings) == "", "\(language) \(filler)")
+            }
+            for kept in ["Um?", "Uh-huh.", "UM."] {
+                #expect(await FileTranscription.text(kept, seconds: 1, settings: settings) == kept, "\(language) \(kept)")
+            }
+        }
+        let japanese = FileTranscriptionSettings(language: .japanese)
+        for kept in ["嗯。", "呃。", "嗯，嗯。", "えーと。", "あの、えーと。"] {
+            #expect(await FileTranscription.text(kept, seconds: 1, settings: japanese) == kept, "\(kept)")
+        }
+        #expect(await FileTranscription.text("Um、えーと。", seconds: 1, settings: japanese) == "えーと。")
+        let spanish = FileTranscriptionSettings(language: .spanish)
+        for kept in ["Eh.", "Em.", "Este, eh."] {
+            #expect(await FileTranscription.text(kept, seconds: 1, settings: spanish) == kept, "\(kept)")
+        }
+        #expect(FillerRules.isOnlyFillers("Um, uh.", englishOnly: true))
+        #expect(!FillerRules.isOnlyFillers("嗯。", englishOnly: true))
+        #expect(!FillerRules.isOnlyFillers("Um, 嗯。", englishOnly: true))
+        #expect(FillerRules.isOnlyFillers("Um, 嗯。"))
     }
 
     /// The vocabulary and the language of dictation reach the speech model through the

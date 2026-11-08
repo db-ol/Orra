@@ -43,7 +43,7 @@ nonisolated enum FillerRules {
     private static let questionMarks: Set<Character> = ["？", "?"]
     private static let clauseEnds: Set<Character> = commas.union(sentenceEnds).union(["；", ";", "：", ":"])
     private static let englishFillers: Set<String> = ["um", "umm", "uh", "uhh", "uhm", "erm"]
-    /// The Chinese hums, each a word of its own in `isOnlyFillers(_:)`.
+    /// The Chinese hums, each a word of its own in `isOnlyFillers(_:englishOnly:)`.
     private static let hums: Set<String> = ["嗯", "呃", "额"]
     /// Words after uh or um that make it a reply or an interjection.
     private static let replyWords: Set<String> = ["huh", "oh", "hm", "hmm"]
@@ -93,11 +93,16 @@ nonisolated enum FillerRules {
     }
 
     /// Whether the text is nothing but hums and fillers with the punctuation after them,
-    /// such as “Um.”, “呃，额。” or “嗯。”, which `removingFillers(from:)` leaves as they are
-    /// for a dictation of nothing else. Transcribe File leaves such a segment of a file out,
-    /// where it stands between two pauses. A hum before a question mark asks something, so
-    /// “嗯？” is not one, nor is a quoted filler or a reply such as uh-huh or 嗯哼.
-    static func isOnlyFillers(_ text: String) -> Bool {
+    /// such as “Um.”, “呃，额。” or “嗯。”, which `removingFillers(from:englishOnly:)` leaves
+    /// as they are for a dictation of nothing else. Transcribe File leaves such a segment of
+    /// a file out, where it stands between two pauses. A hum before a question mark asks
+    /// something, so “嗯？” is not one, nor is a quoted filler or a reply such as uh-huh or
+    /// 嗯哼.
+    ///
+    /// With `englishOnly` only the English fillers count, since the rule then removes only
+    /// those, so “Um.” is nothing but fillers and “嗯。” is not. That is for a segment in a
+    /// dictation language other than Chinese, see LanguageGuard.rules(for:language:).
+    static func isOnlyFillers(_ text: String, englishOnly: Bool = false) -> Bool {
         var words: [String] = []
         var word = ""
         for character in text {
@@ -122,7 +127,7 @@ nonisolated enum FillerRules {
             words.append(word)
         }
         return !words.isEmpty && words.allSatisfy { word in
-            hums.contains(word) || (englishFillers.contains(word.lowercased()) && word != word.uppercased())
+            (!englishOnly && hums.contains(word)) || (englishFillers.contains(word.lowercased()) && word != word.uppercased())
         }
     }
 
