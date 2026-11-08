@@ -641,7 +641,10 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     gate runs after the join, so gate.py can score the change without a model.
     PushToTalkControllerTests checks that the paste joins the letters in Chinese text
     after the number rules, also with both switches of the rules off, and that English,
-    and Japanese for a user who dictates in it, keep them.
+    and Japanese for a user who dictates in it, keep them. FileTranscriptionTests,
+    since 2026-11-07, puts the same texts through Transcribe File and through a dictation
+    with each setting of the two switches and checks that each segment comes out as the
+    paste does.
   - Cleanup with a local model, added on 2026-10-10:
   - RewriteGuardTests runs all 357 distinct cleanup outputs of the hardening benchmark
     (bench/hardening, five prompts on the 70 adversarial cases and three on the 178
@@ -2425,6 +2428,9 @@ Spelled capitals, added on 2026-11-06, not verified yet:
 - [ ] Dictate "Lee 的拼写是 L E E". The letters stay apart.
 - [ ] Dictate "The code is A B C" in English. The paste keeps the letters as the model
   wrote them.
+- [ ] Record "这个 PR 先别 merge" and "内存是十六 GB" in a voice memo, saying each letter on
+  its own, and drop it on the Transcribe File window. The text reads PR and 16GB, as in a
+  dictation.
 
 Updates from inside the app, added on 2026-10-10, not verified yet:
 
