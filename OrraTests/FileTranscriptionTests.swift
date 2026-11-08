@@ -165,6 +165,83 @@ struct FileTranscriptionTests {
         #expect(transcription.segments.map(\.text) == [japanese])
     }
 
+    /// Each segment joins capitals that the speech model spelled one by one as a dictation
+    /// does, after the filler and number rules and with no switch of its own, so a file and
+    /// a dictation of the same words give the same text. English, letters spelled on purpose
+    /// and Japanese for a user who dictates in it keep them apart. The texts are those of the
+    /// dictation tests of the join in PushToTalkControllerTests and one spelled on purpose.
+    /// Each goes through a file and through a dictation, with each setting of the switches.
+    @Test(arguments: [(true, true), (false, false), (true, false), (false, true)])
+    func eachSegmentJoinsSpelledCapitalsAsADictationDoes(_ fillers: Bool, _ digits: Bool) async throws {
+        let spoken: [(language: DictationLanguage, text: String)] = [
+            (.chinese, "这个 P R 先别 merge，等 C I 跑完，内存是十六 G B 吗？"),
+            (.chinese, "这台 MacBook 有16 G B 内存，O.K.。"),
+            (.chinese, "嗯，这个 P 呃 R 先别 merge。"),
+            (.chinese, "Lee 的拼写是 L E E。"),
+            (.chinese, "The P R and the C I are ready."),
+            (.japanese, "この P R は明日見ます。"),
+        ]
+        var files: [String] = []
+        var dictations: [String] = []
+        for language in [DictationLanguage.chinese, .japanese] {
+            let texts = spoken.filter { $0.language == language }.map { $0.text }
+            let source = FakeFileSource(starts: texts.indices.map { Double($0) * 4 }, duration: Double(texts.count) * 4)
+            let speech = FakeFileSpeech()
+            speech.texts = Dictionary(uniqueKeysWithValues: texts.enumerated().map { ($0.offset + 1, $0.element) })
+            let settings = FileTranscriptionSettings(language: language, terms: [], removesFillers: fillers, writesDigits: digits)
+            let transcription = FileTranscription(engines: engines(source, speech, settings: settings))
+            transcription.start(url)
+            try await finished(transcription)
+            files += transcription.segments.map(\.text)
+
+            let mic = FakeMicrophone()
+            let dictationSpeech = FakeSpeech()
+            let inserter = FakeInserter()
+            let controller = PushToTalkController(
+                capture: mic.capture,
+                transcription: dictationSpeech.transcription,
+                insert: inserter.insert,
+                frontmostApp: { 100 },
+                minimumHold: .zero,
+                releaseTail: .zero,
+                listeningCueDelay: .zero,
+                removesFillerWords: fillers,
+                writesNumbersAsDigits: digits,
+                dictationLanguage: language
+            )
+            await controller.loadModel()
+            for (index, text) in texts.enumerated() {
+                dictationSpeech.reply = text
+                controller.handle(.pressed(isRepeat: false))
+                try await waitUntil { mic.calls.filter { $0 == "start" }.count == index + 1 }
+                controller.handle(.released)
+                try await waitUntil { controller.state == .idle && inserter.inserted.count == index + 1 }
+            }
+            dictations += inserter.inserted
+        }
+        #expect(files == dictations)
+        if fillers, digits {
+            #expect(files == [
+                "这个 PR 先别 merge，等 CI 跑完，内存是16GB 吗？",
+                "这台 MacBook 有16GB 内存，OK。",
+                "这个 PR 先别 merge。",
+                "Lee 的拼写是 L E E。",
+                "The P R and the C I are ready.",
+                "この P R は明日見ます。",
+            ])
+        }
+        if !fillers, !digits {
+            #expect(files == [
+                "这个 PR 先别 merge，等 CI 跑完，内存是十六 GB 吗？",
+                "这台 MacBook 有16GB 内存，OK。",
+                "嗯，这个 P 呃 R 先别 merge。",
+                "Lee 的拼写是 L E E。",
+                "The P R and the C I are ready.",
+                "この P R は明日見ます。",
+            ])
+        }
+    }
+
     /// A segment of nothing but fillers between two pauses, such as “Um.” or “嗯。”, is left
     /// out while fillers are removed, where a dictation of nothing else keeps it as it is.
     /// A hum that asks, a reply and a filler in a sentence are not left out.

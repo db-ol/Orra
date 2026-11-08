@@ -474,11 +474,15 @@ final class FileTranscription {
 
     /// A segment's text as a dictation's before the paste: through TranscriptGuard, into
     /// simplified characters for Chinese, without fillers and with numbers as digits when
-    /// the switches say so, which Japanese and Spanish skip, as in a dictation. Off the main
-    /// actor, since the language check may run NLLanguageRecognizer.
+    /// the switches say so, and with capitals spelled one by one joined, see SpelledLetters,
+    /// which Japanese and Spanish skip, as in a dictation. Off the main actor, since the
+    /// language check may run NLLanguageRecognizer.
     ///
     /// Unlike a dictation, a segment of nothing but fillers, such as “Um.” or “嗯。” between
     /// two pauses, is left out while fillers are removed, see FillerRules.isOnlyFillers(_:).
+    /// The join reads one segment at a time, where a dictation's reads the whole dictation,
+    /// so the Chinese characters, the talk of spelling and the Latin words it looks for
+    /// count only within the segment.
     @concurrent
     nonisolated static func text(_ raw: String, seconds: Double, settings: FileTranscriptionSettings) async -> String {
         let guarded = TranscriptGuard.clean(raw, audioSeconds: seconds)
@@ -492,6 +496,11 @@ final class FileTranscription {
         }
         if settings.writesDigits, takesSteps {
             text = NumberRules.writingNumbersAsDigits(in: text)
+        }
+        // Capitals spelled one by one, such as P R, have no switch of their own, as in a
+        // dictation. Japanese and Spanish skip them, as they skip the rules above.
+        if takesSteps {
+            text = SpelledLetters.joining(in: text)
         }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
