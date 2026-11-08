@@ -462,6 +462,11 @@ struct NumbersOnlyTests {
         #expect(findings("I wrote it in Python3.11", "I wrote it in Python3.12").isEmpty)
         // A period after the number ends the word, and stays out of the number.
         #expect(CorrectionFinder.changesOnlyNumbers("Qwen2.", "Qwen3."))
+        // Only the point tells these apart: without it both hold the digits 25, and the
+        // fix would go to the sound check, which reads letters only, and be learned.
+        #expect(CorrectionFinder.changesOnlyNumbers("Qwen25", "Qwen2.5"))
+        #expect(CorrectionFinder.changesOnlyNumberValues("Qwen25", "Qwen2.5"))
+        #expect(findings("I use Qwen25 now", "I use Qwen2.5 now").isEmpty)
     }
 
     @Test func aChangeOfNumberWithASpaceAMarkOrACaseBesideItIsNeverLearned() {
