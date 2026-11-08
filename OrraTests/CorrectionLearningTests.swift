@@ -653,6 +653,29 @@ struct CorrectionLearningTests {
         #expect(learning.store.entries.map(\.correction) == [pair])
     }
 
+    /// Windows十一 to Windows11 writes the same number another way, so it is learned as in
+    /// 0.7.0, and its pair replaces. Qwen2 to Qwen3 in the same paste gives the number
+    /// another value, so it is not.
+    @Test func theSameNumberInAnotherWritingIsLearnedNextToAChangeOfNumber() async {
+        let windows = Correction(heard: "Windows十一", corrected: "Windows11")
+        let pasted = "我在Windows十一系统里用Qwen2写代码"
+        let field = ScriptedField([pasted, pasted, "我在Windows11系统里用Qwen3写代码"])
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: field, vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        var offered: [WordSuggestion] = []
+        learning.onLearned = { learned.append($0) }
+        learning.onSuggest = { offered.append($0) }
+        learning.pasted(pasted, in: 42)
+        await waitForReads(field)
+        #expect(learned.map(\.correction) == [windows])
+        #expect(offered.isEmpty)
+        #expect(vocabulary.words == ["Windows11"])
+        #expect(learning.store.entries.map(\.correction) == [windows])
+        #expect(WordReplacement.usablePairs(learning.replacementPairs, vocabulary: vocabulary.words, ordinary: OrdinaryWords([])) == [windows])
+        learning.isOn = false
+    }
+
     /// Waits until the field's reads have stopped for a while.
     private func waitForReads(_ field: ScriptedField) async {
         var lastReads = -1

@@ -28,10 +28,11 @@ nonisolated struct Replacement: Equatable, Hashable, Sendable {
 ///   or 生根 for 申根, is never replaced, since it is far more often meant as written.
 /// - A heard spelling that is itself a vocabulary word, or that two pairs fix in different
 ///   ways, is left alone.
-/// - A pair whose two sides differ only in numbers, such as Qwen2 to Qwen3, is never used.
-///   Learning no longer keeps one, but earlier versions did, and it would change what was
-///   said in every later dictation. One that writes the same numbers another way, such as
-///   Windows十一 to Windows11, is still used.
+/// - A pair whose two sides differ only in numbers that get other values, such as Qwen2 to
+///   Qwen3, is never used. Learning no longer keeps one, but earlier versions did, and it
+///   would change what was said in every later dictation. One that writes the same numbers
+///   another way, such as Windows十一 to Windows11, never does, so learning keeps it and it
+///   is used.
 /// - The longest heard spelling wins where two overlap, and every replacement is made in
 ///   the transcript as the model wrote it, so one never feeds another.
 ///
