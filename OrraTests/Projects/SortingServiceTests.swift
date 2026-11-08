@@ -193,7 +193,9 @@ struct SortingServiceTests {
             while requests.isEmpty, !ended.isSet {
                 await withCheckedContinuation { waitingForRequests.append($0) }
             }
-            #expect(!requests.isEmpty, "The batch ended without asking the model.", sourceLocation: sourceLocation)
+            if requests.isEmpty {
+                Issue.record("The batch ended without asking the model.", sourceLocation: sourceLocation)
+            }
         }
 
         func release() {
