@@ -50,6 +50,8 @@ Un vocabulario personal de hasta 5,000 nombres y términos, para que Orra los es
 
 Opcional. Un modelo de texto en tu Mac elimina las muletillas que las reglas dejan pasar y aplica las rectificaciones que haces al hablar, así que “at three, oh wait, four” queda como “at four”. Pegar texto original siempre recupera lo que dijiste. Con japonés o español como idioma de dictado, por ahora la limpieza solo funciona con oraciones en inglés.
 
+Activa también Pulir y el mismo modelo reescribe lo que dices como texto escrito claro y conciso, en el estilo que elijas: Claro conserva casi todo y Conciso solo lo esencial. Orra revisa cada reescritura y, si no pasa las verificaciones, pega tu texto sin reescribir. Aun así, una reescritura puede omitir un detalle o cambiar lo que quisiste decir, y Pegar texto original recupera el texto de antes. Como la limpieza, por ahora el pulido solo funciona con oraciones en inglés si dictas en japonés o español. Novedad de la versión 0.7.0.
+
 </td>
 <td width="50%"><img src="docs/images/readme/es/cleanup.gif" alt="Con Limpiar texto activado, alguien dice en inglés “Let’s go over the quote at three, oh wait, four tomorrow.” En el correo queda “Let’s go over the quote at four tomorrow.”" width="100%"></td>
 </tr>
@@ -74,6 +76,18 @@ Novedad de la versión 0.4.0.
 
 </td>
 <td width="50%"><img src="docs/images/readme/es/meeting.gif" alt="En una videollamada, Alex habla en inglés y la ventana de Subtítulos en vivo muestra cada oración con su traducción al español. Arriba están elegidos Ambos y Español, junto al botón para copiar. Luego, el usuario presiona la tecla de traducción, dice “Claro, termino las pruebas para el miércoles” y la vuelve a presionar, y en la llamada se escucha “Sure, I’ll finish testing by Wednesday.” desde Orra Microphone." width="100%"></td>
+</tr>
+<tr>
+<td width="50%" valign="middle">
+
+### Transcribir un archivo
+
+Elige Transcribir archivo… en el menú de Orra y arrastra a la ventana un archivo de audio o video, como una nota de voz, una llamada grabada o un video, en un formato que macOS reproduce, como M4A, MP3, WAV, MP4 o MOV. Orra escribe en tu Mac lo que se dice, con el modelo de transcripción, el idioma de dictado y el vocabulario de tus dictados, y muestra cada oración con su tiempo a medida que avanza. Copia el texto, o guárdalo como texto o como subtítulos para un reproductor de video. Mientras se transcribe un archivo, tus dictados van primero.
+
+Novedad de la versión 0.7.0.
+
+</td>
+<td width="50%"><img src="docs/images/readme/es/transcribe.gif" alt="Se arrastra un archivo llamado Reunión del equipo.m4a a la ventana Transcribir archivo. Sus oraciones aparecen una por una con su hora de inicio mientras se llena una barra de progreso, y la ventana indica que queda menos de un minuto. Luego se hace clic en Guardar como subtítulos…, y el archivo Reunión del equipo.srt guardado muestra sus dos primeros subtítulos numerados con sus tiempos." width="100%"></td>
 </tr>
 <tr>
 <td colspan="2" valign="middle">

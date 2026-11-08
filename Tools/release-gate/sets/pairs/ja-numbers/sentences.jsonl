@@ -1,0 +1,40 @@
+{"id": "num01", "language": "ja", "say": "二千二十六年十月十四日に新しいバージョンをリリースします。", "reference": "2026年10月14日に新しいバージョンをリリースします。", "expect_terms": [["2026年", "二千二十六年"], ["10月14日", "十月十四日"]], "forbid_terms": []}
+{"id": "num02", "language": "ja", "say": "彼は千九百九十八年生まれです。", "reference": "彼は1998年生まれです。", "expect_terms": [["1998年", "千九百九十八年"]], "forbid_terms": []}
+{"id": "num03", "language": "ja", "say": "三万円じゃなくて、三万五千円です。", "reference": "3万円じゃなくて、3万5000円です。", "expect_terms": [["3万円", "三万円", "30,000円", "30000円"], ["3万5000円", "3万5千円", "三万五千円", "35,000円", "35000円"], "じゃなくて"], "forbid_terms": []}
+{"id": "num04", "language": "ja", "say": "予算は三百万円ではなく、三百五十万円です。", "reference": "予算は300万円ではなく、350万円です。", "expect_terms": [["300万円", "三百万円"], ["350万円", "三百五十万円"], "ではなく"], "forbid_terms": []}
+{"id": "num05", "language": "ja", "say": "このパソコンは十二万八千円でした。", "reference": "このパソコンは12万8000円でした。", "expect_terms": [["12万8000円", "12万8千円", "十二万八千円", "128,000円", "128000円"]], "forbid_terms": []}
+{"id": "num06", "language": "ja", "say": "家賃は月八万五千円です。", "reference": "家賃は月8万5000円です。", "expect_terms": [["8万5000円", "8万5千円", "八万五千円", "85,000円", "85000円"]], "forbid_terms": []}
+{"id": "num07", "language": "ja", "say": "彼に二千円貸したけど、まだ返してもらっていません。", "reference": "彼に2000円貸したけど、まだ返してもらっていません。", "expect_terms": [["2000円", "2,000円", "二千円"], "いません"], "forbid_terms": []}
+{"id": "num08", "language": "ja", "say": "コンバージョン率が十二パーセント上がりました。", "reference": "コンバージョン率が12%上がりました。", "expect_terms": [["12%", "12パーセント", "十二パーセント"]], "forbid_terms": []}
+{"id": "num09", "language": "ja", "say": "バッテリーが残り五パーセントしかありません。", "reference": "バッテリーが残り5%しかありません。", "expect_terms": [["5%", "5パーセント", "五パーセント"], "ありません"], "forbid_terms": [], "accepted": [["バッテリー", "バッテリ"]]}
+{"id": "num10", "language": "ja", "say": "正解率は九十八点五パーセントです。", "reference": "正解率は98.5%です。", "expect_terms": [["98.5%", "98.5パーセント", "九十八点五パーセント"]], "forbid_terms": []}
+{"id": "num11", "language": "ja", "say": "三十パーセントじゃなくて、三十五パーセントです。", "reference": "30%じゃなくて、35%です。", "expect_terms": [["30%", "30パーセント", "三十パーセント"], ["35%", "35パーセント", "三十五パーセント"], "じゃなくて"], "forbid_terms": []}
+{"id": "num12", "language": "ja", "say": "会議は午後三時に変更になりました。", "reference": "会議は午後3時に変更になりました。", "expect_terms": [["3時", "三時"]], "forbid_terms": []}
+{"id": "num13", "language": "ja", "say": "明日の朝八時半に出発します。", "reference": "明日の朝8時半に出発します。", "expect_terms": [["8時半", "八時半"]], "forbid_terms": []}
+{"id": "num14", "language": "ja", "say": "三時二十分に入口で会いましょう。", "reference": "3時20分に入口で会いましょう。", "expect_terms": [["3時20分", "三時二十分"]], "forbid_terms": []}
+{"id": "num15", "language": "ja", "say": "夜十時以降は電話しないでください。", "reference": "夜10時以降は電話しないでください。", "expect_terms": [["10時", "十時"], "しないで"], "forbid_terms": []}
+{"id": "num16", "language": "ja", "say": "飛行機は午前十一時四十五分に出発します。", "reference": "飛行機は午前11時45分に出発します。", "expect_terms": [["11時45分", "十一時四十五分"]], "forbid_terms": []}
+{"id": "num17", "language": "ja", "say": "私の電話番号は、ゼロハチゼロ、ニーヨンロクハチ、イチサンゴーナナです。", "reference": "私の電話番号は080-2468-1357です。", "expect_terms": [["080-2468-1357", "08024681357", "080 2468 1357"]], "forbid_terms": []}
+{"id": "num18", "language": "ja", "say": "認証コードは、ヨンナナニーキューイチロクです。", "reference": "認証コードは472916です。", "expect_terms": [["472916", "四七二九一六"]], "forbid_terms": []}
+{"id": "num19", "language": "ja", "say": "はちまるろく号室に泊まっています。", "reference": "806号室に泊まっています。", "expect_terms": [["806号室", "八〇六号室"]], "forbid_terms": []}
+{"id": "num20", "language": "ja", "say": "注文番号は、ニーゼロニーロク、イチゼロイチヨン、ゼロゼロナナです。", "reference": "注文番号は20261014007です。", "expect_terms": ["20261014007"], "forbid_terms": []}
+{"id": "num21", "language": "ja", "say": "彼は一位になりました。", "reference": "彼は1位になりました。", "expect_terms": [["1位", "一位"]], "forbid_terms": []}
+{"id": "num22", "language": "ja", "say": "これで三回目のリマインドです。", "reference": "これで3回目のリマインドです。", "expect_terms": [["3回目", "三回目"]], "forbid_terms": []}
+{"id": "num23", "language": "ja", "say": "第一四半期の売上は、目標に届きませんでした。", "reference": "第1四半期の売上は、目標に届きませんでした。", "expect_terms": [["第1四半期", "第一四半期"], "ませんでした"], "forbid_terms": []}
+{"id": "num24", "language": "ja", "say": "行きたくないわけじゃなくて、時間がないんです。", "reference": "行きたくないわけじゃなくて、時間がないんです。", "expect_terms": ["じゃなくて", "時間がない"], "forbid_terms": []}
+{"id": "num25", "language": "ja", "say": "そのファイルは彼に送らないでください。", "reference": "そのファイルは彼に送らないでください。", "expect_terms": ["送らないで"], "forbid_terms": []}
+{"id": "num26", "language": "ja", "say": "金曜日の午後にはリリースしないでください。", "reference": "金曜日の午後にはリリースしないでください。", "expect_terms": ["しないで"], "forbid_terms": []}
+{"id": "num27", "language": "ja", "say": "午後四時の会議を忘れないでください。", "reference": "午後4時の会議を忘れないでください。", "expect_terms": [["4時", "四時"], "忘れないで"], "forbid_terms": []}
+{"id": "num28", "language": "ja", "say": "五百円以上は使わないでください。", "reference": "500円以上は使わないでください。", "expect_terms": [["500円", "五百円"], "使わないで"], "forbid_terms": []}
+{"id": "num29", "language": "ja", "say": "ここには三十歳以上の人はいません。", "reference": "ここには30歳以上の人はいません。", "expect_terms": [["30歳", "三十歳"], "いません"], "forbid_terms": []}
+{"id": "num30", "language": "ja", "say": "彼は十キロ走って、一度も休みませんでした。", "reference": "彼は10キロ走って、一度も休みませんでした。", "expect_terms": [["10キロ", "十キロ", "10km"], "休みませんでした"], "forbid_terms": []}
+{"id": "num31", "language": "ja", "say": "このファイルは三点五ギガあります。", "reference": "このファイルは3.5GBあります。", "expect_terms": [["3.5GB", "3.5ギガ", "三点五ギガ"]], "forbid_terms": []}
+{"id": "num32", "language": "ja", "say": "マックオーエス十五点一にアップデートしてください。", "reference": "macOS 15.1にアップデートしてください。", "expect_terms": ["macOS", ["15.1", "十五点一"]], "forbid_terms": []}
+{"id": "num33", "language": "ja", "say": "新しいエムファイブチップは、二十パーセント速くなりました。", "reference": "新しいM5チップは、20%速くなりました。", "expect_terms": ["M5", ["20%", "20パーセント", "二十パーセント"]], "forbid_terms": []}
+{"id": "num34", "language": "ja", "say": "このアイフォーンは十二万四千八百円です。", "reference": "このiPhoneは12万4800円です。", "expect_terms": ["iPhone", ["12万4800円", "十二万四千八百円", "124,800円", "124800円"]], "forbid_terms": []}
+{"id": "num35", "language": "ja", "say": "このピーアールは、三百行以上変更しています。", "reference": "このPRは、300行以上変更しています。", "expect_terms": ["PR", ["300行", "三百行"]], "forbid_terms": []}
+{"id": "num36", "language": "ja", "say": "二つ目のバグは、まだ直していません。", "reference": "2つ目のバグは、まだ直していません。", "expect_terms": [["2つ目", "二つ目"], "いません"], "forbid_terms": []}
+{"id": "num37", "language": "ja", "say": "サーバーのレイテンシは、二百ミリ秒じゃなくて二十ミリ秒です。", "reference": "サーバーのレイテンシは、200ミリ秒じゃなくて20ミリ秒です。", "expect_terms": [["200ミリ秒", "200ms", "二百ミリ秒"], ["20ミリ秒", "20ms", "二十ミリ秒"], "じゃなくて"], "forbid_terms": [], "accepted": [["サーバー", "サーバ"], ["レイテンシ", "レイテンシー"]]}
+{"id": "num38", "language": "ja", "say": "夜十一時以降は、サーバーにデプロイしないでください。", "reference": "夜11時以降は、サーバーにデプロイしないでください。", "expect_terms": [["11時", "十一時"], "しないで"], "forbid_terms": [], "accepted": [["サーバー", "サーバ"]]}
+{"id": "num39", "language": "ja", "say": "タイムアウトを三十秒から六十秒に変えて、六百秒にはしないでください。", "reference": "タイムアウトを30秒から60秒に変えて、600秒にはしないでください。", "expect_terms": [["30秒", "三十秒"], ["60秒", "六十秒"], ["600秒", "六百秒"], "しないで"], "forbid_terms": []}
+{"id": "num40", "language": "ja", "say": "今回のスプリントで直したバグは、十五件じゃなくて二十五件です。", "reference": "今回のスプリントで直したバグは、15件じゃなくて25件です。", "expect_terms": [["15件", "十五件"], ["25件", "二十五件"], "じゃなくて"], "forbid_terms": []}

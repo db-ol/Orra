@@ -18,6 +18,30 @@ struct SupportTests {
         #expect(TranscriptScoring.errorRate(references: ["東京へ行きます"], hypotheses: ["東京に行きます"], dropFillers: false) == 100.0 / 7)
     }
 
+    /// Tools/speech-eval/token-cases.jsonl, which test_score.py checks against score.py: the
+    /// same tokens for each text and the same errors for each reference and hypothesis, or
+    /// the tokens a case lists under transcript_scoring where the two differ on purpose.
+    @Test func scoringAgreesWithTheSpeechEvaluationScorer() throws {
+        let file = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Tools/speech-eval/token-cases.jsonl")
+        let cases = try RewriteEvalFiles.objects(file)
+        #expect(cases.count >= 30)
+        for item in cases {
+            if let text = item["text"] as? String {
+                let expected = try #require((item["transcript_scoring"] ?? item["tokens"]) as? [String])
+                #expect(TranscriptScoring.tokens(text, dropFillers: false) == expected, "\(text)")
+            } else {
+                let reference = try #require(item["reference"] as? String)
+                let hypothesis = try #require(item["hypothesis"] as? String)
+                let counts = TranscriptScoring.counts(references: [reference], hypotheses: [hypothesis], dropFillers: false)
+                #expect(counts.errors == item["errors"] as? Int, "\(reference)")
+                #expect(counts.tokens == item["reference_tokens"] as? Int, "\(reference)")
+            }
+        }
+    }
+
     @Test func memoryFootprintIsReadable() {
         #expect(MemoryFootprint.current() > 0)
     }

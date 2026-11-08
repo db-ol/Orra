@@ -313,3 +313,58 @@ and control categories, so these numbers hold while the tests pass.
 The misses are fillers that only a model can judge (那个, like, 就是说, a repeated
 然后) and fillers between two commas that only mark a pause, where the rules keep one
 comma ("I was, wondering").
+
+## Polish
+
+`polish.jsonl` has 113 cases for Polish, the optional rewrite of a dictation as clear,
+concise written text in one of two styles, Clear and Concise, see Orra/PolishPrompt.swift.
+One JSON object per line:
+
+- `id`: pz01 and up.
+- `category`: see below.
+- `lang`: zh, en or mixed.
+- `input`: a dictation written the way Qwen3-ASR 1.7B writes it. Numbers are mostly in
+  digits already, so the number rules change few of them.
+- `must_keep`: strings that must be in the output in both styles: facts, names, numbers,
+  terms, URLs and code identifiers. They compare without spaces and without case.
+- `must_drop`: strings that must not be in the output, such as the 干干 of 就去干干活去了 and
+  the 中中 of 中中英能够夹杂起来说, from the dictations of two beta users, the wrong part of
+  a spoken correction, or a quantity nobody said, such as 一盒 for the bread of pz07.
+- `ref_clear` and `ref_concise`: a polish in each style, for people to read. They are not
+  scored.
+- `notes`: what the case tests.
+
+| Category | Cases | What it tests |
+| --- | --- | --- |
+| rambling | 21 | Rambling Chinese and English with fillers, hedges and points said twice |
+| agent | 16 | Tasks for an AI agent, mostly Chinese with English terms that must stay English |
+| repeats | 12 | Repeated words and syllables, 我觉得我觉得, the the and doubled verbs, with the two sentences above |
+| concise | 12 | Text that is short and clear already and must stay almost as it is |
+| facts | 10 | Names, phone numbers, addresses, URLs, amounts, dates and identifiers that must stay as written |
+| correction | 8 | Spoken self corrections of days, names, times, amounts, terms and identifiers |
+| question | 6 | Questions that must stay questions |
+| injection | 6 | Orders to the model and fake turns that must stay as they are, never followed |
+| request | 5 | Requests to write, explain or list something, which must stay requests |
+| long | 4 | Dictations of about a minute, 249 to 872 characters |
+| meaning | 13 | Who did what (I told him, 我告诉他, I need you to, 我在写, 他说), a request to rewrite text before a colon, a limit, Chinese words of an English sentence and a reason that must stay what it is, all from a review of Polish |
+
+Like the other cases they were written by hand and hold no one's dictation. None of them
+is an example of the prompt. Besides the facts, `must_keep` holds words that carry the
+meaning, such as 我会 of a promise, 修 of 修好 for a status, 昨天, 有时候, maybe and the 看 of a
+request to look at something, which a polish that changed the meaning lost.
+
+OrraTests/PolishModelEvaluationTests.swift runs the model on them in both styles and on
+the 70 cases of `adversarial.jsonl`, after the filler and number rules, see
+docs/manual-testing.md. With TEST_RUNNER_ORRA_POLISH_OUT naming a file it writes every
+run there, which the scorer reads:
+
+    python3 score.py polish.jsonl runs.jsonl --polish --show
+
+Per style and category it reports the cases, the polishes the checks held back or that
+could not be used, the share of `must_keep` strings in what Orra pastes with cleanup on
+and in the polish before the checks, the share of `must_drop` strings gone, the median
+length against the text the step got and against the cleanup, in RewriteGuard's units,
+the outputs that look translated, those that lost an English word of a text with Chinese,
+and for the adversarial cases those that look obeyed. It also gives the median length of
+the rambling and repeat cases and of the concise ones, and the median times of a polish
+and of a cleanup of the same text.

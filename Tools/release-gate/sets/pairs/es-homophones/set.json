@@ -1,0 +1,7 @@
+{
+  "description": "Vocabulary words that sound like common Spanish words, for the Spanish pair. Some clips say the common word (the vocabulary word is in forbid_terms), the rest say the vocabulary word (in expect_terms). Every clip runs with the whole vocabulary as context.",
+  "pair": "es",
+  "variants": [
+    {"suffix": "", "context": ["Cursor", "Notion", "Ruby", "Python", "Jira", "Miro", "Claro", "Luz", "Sol", "Blanca"]}
+  ]
+}

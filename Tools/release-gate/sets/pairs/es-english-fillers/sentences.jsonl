@@ -1,0 +1,6 @@
+{"id": "es_uh_1", "language": "es", "say": [["Samantha", "Uh,"], ["Paulina", "la reunión es mañana."]], "reference": "La reunión es mañana.", "expect_terms": [], "forbid_terms": []}
+{"id": "es_um_2", "language": "es", "say": [["Paulina", "El reporte,"], ["Samantha", "um,"], ["Paulina", "te lo mando el viernes."]], "reference": "El reporte, te lo mando el viernes.", "expect_terms": [], "forbid_terms": []}
+{"id": "es_um_3", "language": "es", "say": [["Samantha", "Um,"], ["Paulina", "nos vemos en la tarde."]], "reference": "Nos vemos en la tarde.", "expect_terms": [], "forbid_terms": []}
+{"id": "es_uh_4", "language": "es", "say": [["Paulina", "¿Puedes revisar mi"], ["Samantha", "uh,"], ["Paulina", "pull request antes de la comida?"]], "reference": "¿Puedes revisar mi pull request antes de la comida?", "expect_terms": [], "forbid_terms": []}
+{"id": "es_uh_5", "language": "es", "say": [["Samantha", "Uh,"], ["Paulina", "no sé, déjame checarlo."]], "reference": "No sé, déjame checarlo.", "expect_terms": [], "forbid_terms": []}
+{"id": "en_um_6", "language": "en", "say": "Um, okay.", "reference": "Okay.", "expect_terms": [], "forbid_terms": []}

@@ -437,9 +437,9 @@ private struct HandsFreeToggle: View {
     }
 }
 
-/// The row under the switch of cleanup or of translation, while that switch is on and the
-/// model is not ready: where the model stands, with its buttons. Its text starts where the
-/// names of the rows do, behind the hidden `symbol` of the switch.
+/// The row under the switch of cleanup, Polish or translation, while that switch is on and
+/// the model is not ready: where the model stands, with its buttons. Its text starts where
+/// the names of the rows do, behind the hidden `symbol` of the switch.
 struct ModelStatusRow: View {
     let cleanup: TextCleanup
     let use: CleanupLabels.Use
@@ -457,8 +457,9 @@ struct ModelStatusRow: View {
     }
 }
 
-/// The model's download and loading under the switch of cleanup or of translation, while
-/// that switch is on: progress, Download or Try Again, or nothing once the model is ready.
+/// The model's download and loading under the switch of cleanup, Polish or translation,
+/// while that switch is on: progress, Download or Try Again, or nothing once the model is
+/// ready.
 private struct LocalModelStatus: View {
     let cleanup: TextCleanup
     let use: CleanupLabels.Use
@@ -525,10 +526,12 @@ private struct LocalModelStatus: View {
 
 /// The text about the cleanup model's download, kept apart so tests can read it.
 nonisolated enum CleanupLabels {
-    /// Which page the text is for. Clean Up Text calls the model the cleanup model, and
-    /// Translation calls the same model the local model.
+    /// Which switch the text is for. Clean Up Text calls the model the cleanup model, and
+    /// so does Polish, which sits under it and uses its model. Translation calls the same
+    /// model the local model.
     nonisolated enum Use: Equatable, Sendable {
         case cleanup
+        case polish
         case translation
     }
 
@@ -536,21 +539,21 @@ nonisolated enum CleanupLabels {
         let percent = ModelInstaller.State.percent(bytes, of: total)
         let size = ModelInstaller.State.size(total)
         return switch use {
-        case .cleanup: String(localized: "Downloading the cleanup model: \(percent)% of \(size)")
+        case .cleanup, .polish: String(localized: "Downloading the cleanup model: \(percent)% of \(size)")
         case .translation: String(localized: "Downloading the local model: \(percent)% of \(size)")
         }
     }
 
     static func loading(_ use: Use) -> String {
         switch use {
-        case .cleanup: String(localized: "Loading the cleanup model…")
+        case .cleanup, .polish: String(localized: "Loading the cleanup model…")
         case .translation: String(localized: "Loading the local model…")
         }
     }
 
     static func failedToLoad(_ use: Use) -> String {
         switch use {
-        case .cleanup: String(localized: "The cleanup model could not be loaded")
+        case .cleanup, .polish: String(localized: "The cleanup model could not be loaded")
         case .translation: String(localized: "The local model could not be loaded")
         }
     }
@@ -567,12 +570,14 @@ nonisolated enum CleanupLabels {
         }
     }
 
-    /// What stands in the way while cleanup or translation is on and the model is not in
-    /// place.
+    /// What stands in the way while cleanup, Polish or translation is on and the model is
+    /// not in place.
     static func lines(_ state: ModelInstaller.State, total: Int64, use: Use = .cleanup) -> [String] {
         switch (state, use) {
         case (.missing, .cleanup):
             [String(localized: "The cleanup model is not on this Mac yet. Until it is, Orra pastes the text without cleanup.")]
+        case (.missing, .polish):
+            [String(localized: "The cleanup model is not on this Mac yet. Until it is, Orra pastes the text without polishing.")]
         case (.missing, .translation):
             [String(localized: "The local model is not on this Mac yet. Until it is, Orra pastes the text without translation.")]
         default:
@@ -580,8 +585,8 @@ nonisolated enum CleanupLabels {
         }
     }
 
-    /// One line on the page under Clean Up Text or Translation while it is on and the
-    /// model is not ready, or nil once it is. The status row under the switch shows the details.
+    /// One line on the page under Clean Up Text, Polish or Translation while it is on and
+    /// the model is not ready, or nil once it is. The status row under the switch shows the details.
     static func status(_ state: ModelInstaller.State, engine: TextCleanup.EngineState, total: Int64, use: Use) -> String? {
         switch state {
         case .installed:
