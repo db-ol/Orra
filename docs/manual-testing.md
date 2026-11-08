@@ -489,21 +489,28 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     widened to its unchanged characters, and the cap of 8 Chinese characters. Two words
     without an English key, such as 开会 and 十点 or A and B, are compared by their sound
     only, and a Chinese numeral is no digit of a name. NumbersOnlyTests checks that a fix
-    of numbers only, digits in any width or Chinese numerals, such as Qwen2 to Qwen3,
-    十四 to 四十 or 第3版 to 第三版, is never learned, and one numeral fixed to another,
-    such as 四点 to 十点, never offered, also in a name such as 十郎 to 四郎, while 完克 to
-    万科, quen 3 to Qwen3, Quen2 to Qwen3 and 通一千问 to 通义千问 still are. A version with
-    a decimal point counts as a number (Qwen2.5 to Qwen3, and Qwen25 to Qwen2.5, where
-    only the point changes), and a changed number with a space, a hyphen or a case
-    changed beside it (Qwen 2 to Qwen3, GPT4 to GPT-5, qwen2 to Qwen3) is not learned
-    either, while the same number in another writing (Qwen 3 to Qwen3, COVID 19 to
-    COVID-19) still is. Dates, times and amounts are not learned, and
-    names with numerals keep the known cost. In a replaced word a change of numbers only,
-    from the pasted word or from what the model wrote, teaches nothing, and putting back
-    the number the model wrote still forgets the pair, also in another writing. For the
-    pairs an earlier version kept, it tells another number (十四 to 四十) from the same
-    number in another writing (Windows十一 to Windows11), with a formal numeral counted as
-    written.
+    that changes only numbers, digits in any width or Chinese numerals, and gives them
+    other values, such as Qwen2 to Qwen3 or 十四 to 四十, is never learned, and one numeral
+    fixed to another, such as 四点 to 十点, never offered, also in a name such as 十郎 to
+    四郎, while 完克 to 万科, quen 3 to Qwen3, Quen2 to Qwen3 and 通一千问 to 通义千问 still
+    are. A version with a decimal point counts as a number (Qwen2.5 to Qwen3, and Qwen25
+    to Qwen2.5, where only the point changes), and a changed number with a space, a hyphen
+    or a case changed beside it (Qwen 2 to Qwen3, GPT4 to GPT-5, qwen2 to Qwen3) is not
+    learned either. The same number in another writing is judged by its sound as in
+    0.7.0 and learned, with a space or a mark (Qwen 3 to Qwen3, COVID 19 to COVID-19) or
+    in other numerals or another width (Windows十一 to Windows11, Ubuntu二十四 to Ubuntu24,
+    Qwen３ to Qwen3), while the same fixes to another number (Windows12, Ubuntu22, Qwen2)
+    are not. A formal numeral counts as written, so 三百 to 叁佰 is not learned, and a
+    number alone, as in 第3版 to 第三版, is no word. Dates, times and amounts are not
+    learned, and names with numerals keep the known cost. In a replaced word a fix that
+    only gives numbers other values, from the pasted word or from what the model wrote,
+    teaches nothing, and putting back the number the model wrote still forgets the pair,
+    also in another writing or in other numerals (Windows11 where the model wrote
+    Windows十一 and an old pair pasted Windows12). A fix that only writes the number of a
+    replaced word another way is learned with the model's spelling (Windows11 to
+    Windows 11 learns Windows十一 to Windows 11). Learning and the pairs an earlier version
+    kept tell another number (十四 to 四十) from the same number in another writing
+    (Windows十一 to Windows11) by the same rule, with a formal numeral counted as written.
     CorrectionWatcherTests drives the watcher with a scripted field, so no app is read: a
     reported fix, no watch at all after a paste into Orra's own process, and no reading
     after leaving the app, under secure input, in a field without the pasted text, or in a
@@ -512,7 +519,8 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     first fix adds the word and tells the user, a quiet new mishearing, Undo, that a
     learned word removed from the vocabulary is learned again, that after a cleanup only
     a fix of a word the speech model wrote is learned, that a change of what was said or
-    of only a number next to a fixed name is not learned,
+    of only a number next to a fixed name is not learned, that Windows十一 to Windows11 is
+    learned and replaces next to Qwen2 to Qwen3, which is not,
     and that Paste Original Text ends the watch of the cleaned paste. LearnedNoticeTests checks the notice and its panel.
   - WordReplacementTests covers putting the user's words back into a transcript: a kept
     pair replaces its heard spelling only while its word is in the vocabulary, Latin
@@ -2282,6 +2290,9 @@ corrections under Recognition in Settings, Dictation first:
   fixing one Chinese character as grammar such as 的 to 得, changing a number such as 两点
   to 三点, 四点 to 十点 or Qwen2 to Qwen3, deleting words, or rewriting the sentence adds
   nothing. Fixing a word and then typing a period learns the word without the period.
+- [ ] Fix a pasted Windows十一系统 to Windows11系统, where the number rules leave Windows十一
+  before Chinese: the notice says Windows11 was added, as in 0.7.0. Fix a pasted Windows十一
+  to Windows12 instead: nothing is added.
 - [ ] Dictate 我用通义千问写代码 so it comes out as 通一千问 and fix the one character: no
   word is added, and a notice asks "Add a word to your vocabulary?" with 通义千问 in its
   field. The app you are in keeps the focus and typing there still works while the notice
