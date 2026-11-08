@@ -43,6 +43,8 @@ nonisolated enum FillerRules {
     private static let questionMarks: Set<Character> = ["？", "?"]
     private static let clauseEnds: Set<Character> = commas.union(sentenceEnds).union(["；", ";", "：", ":"])
     private static let englishFillers: Set<String> = ["um", "umm", "uh", "uhh", "uhm", "erm"]
+    /// The Chinese hums, each a word of its own in `isOnlyFillers(_:)`.
+    private static let hums: Set<String> = ["嗯", "呃", "额"]
     /// Words after uh or um that make it a reply or an interjection.
     private static let replyWords: Set<String> = ["huh", "oh", "hm", "hmm"]
     /// Replies after 嗯 that keep it, as whole words before punctuation or the end.
@@ -88,6 +90,40 @@ nonisolated enum FillerRules {
         let result = String(output).trimmingCharacters(in: .whitespacesAndNewlines)
         guard result.contains(where: { $0.isLetter || $0.isNumber }) else { return text }
         return result
+    }
+
+    /// Whether the text is nothing but hums and fillers with the punctuation after them,
+    /// such as “Um.”, “呃，额。” or “嗯。”, which `removingFillers(from:)` leaves as they are
+    /// for a dictation of nothing else. Transcribe File leaves such a segment of a file out,
+    /// where it stands between two pauses. A hum before a question mark asks something, so
+    /// “嗯？” is not one, nor is a quoted filler or a reply such as uh-huh or 嗯哼.
+    static func isOnlyFillers(_ text: String) -> Bool {
+        var words: [String] = []
+        var word = ""
+        for character in text {
+            if questionMarks.contains(character) || quotes.contains(character) {
+                return false
+            }
+            if character.isLetter, !character.containsHan {
+                word.append(character)
+                continue
+            }
+            if !word.isEmpty {
+                words.append(word)
+                word = ""
+            }
+            if character.containsHan {
+                words.append(String(character))
+            } else if !character.isWhitespace, !isPunctuation(character) {
+                return false
+            }
+        }
+        if !word.isEmpty {
+            words.append(word)
+        }
+        return !words.isEmpty && words.allSatisfy { word in
+            hums.contains(word) || (englishFillers.contains(word.lowercased()) && word != word.uppercased())
+        }
     }
 
     private static func filler(at index: Int, in characters: [Character], after output: [Character], englishOnly: Bool) -> Filler? {

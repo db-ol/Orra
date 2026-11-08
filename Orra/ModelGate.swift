@@ -349,6 +349,8 @@ extension CleanupEngine {
         let unload = unload
         let complete = complete
         let translate = translate
+        let polish = polish
+        let preparePolish = preparePolish
         let prepareTranslation = prepareTranslation
         let keepTranslationPrefixes = keepTranslationPrefixes
         let startJob = startJob
@@ -361,6 +363,8 @@ extension CleanupEngine {
             unload: { await gate.runEvenIfCancelled(.shared) { await unload() } },
             complete: { text in try await gate.run(.shared) { try await complete(text) } },
             translate: { text, route in try await gate.run(.shared) { try await translate(text, route) } },
+            polish: { text, style in try await gate.run(.shared) { try await polish(text, style) } },
+            preparePolish: { style in try await gate.run(.shared) { try await preparePolish(style) } },
             prepareTranslation: { route in try await gate.run(.shared) { try await prepareTranslation(route) } },
             keepTranslationPrefixes: { routes in await gate.runEvenIfCancelled(.shared) { await keepTranslationPrefixes(routes) } },
             startJob: { prompt, maximumTokens in try await gate.run(.shared) { try await startJob(prompt, maximumTokens) } },

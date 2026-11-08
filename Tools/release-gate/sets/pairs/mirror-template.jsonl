@@ -1,0 +1,60 @@
+{"id": "m01", "kind": "terms", "en": "Could you review my PR before the afternoon meeting?"}
+{"id": "m02", "kind": "terms", "en": "The deadline is Friday, so we have to deploy today."}
+{"id": "m03", "kind": "terms", "en": "I'll share the details on Slack."}
+{"id": "m04", "kind": "terms", "en": "Once the deploy is done, please close the Jira ticket."}
+{"id": "m05", "kind": "terms", "en": "This sprint, let's start by cleaning up the API docs."}
+{"id": "m06", "kind": "terms", "en": "Please push it to GitHub by the end of the day."}
+{"id": "m07", "kind": "terms", "en": "I attached the Excel file to the email."}
+{"id": "m08", "kind": "terms", "en": "Let's put the dashboard numbers in the weekly report."}
+{"id": "m09", "kind": "terms", "en": "The customer feedback is in the shared Google Drive folder."}
+{"id": "m10", "kind": "terms", "en": "CI failed again, can you check the logs?"}
+{"id": "m11", "kind": "terms", "en": "After the review, please merge this branch into main."}
+{"id": "m12", "kind": "terms", "en": "The new UI design is up in Figma."}
+{"id": "m13", "kind": "terms", "en": "We found a bug on the login page, so the release is on hold."}
+{"id": "m14", "kind": "terms", "en": "Please add the agenda for tomorrow's kickoff to the shared doc."}
+{"id": "m15", "kind": "terms", "en": "The server went down last night, so we rolled back."}
+{"id": "m16", "kind": "terms", "en": "Let's brainstorm after lunch."}
+{"id": "m17", "kind": "terms", "en": "Please update the slides before the demo."}
+{"id": "m18", "kind": "terms", "en": "Our KPI this quarter is the number of new users."}
+{"id": "m19", "kind": "terms", "en": "Can you add test cases for this feature?"}
+{"id": "m20", "kind": "terms", "en": "The onboarding docs are out of date, let's update them this week."}
+{"id": "m21", "kind": "names", "en": "Please forward the invoice to Jennifer."}
+{"id": "m22", "kind": "names", "en": "Michael from the London office is joining the call too."}
+{"id": "m23", "kind": "names", "en": "Ask Daniel whether the contract has been signed."}
+{"id": "m24", "kind": "names", "en": "Emily is on vacation until next week."}
+{"id": "m25", "kind": "names", "en": "This Italian restaurant was Chris's recommendation."}
+{"id": "m26", "kind": "names", "en": "We signed the contract with Salesforce."}
+{"id": "m27", "kind": "names", "en": "I booked the place to stay through Airbnb."}
+{"id": "m28", "kind": "names", "en": "Can you send me the link on LinkedIn?"}
+{"id": "m29", "kind": "names", "en": "The marketing team uses HubSpot for the newsletter."}
+{"id": "m30", "kind": "names", "en": "Sarah and Kevin will present the roadmap."}
+{"id": "m31", "kind": "numbers", "en": "Tomorrow's meeting moved to 3:30 in the afternoon."}
+{"id": "m32", "kind": "numbers", "en": "The server costs 1,200 dollars a month."}
+{"id": "m33", "kind": "numbers", "en": "Conversions went up 15% after the release."}
+{"id": "m34", "kind": "numbers", "en": "This MacBook has 16 GB of memory."}
+{"id": "m35", "kind": "numbers", "en": "Please update the app to version 2.4.1."}
+{"id": "m36", "kind": "numbers", "en": "The API handles 2,000 requests per second."}
+{"id": "m37", "kind": "numbers", "en": "The demo is on November 14."}
+{"id": "m38", "kind": "numbers", "en": "My phone number is a local mobile number, or message me on an app."}
+{"id": "m39", "kind": "numbers", "en": "Latency dropped from 200 ms to 50 ms."}
+{"id": "m40", "kind": "numbers", "en": "The campaign budget is 50,000 dollars, not 5,000."}
+{"id": "m41", "kind": "replies", "en": "OK, sounds good."}
+{"id": "m42", "kind": "replies", "en": "Thank you, got it."}
+{"id": "m43", "kind": "replies", "en": "LGTM, go ahead and merge."}
+{"id": "m44", "kind": "replies", "en": "FYI, the office is closed on Friday."}
+{"id": "m45", "kind": "replies", "en": "Nice, good job!"}
+{"id": "m46", "kind": "replies", "en": "Sorry, could you send the link again?"}
+{"id": "m47", "kind": "replies", "en": "Sure, I'll check it ASAP."}
+{"id": "m48", "kind": "replies", "en": "Done, I pushed the fix."}
+{"id": "m49", "kind": "replies", "en": "Got it, I'll update the doc."}
+{"id": "m50", "kind": "replies", "en": "See you tomorrow, bye!"}
+{"id": "m51", "kind": "corrections", "en": "Let's have the meeting on Tuesday, no wait, Wednesday."}
+{"id": "m52", "kind": "corrections", "en": "Send it to Jennifer, sorry, I mean Emily."}
+{"id": "m53", "kind": "corrections", "en": "The deadline is Friday, actually, let's make it Monday."}
+{"id": "m54", "kind": "corrections", "en": "Book the meeting room for three, no, four people."}
+{"id": "m55", "kind": "corrections", "en": "Push it to the develop branch, I mean staging."}
+{"id": "m56", "kind": "corrections", "en": "Use the Excel file, no, the Google Sheets one."}
+{"id": "m57", "kind": "corrections", "en": "The meeting is at two, sorry, two thirty."}
+{"id": "m58", "kind": "corrections", "en": "Post it on Slack, actually, just send it by email."}
+{"id": "m59", "kind": "corrections", "en": "We need it today, well, tomorrow morning is OK too."}
+{"id": "m60", "kind": "corrections", "en": "Merge the PR, wait, don't merge it yet."}

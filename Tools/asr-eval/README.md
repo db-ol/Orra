@@ -68,3 +68,9 @@ other clips it does not contain. The report gives the share of terms recognized,
 share of those other terms inserted, the error rate and the latency, then the error rate
 on `ascend_mixed` with unrelated terms as context, and whether silence, hum and noise stay
 silent with a vocabulary.
+
+With `TEST_RUNNER_ORRA_DICTATION_LANGUAGE` set to `Japanese` or `Spanish` the test runs with
+that dictation pair, as the pairs suite of the release gate does (docs/release-gate.md,
+Dictation pairs): contextasr_en and the clips without speech only, each through the path of
+a dictation with the pair, into `results/context-evaluation-ja.txt` or
+`results/context-evaluation-es.txt`.
