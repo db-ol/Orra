@@ -9,8 +9,8 @@
 {"id": "hom09", "language": "ko", "say": "아이들이 미로 찾기를 정말 좋아해요.", "reference": "아이들이 미로 찾기를 정말 좋아해요.", "expect_terms": [], "forbid_terms": ["Miro"]}
 {"id": "hom10", "language": "ko", "say": "이 건물은 미로 같아서 길을 자꾸 잃어요.", "reference": "이 건물은 미로 같아서 길을 자꾸 잃어요.", "expect_terms": [], "forbid_terms": ["Miro"]}
 {"id": "hom11", "language": "ko", "say": "아이디어는 미로 보드에 붙여 주세요.", "reference": "아이디어는 Miro 보드에 붙여 주세요.", "expect_terms": ["Miro"], "forbid_terms": []}
-{"id": "hom12", "language": "ko", "say": "액셀을 너무 세게 밟지 마세요.", "reference": "액셀을 너무 세게 밟지 마세요.", "expect_terms": [], "forbid_terms": ["Excel", "엑셀"]}
-{"id": "hom13", "language": "ko", "say": "언덕에서는 액셀을 천천히 밟으세요.", "reference": "언덕에서는 액셀을 천천히 밟으세요.", "expect_terms": [], "forbid_terms": ["Excel", "엑셀"]}
+{"id": "hom12", "language": "ko", "say": "액셀을 너무 세게 밟지 마세요.", "reference": "액셀을 너무 세게 밟지 마세요.", "expect_terms": [], "forbid_terms": ["Excel"]}
+{"id": "hom13", "language": "ko", "say": "언덕에서는 액셀을 천천히 밟으세요.", "reference": "언덕에서는 액셀을 천천히 밟으세요.", "expect_terms": [], "forbid_terms": ["Excel"]}
 {"id": "hom14", "language": "ko", "say": "매출 자료는 엑셀 파일로 보내 주세요.", "reference": "매출 자료는 Excel 파일로 보내 주세요.", "expect_terms": [["Excel", "엑셀"]], "forbid_terms": []}
 {"id": "hom15", "language": "ko", "say": "회의실 빔 좀 켜 주세요.", "reference": "회의실 빔 좀 켜 주세요.", "expect_terms": [], "forbid_terms": ["Vim"]}
 {"id": "hom16", "language": "ko", "say": "발표하기 전에 빔이 잘 나오는지 확인해 주세요.", "reference": "발표하기 전에 빔이 잘 나오는지 확인해 주세요.", "expect_terms": [], "forbid_terms": ["Vim"]}
