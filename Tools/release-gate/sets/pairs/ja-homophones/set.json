@@ -1,0 +1,7 @@
+{
+  "description": "Vocabulary words that sound like common Japanese words, for the Japanese pair. Some clips say the common word (the vocabulary word is in forbid_terms), the rest say the vocabulary word (in expect_terms). Every clip runs with the whole vocabulary as context.",
+  "pair": "ja",
+  "variants": [
+    {"suffix": "", "context": ["Cursor", "Rust", "Ruby", "LINE", "Slack", "Linear", "佐藤", "近藤", "工藤", "東海林"]}
+  ]
+}

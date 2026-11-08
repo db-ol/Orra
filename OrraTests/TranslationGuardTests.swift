@@ -234,6 +234,29 @@ struct TranslationGuardTests {
         #expect(TranslationGuard.newNumbers(source: "电话是１３８", output: "138 and 7") == ["7"])
     }
 
+    /// English numbers of several words, decimals with point, digits said one by one and
+    /// 一个半 are read as their values, so writing them in digits brings no new number. Found
+    /// when Polish held back right Concise polishes for them.
+    @Test func numbersOfSeveralWordsAreReadAsTheirValues() {
+        #expect(TranslationGuard.newNumbers(source: "Under two hundred eighty characters.", output: "Under 280 characters.") == [])
+        #expect(TranslationGuard.newNumbers(source: "It's version two point three, not three point two.", output: "It's version 2.3, not 3.2.") == [])
+        #expect(TranslationGuard.newNumbers(source: "Zero point five milligrams, never more than two milligrams in twenty four hours.", output: "0.5 mg, never more than 2 mg in 24 hours.") == [])
+        #expect(TranslationGuard.newNumbers(source: "From two thousand one hundred to two thousand four hundred a month.", output: "From 2,100 to 2,400 a month.") == [])
+        #expect(TranslationGuard.newNumbers(source: "Two hundred and fifty people, a hundred and twenty of them new.", output: "250 people, 120 of them new.") == [])
+        #expect(TranslationGuard.newNumbers(source: "The code is four seven two nine.", output: "The code is 4729.") == [])
+        #expect(TranslationGuard.newNumbers(source: "Take point five of it.", output: "Take 0.5 of it.") == [])
+        #expect(TranslationGuard.newNumbers(source: "大概开一个半小时。", output: "车程约1.5小时。") == [])
+        #expect(TranslationGuard.newNumbers(source: "还要两天半。", output: "还要2.5天。") == [])
+        // Other numbers are still new, and a word that cannot follow ends a number.
+        #expect(TranslationGuard.newNumbers(source: "Two hundred eighty.", output: "290.") == ["290"])
+        #expect(TranslationGuard.newNumbers(source: "Version two point three.", output: "Version 2.4.") == ["2.4"])
+        #expect(TranslationGuard.newNumbers(source: "Four seven two nine.", output: "4728.") == ["4728"])
+        #expect(TranslationGuard.newNumbers(source: "Nineteen eighty.", output: "99.") == ["99"])
+        #expect(TranslationGuard.newNumbers(source: "一半的人。", output: "1.5的人。") == ["1.5"])
+        #expect(TranslationGuard.englishNumber(in: ["nineteen", "eighty", "four"], from: 0)?.value == 19)
+        #expect(TranslationGuard.englishNumber(in: ["nineteen", "eighty", "four"], from: 1)?.value == 84)
+    }
+
     /// A year or a phone number said digit by digit, 二零零二 or 幺三八, is that string of
     /// digits, not its last digit. Found when captions of a talk dropped "in 2002".
     @Test func digitByDigitReadingsAreTheirDigits() {

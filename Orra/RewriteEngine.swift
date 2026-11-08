@@ -43,11 +43,11 @@ nonisolated extension ModelFolders {
     }
 }
 
-/// Owns the cleanup model, which also translates and runs Projects jobs. An actor, so
-/// loading and generating run off the main actor and one call runs at a time. Loaded while
-/// cleanup or translation is on and the user dictates, while captions translate, and while
-/// Projects holds it. Unloaded when none of them needs it or nobody dictated for a while,
-/// see TextCleanup.
+/// Owns the cleanup model, which also polishes, translates and runs Projects jobs. An
+/// actor, so loading and generating run off the main actor and one call runs at a time.
+/// Loaded while cleanup, Polish or translation is on and the user dictates, while captions
+/// translate, and while Projects holds it. Unloaded when none of them needs it or nobody
+/// dictated for a while, see TextCleanup.
 ///
 /// Written against mlx-swift-lm 3.31.4.
 actor RewriteEngine {
@@ -81,6 +81,11 @@ actor RewriteEngine {
     /// Which routes have a prefix cache, in the order they were used.
     private var prefixSlots = TranslationPrefixSlots()
 
+    /// The prefix cache of the polish prompt of one style, filled on the first polish in
+    /// that style or ahead, see `preparePolish`. Another style replaces it, so at most one
+    /// is in memory. Dropped with the model.
+    private var polishPrefix: (style: PolishStyle, prefix: Prefix?)?
+
     /// The Projects jobs that have not ended, by their id, see `startJob`. Dropped with the
     /// model.
     private var jobs: [Int: Job] = [:]
@@ -90,6 +95,11 @@ actor RewriteEngine {
     /// The bytes the cleanup prefix cache holds, 0 without one.
     var prefixCacheBytes: Int {
         Self.bytes(prefix)
+    }
+
+    /// The bytes the polish prefix cache of a style holds, 0 before it is filled.
+    func polishPrefixCacheBytes(_ style: PolishStyle) -> Int {
+        polishPrefix?.style == style ? Self.bytes(polishPrefix?.prefix) : 0
     }
 
     /// The bytes the prefix cache of a translation target of Chinese holds, 0 before it is
@@ -141,6 +151,7 @@ actor RewriteEngine {
         prefix = nil
         translationPrefixes = [:]
         prefixSlots = TranslationPrefixSlots()
+        polishPrefix = nil
         let droppedJobs = jobs.count
         jobs = [:]
         context = nil
@@ -169,6 +180,43 @@ actor RewriteEngine {
         guard let context else { throw RewriteError.notLoaded }
         let inputTokens = context.tokenizer.encode(text: text, addSpecialTokens: false).count
         return try generate(RewritePrompt.text(for: text), maximumTokens: RewritePrompt.maximumTokens(inputTokens: inputTokens), prefix: usingPrefixCache ? prefix : nil, lookingUp: true, task: "Cleanup")
+    }
+
+    /// Runs the polish prompt of a style on a transcript, see PolishPrompt. Greedy, and
+    /// stops early when the task is cancelled, as `cleanUp` does. Clear keeps most of the
+    /// transcript in its order, so it drafts tokens from it as a cleanup does, see
+    /// PromptLookup. Concise leaves most of it out, so drafts would mostly be wrong and cost
+    /// a pass each, and it decodes one token at a time. The first polish in a style fills
+    /// its prefix cache unless `preparePolish` filled it ahead, and a polish in another style
+    /// replaces it.
+    func polish(_ text: String, style: PolishStyle, usingPrefixCache: Bool = true) throws -> Completion {
+        try Task.checkCancellation()
+        guard let context else { throw RewriteError.notLoaded }
+        let inputTokens = context.tokenizer.encode(text: text, addSpecialTokens: false).count
+        let prefix = usingPrefixCache ? try polishPrefix(style) : nil
+        return try generate(PolishPrompt.text(for: text, style: style), maximumTokens: PolishPrompt.maximumTokens(inputTokens: inputTokens), prefix: prefix, lookingUp: style == .clear, prefill: PolishPrompt.prefill, task: "Polish in the \(style.rawValue) style")
+    }
+
+    /// Fills the prefix cache of a style's polish prompt, if it is not filled yet, so the
+    /// first polish does not wait for it.
+    func preparePolish(_ style: PolishStyle) throws {
+        _ = try polishPrefix(style)
+    }
+
+    private func polishPrefix(_ style: PolishStyle) throws -> Prefix? {
+        guard let context else { throw RewriteError.notLoaded }
+        if let polishPrefix, polishPrefix.style == style {
+            return polishPrefix.prefix
+        }
+        // Drops the other style's cache before filling this one.
+        if polishPrefix != nil {
+            polishPrefix = nil
+            Memory.clearCache()
+        }
+        let tokens = PromptPrefix.polishPrompt(style) { context.tokenizer.encode(text: $0, addSpecialTokens: false) }
+        let filled = try fillPrefixCache(tokens, for: "polish in the \(style.rawValue) style")
+        polishPrefix = (style, filled)
+        return filled
     }
 
     /// Runs the translation prompt for a target on a transcript, see TranslationPrompt.
@@ -433,9 +481,9 @@ actor RewriteEngine {
         return filled
     }
 
-    /// Runs the model on a prompt, which ends with RewritePrompt.prefill, reading only what
-    /// follows `prefix` when the prompt starts with it. `task` names the run in the log.
-    private func generate(_ text: String, maximumTokens: Int, prefix: Prefix?, lookingUp looksUp: Bool = false, task: String) throws -> Completion {
+    /// Runs the model on a prompt, which ends with `prefill`, reading only what follows
+    /// `prefix` when the prompt starts with it. `task` names the run in the log.
+    private func generate(_ text: String, maximumTokens: Int, prefix: Prefix?, lookingUp looksUp: Bool = false, prefill: String = RewritePrompt.prefill, task: String) throws -> Completion {
         guard let context else { throw RewriteError.notLoaded }
         let started = ContinuousClock.now
         let prompt = context.tokenizer.encode(text: text, addSpecialTokens: false)
@@ -498,7 +546,7 @@ actor RewriteEngine {
         // buffer cache does not grow from run to run.
         Stream().synchronize()
         Memory.clearCache()
-        let answer = RewritePrompt.prefill + context.tokenizer.decode(tokenIds: generated, skipSpecialTokens: true)
+        let answer = prefill + context.tokenizer.decode(tokenIds: generated, skipSpecialTokens: true)
         let cached = prompt.count - input.count
         let prefillTime = started.duration(to: prefilled)
         Logger.rewrite.notice("\(task, privacy: .public) ran in \(started.duration(to: .now), privacy: .public): \(prompt.count, privacy: .public) prompt tokens, \(cached, privacy: .public) of them cached and \(input.count, privacy: .public) read in \(prefillTime, privacy: .public), \(generated.count, privacy: .public) of at most \(maximumTokens, privacy: .public) tokens written, stopped by \(reason, privacy: .public), \(lookup.verifications, privacy: .public) lookups verified \(lookup.drafted, privacy: .public) drafted tokens and kept \(lookup.accepted, privacy: .public)")
@@ -530,13 +578,21 @@ struct CleanupModel {
     var dictationEnded: () -> Void = {}
     /// The model's answer for a transcript, see RewriteEngine.cleanUp.
     var complete: @Sendable (String) async throws -> String
+    /// The style of a polish while the user turned Polish on, nil while it is off, see
+    /// TextCleanup.polishIsOn.
+    var polishStyle: () -> PolishStyle? = { nil }
+    /// Whether the model can polish a transcript now, after waiting a bounded time for a
+    /// load under way, see TextCleanup.waitUntilLoadedForPolish.
+    var waitUntilLoadedForPolish: () async -> Bool = { false }
+    /// The model's answer for a transcript and a style, see RewriteEngine.polish.
+    var polish: @Sendable (String, PolishStyle) async throws -> String = { _, _ in throw RewriteError.notLoaded }
 
     /// No cleanup, for tests and previews.
     static let off = CleanupModel(waitUntilLoaded: { false }, complete: { _ in throw RewriteError.notLoaded })
 }
 
-/// A model call with a time limit, for the cleanup and translation steps. Live Captions
-/// also use it for their check of what plays, see MeetingCaptions.playCheckLimit.
+/// A model call with a time limit, for the cleanup, polish and translation steps. Live
+/// Captions also use it for their check of what plays, see MeetingCaptions.playCheckLimit.
 ///
 /// At the limit it cancels the call and returns at once, so the paste never waits past
 /// the limit. The call goes on until it ends by itself, and its result is dropped: one

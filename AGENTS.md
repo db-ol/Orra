@@ -22,6 +22,7 @@ This file is the guide for anyone, human or agent, who changes this repository.
 Hotkey -> Audio Capture -> TranscriptionEngine -> optional RewriteEngine -> Text Injection
 Live Captions (off at every launch): what the Mac plays (SystemAudioTap), or the microphone when the user chooses it (CaptionMicrophone) -> CaptionSegmenter -> speech model -> optional translation -> caption window
 Projects (optional, a preview): Mail app (Apple Events) and project folders -> local index -> cleanup model -> Projects window -> Mail's reply window and the clipboard, on the user's click
+Transcribe File: the one file the user drops or picks -> FileAudioSource (16 kHz mono, streamed) -> segments at pauses -> speech model, after dictation -> Transcribe File window -> the clipboard or a file the user saves, on the user's click
 
 Keep it simple. Do not add a protocol, layer, or abstraction without a concrete need in the code today.
 
@@ -34,7 +35,9 @@ text always recoverable, is allowed. It is off by default, except that on a Mac 
 of memory or more, a new user's Download Models in the welcome window also downloads the
 cleanup model and turns cleanup on. The button shows the total size of both models, and
 the user can turn cleanup off in Settings. A saved choice is never changed. The
-maintainer approved this on 2026-10-15.
+maintainer approved this on 2026-10-15. Polish, which rewrites a dictation of the talk
+key as clear, concise written text with the same model, is off by default for everyone,
+also on a Mac with 16 GB, and the welcome window never turns it on.
 
 ## Build discipline
 Build (run in the repository root):
@@ -141,6 +144,18 @@ trusted once in Xcode. docs/dependencies.md has the details.
   mixture of experts model, may join the shared group of ModelGate, see docs/dependencies.md.
   Projects code must load the cleanup model only while the Projects window is open or a
   Projects request runs.
+- Transcribe File reads only the one file the user drops on its window or picks in its open
+  panel, through AVFoundation, which may follow no reference to another file or a URL, and
+  it refuses a file that is not on this Mac yet instead of having macOS download it. It
+  writes no audio to disk: FileAudioSource decodes the file and streams it as 16 kHz mono,
+  segment by segment, and caches nothing. The text stays in memory, in FileTranscription,
+  until the window closes or another file starts, and the only file it writes is the one
+  the user saves from the window. Copy puts the text on this Mac's clipboard through
+  ConcealedClipboard. It never logs text or file names, only durations, counts, timings
+  and error codes, and it goes online for nothing. Dictation goes first: each segment's
+  call takes its turn through EngineTurns, as caption calls do, so a press of the talk key
+  or the translation key gets the speech model before the next segment, and the file waits
+  while Live Captions run. It uses no language model but the speech model.
 - Orra never writes audio to disk or to the log. The one exception, approved by the maintainer
   on 2026-10-15, is Remember my voice in Settings, off until the user turns it on. It keeps
   the voice sample's audio, never what is said in it, in
@@ -188,7 +203,7 @@ trusted once in Xcode. docs/dependencies.md has the details.
   asks for, Sleep or a closed lid.
 - Orra goes online only for the speech model download the user starts from the menu or the
   welcome window, the cleanup model download the user agrees to in Settings, for Clean Up
-  Text, Translation or Projects, or starts in the welcome window (with the speech model
+  Text, Polish, Translation or Projects, or starts in the welcome window (with the speech model
   through Download Models, or alone while cleanup is on), and for
   update checks through Sparkle that the user allowed or started.
   Launching must never touch the network before the user allowed update checks. Any other

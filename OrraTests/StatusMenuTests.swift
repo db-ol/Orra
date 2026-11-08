@@ -63,6 +63,15 @@ struct StatusMenuTests {
         #expect(shown() == ["Live Captions", "Copy Captions", "Copy Previous Captions"])
     }
 
+    /// Transcribe File… stands below Meeting Interpretation with its symbol, also in a build
+    /// without Projects, and before the divider above Talk Key.
+    @Test func transcribeFileIsBelowMeetingInterpretation() throws {
+        let lines = lines(translationOn: false, speakingOn: false)
+        let item = try #require(lines.firstIndex(of: "Transcribe File…"))
+        #expect(Array(lines[(item - 3)...(item + 2)]) == ["# Meeting Interpretation", "Live Captions", "---", "Transcribe File…", "---", "Talk Key >"])
+        #expect(menu(translationOn: false, speakingOn: false).items.first { $0.title == "Transcribe File…" }?.image != nil)
+    }
+
     /// The Live Captions shortcut shows as text after the name, not as a key equivalent.
     @Test func liveCaptionsShowsItsShortcut() throws {
         let shortcut = KeyCombination(modifiers: [.control, .option, .command], keyCode: 0x69)
@@ -102,7 +111,7 @@ struct StatusMenuTests {
         #expect(StatusMenu.offersProjectsSetup(projects))
         var lines = Self.lines(of: menu(translationOn: false, speakingOn: false, projects: runtime))
         let setUp = try #require(lines.firstIndex(of: "Set Up Projects…"))
-        #expect(Array(lines[(setUp - 3)...(setUp + 2)]) == ["# Meeting Interpretation", "Live Captions", "---", "Set Up Projects…", "---", "Talk Key >"])
+        #expect(Array(lines[(setUp - 4)...(setUp + 2)]) == ["# Meeting Interpretation", "Live Captions", "---", "Transcribe File…", "Set Up Projects…", "---", "Talk Key >"])
         #expect(!lines.contains { $0.hasPrefix("Open Projects Window") })
         #expect(menu(translationOn: false, speakingOn: false, projects: runtime).items.first { $0.title == "Set Up Projects…" }?.image != nil)
         let target = DockTarget()
@@ -115,7 +124,7 @@ struct StatusMenuTests {
         #expect(!StatusMenu.offersProjectsSetup(projects))
         lines = Self.lines(of: menu(translationOn: false, speakingOn: false, projects: runtime))
         let item = try #require(lines.firstIndex(of: "Open Projects Window"))
-        #expect(Array(lines[(item - 3)...(item + 2)]) == ["# Meeting Interpretation", "Live Captions", "---", "Open Projects Window", "---", "Talk Key >"])
+        #expect(Array(lines[(item - 4)...(item + 2)]) == ["# Meeting Interpretation", "Live Captions", "---", "Transcribe File…", "Open Projects Window", "---", "Talk Key >"])
         #expect(!lines.contains("Set Up Projects…"))
         #expect(!zip(lines, lines.dropFirst()).contains { $0 == "---" && $1 == "---" })
         // It carries an icon, so it stands out.

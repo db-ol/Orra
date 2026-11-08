@@ -27,17 +27,22 @@ import Testing
 /// text_english, the clip transcribed with each language as the hint, and their times.
 ///
 /// TEST_RUNNER_ORRA_DICTATION_LANGUAGE picks the dictation language, Chinese by default,
-/// or Japanese or Spanish, as the user picks it in Settings, see DictationLanguage. With
+/// or Japanese or Spanish, as the user picks it in Settings, see DictationLanguage and
+/// DictationPair. A name that is no dictation language fails the test instead of running as
+/// Chinese, and with the variable the file names the language in dictation_language. With
 /// Japanese or Spanish, the passes are that language and then English, into
 /// text_pass_japanese or text_pass_spanish, the text keeps its Han characters as written,
 /// and ruled_text has the rules only for text LanguageGuard reads as English.
 /// language_verdict holds LanguageGuard's verdict on the text.
 ///
-/// Another corpus in the same layout runs too, such as FLEURS ja_jp and es_419, where each
-/// manifest line has lang ja or es. Such a clip is also transcribed with its own language
-/// as the hint, straight from the engine, into text_japanese or text_spanish with
-/// decode_seconds_japanese or decode_seconds_spanish. score.py scores such clips as cer_ja
-/// and wer_es.
+/// Another corpus in the same layout runs too, such as FLEURS ja_jp, es_419 and ko_kr, where
+/// each manifest line has its lang. A clip in the language of a dictation pair other than
+/// Chinese, such as ja or es, is also transcribed with its own language as the hint,
+/// straight from the engine, into text_japanese or text_spanish with
+/// decode_seconds_japanese or decode_seconds_spanish. score.py scores such clips as cer_ja,
+/// wer_es or cer_ko. TEST_RUNNER_ORRA_SPEECH_CORPUS_CLIPS names a file of clip ids, one per
+/// line, and only those clips run, in the manifest's order, as the release gate runs one
+/// pair's FLEURS clips. The count of 392 holds for the whole speech corpus only.
 ///
 /// Optional: TEST_RUNNER_ORRA_SPEECH_MODEL_DIR picks another model folder, and
 /// TEST_RUNNER_ORRA_SPEECH_MODEL_ID the Hugging Face ID speech-swift reads its size and
@@ -54,14 +59,14 @@ struct SpeechCorpusEvaluationTests {
         let output = try #require(SpeechCorpus.environment["ORRA_SPEECH_EVAL_OUT"], "set TEST_RUNNER_ORRA_SPEECH_EVAL_OUT to a folder for the results")
         let modelFolder = try #require(SpeechCorpus.modelFolder, "no speech model on this Mac, or TEST_RUNNER_ORRA_SPEECH_MODEL_DIR is not a folder")
         let modelID = SpeechCorpus.environment["ORRA_SPEECH_MODEL_ID"] ?? SpeechModel.id
-        let clips = try SpeechCorpus.manifest(in: corpus)
-        let hasOtherLanguages = clips.contains { SpeechCorpus.otherLanguages[$0.language] != nil }
-        // The speech corpus. A corpus in other languages has a count of its own.
-        if !hasOtherLanguages {
+        let language = try DictationPair.chosen()
+        let listed = try SpeechCorpus.listedClips()
+        let clips = try SpeechCorpus.clips(SpeechCorpus.manifest(in: corpus), listed: listed)
+        // The speech corpus. Another corpus, or a list of clips, has a count of its own.
+        if listed == nil && SpeechCorpus.isSpeechCorpus(clips) {
             #expect(clips.count == 392)
         }
 
-        let language = SpeechCorpus.dictationLanguage
         let engine = Qwen3Engine(folder: { modelFolder }, modelID: modelID)
         // Every pass of one clip. With no vocabulary, the first has no hint and the others
         // are the ones LanguageGuard asks for, see DictationLanguage.passes.
@@ -139,8 +144,8 @@ struct SpeechCorpusEvaluationTests {
                         row["decode_seconds_\(key)"] = hintSeconds
                     }
                 }
-                // A clip in Japanese or Spanish with its own language as the hint, also
-                // straight from the engine.
+                // A clip in the language of another pair, such as Japanese, with its own
+                // language as the hint, also straight from the engine.
                 if let own = SpeechCorpus.otherLanguages[clip.language] {
                     let hintStarted = ContinuousClock.now
                     let hinted = try await engine.transcribe(samples, language: own)
@@ -157,14 +162,14 @@ struct SpeechCorpusEvaluationTests {
         #else
         let build = "Release"
         #endif
-        let document: [String: Any] = [
+        let document = try DictationPair.marked([
             "model_folder": modelFolder.lastPathComponent,
             "model_id": modelID,
             "device": SpeechCorpus.chip(),
             "build": build,
             "load_seconds": loadSeconds,
             "clips": results,
-        ]
+        ])
         let name = SpeechCorpus.environment["ORRA_SPEECH_EVAL_NAME"] ?? "orra-\(modelFolder.lastPathComponent)"
         let folder = URL(fileURLWithPath: output, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -208,13 +213,50 @@ enum SpeechCorpus {
         return RealModel.folder
     }
 
-    /// Languages a corpus may hold beyond Chinese and English, by the manifest's lang.
-    static let otherLanguages: [String: SpeechLanguage] = ["ja": .japanese, "es": .spanish]
+    /// Languages a corpus may hold beyond Chinese and English, by the manifest's lang: the
+    /// language of every dictation pair but Chinese, so a new pair joins with its code.
+    static let otherLanguages: [String: SpeechLanguage] = Dictionary(
+        uniqueKeysWithValues: DictationLanguage.allCases.filter { $0 != .chinese }.map { ($0.pairCode, $0.speechLanguage) }
+    )
 
-    /// The dictation language named in TEST_RUNNER_ORRA_DICTATION_LANGUAGE, such as
-    /// Japanese, or Chinese without one.
-    static var dictationLanguage: DictationLanguage {
-        environment["ORRA_DICTATION_LANGUAGE"].flatMap(DictationLanguage.init(rawValue:)) ?? .chinese
+    /// The langs of the speech corpus: Chinese, English, code switched speech, and none for
+    /// the clips without speech.
+    static let speechCorpusLanguages: Set<String> = ["zh", "en", "mixed", "none"]
+
+    /// The ids in the file TEST_RUNNER_ORRA_SPEECH_CORPUS_CLIPS names, one per line, or nil
+    /// without the variable, for every clip.
+    static func listedClips() throws -> [String]? {
+        guard let path = environment["ORRA_SPEECH_CORPUS_CLIPS"] else { return nil }
+        let text = try String(contentsOf: URL(fileURLWithPath: (path as NSString).expandingTildeInPath), encoding: .utf8)
+        return text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    /// The clips of the manifest that the list names, in the manifest's order, or every clip
+    /// without a list. A listed id that the manifest lacks is an error.
+    static func clips(_ manifest: [(id: String, language: String)], listed: [String]?) throws -> [(id: String, language: String)] {
+        guard let listed else { return manifest }
+        let known = Set(manifest.map(\.id))
+        let unknown = listed.filter { !known.contains($0) }
+        if !unknown.isEmpty {
+            throw UnknownClips(ids: unknown)
+        }
+        let wanted = Set(listed)
+        return manifest.filter { wanted.contains($0.id) }
+    }
+
+    /// Whether the clips hold only the langs of the speech corpus, which no other corpus,
+    /// such as FLEURS ko or yue, does.
+    static func isSpeechCorpus(_ clips: [(id: String, language: String)]) -> Bool {
+        clips.allSatisfy { speechCorpusLanguages.contains($0.language) }
+    }
+
+    /// Listed clips that are not in the manifest.
+    struct UnknownClips: Error, CustomStringConvertible {
+        let ids: [String]
+
+        var description: String {
+            "\(ids.count) listed clips are not in the manifest, such as \(ids[0])"
+        }
     }
 
     /// The clips of the manifest, in its order, each with its ID and its lang.
