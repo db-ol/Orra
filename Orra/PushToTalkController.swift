@@ -1662,9 +1662,9 @@ final class PushToTalkController {
                         timings.lap(.cleanup)
                     }
                 } else {
-                    // The gate found no filler or correction cue, or the text is Japanese
-                    // or Spanish, so the model is skipped. The check still ends the cleanup
-                    // step, so its time is not counted as part of the paste.
+                    // The gate found no filler, correction cue or repeat, or the text is
+                    // Japanese or Spanish, so the model is skipped. The check still ends the
+                    // cleanup step, so its time is not counted as part of the paste.
                     timings.lap(.cleanup)
                 }
             } else if takesSteps, cleanup.isOn(), cleanup.polishStyle() == nil, text.count > CleanupStep.maximumLength, CleanupStep.hasWorkForModel(text, heard: heard) {

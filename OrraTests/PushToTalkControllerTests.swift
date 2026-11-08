@@ -1025,10 +1025,15 @@ struct PushToTalkControllerTests {
         #expect(waits == 0)
         #expect((inserter.inserted.first?.count ?? 0) > CleanupStep.maximumLength)
         #expect(controller.notice == "Dictations over 400 characters are pasted without cleanup.")
-        // Without a filler or a correction the model would have had nothing to do.
+        // Without a filler, a correction or a repeat the model would have had nothing to do.
         speech.reply = String(repeating: "我们明天下午开会讨论一下。", count: 20)
         try await dictate(controller)
         #expect(controller.notice == nil)
+        // A word said twice gives it work, as the user guide says.
+        speech.reply = "我我觉得" + String(repeating: "我们明天下午开会讨论一下。", count: 20)
+        try await dictate(controller)
+        #expect(cleanups.withLock { $0 } == 0)
+        #expect(controller.notice == "Dictations over 400 characters are pasted without cleanup.")
     }
 
     @Test func withCleanupOffALongDictationSaysNothingAboutIt() async throws {
