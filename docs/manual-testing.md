@@ -413,7 +413,10 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     that nothing was recognized, every piece failing, a cancelled piece ending the whole
     dictation, the notices of a long dictation adding up, each on a menu line of its own,
     and the notice about a long dictation pasted without cleanup only while cleanup is on
-    and has work, with no wait for the model. Through the tap it checks that after a stop
+    and the dictation has a filler or a correction, with no wait for the model. Since
+    2026-11-07 it checks that a long dictation whose only work for the model is a
+    repeat, such as 我我觉得 or 看看, gets no notice, while a short one with a repeat
+    still goes to the model. Through the tap it checks that after a stop
     at the limit the press meant to stop only clears the notice, in Press to start and
     stop, Double press and hands free in Hold mode, that the notice that stays says first
     why the recording stopped, that in Hold mode a hold records and a double press starts

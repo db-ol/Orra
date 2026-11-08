@@ -48,4 +48,23 @@ struct CleanupCuesTests {
         #expect(CleanupStep.hasWorkForModel("Ship it today.", heard: "Um, ship it today."))
         #expect(!CleanupStep.hasWorkForModel("周五的聚餐取消了。", heard: "周五的聚餐取消了。"))
     }
+
+    /// The notice about a dictation too long for a cleanup asks for a filler or a
+    /// correction cue, so a repeat alone, which goes to the model, is none.
+    @Test func aRepeatIsNoFillerOrCorrectionCue() {
+        for text in ["我我觉得价格有点高。", "你帮我看看。", "谢谢谢谢。", "Send the the file to Lisa."] {
+            #expect(CleanupStep.hasWorkForModel(text, heard: text))
+            #expect(!CleanupStep.hasFillerOrCorrectionCue(text, heard: text))
+        }
+        #expect(CleanupStep.hasFillerOrCorrectionCue("周五有个两点的电话会，哦不对，三点。"))
+        #expect(CleanupStep.hasFillerOrCorrectionCue("Send it Monday, I mean Tuesday."))
+        #expect(!CleanupStep.hasFillerOrCorrectionCue("周五的聚餐取消了。"))
+        // A filler the rule removed counts, as it does for the gate, and so does a cue in
+        // the text after the rules.
+        let heard = "呃，我我觉得价格有点高。"
+        let ruled = FillerRules.removingFillers(from: heard)
+        #expect(!CleanupStep.hasFillerOrCorrectionCue(ruled))
+        #expect(CleanupStep.hasFillerOrCorrectionCue(ruled, heard: heard))
+        #expect(CleanupStep.hasFillerOrCorrectionCue("Send it Monday, I mean Tuesday.", heard: "Send it Tuesday."))
+    }
 }

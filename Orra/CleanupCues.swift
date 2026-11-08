@@ -23,11 +23,16 @@ nonisolated extension CleanupStep {
         return try! Regex("\\b(?:" + words.joined(separator: "|") + ")\\b").ignoresCase()
     }()
 
+    /// Whether the text holds a filler or a self correction cue of the lists above.
+    static func hasFillerOrCorrectionCue(_ text: String) -> Bool {
+        if chineseCues.contains(where: text.contains) { return true }
+        return text.contains(englishCuePattern)
+    }
+
     /// Whether the text holds a filler, a self correction cue or a repeat, so the cleanup
     /// model may change it. Text without one is pasted at once, without waiting for the model.
     static func hasWorkForModel(_ text: String) -> Bool {
-        if chineseCues.contains(where: text.contains) { return true }
-        return text.contains(englishCuePattern) || hasRepeat(text)
+        hasFillerOrCorrectionCue(text) || hasRepeat(text)
     }
 
     /// Whether a Chinese character, an English word or a phrase of up to four of them comes
@@ -70,5 +75,12 @@ nonisolated extension CleanupStep {
     /// counts as well as one in the ruled text.
     static func hasWorkForModel(_ ruled: String, heard: String) -> Bool {
         hasWorkForModel(ruled) || hasWorkForModel(heard)
+    }
+
+    /// The gate without repeats, for the notice that a dictation over `maximumLength` was
+    /// pasted without cleanup. A repeat alone gets no notice, since a long Chinese dictation
+    /// often holds doubled words that are meant, such as 看看 or 谢谢谢谢.
+    static func hasFillerOrCorrectionCue(_ ruled: String, heard: String) -> Bool {
+        hasFillerOrCorrectionCue(ruled) || hasFillerOrCorrectionCue(heard)
     }
 }
