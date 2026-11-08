@@ -31,9 +31,9 @@ https://db-ol.github.io/Orra/.
     in Spanish. Live Captions show English sentences with Japanese or Spanish translations,
     and the reply is spoken in English. The cleanup demo keeps the English sentence, since
     with Japanese or Spanish as the dictation language cleanup works on English sentences
-    only, and its caption says so. The tile on learning from corrections says the same of
-    learning, as the READMEs do. Spoken Japanese is quoted with 「」, as in the README
-    animations.
+    only, and its caption says so. The tiles on learning from corrections and on Polish say
+    the same of learning and of Polish, as the READMEs do. Spoken Japanese is quoted with
+    「」, as in the README animations.
   - The English page shows an English speaker whose dictation language is
     中文（普通话和粤语）+ English, the one Orra picks on a Mac in English. The translation
     key turns English into Chinese, with the 译 badge. Live Captions show Chinese sentences
@@ -48,6 +48,10 @@ https://db-ol.github.io/Orra/.
   style.css), so that no line ends with a character or two alone, in Safari too. Put a <wbr>
   between the phrases of any such line you change. In a spoken line it goes between the
   said-words spans, since site.js rebuilds each span from its text.
+- The Features section after the demos has six tiles, two to a row on a wide page: the
+  vocabulary, learning from corrections, the two languages, translation, Polish and
+  Transcribe File. Each says in a few sentences what the README says of it. Keep their
+  number even, so the last row is full.
 - The Meeting Interpretation section draws the Live Captions window and a call in HTML and
   CSS. style.css plays it once when each part scrolls into view, through the class that
   site.js adds. Without site.js, or with reduced motion, it shows its last frame.
@@ -99,12 +103,12 @@ The Download button points to
 https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg, so every release must
 upload a copy of its DMG named Orra.dmg, as docs/releasing.md describes.
 
-The version under the top Download button is plain text, once in each page ("Version 0.6.4",
-"版本 0.6.4", "バージョン0.6.4" and "Versión 0.6.4"), next to the system requirements. After a
+The version under the top Download button is plain text, once in each page ("Version 0.7.0",
+"版本 0.7.0", "バージョン0.7.0" and "Versión 0.7.0"), next to the system requirements. After a
 release is published, change it in all four pages and merge, so the site never names a
 version that is not out yet. To find every place:
 
-    grep -rn "0\.6\.4" site
+    grep -rn "0\.7\.0" site
 
 The Download Orra Microphone link in the Meeting Interpretation section points at
 OrraMicrophone.pkg in the v0.4.0 release, as README.md does. Change it only when a newer

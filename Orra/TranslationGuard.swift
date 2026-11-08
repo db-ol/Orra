@@ -498,10 +498,11 @@ nonisolated enum TranslationGuard {
     }
 
     /// Every value a number in the source can stand for: digits with their multipliers
-    /// (50K, 3 million, 1.2 亿), Chinese numerals, English number words and ordinals, months,
-    /// weekdays, noon, midnight, half and quarter, each also divided by a thousand, ten
-    /// thousand, a million, a hundred million and a billion, times a thousand, and moved by
-    /// 12 hours.
+    /// (50K, 3 million, 1.2 亿), Chinese numerals, English number words and ordinals, also
+    /// of several words (two hundred eighty, two point three, four seven two nine), months,
+    /// weekdays, noon, midnight, half and quarter, 一个半 as 1.5, each also divided by a
+    /// thousand, ten thousand, a million, a hundred million and a billion, times a
+    /// thousand, and moved by 12 hours.
     static func sourceValues(_ text: String) -> Set<Double> {
         let folded = removingThousandsSeparators(asciiDigits(text))
         var values: Set<Double> = []
@@ -538,6 +539,12 @@ nonisolated enum TranslationGuard {
         values.formUnion(englishValues(text))
         if contains(text, "半") {
             values.formUnion([30, 0.5])
+        }
+        // 一个半小时 is 1.5 hours and 两天半 2.5 days.
+        let nsFoldedText = folded as NSString
+        for match in andAHalf.matches(in: folded, range: NSRange(location: 0, length: nsFoldedText.length)) {
+            let numeral = nsFoldedText.substring(with: match.range(at: 1))
+            values.insert((Double(numeral) ?? chineseValue(numeral)) + 0.5)
         }
         if contains(text, "刻") {
             values.formUnion([15, 45])
@@ -606,6 +613,7 @@ nonisolated enum TranslationGuard {
             }
             index += 1
         }
+        values.formUnion(compoundValues(words))
         for (index, pattern) in monthPatterns.enumerated() {
             if matches(pattern, lower) {
                 values.insert(Double(index + 1))
@@ -627,6 +635,92 @@ nonisolated enum TranslationGuard {
             values.formUnion([15, 45, 0.25])
         }
         return values
+    }
+
+    /// The values of English numbers said in several words, which the words one by one do
+    /// not give: two hundred eighty is 280, two thousand one hundred 2100, two hundred and
+    /// fifty 250, two point three 2.3, point five 0.5, and three or more digits said one by
+    /// one, as four seven two nine is 4729.
+    static func compoundValues(_ words: [String]) -> Set<Double> {
+        var values: Set<Double> = []
+        var digits = ""
+        for word in words + [""] {
+            if let digit = ones[word], digit < 10 {
+                digits += String(Int(digit))
+            } else {
+                if digits.count >= 3, let value = Double(digits) {
+                    values.insert(value)
+                }
+                digits = ""
+            }
+        }
+        var index = 0
+        while index < words.count {
+            if let number = englishNumber(in: words, from: index) {
+                if number.end - index > 1 {
+                    values.insert(number.value)
+                }
+                index = number.end
+            } else {
+                index += 1
+            }
+        }
+        return values
+    }
+
+    /// The English number that starts at `start` in the words, and the index of the word
+    /// after it, nil when none starts there. Read the way it is said: tens before ones,
+    /// hundred after a number below a hundred, thousand, million and billion after a
+    /// number, "and" after hundred or thousand before the rest, and digits after "point".
+    /// A word that cannot follow ends the number, so nineteen eighty is 19 and then 80.
+    static func englishNumber(in words: [String], from start: Int) -> (value: Double, end: Int)? {
+        var total = 0.0
+        var current = 0.0
+        // Whether tens or a digit may follow, as in twenty four, and whether ones may.
+        var takesTens = true
+        var takesOnes = true
+        var read = false
+        var index = start
+        if index + 1 < words.count, words[index] == "a" || words[index] == "an", ["hundred", "thousand", "million", "billion"].contains(words[index + 1]) {
+            current = 1
+            read = true
+            index += 1
+        }
+        while index < words.count {
+            let word = words[index]
+            if let value = tens[word], takesTens {
+                current += value
+                takesTens = false
+            } else if let value = ones[word], takesOnes, takesTens || (value > 0 && value < 10) {
+                current += value
+                takesTens = false
+                takesOnes = false
+            } else if word == "hundred", read, current > 0, current < 100 {
+                current *= 100
+                takesTens = true
+                takesOnes = true
+            } else if let scale = scales[word], read, current > 0 {
+                total += current * scale
+                current = 0
+                takesTens = true
+                takesOnes = true
+            } else if word == "and", read, takesTens, index + 1 < words.count, tens[words[index + 1]] != nil || ones[words[index + 1]] != nil {
+                // Two hundred and fifty.
+            } else if word == "point", index + 1 < words.count, let first = ones[words[index + 1]], first < 10 {
+                var fraction = ""
+                var next = index + 1
+                while next < words.count, let digit = ones[words[next]], digit < 10 {
+                    fraction += String(Int(digit))
+                    next += 1
+                }
+                return (total + current + (Double("0." + fraction) ?? 0), next)
+            } else {
+                break
+            }
+            read = true
+            index += 1
+        }
+        return read ? (total + current, index) : nil
     }
 
     /// The value of a run of Chinese numerals, as guards2.py reads it: 三万五 is 35000 and
@@ -720,6 +814,7 @@ nonisolated enum TranslationGuard {
         "hundred": 100, "thousand": 1e3, "k": 1e3, "million": 1e6, "m": 1e6, "mn": 1e6, "billion": 1e9, "bn": 1e9, "b": 1e9,
         "dozen": 12, "万": 1e4, "亿": 1e8, "千": 1e3, "百万": 1e6, "千万": 1e7,
     ]
+    static let scales: [String: Double] = ["thousand": 1e3, "million": 1e6, "billion": 1e9]
     static let months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
     static let weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
@@ -737,6 +832,8 @@ nonisolated enum TranslationGuard {
     /// a number such as 三点一四一五九, which `chineseDecimal` reads.
     private static let chineseDigitRun = regex("(?<![零〇一二两三四五六七八九幺十百千万亿])(?<![零〇一二两三四五六七八九十百千万亿]点)[零〇一二两三四五六七八九幺]++(?![十百千万亿])")
     private static let chineseDecimal = regex("([零一二两三四五六七八九十]+)点([零一二三四五六七八九]+)(万|亿)?")
+    /// A count and a half: 一个半, 两天半, 3个半.
+    private static let andAHalf = regex("(\\d+|[零一二两三四五六七八九十百千]+)(?:个|年|天|周|月|星期|小时|钟头|斤|公里|里|米|岁)半")
     private static let tenThousandsAndThousands = regex(#"(\d+)\s*万\s*(\d)\s*千"#)
     private static let tenThousandsAndDigit = regex(#"(\d+)\s*万\s*(\d)(?![\d.])"#)
     static let decimal = regex(#"\d+(?:\.\d+)?"#)

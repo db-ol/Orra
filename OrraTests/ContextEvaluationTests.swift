@@ -18,6 +18,14 @@ import Testing
 /// set, context.json there holds the numbers of every clip for the release gate: the time
 /// of each pass, the terms found, the distractors inserted, the errors, and how long the
 /// raw output ran. TEST_RUNNER_ORRA_CONTEXT_COUNT sets the clips per set, 100 by default.
+///
+/// TEST_RUNNER_ORRA_DICTATION_LANGUAGE picks the dictation pair, see DictationPair. With
+/// Chinese, the default, each pass is one pass of the speech model, as the gate's baselines
+/// hold it. With another pair each pass takes the path of a dictation with that pair, see
+/// DictationPair.transcribe, and keeps Han characters as written. Such a run takes only
+/// contextasr_en, since Chinese speech is another pair's speech for it, and the three clips
+/// without speech, with the same vocabulary as with Chinese. It writes
+/// context-evaluation-<pair>.txt. With the variable, context.json names the pair.
 extension RealModelTests {
     @MainActor
     @Suite
@@ -25,9 +33,11 @@ extension RealModelTests {
         nonisolated private static let rate = RecordingLimits.sampleRate
         private static let distractorsPerClip = 10
 
-        /// What the controller pastes: loops cut, traditional characters converted.
-        private static func finalText(_ raw: String, samples: [Float]) -> String {
-            ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: Double(samples.count) / Double(rate)))
+        /// What the controller pastes before its rule steps: loops cut, and traditional
+        /// characters converted where the pair simplifies, as Chinese does.
+        private static func finalText(_ raw: String, samples: [Float], language: DictationLanguage = .chinese) -> String {
+            let guarded = TranscriptGuard.clean(raw, audioSeconds: Double(samples.count) / Double(rate))
+            return language.simplifiesCharacters ? ChineseText.simplified(guarded) : guarded
         }
 
         /// Lowercase letters and digits only, so "N P C 行为树" matches "NPC行为树".
@@ -73,10 +83,18 @@ extension RealModelTests {
 
         @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_CONTEXT_EVAL"] != nil))
         func vocabularyAsContext() async throws {
+            let language = try DictationPair.chosen()
             let engine = RealModel.engine()
             try await engine.load()
+            let transcription = Transcription(load: { try await engine.load() }, transcribe: { try await engine.transcribe($0, context: $1, language: $2) })
+            // The speech model's text before the post steps. With Chinese one pass with the
+            // context. With another pair a dictation's path with the vocabulary.
+            func transcribe(_ samples: [Float], context: String?, vocabulary: [String]) async throws -> String {
+                guard language != .chinese else { return try await engine.transcribe(samples, context: context) }
+                return try await DictationPair.transcribe(samples, vocabulary: vocabulary, language: language, transcription: transcription)
+            }
             let count = Int(ProcessInfo.processInfo.environment["ORRA_CONTEXT_COUNT"] ?? "") ?? 100
-            var report: [String] = ["Context evaluation, \(count) clips per set at most"]
+            var report: [String] = ["Context evaluation, \(count) clips per set at most" + (language == .chinese ? "" : ", \(language.rawValue) chosen")]
             var unrelatedTerms: [String] = []
             var rows: [[String: Any]] = []
 
@@ -85,6 +103,9 @@ extension RealModelTests {
                 let termsByClip = try Self.terms(in: set)
                 let allTerms = clips.flatMap { termsByClip[$0.name] ?? [] }
                 unrelatedTerms += allTerms.prefix(15)
+                // Chinese speech is another pair's speech for a pair other than Chinese. Its
+                // terms still go into the vocabulary of the clips without speech below.
+                guard language == .chinese || set == "contextasr_en" else { continue }
                 var plain = Pass()
                 var biased = Pass()
                 var termCount = 0
@@ -117,9 +138,9 @@ extension RealModelTests {
                     ]
                     for withContext in [false, true] {
                         let start = ContinuousClock.now
-                        let raw = try await engine.transcribe(speech, context: withContext ? context : nil)
+                        let raw = try await transcribe(speech, context: withContext ? context : nil, vocabulary: withContext ? vocabulary : [])
                         let elapsed = start.duration(to: .now) / .seconds(1)
-                        let text = Self.finalText(raw, samples: speech)
+                        let text = Self.finalText(raw, samples: speech, language: language)
                         let heard = Self.normalized(text)
                         let found = counted.filter { heard.contains(Self.normalized($0)) }.count
                         let inserted = offered.filter { heard.contains(Self.normalized($0)) }.count
@@ -158,7 +179,8 @@ extension RealModelTests {
             // A vocabulary that has nothing to do with the speech.
             let vocabulary = (unrelatedTerms.isEmpty ? ["Orra", "Qwen3-ASR", "speech-swift"] : unrelatedTerms).joined(separator: "\n")
             let unrelated = vocabulary.split(separator: "\n").map(String.init)
-            if FileManager.default.fileExists(atPath: EvaluationData.root.appendingPathComponent("sets/ascend_mixed/refs.tsv").path) {
+            // Chinese and English speech, so for the Chinese pair only.
+            if language == .chinese, FileManager.default.fileExists(atPath: EvaluationData.root.appendingPathComponent("sets/ascend_mixed/refs.tsv").path) {
                 let clips = try EvaluationData.clips(in: "ascend_mixed", count: 200)
                 var plain: [String] = []
                 var biased: [String] = []
@@ -189,18 +211,19 @@ extension RealModelTests {
                 ("noise", (0..<(3 * Self.rate)).map { Float(($0 &* 1_103_515_245 &+ 12_345) % 65_536) / 65_536 * 0.006 - 0.003 }),
             ]
             for (_, samples) in quiet {
-                let text = Self.finalText(try await engine.transcribe(samples, context: vocabulary), samples: samples)
+                let text = Self.finalText(try await transcribe(samples, context: vocabulary, vocabulary: unrelated), samples: samples, language: language)
                 if !text.isEmpty { spoken += 1 }
             }
             summary["no_speech"] = ["clips": quiet.count, "gave_text": spoken]
             report.append("no speech with \(unrelated.count) terms as context: \(spoken) of \(quiet.count) gave text")
 
             let text = report.joined(separator: "\n")
-            Attachment.record(text, named: "context-evaluation.txt")
+            let name = language == .chinese ? "context-evaluation.txt" : "context-evaluation-\(language.pairCode).txt"
+            Attachment.record(text, named: name)
             let results = EvaluationData.root.appendingPathComponent("results", isDirectory: true)
             try? FileManager.default.createDirectory(at: results, withIntermediateDirectories: true)
-            try text.write(to: results.appendingPathComponent("context-evaluation.txt"), atomically: true, encoding: .utf8)
-            try GateOutput.write(["suite": "context", "clips_per_set": count, "clips": rows, "summary": summary], named: "context")
+            try text.write(to: results.appendingPathComponent(name), atomically: true, encoding: .utf8)
+            try GateOutput.write(DictationPair.marked(["suite": "context", "clips_per_set": count, "clips": rows, "summary": summary]), named: "context")
         }
     }
 }
