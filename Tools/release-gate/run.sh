@@ -3,12 +3,13 @@
 # writes one JSON file per suite and compares them with a baseline. docs/release-gate.md
 # describes the suites, the rules and the variables below.
 #
-#   Tools/release-gate/run.sh [--baseline DIR] [--only corpus,context,cleanup,latency,sets,projects,retrieval] [--out DIR] [--skip-build]
+#   Tools/release-gate/run.sh [--baseline DIR] [--only corpus,context,cleanup,latency,sets,projects,retrieval,pairs,wrong-pairs] [--pairs zh,ja,es] [--out DIR] [--skip-build]
 #
-# Without --only it runs every suite, the projects and retrieval suites too, which need the
-# variables of docs/release-gate.md. Exit status: 0 when every suite ran and nothing got worse, 1 when a
-# rule failed or, with or without a baseline, the projects bar, 2 when the build or a suite
-# failed to run.
+# Without --only it runs every suite but the two of the dictation pairs, the projects and
+# retrieval suites too, which need the variables of docs/release-gate.md. pairs and
+# wrong-pairs run the pairs of --pairs, every pair Orra has unless it names some. Exit
+# status: 0 when every suite ran and nothing got worse, 1 when a rule failed or, with or
+# without a baseline, the projects bar, 2 when the build or a suite failed to run.
 set -u
 
 repo=${0:A:h:h:h}
@@ -27,17 +28,27 @@ baseline=""
 only=${(j:,:)default_suites}
 out=""
 build=1
+pairs_arg=""
 while (( $# )); do
   case $1 in
     --baseline) baseline=${2:A}; shift 2 ;;
     --only) only=$2; shift 2 ;;
     --out) out=${2:A}; shift 2 ;;
     --skip-build) build=0; shift ;;
-    -h|--help) sed -n '2,11p' $0; exit 0 ;;
+    --pairs) pairs_arg=$2; shift 2 ;;
+    -h|--help) sed -n '2,12p' $0; exit 0 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
 suites=(${(s:,:)only})
+# The suites of the dictation pairs run after the others, in their own block below.
+pair_suites_known=(pairs wrong-pairs)
+pair_suites=(${suites:*pair_suites_known})
+suites=(${suites:|pair_suites_known})
+if [[ -n $pairs_arg ]] && (( ! ${#pair_suites} )); then
+  echo "--pairs needs pairs or wrong-pairs in --only" >&2
+  exit 2
+fi
 for suite in $suites; do
   (( ${all_suites[(Ie)$suite]} )) || { echo "unknown suite $suite" >&2; exit 2 }
 done
@@ -55,6 +66,18 @@ sha=$(git -C $repo rev-parse --short HEAD)
 mkdir -p $out/raw $out/logs
 echo "commit $sha, results in $out"
 git -C $repo rev-parse HEAD > $out/commit.txt
+
+# Dictation pairs, plan: gate.py names each test run of the pair suites and writes their
+# clip lists into $out. A pair is a code, zh, ja or es.
+pair_sets=${GATE_PAIR_SETS_DIR:-$sets/pairs}
+fleurs_dirs=(${=GATE_FLEURS_DIRS:-$bench/fleurs-ja-es $bench/fleurs-ko})
+pair_args=(--corpus $corpus --fleurs $fleurs_dirs --pair-sets $pair_sets --count ${GATE_WRONG_PAIR_CLIPS:-50})
+[[ -n $pairs_arg ]] && pair_args+=(--pairs $pairs_arg)
+pair_runs=()
+for suite in $pair_suites; do
+  plan=$(python3 $repo/Tools/release-gate/gate.py runs $suite $out $pair_args) || exit 2
+  [[ -n $plan ]] && pair_runs+=("${(@f)plan}")
+done
 
 xcode=(xcodebuild -project $repo/Orra.xcodeproj -scheme Orra -configuration Release
   -destination 'platform=macOS,arch=arm64' -derivedDataPath $derived
@@ -155,6 +178,54 @@ for suite in $suites; do
     echo "$suite: done $(date +%H:%M:%S), xcodebuild exit $code"
   fi
 done
+
+# Dictation pairs, runs: each test run of the plan, with its pair chosen, waiting for an
+# installed Orra and for the lock as the suites above do. Then gate.py scores them. A run
+# of the context or latency suite takes the variables of that suite above, the latency
+# suite with the pair's say clips.
+for line in $pair_runs; do
+  fields=("${(@ps:\t:)line}")
+  label=$fields[1] kind=$fields[2] language=$fields[3] name=$fields[4] folder=$fields[5] clips=$fields[6] raw=$fields[7]
+  env=(TEST_RUNNER_ORRA_GATE_OUT=$raw TEST_RUNNER_ORRA_DICTATION_LANGUAGE=$language)
+  case $kind in
+    corpus)
+      env+=(TEST_RUNNER_ORRA_SPEECH_EVAL=1 TEST_RUNNER_ORRA_SPEECH_CORPUS_DIR=$folder
+        TEST_RUNNER_ORRA_SPEECH_EVAL_OUT=$raw TEST_RUNNER_ORRA_SPEECH_EVAL_NAME=$name)
+      [[ $clips != - ]] && env+=(TEST_RUNNER_ORRA_SPEECH_CORPUS_CLIPS=$clips)
+      test_id=OrraTests/SpeechCorpusEvaluationTests ;;
+    context)
+      env+=(TEST_RUNNER_ORRA_CONTEXT_EVAL=1 TEST_RUNNER_ORRA_CONTEXT_COUNT=$context_count)
+      test_id=OrraTests/RealModelTests/ContextEvaluationTests ;;
+    latency)
+      env+=(TEST_RUNNER_ORRA_LATENCY=1 TEST_RUNNER_ORRA_LATENCY_CLIPS=$folder
+        TEST_RUNNER_ORRA_SPEECH_CORPUS_DIR=$corpus TEST_RUNNER_ORRA_LATENCY_REPORT=$out/logs/$label-report.txt)
+      test_id="OrraTests/LatencyMeasurementTests/dictations()" ;;
+    sets)
+      env+=(TEST_RUNNER_ORRA_GATE_SETS=$folder)
+      test_id=OrraTests/GateSetEvaluationTests ;;
+    *) echo "gate.py planned a run of an unknown kind: $line" >&2; exit 2 ;;
+  esac
+  mkdir -p $raw
+  while true; do
+    wait_for_installed_orra
+    take_lock
+    installed_orra_runs || break
+    release_lock
+  done
+  echo "$label: started $(date +%H:%M:%S)"
+  env $env $xcode test-without-building -only-testing:$test_id > $out/logs/$label.log 2>&1
+  code=$?
+  release_lock
+  if [[ ! -s $raw/$name.json ]]; then
+    echo "$label: no results (xcodebuild exit $code), see $out/logs/$label.log" >&2
+    failed_to_run+=($label)
+  else
+    echo "$label: done $(date +%H:%M:%S), xcodebuild exit $code"
+  fi
+done
+if (( ${#pair_runs} )); then
+  python3 $repo/Tools/release-gate/gate.py summarize-pairs $out --pair-sets $pair_sets --corpora $corpus $fleurs_dirs || exit 2
+fi
 
 python3 $repo/Tools/release-gate/gate.py summarize $out --sets $sets --projects-set $projects_set || exit 2
 

@@ -14,21 +14,25 @@ import Testing
 /// docs/release-gate.md. The sets hold synthetic speech made with macOS say from the
 /// sentences in Tools/release-gate/sets.
 ///
+/// A run has one dictation language, from TEST_RUNNER_ORRA_DICTATION_LANGUAGE as
+/// DictationPair reads it, Chinese by default, and runs the sets of that pair: those whose
+/// set.json names its code as their pair, and for Chinese the sets without one. With the
+/// variable, the file names the language in dictation_language.
+///
 /// It drives PushToTalkController as the app does, with the clip's context as the
-/// vocabulary: the real speech model with the language guard and the echo check, the
-/// transcript guard, the filler and number rules on, as by default, and the word
-/// replacement step. Cleanup and translation are off. The microphone is a stand in that
-/// returns the clip, and the text is collected instead of pasted.
+/// vocabulary and the run's dictation language: the real speech model with the language
+/// guard and the echo check, the transcript guard, the filler and number rules on, as by
+/// default, and the word replacement step. Cleanup and translation are off. The microphone
+/// is a stand in that returns the clip, and the text is collected instead of pasted.
 @Suite(.serialized, .enabled(if: GateSets.folder != nil))
 @MainActor
 struct GateSetEvaluationTests {
     @Test func transcribeTheSets() async throws {
         let root = try #require(GateSets.folder)
         let speechFolder = try #require(RealModel.folder, "no speech model on this Mac")
-        let sets = try FileManager.default.contentsOfDirectory(atPath: root.path)
-            .filter { FileManager.default.fileExists(atPath: root.appendingPathComponent("\($0)/manifest.jsonl").path) }
-            .sorted()
-        try #require(!sets.isEmpty, "no set with a manifest.jsonl in \(root.path)")
+        let language = try DictationPair.chosen()
+        let sets = try GateSets.sets(in: root, for: language)
+        try #require(!sets.isEmpty, "no set of the \(language.pairCode) pair with a manifest.jsonl in \(root.path)")
 
         let speech = Qwen3Engine(folder: { speechFolder })
         let transcription = Transcription(
@@ -48,7 +52,8 @@ struct GateSetEvaluationTests {
             lidIsClosed: { false },
             isTrusted: { true },
             minimumHold: .zero,
-            releaseTail: .zero
+            releaseTail: .zero,
+            dictationLanguage: language
         )
         var latest: DictationTimings?
         controller.onTimings = { latest = $0 }
@@ -82,7 +87,7 @@ struct GateSetEvaluationTests {
                 rows.append(row)
             }
         }
-        try GateOutput.write(["suite": "sets", "load_seconds": loadSeconds, "sets": sets, "clips": rows], named: "sets-raw")
+        try GateOutput.write(DictationPair.marked(["suite": "sets", "load_seconds": loadSeconds, "sets": sets, "clips": rows]), named: "sets-raw")
         // Numbers only.
         print("\(rows.count) clips in \(sets.count) sets")
     }
@@ -93,6 +98,26 @@ enum GateSets {
         guard let path = ProcessInfo.processInfo.environment["ORRA_GATE_SETS"], !path.isEmpty else { return nil }
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// The code of the pair a set is for: the pair its set.json names, Chinese for a set
+    /// without one, such as the four sets the gate always ran.
+    static func pair(of folder: URL) throws -> String {
+        struct Settings: Decodable {
+            let pair: String?
+        }
+        let file = folder.appendingPathComponent("set.json")
+        guard FileManager.default.fileExists(atPath: file.path) else { return DictationLanguage.chinese.pairCode }
+        return try JSONDecoder().decode(Settings.self, from: Data(contentsOf: file)).pair ?? DictationLanguage.chinese.pairCode
+    }
+
+    /// The sets of a pair in a folder, by name in order: every folder with a manifest.jsonl
+    /// whose pair is the language's.
+    static func sets(in root: URL, for language: DictationLanguage) throws -> [String] {
+        try FileManager.default.contentsOfDirectory(atPath: root.path)
+            .filter { FileManager.default.fileExists(atPath: root.appendingPathComponent("\($0)/manifest.jsonl").path) }
+            .sorted()
+            .filter { try pair(of: root.appendingPathComponent($0, isDirectory: true)) == language.pairCode }
     }
 
     struct Clip: Decodable {

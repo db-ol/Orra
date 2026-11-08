@@ -11,6 +11,8 @@ import SwiftUI
                 appDelegate.report.show()
             } showProjects: {
                 appDelegate.projectsWindow.show()
+            } showTranscribeFile: {
+                appDelegate.transcribeFileWindow.show()
             }
         } label: {
             MenuBarIcon(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models, feedback: appDelegate.feedback)

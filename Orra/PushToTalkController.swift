@@ -195,16 +195,16 @@ final class PushToTalkController {
     private(set) var lastTranscript: String?
     /// The latest dictation before the model changed it, so Paste Original Text in the
     /// menu can bring it back: the text before translation when the paste was translated,
-    /// and otherwise the text as the rule steps left it, when the cleanup model changed it.
-    /// In memory only, never logged.
+    /// and otherwise the text as the rule steps left it, when the model cleaned it up or
+    /// polished it. In memory only, never logged.
     private(set) var originalText: String?
     /// Receives the cues for the recording indicator and the sounds. AppDelegate sets it.
     @ObservationIgnored var onCue: (DictationCue) -> Void = { _ in }
     /// Told after each paste, with the text, the app it went into, the text before the
     /// cleanup model changed it, if it did, and the words Orra replaced, placed in the text
     /// before the cleanup, so Orra can learn from a correction. Never told about a
-    /// translated paste, since a fix of a translation is no misheard word. AppDelegate sets
-    /// it.
+    /// translated or polished paste, since a fix of a rewritten text is no misheard word.
+    /// AppDelegate sets it.
     @ObservationIgnored var onPasted: (_ text: String, _ app: pid_t, _ beforeCleanup: String?, _ replacements: [Replacement]) -> Void = { _, _, _, _ in }
     /// The kept word pairs whose words replace what the speech model wrote, see
     /// WordReplacement. Read once per dictation. AppDelegate sets it.
@@ -1648,9 +1648,16 @@ final class PushToTalkController {
             let translated = step?.result
             let language = step?.target
             timings.lap(.translation)
+            // While Polish is on, a dictation of the talk key gets a polish in place of the
+            // cleanup. One that cannot be used leaves the steps below to paste what they
+            // would without Polish. A dictation of the translation key is never polished,
+            // also when it is not translated, such as one over the translation's limit.
+            let polished = translating == nil && takesSteps ? await polish(text, timings: &timings) : nil
             if let translated {
                 // In place of the cleanup step, since the translation prompt cleans up too.
                 text = translated.text
+            } else if let polished {
+                text = polished
             } else if CleanupStep.isWorthCleaning(text) {
                 if takesSteps, CleanupStep.hasWorkForModel(text, heard: heard) {
                     let loaded = await cleanup.waitUntilLoaded()
@@ -1665,13 +1672,16 @@ final class PushToTalkController {
                     // step, so its time is not counted as part of the paste.
                     timings.lap(.cleanup)
                 }
-            } else if takesSteps, cleanup.isOn(), text.count > CleanupStep.maximumLength, CleanupStep.hasWorkForModel(text, heard: heard) {
+            } else if takesSteps, cleanup.isOn(), cleanup.polishStyle() == nil, text.count > CleanupStep.maximumLength, CleanupStep.hasWorkForModel(text, heard: heard) {
                 // Said only when cleanup is on and the model would have had work, so a long
                 // dictation it would have left as it was says nothing. Nothing waits for
-                // the model here, since it would not run anyway.
+                // the model here, since it would not run anyway. With Polish on, the notice
+                // about polishing says it.
                 addNotice(String(localized: "Dictations over \(CleanupStep.maximumLength) characters are pasted without cleanup."))
             }
             let isTranslation = translated?.isTranslation == true
+            // A polish the model gave back as it was is no rewritten text.
+            let isPolish = polished.map { $0 != ruled } ?? false
             if isTranslation {
                 originalText = translated?.untranslated
             } else {
@@ -1703,13 +1713,13 @@ final class PushToTalkController {
                 // checks. Numbers only.
                 logger.notice("Release to paste took \(pasted.total, privacy: .public) for \(recording.duration, privacy: .public) s of audio: \(pasted.summary, privacy: .public)")
                 onTimings(pasted)
-                // The words are in the text before translation.
-                markVocabularyUsed(in: isTranslation ? originalText ?? text : text)
-                // Orra never learns from a translated paste: a fix of the translation is no
-                // misheard word. Nor from Japanese or Spanish, since learning judges a fix by
-                // rules for Chinese and English: a Spanish accent fix, such as que to qué,
-                // would become a word that changes every later que.
-                if !isTranslation, takesSteps, let app = target ?? frontmostApp() {
+                // The words are in the text before translation or polish.
+                markVocabularyUsed(in: isTranslation || isPolish ? originalText ?? text : text)
+                // Orra never learns from a translated or polished paste: a fix of a rewritten
+                // text is no misheard word. Nor from Japanese or Spanish, since learning
+                // judges a fix by rules for Chinese and English: a Spanish accent fix, such
+                // as que to qué, would become a word that changes every later que.
+                if !isTranslation, !isPolish, takesSteps, let app = target ?? frontmostApp() {
                     onPasted(text, app, originalText, replacements)
                 }
             case .skippedPasswordField:
@@ -1774,6 +1784,27 @@ final class PushToTalkController {
             addNotice(String(localized: "This dictation was pasted without translation."))
         }
         return (result, plan.route.target)
+    }
+
+    /// The polish of a dictation of the talk key while Polish is on, or nil when there is
+    /// none to paste: Polish off, the text too short or too long, the model not ready, also
+    /// after a bounded wait for a load the press of the key started, or a polish that
+    /// failed Orra's checks, took too long or failed. Then the cleanup step runs as it does
+    /// without Polish, so Orra pastes the cleanup while cleanup is on and the text after the
+    /// rules otherwise. A dictation too long to polish leaves a notice that says so.
+    private func polish(_ text: String, timings: inout DictationTimings) async -> String? {
+        guard let style = cleanup.polishStyle() else { return nil }
+        guard text.count <= PolishStep.maximumLength else {
+            addNotice(String(localized: "Dictations over \(PolishStep.maximumLength) characters are pasted without polishing."))
+            return nil
+        }
+        guard PolishStep.isWorthPolishing(text) else { return nil }
+        let loaded = await cleanup.waitUntilLoadedForPolish()
+        timings.lap(.cleanupWait)
+        guard loaded else { return nil }
+        let result = await PolishStep.run(text, style: style, complete: cleanup.polish)
+        timings.lap(.cleanup)
+        return result.outcome.isUsable ? result.text : nil
     }
 
     /// Adds a note for the menu and the indicator after those the dictation has already, so

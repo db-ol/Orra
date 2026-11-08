@@ -1,0 +1,34 @@
+{"lang": "ko", "text": "내일 회의가 있어요.", "tokens": ["내", "일", "회", "의", "가", "있", "어", "요"]}
+{"lang": "ko", "text": "내일회의가있어요", "tokens": ["내", "일", "회", "의", "가", "있", "어", "요"]}
+{"lang": "ko", "text": "\u1112\u1161\u11ab\u1100\u116e\u11a8\u110b\u1165 \u1107\u1161\u11ae\u110b\u1161\u110a\u1173\u1100\u1175", "tokens": ["한", "국", "어", "받", "아", "쓰", "기"]}
+{"lang": "ko", "text": "ㅋㅋ 좋아요", "tokens": ["\u110f", "\u110f", "좋", "아", "요"]}
+{"lang": "ko", "text": "\uffbb\uffbb", "tokens": ["\u110f", "\u110f"]}
+{"lang": "ko", "text": "\u1100\u1100", "tokens": ["\u1100", "\u1100"]}
+{"lang": "ko", "text": "大韓民國은 2026년 3월에", "tokens": ["大", "韓", "民", "國", "은", "2026", "년", "3", "월", "에"]}
+{"lang": "ko", "text": "10,000원, 15km", "tokens": ["10", "000", "원", "15km"]}
+{"lang": "ko", "text": "Slack에서 PR 리뷰를 부탁해요. Deadline은 금요일!", "tokens": ["slack", "에", "서", "pr", "리", "뷰", "를", "부", "탁", "해", "요", "deadline", "은", "금", "요", "일"]}
+{"lang": "ko", "text": "カレー 먹자", "tokens": ["カ", "レ", "ー", "먹", "자"]}
+{"lang": "ko_en", "text": "Zoom 링크 보내 줄게요", "tokens": ["zoom", "링", "크", "보", "내", "줄", "게", "요"]}
+{"lang": "zh", "text": "这个 PR，先 merge！", "tokens": ["这", "个", "pr", "先", "merge"]}
+{"lang": "zh", "text": "我用 iPhone 拍了２０张，", "tokens": ["我", "用", "iphone", "拍", "了", "20", "张"]}
+{"lang": "zh", "text": "2011年，二零一一年", "tokens": ["2011", "年", "二", "零", "一", "一", "年"]}
+{"lang": "zh", "text": "안녕 hello 你好", "tokens": ["안", "녕", "hello", "你", "好"]}
+{"lang": "mixed", "text": "我们 deploy 到 production 了", "tokens": ["我", "们", "deploy", "到", "production", "了"]}
+{"lang": "en", "text": "Send me the report by Friday.", "tokens": ["send", "me", "the", "report", "by", "friday"]}
+{"lang": "en", "text": "A well-known API, version 2.4.1!", "tokens": ["a", "well", "known", "api", "version", "2", "4", "1"]}
+{"lang": "ja", "text": "人々は「モササウルス・ゲーム」を2つ見た。iPhone", "tokens": ["人", "々", "は", "モ", "サ", "サ", "ウ", "ル", "ス", "ゲ", "ー", "ム", "を", "2", "つ", "見", "た", "iphone"]}
+{"lang": "ja", "text": "ｶﾞｰﾃﾞﾝ", "tokens": ["ガ", "ー", "デ", "ン"]}
+{"lang": "ja_en", "text": "このバグのfixは明日Slackで", "tokens": ["こ", "の", "バ", "グ", "の", "fix", "は", "明", "日", "slack", "で"]}
+{"lang": "es", "text": "¿El año pasado? «Cuán ácida», dijo.", "tokens": ["el", "año", "pasado", "cuán", "ácida", "dijo"]}
+{"lang": "es_en", "text": "Mándame el PR por Slack, porfa.", "tokens": ["mándame", "el", "pr", "por", "slack", "porfa"]}
+{"lang": "ko", "reference": "내일 회의", "hypothesis": "내일회이", "errors": 1, "reference_tokens": 4}
+{"lang": "ko", "reference": "Slack에 올려 주세요", "hypothesis": "슬랙에 올려 주세요", "errors": 2, "reference_tokens": 7}
+{"lang": "zh", "reference": "你好 world", "hypothesis": "你好 word", "errors": 1, "reference_tokens": 3}
+{"lang": "ja", "reference": "東京へ行きます", "hypothesis": "東京に行きます", "errors": 1, "reference_tokens": 7}
+{"lang": "es", "reference": "el año pasado", "hypothesis": "el ano pasado", "errors": 1, "reference_tokens": 3}
+{"lang": "en", "reference": "send me the report", "hypothesis": "send me a report", "errors": 1, "reference_tokens": 4}
+{"lang": "en", "text": "It's O'Brien's turn.", "tokens": ["it's", "o'brien's", "turn"], "transcript_scoring": ["its", "obriens", "turn"], "note": "an apostrophe inside a word"}
+{"lang": "en", "text": "don\u2019t", "tokens": ["don", "t"], "transcript_scoring": ["dont"], "note": "a curly apostrophe"}
+{"lang": "es", "text": "dijo O'Brien", "tokens": ["dijo", "o'brien"], "transcript_scoring": ["dijo", "obrien"], "note": "an apostrophe inside a word"}
+{"lang": "zh", "text": "[UNK]好", "tokens": ["unk", "好"], "transcript_scoring": ["好"], "note": "the model's unknown token"}
+{"lang": "zh", "text": "東京へ año", "tokens": ["東", "京", "a", "o"], "transcript_scoring": ["東", "京", "へ", "año"], "note": "kana and letters outside ASCII in the Chinese way"}

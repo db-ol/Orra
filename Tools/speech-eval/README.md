@@ -120,6 +120,20 @@ becomes 80km, one token, which counts against a reference that writes 80 km as a
 of 80km would. The strict rate is the rate as before. A clip without lists scores the same
 both ways, and a run without lists shows no lenient row.
 
+### The scorer of the Swift tests
+
+The evaluations in OrraTests that score text themselves, such as the long dictation and
+context checks, use TranscriptScoring in OrraTests/TestSupport.swift. It has one way for
+every language, the tokens of cer_ko: one per Han character, kana and Hangul syllable or
+jamo, and one per run of other letters and digits. It differs on purpose in a few places:
+it drops apostrophes and the model's `[UNK]`, keeps letters outside ASCII in their word
+where the Chinese and English ways of score.py drop or split them, and knows no accepted
+spellings. `token-cases.jsonl` holds strings in every language of the pairs, Chinese and
+English mixed and each language mixed with English, with the tokens and errors both give,
+and the differences with TranscriptScoring's own tokens and a note. test_score.py checks
+score.py against it and SupportTests checks TranscriptScoring, so the two cannot drift
+apart unnoticed.
+
 ## Steps
 
 1. Build the corpus, about 1 GB of downloads and 140 MB of clips, in a virtual environment
@@ -152,7 +166,9 @@ both ways, and a run without lists shows no lenient row.
    `text_english`, each clip transcribed with that language as the hint, and their times.
 
    `TEST_RUNNER_ORRA_DICTATION_LANGUAGE` picks the dictation language as a user picks it
-   in Settings: `Chinese`, the default, `Japanese` or `Spanish`. With `Japanese` or
+   in Settings: `Chinese`, the default, `Japanese` or `Spanish`. Another value fails the
+   test, an empty one too, so a typo never runs as Chinese, and with the variable the
+   results file names the language in `dictation_language`. With `Japanese` or
    `Spanish`, LanguageGuard accepts that language and English, its passes are that
    language and then English, into `text_pass_japanese` or `text_pass_spanish`, Han
    characters stay as written, and `ruled_text` has the rules only where
@@ -180,19 +196,23 @@ The test never logs them. Keep results outside the repository.
 
 ## Other languages
 
-The test and score.py also take a corpus of Japanese or Spanish clips in the same layout,
-such as 200 clips each of the FLEURS ja_jp and es_419 test sets (CC BY 4.0): a folder with
-`clips/<id>.wav` and `manifest.jsonl`, one line per clip with `id`, `stratum`, `lang` (`ja`
-or `es`), `duration` and `reference`. Orra's first pass has no language hint, so these
-clips show what a Japanese or Spanish speaker gets: `text_unhinted` for what the model
-chose, and `text` and `language_pass` for what LanguageGuard made of it, with Chinese as
-the dictation language by default, or with `TEST_RUNNER_ORRA_DICTATION_LANGUAGE` set to
-the clips' language, as for a user who picked it. The 392 clip check is skipped for such
-a corpus.
+The test and score.py also take a corpus of other languages in the same layout, such as
+200 clips each of the FLEURS ja_jp, es_419 and ko_kr test sets (CC BY 4.0, see FLEURS
+sets): a folder with `clips/<id>.wav` and `manifest.jsonl`, one line per clip with `id`,
+`stratum`, `lang` (such as `ja`, `es` or `ko`), `duration` and `reference`. Orra's first
+pass has no language hint, so these clips show what a speaker of the language gets:
+`text_unhinted` for what the model chose, and `text` and `language_pass` for what
+LanguageGuard made of it, with Chinese as the dictation language by default, or with
+`TEST_RUNNER_ORRA_DICTATION_LANGUAGE` set to the clips' language, as for a user who picked
+it. The check of 392 clips holds for the speech corpus alone, whose clips are all `zh`,
+`en`, `mixed` or `none`.
 
-The test also transcribes each such clip with its own language as the hint, straight from
-the engine, into `text_japanese` or `text_spanish` with its time, for what the model can
-do when told the language.
+The test also transcribes each clip in the language of a dictation pair besides Chinese
+with its own language as the hint, straight from the engine, into `text_japanese` or
+`text_spanish` with its time, for what the model can do when told the language. Korean
+has no such pass until Orra has the pair. `TEST_RUNNER_ORRA_SPEECH_CORPUS_CLIPS` names a
+file of clip ids, one per line, and the test runs only those, in the manifest's order, as
+the release gate runs a pair's FLEURS clips (docs/release-gate.md, Dictation pairs).
 
 Score each text with the corpus's manifest:
 
@@ -201,9 +221,7 @@ Score each text with the corpus's manifest:
     python3 Tools/speech-eval/score.py --manifest <corpus>/manifest.jsonl --field text_japanese results/fleurs-ja.json
 
 score.py scores Korean clips (lang `ko`) and clips mixed with English (`ja_en`, `es_en`
-and `ko_en`) in the same layout. The test does not run such a corpus yet. It knows only
-Japanese and Spanish as other languages, and expects 392 clips from a manifest without
-them.
+and `ko_en`) in the same layout.
 
 The table leaves out any group or stratum that no run has clips in, so a run of FLEURS
 Spanish clips shows only wer_es, its rate without digits and es, and a run without clips
@@ -247,7 +265,9 @@ The sets in ~/projects/orra-project/bench were all drawn with seed 20261004, the
 the speech corpus. The ja, es and yue sets were built in October 2026 by scripts that are
 lost. On 2026-11-06 `build` and `rebuild` both gave every stored manifest and clip of
 fleurs-ja-es and fleurs-yue byte for byte. fleurs-ko was built that day, from the ko_kr
-download pinned in fleurs.sha256, and rebuilds the same way.
+download pinned in fleurs.sha256, and rebuilds the same way. A rebuild the same day took
+미리 out of the spellings of mm, since it is a common word for in advance: one clip's
+accepted list changed, and the 200 clips stayed byte for byte the same.
 
 | Folder | FLEURS configs | Clips | With digits | Audio |
 |---|---|---|---|---|

@@ -126,6 +126,37 @@ class KoreanTokenTests(unittest.TestCase):
         self.assertIn("n1 noise 5.0 s: 0 against 1 errors of 0 (-1)", text)
 
 
+class SharedCaseTests(unittest.TestCase):
+    """token-cases.jsonl, which OrraTests/SupportTests.swift also checks against
+    TranscriptScoring, the scorer of the Swift evaluations. A case of a text gives its tokens
+    in the scoring language of its lang, and a case of a reference and a hypothesis gives the
+    errors and the reference's token count. TranscriptScoring gives the same, except where a
+    case lists its own tokens under transcript_scoring, with a note on why."""
+
+    CASES = [json.loads(line) for line in (score.HERE / "token-cases.jsonl").read_text(encoding="utf-8").splitlines()]
+
+    def test_every_language_has_cases(self) -> None:
+        self.assertEqual({case["lang"] for case in self.CASES}, {"ko", "ko_en", "zh", "mixed", "en", "ja", "ja_en", "es", "es_en"})
+        self.assertEqual({case["lang"] for case in self.CASES if "reference" in case}, {"ko", "zh", "ja", "es", "en"})
+
+    def test_the_cases(self) -> None:
+        for case in self.CASES:
+            lang = score.scoring_lang(case["lang"])
+            if "text" in case:
+                with self.subTest(text=case["text"]):
+                    self.assertEqual(score.tokens(case["text"], lang), case["tokens"])
+                    # A difference is a real one, and says why.
+                    if "transcript_scoring" in case:
+                        self.assertNotEqual(case["transcript_scoring"], case["tokens"])
+                        self.assertTrue(case["note"])
+            else:
+                with self.subTest(reference=case["reference"]):
+                    clip = {"lang": case["lang"], "reference": case["reference"]}
+                    self.assertEqual(score.clip_errors(clip, case["hypothesis"]), (case["errors"], case["reference_tokens"]))
+                    # TranscriptScoring caps a clip's errors at its reference length.
+                    self.assertLessEqual(case["errors"], case["reference_tokens"])
+
+
 class ManifestTests(unittest.TestCase):
     def test_the_manifest_holds_the_392_clips(self) -> None:
         manifest = score.load_manifest()

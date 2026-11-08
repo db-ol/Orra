@@ -197,8 +197,9 @@ A new server, or any other network use, needs the maintainer's approval, see AGE
 
 Qwen3.5 4B in the 4 bit MLX build (mlx-community/Qwen3.5-4B-4bit, Apache-2.0), for
 the Clean Up Text switch in Settings ("Clean up with a local model") and, since
-2026-10-13, for the Translation switch ("Translate with the translation key"), which use
-the same files and the same download. The pins are in
+2026-10-13, for the Translation switch ("Translate with the translation key"), and since
+0.7.0 for the Polish switch ("Polish with a local model"), which use the same files and
+the same download. The pins are in
 `ModelManifest.qwen35Cleanup` in Orra/RewriteEngine.swift, and Orra/TextCleanup.swift
 drives the download from Settings. Everything above about servers, retries, ranges,
 hashes, staging and backups applies to it as well. It replaced Qwen3 4B Instruct 2507
@@ -207,26 +208,26 @@ cleanup.
 
 When Orra goes online for it:
 
-- Only after the user turns cleanup or translation on and agrees to the download in the
-  dialog that names its size, 3.05 GB, or chooses Download, Resume Download or Try Again
-  under a switch that is on. In the welcome window, a new user on a Mac with 16 GB of
+- Only after the user turns cleanup, Polish or translation on and agrees to the download
+  in the dialog that names its size, 3.05 GB, or chooses Download, Resume Download or Try
+  Again under a switch that is on. In the welcome window, a new user on a Mac with 16 GB of
   memory or more who never saved a choice for cleanup is not asked: the download step's
   button, Download Models (5.52 GB), names the size of both models, and clicking it turns
   cleanup on and starts the speech model and then this one, one after the other and never
   at once. The same button includes this model when cleanup was saved on. Under 16 GB, or
   with cleanup saved off, the welcome window downloads the speech model only and cleanup
   is turned on in Settings. Nothing goes online before one of these buttons. Turning on
-  the other switch while a download was agreed to for one asks nothing more. Cancel
-  Download keeps the bytes on disk and turns both switches off again. It leaves Projects
-  on.
+  another switch while a download was agreed to for one asks nothing more. Cancel
+  Download keeps the bytes on disk and turns the three switches off again. It leaves
+  Projects on. The welcome window never turns Polish on.
 - Or after the user turns Projects on in Settings and agrees to the download in the
   dialog that names its size, or chooses Download, Resume Download or Try Again on its
-  page while Projects is on. Turning Projects on while cleanup or translation is on asks
-  nothing more. A download agreed to for Projects goes on with Settings closed until
-  Projects turns off, and then stops unless cleanup, translation or captions wait for it.
-  The Projects page shows Cancel Download only while cleanup and translation are off and
-  captions do not run, so it never turns them off.
-- Never at launch, and never while cleanup, translation and Projects are all off, except
+  page while Projects is on. Turning Projects on while cleanup, Polish or translation is
+  on asks nothing more. A download agreed to for Projects goes on with Settings closed
+  until Projects turns off, and then stops unless cleanup, Polish, translation or captions
+  wait for it. The Projects page shows Cancel Download only while cleanup, Polish and
+  translation are off and captions do not run, so it never turns them off.
+- Never at launch, and never while cleanup, Polish, translation and Projects are all off, except
   while captions translate and the user agreed in the caption window. Launch only looks
   at the installed folder's file sizes. Loading uses local files only.
 

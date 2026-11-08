@@ -80,8 +80,9 @@ when the error rate barely moves.
 
 The sets in `pairs/` measure the four dictation pairs the same way, each set with its pair
 in `set.json`. `make_sets.py` builds them into `$ORRA_BENCH/gate-sets/pairs`, one level
-below the sets above. The release gate runs every set directly in its sets folder with the
-Chinese pair, so these sets stay apart until the gate runs each set with its own pair.
+below the sets above. The sets suite of the release gate runs the sets directly in its sets
+folder with the Chinese pair, and the pairs suite runs these, each with its own pair
+chosen (docs/release-gate.md, Dictation pairs). A Korean set runs once Orra has the pair.
 
 | Set | zh | ja | es | ko |
 |---|---|---|---|---|
