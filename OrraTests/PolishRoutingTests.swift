@@ -295,4 +295,72 @@ struct PolishRoutingTests {
         #expect(reported == ["明天下午3点开会。"])
         #expect(controller.originalText == nil)
     }
+
+    // MARK: A word said twice
+
+    /// A dictation whose only work for the cleanup is a word said twice by accident, with no
+    /// filler or correction cue, which the cleanup gate sends to the model for the repeat.
+    private static let repeated = "我我觉得方案还可以，成本稍微高了。"
+    private static let once = "我觉得方案还可以，成本稍微高了。"
+
+    /// While Polish is on, the polish takes the place of the cleanup for such a dictation
+    /// too, so the cleanup model never gets it, with cleanup on or off.
+    @Test func aRepeatIsPolishedWithoutACleanup() async throws {
+        for cleanupOn in [true, false] {
+            let model = Model(polish: #"{"polished": "\#(Self.once)"}"#, cleanup: #"{"cleaned": "\#(Self.once)"}"#)
+            let controller = await controller(cleanup: model.closures(cleanupOn: cleanupOn, style: .clear))
+            speech.reply = Self.repeated
+            try await dictate(controller)
+            #expect(model.polished.withLock { $0 } == ["clear \(Self.repeated)"])
+            #expect(model.cleaned.withLock { $0 }.isEmpty)
+            #expect(inserter.inserted.last == Self.once)
+            #expect(controller.originalText == Self.repeated)
+        }
+    }
+
+    /// A polish of such a dictation that is held back leaves what Orra pastes without
+    /// Polish: the cleanup while cleanup is on, which gets the dictation for its repeat,
+    /// and the text after the rules while cleanup is off.
+    @Test func aHeldBackPolishOfARepeatPastesWhatOrraPastesWithoutPolish() async throws {
+        let heldBack = #"{"polished": "好的，以下是修改后的方案：成本可以再降低。"}"#
+        let on = Model(polish: heldBack, cleanup: #"{"cleaned": "\#(Self.once)"}"#)
+        let cleaning = await controller(cleanup: on.closures(cleanupOn: true, style: .clear))
+        speech.reply = Self.repeated
+        try await dictate(cleaning)
+        #expect(on.polished.withLock { $0 } == ["clear \(Self.repeated)"])
+        #expect(on.cleaned.withLock { $0 } == [Self.repeated])
+        #expect(inserter.inserted.last == Self.once)
+        let off = Model(polish: heldBack, cleanup: #"{"cleaned": "\#(Self.once)"}"#)
+        let ruling = await controller(cleanup: off.closures(cleanupOn: false, style: .clear))
+        try await dictate(ruling)
+        #expect(off.polished.withLock { $0 } == ["clear \(Self.repeated)"])
+        #expect(off.cleaned.withLock { $0 }.isEmpty)
+        #expect(inserter.inserted.last == Self.repeated)
+    }
+
+    /// With Polish off, the cleanup gets such a dictation and its cleanup is pasted.
+    @Test func withPolishOffTheCleanupGetsARepeat() async throws {
+        let model = Model(polish: #"{"polished": "x"}"#, cleanup: #"{"cleaned": "\#(Self.once)"}"#)
+        let controller = await controller(cleanup: model.closures(cleanupOn: true, style: nil))
+        speech.reply = Self.repeated
+        try await dictate(controller)
+        #expect(model.polished.withLock { $0 }.isEmpty)
+        #expect(model.cleaned.withLock { $0 } == [Self.repeated])
+        #expect(inserter.inserted == [Self.once])
+        #expect(controller.originalText == Self.repeated)
+    }
+
+    /// The translation key translates such a dictation, and neither the polish nor the
+    /// cleanup gets it, as with any other dictation of that key.
+    @Test func theTranslationKeyTranslatesARepeatWithoutPolishOrCleanup() async throws {
+        let model = Model(polish: #"{"polished": "\#(Self.once)"}"#, cleanup: #"{"cleaned": "\#(Self.once)"}"#)
+        let translation = PushToTalkControllerTests.FakeTranslation(answer: #"{"cleaned": "\#(Self.once)", "translation": "I think the plan is fine, but the cost is a little high."}"#)
+        let controller = await controller(cleanup: model.closures(cleanupOn: true, style: .clear), translation: translation)
+        speech.reply = Self.repeated
+        try await dictate(controller, with: .rightOption)
+        #expect(translation.received == ["en \(Self.repeated)"])
+        #expect(model.polished.withLock { $0 }.isEmpty)
+        #expect(model.cleaned.withLock { $0 }.isEmpty)
+        #expect(inserter.inserted == ["I think the plan is fine, but the cost is a little high."])
+    }
 }

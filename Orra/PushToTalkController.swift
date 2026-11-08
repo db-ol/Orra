@@ -1667,16 +1667,19 @@ final class PushToTalkController {
                         timings.lap(.cleanup)
                     }
                 } else {
-                    // The gate found no filler or correction cue, or the text is Japanese
-                    // or Spanish, so the model is skipped. The check still ends the cleanup
-                    // step, so its time is not counted as part of the paste.
+                    // The gate found no filler, correction cue or repeat, or the text is
+                    // Japanese or Spanish, so the model is skipped. The check still ends the
+                    // cleanup step, so its time is not counted as part of the paste.
                     timings.lap(.cleanup)
                 }
-            } else if takesSteps, cleanup.isOn(), cleanup.polishStyle() == nil, text.count > CleanupStep.maximumLength, CleanupStep.hasWorkForModel(text, heard: heard) {
-                // Said only when cleanup is on and the model would have had work, so a long
-                // dictation it would have left as it was says nothing. Nothing waits for
-                // the model here, since it would not run anyway. With Polish on, the notice
-                // about polishing says it.
+            } else if takesSteps, cleanup.isOn(), cleanup.polishStyle() == nil, text.count > CleanupStep.maximumLength, CleanupStep.hasFillerOrCorrectionCue(text, heard: heard) {
+                // Said only when cleanup is on and the dictation holds a filler or a
+                // correction cue, so a long dictation the model would have left as it was
+                // says nothing. A repeat alone says nothing either. It sends a shorter
+                // dictation to the model, but long Chinese dictations often hold doubled
+                // words that are meant, such as 看看 or 谢谢谢谢. Nothing waits for the model
+                // here, since it would not run anyway. With Polish on, the notice about
+                // polishing says it.
                 addNotice(String(localized: "Dictations over \(CleanupStep.maximumLength) characters are pasted without cleanup."))
             }
             let isTranslation = translated?.isTranslation == true

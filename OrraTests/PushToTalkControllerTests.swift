@@ -1025,10 +1025,49 @@ struct PushToTalkControllerTests {
         #expect(waits == 0)
         #expect((inserter.inserted.first?.count ?? 0) > CleanupStep.maximumLength)
         #expect(controller.notice == "Dictations over 400 characters are pasted without cleanup.")
+        // A spoken correction says it too.
+        speech.reply = "发给张总，不对，发给李总。" + String(repeating: "我们明天下午开会讨论一下。", count: 20)
+        try await dictate(controller)
+        #expect(controller.notice == "Dictations over 400 characters are pasted without cleanup.")
         // Without a filler or a correction the model would have had nothing to do.
         speech.reply = String(repeating: "我们明天下午开会讨论一下。", count: 20)
         try await dictate(controller)
         #expect(controller.notice == nil)
+        #expect(cleanups.withLock { $0 } == 0)
+        #expect(waits == 0)
+    }
+
+    /// A repeat sends a dictation to the cleanup model, but a long one whose only work for
+    /// the model is a repeat says nothing about the cleanup it did not get, since long
+    /// Chinese dictations often hold doubled words that are meant, such as 看看 or 谢谢谢谢.
+    @Test func aLongDictationWithOnlyARepeatSaysNothingAboutCleanup() async throws {
+        let cleaned = Mutex<[String]>([])
+        let controller = await controller(cleanup: CleanupModel(isOn: { true }, waitUntilLoaded: { true }, complete: { text in
+            cleaned.withLock { $0.append(text) }
+            // The model removes a word said twice by accident and keeps a doubled word.
+            let once = text.replacingOccurrences(of: "我我", with: "我")
+            return #"{"cleaned": "\#(once)"}"#
+        }))
+        // A short dictation with a repeat goes to the model, an accidental repeat or a meant one.
+        speech.reply = "我我觉得方案还可以，成本稍微高了。"
+        try await dictate(controller)
+        speech.reply = "你帮我看看方案。"
+        try await dictate(controller)
+        #expect(cleaned.withLock { $0 } == ["我我觉得方案还可以，成本稍微高了。", "你帮我看看方案。"])
+        #expect(inserter.inserted == ["我觉得方案还可以，成本稍微高了。", "你帮我看看方案。"])
+        #expect(controller.notice == nil)
+        // A long one is pasted without a notice, whether its repeat is accidental or meant.
+        mic.recording = longRecording(seconds: 100)
+        for start in ["我我觉得", "你帮我看看，", "谢谢谢谢，"] {
+            speech.reply = start + String(repeating: "我们明天下午开会讨论一下。", count: 20)
+            try await dictate(controller)
+            let pasted = try #require(inserter.inserted.last)
+            #expect(pasted.count > CleanupStep.maximumLength)
+            // The gate finds work for the model in it, as in a short one.
+            #expect(CleanupStep.hasWorkForModel(pasted, heard: pasted))
+            #expect(controller.notice == nil)
+        }
+        #expect(cleaned.withLock { $0 }.count == 2)
     }
 
     @Test func withCleanupOffALongDictationSaysNothingAboutIt() async throws {
