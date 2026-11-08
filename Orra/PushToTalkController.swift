@@ -1617,6 +1617,11 @@ final class PushToTalkController {
             if writesNumbersAsDigits, takesSteps {
                 text = NumberRules.writingNumbersAsDigits(in: text)
             }
+            // Capitals spelled one by one, such as P R, have no switch of their own.
+            // Japanese and Spanish skip them, as they skip the rules above.
+            if takesSteps {
+                text = SpelledLetters.joining(in: text)
+            }
             timings.lap(.numbers)
             // The user's words go in after the rule steps, which learning saw the heard
             // spellings after, so no rule rewrites a user's word, and before the cleanup

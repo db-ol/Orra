@@ -88,13 +88,15 @@ struct WordReplacementDataEvaluationTests {
                 if Self.hasHan(text) { chinese.append(text) } else { english.append(text) }
             }
         }
-        // The stored transcripts, through the rule steps as the controller runs them.
+        // The stored transcripts, through the rule steps as the controller runs them: the
+        // filler and number rules, then the join of spelled capitals.
         var clips: [(id: String, reference: String, transcript: String)] = []
         for file in ["q17_auto.fleurs_en", "q17_auto.fleurs_zh", "q17_auto.ascend_mixed"] {
             for line in Self.lines("results/\(file).scored.tsv") {
                 let parts = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
                 guard parts.count >= 4 else { continue }
-                let transcript = NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: ChineseText.simplified(parts[3])))
+                let ruled = NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: ChineseText.simplified(parts[3])))
+                let transcript = SpelledLetters.joining(in: ruled)
                 clips.append((parts[1], parts[2], transcript))
                 if Self.hasHan(parts[2]) { chinese.append(parts[2]) } else { english.append(parts[2]) }
             }
