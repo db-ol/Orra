@@ -26,7 +26,8 @@ https://db-ol.github.io/Orra/.
   translates between English and Chinese.
   - The Japanese and Spanish pages use the sentences of the animations in README.ja.md and
     README.es.md. They say a Japanese or Spanish sentence, pasted as it was said, since the
-    filler rule and the cleanup model take English and Chinese only. The translation key
+    filler rule removes only English fillers from it and the cleanup model takes English
+    and Chinese only. The translation key
     turns it into English, with the badge the app shows for Automatic, 訳 in Japanese and ⇄
     in Spanish. Live Captions show English sentences with Japanese or Spanish translations,
     and the reply is spoken in English. The cleanup demo keeps the English sentence, since
