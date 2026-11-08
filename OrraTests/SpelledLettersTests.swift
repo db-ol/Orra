@@ -148,8 +148,8 @@ struct SpelledLettersTests {
         }
     }
 
-    /// No text of Tools/rewrite-eval holds capitals the join changes, so the cleanup and
-    /// translation evaluations get the same texts as before it.
+    /// No text of Tools/rewrite-eval holds capitals the join changes, so the cleanup, polish
+    /// and translation evaluations get the same texts as before it.
     @Test func theEvaluationTextsStayTheSame() throws {
         let files = try FileManager.default.contentsOfDirectory(atPath: RewriteEvalFiles.folder.path)
             .filter { $0.hasSuffix(".jsonl") }
@@ -196,8 +196,8 @@ struct SpelledLettersTests {
     ///     TEST_RUNNER_ORRA_SPELLED_LETTERS_RUNS=<run>[:<run>...] TEST_RUNNER_ORRA_SPELLED_LETTERS_OUT=<folder> xcodebuild ... test -only-testing:OrraTests/SpelledLettersTests
     ///
     /// For each run it writes <folder>/<run>.json with two maps: corpus, the ruled_text of
-    /// every clip of raw/corpus.json after the join, where the dictation language of the
-    /// corpus evaluation takes the rule steps, and sets, the text of every clip of
+    /// every clip of raw/corpus.json after the join, where the dictation pair of the corpus
+    /// evaluation takes the rule steps, see DictationPair, and sets, the text of every clip of
     /// raw/sets-raw.json after the join, by set and ID. The set evaluation dictates in
     /// Chinese, so every text takes the rule steps. Copies of the run with these texts can
     /// then be scored with Tools/release-gate/gate.py. Counts only on the console.
@@ -208,6 +208,7 @@ struct SpelledLettersTests {
         let path = try #require(ProcessInfo.processInfo.environment["ORRA_SPELLED_LETTERS_OUT"], "no TEST_RUNNER_ORRA_SPELLED_LETTERS_OUT")
         let out = URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        let language = try DictationPair.chosen()
         for run in runs {
             var corpus: [String: String] = [:]
             var sets: [String: String] = [:]
@@ -219,7 +220,7 @@ struct SpelledLettersTests {
                 for (id, row) in clips {
                     let text = row["text"] as? String ?? ""
                     let ruled = row["ruled_text"] as? String ?? text
-                    let takesSteps = LanguageGuard.takesChineseAndEnglishSteps(text, for: SpeechCorpus.dictationLanguage)
+                    let takesSteps = LanguageGuard.takesChineseAndEnglishSteps(text, for: language)
                     corpus[id] = takesSteps ? SpelledLetters.joining(in: ruled) : ruled
                     changed += corpus[id] == ruled ? 0 : 1
                 }
