@@ -5,6 +5,12 @@ import Testing
 
 /// SortingService with a fake store and a fake model. The people, companies and mail are
 /// made up for these tests, at .example addresses.
+///
+/// No test here has a time limit. In a full run on a busy runner the other tests can keep
+/// the main actor and the cooperative pool busy for a minute or more, and a test that is
+/// not stuck waits all that time. So each wait ends on its own: when what it waits for
+/// happens, when the batch that would bring it about ends, or, for steps that run on the
+/// main actor alone, after a count of turns of the main actor.
 @MainActor
 struct SortingServiceTests {
     static let harbor = UUID()
@@ -166,11 +172,7 @@ struct SortingServiceTests {
 
         func ask(_ request: ProjectsModelRequest) async throws -> String {
             requests.append(request)
-            let waiting = waitingForRequests
-            waitingForRequests = []
-            for waiter in waiting {
-                waiter.resume()
-            }
+            wakeWaiters()
             if holds {
                 await withCheckedContinuation { held.append($0) }
             }
@@ -178,10 +180,21 @@ struct SortingServiceTests {
         }
 
         /// Returns once the model was asked, however long the rules before the request take
-        /// off the main actor on a busy test runner.
-        func waitUntilAsked() async {
-            while requests.isEmpty {
+        /// off the main actor on a busy test runner. It also returns when `batch` ends
+        /// without asking the model, and then fails the test at the caller's line, so a
+        /// change that keeps the model out of the batch ends the wait too.
+        func waitUntilAsked(by batch: Task<Void, Never>, sourceLocation: SourceLocation = #_sourceLocation) async {
+            let ended = Flag()
+            Task {
+                await batch.value
+                ended.isSet = true
+                self.wakeWaiters()
+            }
+            while requests.isEmpty, !ended.isSet {
                 await withCheckedContinuation { waitingForRequests.append($0) }
+            }
+            if requests.isEmpty {
+                Issue.record("The batch ended without asking the model.", sourceLocation: sourceLocation)
             }
         }
 
@@ -192,10 +205,25 @@ struct SortingServiceTests {
             }
             held = []
         }
+
+        private func wakeWaiters() {
+            let waiting = waitingForRequests
+            waitingForRequests = []
+            for waiter in waiting {
+                waiter.resume()
+            }
+        }
     }
 
     final class Window {
         var isOpen = true
+    }
+
+    /// Set by a task the test started, so the test can see how far the task got without
+    /// awaiting it.
+    @MainActor
+    final class Flag {
+        var isSet = false
     }
 
     private func service(
@@ -238,12 +266,22 @@ struct SortingServiceTests {
         }
     }
 
-    /// Returns once `count` batches are not finished, so the last one started waits behind
-    /// the one under way.
-    private func waitUntil(_ sorting: SortingService, hasBatches count: Int) async {
-        while sorting.unfinishedBatches < count {
+    /// Lets the tasks waiting on the main actor run until `condition` holds, for at most the
+    /// turns of `settle()`, and fails the test at the caller's line if it does not hold then.
+    /// Only for steps that run on the main actor alone. Each of them needs one turn however
+    /// busy the runner is, so a count of turns bounds the wait without a clock. Work off the
+    /// main actor, such as the rules before the model's request, has no such bound.
+    private func settle(until condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
+        for _ in 0..<2_000 where !condition() {
             await Task.yield()
         }
+        #expect(condition(), "Still false after 2,000 turns of the main actor.", sourceLocation: sourceLocation)
+    }
+
+    /// Returns once `count` batches are not finished, so the last one started waits behind
+    /// the one under way. A batch counts from the first turn of its task on the main actor.
+    private func waitUntil(_ sorting: SortingService, hasBatches count: Int, sourceLocation: SourceLocation = #_sourceLocation) async {
+        await settle(until: { sorting.unfinishedBatches >= count }, sourceLocation: sourceLocation)
     }
 
     // MARK: Rules and the model
@@ -355,8 +393,7 @@ struct SortingServiceTests {
         #expect(store.decision("a@test.example") == SortingDecision(project: nil, level: .unsure, reasons: [.tooLongForModel]))
     }
 
-    @Test(.timeLimit(.minutes(1)))
-    func cancellingTheCallerStopsTheBatchWithoutSaving() async {
+    @Test func cancellingTheCallerStopsTheBatchWithoutSaving() async {
         let store = Store()
         store.seen["kim@quay.example"] = [Self.maple]
         let model = Model()
@@ -368,7 +405,7 @@ struct SortingServiceTests {
                 email("b@test.example", from: "song.yutong@harborlights.example", day: 1),
             ])
         }
-        await model.waitUntilAsked()
+        await model.waitUntilAsked(by: task)
         #expect(model.requests.count == 1)
         task.cancel()
         model.release()
@@ -384,7 +421,7 @@ struct SortingServiceTests {
         model.holds = true
         let sorting = service(store, model)
         let first = Task { await sorting.sort([email("a@test.example", from: "kim@quay.example")]) }
-        await model.waitUntilAsked()
+        await model.waitUntilAsked(by: first)
         let second = Task { await sorting.sort([email("b@test.example", from: "song.yutong@harborlights.example")]) }
         await waitUntil(sorting, hasBatches: 2)
         // Time for the second batch to save its email, had it not waited.
@@ -541,15 +578,14 @@ struct SortingServiceTests {
 
     /// Sorting again reads each email when the turn of its batch comes, so it compares the
     /// email with where the batch before filed it.
-    @Test(.timeLimit(.minutes(1)))
-    func sortingAgainReadsEachEmailWhenItsTurnComes() async {
+    @Test func sortingAgainReadsEachEmailWhenItsTurnComes() async {
         let store = Store()
         store.seen["kim@quay.example"] = [Self.maple]
         let model = Model()
         model.holds = true
         let sorting = service(store, model)
         let first = Task { await sorting.sort([email("new@test.example", from: "kim@quay.example")]) }
-        await model.waitUntilAsked()
+        await model.waitUntilAsked(by: first)
         // Filed in Harbor by a setting that is gone when the change comes.
         store.emails = [email("a@test.example", from: "kim@quay.example", decided: SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]))]
         let again = Task { await sorting.sortAgain(["a@test.example"], after: [Self.harbor], rulesOnly: true) }
@@ -637,8 +673,7 @@ struct SortingServiceTests {
         #expect(store.replies["a@test.example"] == .reply(.en))
     }
 
-    @Test(.timeLimit(.minutes(1)))
-    func aMoveWhileTheModelThinksIsKept() async {
+    @Test func aMoveWhileTheModelThinksIsKept() async {
         let store = Store()
         store.seen["kim@quay.example"] = [Self.maple]
         let model = Model()
@@ -646,10 +681,19 @@ struct SortingServiceTests {
         let sorting = service(store, model)
         let mail = email("a@test.example", from: "kim@quay.example")
         let batch = Task { await sorting.sort([mail]) }
-        await model.waitUntilAsked()
-        // The move does not wait for the model.
-        #expect(await sorting.move(mail, to: Self.harbor) == nil)
+        await model.waitUntilAsked(by: batch)
+        // The move does not wait for the model: it is done while the model still holds its
+        // answer. Its steps all run on the main actor, so a move that waited for the model
+        // would fail here rather than leave the test waiting.
+        let moved = Flag()
+        let move = Task {
+            let offer = await sorting.move(mail, to: Self.harbor)
+            moved.isSet = true
+            return offer
+        }
+        await settle(until: { moved.isSet })
         model.release()
+        #expect(await move.value == nil)
         await batch.value
         #expect(store.decisions.isEmpty)
         #expect(store.filed["a@test.example"] == SortingService.Filed(project: Self.harbor, movedByUser: true))
@@ -733,8 +777,7 @@ struct SortingServiceTests {
         #expect(store.projectReads == 2)
     }
 
-    @Test(.timeLimit(.minutes(1)))
-    func projectsThatChangeDuringABatchReachItsNextEmail() async {
+    @Test func projectsThatChangeDuringABatchReachItsNextEmail() async {
         let store = Store()
         store.seen["kim@quay.example"] = [Self.maple]
         let model = Model()
@@ -746,7 +789,7 @@ struct SortingServiceTests {
                 email("b@test.example", from: "owen@pike-build.example", day: 1),
             ])
         }
-        await model.waitUntilAsked()
+        await model.waitUntilAsked(by: batch)
         // The user deletes the kitchen project while the model thinks.
         store.candidates.remove(at: 1)
         sorting.projectsChanged()
@@ -774,8 +817,7 @@ struct SortingServiceTests {
         #expect(store.projectReads == 2)
     }
 
-    @Test(.timeLimit(.minutes(1)))
-    func stopEndsTheBatchUnderWayAndThoseWaiting() async {
+    @Test func stopEndsTheBatchUnderWayAndThoseWaiting() async {
         let store = Store()
         store.seen["kim@quay.example"] = [Self.maple]
         let model = Model()
@@ -787,7 +829,7 @@ struct SortingServiceTests {
                 email("b@test.example", from: "song.yutong@harborlights.example", day: 1),
             ])
         }
-        await model.waitUntilAsked()
+        await model.waitUntilAsked(by: first)
         let second = Task { await sorting.sort([email("c@test.example", from: "song.yutong@harborlights.example")]) }
         await waitUntil(sorting, hasBatches: 2)
         sorting.stop()
