@@ -56,7 +56,8 @@ struct PolishRoutingTests {
             frontmostApp: { [workspace] in workspace.frontmost },
             minimumHold: .zero,
             releaseTail: .zero,
-            listeningCueDelay: .zero
+            listeningCueDelay: .zero,
+            dictationLanguage: .chinese
         )
         if translation != nil {
             controller.setTranslationKeyOn(true)
@@ -273,6 +274,7 @@ struct PolishRoutingTests {
             releaseTail: .zero,
             listeningCueDelay: .zero,
             vocabulary: vocabularyWords("中秋节", "发版", added: Date(timeIntervalSince1970: 1_000)),
+            dictationLanguage: .chinese,
             now: { pasteTime }
         )
         await controller.loadModel()
