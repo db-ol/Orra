@@ -212,7 +212,7 @@ struct TranscribeFileWindowTests {
         FileTranscriptionEngines(
             open: { try source.open($0) },
             isSpeechReady: { true },
-            settings: { FileTranscriptionSettings() },
+            settings: { FileTranscriptionSettings(language: .chinese) },
             transcribe: { try await speech.transcribe($0, $1) },
             dictationNoteDue: { false },
             captionsRun: captionsRun,

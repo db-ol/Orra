@@ -93,21 +93,21 @@ struct ContextNumbersTranscriptionTests {
     @Test func numbersComeFromThePassWithoutTheVocabulary() async throws {
         speech.reply = "Orra 在二零二四年发布。"
         speech.replyWithoutContext = "Aura 在2024年发布。"
-        let text = try await speech.transcription.transcribe([0.1], vocabulary: ["Orra"], audioSeconds: 1)
+        let text = try await speech.transcription.transcribe([0.1], vocabulary: ["Orra"], audioSeconds: 1, language: .chinese)
         #expect(text == "Orra 在2024年发布。")
         #expect(speech.receivedContexts == ["Orra", nil])
     }
 
     @Test func textWithoutSpokenNumbersIsTranscribedOnce() async throws {
         speech.reply = "Orra 发布了三个版本。"
-        let text = try await speech.transcription.transcribe([0.1], vocabulary: ["Orra"], audioSeconds: 1)
+        let text = try await speech.transcription.transcribe([0.1], vocabulary: ["Orra"], audioSeconds: 1, language: .chinese)
         #expect(text == "Orra 发布了三个版本。")
         #expect(speech.receivedContexts == ["Orra"])
     }
 
     @Test func withoutAVocabularyThereIsNoSecondPass() async throws {
         speech.reply = "在二零二四年发布。"
-        let text = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1)
+        let text = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1, language: .chinese)
         #expect(text == "在二零二四年发布。")
         #expect(speech.receivedContexts == [nil])
     }
@@ -115,7 +115,7 @@ struct ContextNumbersTranscriptionTests {
     @Test func withDigitsOffThereIsNoSecondPass() async throws {
         speech.reply = "Orra 在二零二四年发布。"
         speech.replyWithoutContext = "Aura 在2024年发布。"
-        let text = try await speech.transcription.transcribe([0.1], vocabulary: ["Orra"], audioSeconds: 1, takingDigits: false)
+        let text = try await speech.transcription.transcribe([0.1], vocabulary: ["Orra"], audioSeconds: 1, takingDigits: false, language: .chinese)
         #expect(text == "Orra 在二零二四年发布。")
         #expect(speech.receivedContexts == ["Orra"])
     }
@@ -123,7 +123,7 @@ struct ContextNumbersTranscriptionTests {
     @Test func aFailedPassKeepsTheText() async throws {
         speech.reply = "Orra 在二零二四年发布。"
         speech.transcribeErrorWithoutContext = TestError()
-        let text = try await speech.transcription.transcribe([0.1], vocabulary: ["Orra"], audioSeconds: 1)
+        let text = try await speech.transcription.transcribe([0.1], vocabulary: ["Orra"], audioSeconds: 1, language: .chinese)
         #expect(text == "Orra 在二零二四年发布。")
     }
 
@@ -131,7 +131,7 @@ struct ContextNumbersTranscriptionTests {
         speech.reply = "Orra 在二零二四年发布。"
         speech.transcribeErrorWithoutContext = CancellationError()
         await #expect(throws: CancellationError.self) {
-            try await speech.transcription.transcribe([0.1], vocabulary: ["Orra"], audioSeconds: 1)
+            try await speech.transcription.transcribe([0.1], vocabulary: ["Orra"], audioSeconds: 1, language: .chinese)
         }
     }
 }

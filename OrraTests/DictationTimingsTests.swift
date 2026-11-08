@@ -38,7 +38,8 @@ struct DictationTimingsTests {
             insert: inserter.insert,
             frontmostApp: { 100 },
             minimumHold: .zero,
-            releaseTail: .milliseconds(20)
+            releaseTail: .milliseconds(20),
+            dictationLanguage: .chinese
         )
         var reported: [DictationTimings] = []
         controller.onTimings = { reported.append($0) }
@@ -76,7 +77,8 @@ struct DictationTimingsTests {
             insert: inserter.insert,
             frontmostApp: { 100 },
             minimumHold: .zero,
-            releaseTail: .zero
+            releaseTail: .zero,
+            dictationLanguage: .chinese
         )
         var reported: [DictationTimings] = []
         controller.onTimings = { reported.append($0) }
@@ -107,7 +109,8 @@ struct DictationTimingsTests {
             insert: inserter.insert,
             frontmostApp: { 100 },
             minimumHold: .zero,
-            releaseTail: .zero
+            releaseTail: .zero,
+            dictationLanguage: .chinese
         )
         var reported = 0
         controller.onTimings = { _ in reported += 1 }

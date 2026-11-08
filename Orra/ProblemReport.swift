@@ -122,12 +122,13 @@ nonisolated enum ProblemReport {
     }
 
     /// A letter or digit that joins a name into a longer word. Chinese, Japanese and Korean
-    /// characters do not, since those languages write no spaces between words.
-    private static let wordCharacter = "[[\\p{L}\\p{N}]-[\\p{Han}\\p{Hiragana}\\p{Katakana}\\p{Hangul}]]"
+    /// characters do not, since those languages write no spaces between words. Korean
+    /// counts every letter of its script, jamo too, see Hangul.scriptPattern.
+    private static let wordCharacter = "[[\\p{L}\\p{N}]-[\\p{Han}\\p{Hiragana}\\p{Katakana}\(Hangul.scriptPattern)]]"
 
     private static func replaceWord(_ word: String, with placeholder: String, in text: String) -> String {
         let word = word.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cjk = word.range(of: "^[\\p{Han}\\p{Hiragana}\\p{Katakana}\\p{Hangul}]+$", options: .regularExpression) != nil
+        let cjk = word.range(of: "^[\\p{Han}\\p{Hiragana}\\p{Katakana}\(Hangul.scriptPattern)]+$", options: .regularExpression) != nil
         let minimum = cjk ? 2 : 3
         guard word.count >= minimum else { return text }
         let escaped = NSRegularExpression.escapedPattern(for: word)

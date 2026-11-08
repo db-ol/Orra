@@ -132,7 +132,7 @@ struct SettingsPageTests {
     /// The row of double press for hands free shows in Keys only while a key it works on is
     /// in Hold: the talk key, or the translation key while Translation is on.
     @Test func theHandsFreeRowShowsOnlyWhileAKeyIsInHold() {
-        let pushToTalk = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkMode: .toggle, translationMode: .hold)
+        let pushToTalk = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkMode: .toggle, translationMode: .hold, dictationLanguage: .chinese)
         #expect(!pushToTalk.handsFreeApplies)
         pushToTalk.setTranslationKeyOn(true)
         #expect(pushToTalk.handsFreeApplies)
@@ -188,7 +188,7 @@ struct SettingsPageTests {
         #expect(CaptionSource.allCases.map(\.systemImage) == ["speaker.wave.2", "mic.fill"])
         let captions = MeetingCaptions(
             systemAudio: SystemAudioSource(start: { _ in }, stop: {}, somethingPlays: { false }),
-            engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, target: { .chinese }, translate: { text, _ in text })
+            engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, target: { .chinese }, translate: { text, _ in text }, language: { .chinese })
         )
         #expect(captions.source == .systemAudio)
         captions.setSource(.microphone)
@@ -418,7 +418,7 @@ struct SettingsPageTests {
             updater: AppUpdater(),
             captions: meeting ? MeetingCaptions(
                 systemAudio: SystemAudioSource(start: { _ in }, stop: {}, somethingPlays: { false }),
-                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, target: { .chinese }, translate: { text, _ in text })
+                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, target: { .chinese }, translate: { text, _ in text }, language: { .chinese })
             ) : nil,
             speech: meeting ? TranslationSpeech(engines: .only(FakeSynthesizer()), playback: FakePlayback(), outputs: { [] }, folders: { nil }) : nil,
             voiceModels: meeting ? VoiceModels(kind: .qwen3) { [temporary] manifest in

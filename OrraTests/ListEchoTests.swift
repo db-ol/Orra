@@ -73,7 +73,7 @@ struct ListEchoTests {
     private let samples = [Float](repeating: 0.1, count: 32_000)
 
     private func transcribe(_ speech: FakeSpeech, _ terms: [String], screenNames: Bool) async throws -> String {
-        try await speech.transcription.transcribe(samples, vocabulary: terms, holdsScreenNames: screenNames, audioSeconds: 2)
+        try await speech.transcription.transcribe(samples, vocabulary: terms, holdsScreenNames: screenNames, audioSeconds: 2, language: .chinese)
     }
 
     @Test func withScreenNamesAListOverSpeechGivesWayToThePlainPass() async throws {

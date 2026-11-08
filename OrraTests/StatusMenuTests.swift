@@ -255,7 +255,7 @@ struct StatusMenuTests {
 
     /// The menu SwiftUI makes of StatusMenu. No Live Captions shortcut unless one is given.
     private func menu(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true, store: CaptionStore = CaptionStore(), shortcut: KeyCombination? = nil, projects: ProjectsRuntime? = nil) -> NSMenu {
-        let pushToTalk = PushToTalkController(capture: mic.capture, transcription: dictation.transcription, insert: inserter.insert, liveCaptionsShortcut: shortcut)
+        let pushToTalk = PushToTalkController(capture: mic.capture, transcription: dictation.transcription, insert: inserter.insert, liveCaptionsShortcut: shortcut, dictationLanguage: .chinese)
         pushToTalk.setTranslationKeyOn(translationOn)
         let speech = TranslationSpeech(
             engines: voiceModel ? .only(FakeSynthesizer()) : .none,
@@ -273,7 +273,7 @@ struct StatusMenuTests {
             ),
             captions: MeetingCaptions(
                 systemAudio: SystemAudioSource(start: { _ in }, stop: {}, somethingPlays: { false }),
-                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, target: { .chinese }, translate: { text, _ in text }),
+                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, target: { .chinese }, translate: { text, _ in text }, language: { .chinese }),
                 store: store
             ),
             openAtLogin: OpenAtLogin(readStatus: { .off }, register: { _ in }, openLoginItemsSettings: {}),

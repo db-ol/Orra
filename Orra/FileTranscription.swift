@@ -6,7 +6,7 @@ import os
 /// file starts.
 nonisolated struct FileTranscriptionSettings: Equatable, Sendable {
     /// The language the user dictates in besides English, see DictationLanguage.
-    var language: DictationLanguage = .chinese
+    var language: DictationLanguage
     /// The vocabulary terms the speech model gets, the same up to 200 a dictation gets,
     /// see Vocabulary.forModel(_:).
     var terms: [String] = []

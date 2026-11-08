@@ -179,7 +179,8 @@ extension RealModelTests {
                 insert: inserter.insert,
                 frontmostApp: { 100 },
                 minimumHold: .zero,
-                releaseTail: .zero
+                releaseTail: .zero,
+                dictationLanguage: .chinese
             )
             await controller.loadModel()
             #expect(controller.modelState == .ready)

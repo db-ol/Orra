@@ -97,7 +97,7 @@ struct FileTranscriptionTests {
         _ source: FakeFileSource,
         _ speech: FakeFileSpeech,
         ready: Bool = true,
-        settings: FileTranscriptionSettings = FileTranscriptionSettings(),
+        settings: FileTranscriptionSettings = FileTranscriptionSettings(language: .chinese),
         captionsRun: @escaping () -> Bool = { false }
     ) -> FileTranscriptionEngines {
         FileTranscriptionEngines(
@@ -169,7 +169,7 @@ struct FileTranscriptionTests {
     /// out while fillers are removed, where a dictation of nothing else keeps it as it is.
     /// A hum that asks, a reply and a filler in a sentence are not left out.
     @Test func aSegmentOfNothingButFillersIsLeftOut() async {
-        let settings = FileTranscriptionSettings()
+        let settings = FileTranscriptionSettings(language: .chinese)
         for filler in ["Um.", "Uh.", "嗯。", "呃。", "额。", "Um, uh.", "嗯嗯。", "Erm…"] {
             #expect(await FileTranscription.text(filler, seconds: 1, settings: settings) == "", "\(filler)")
         }
@@ -388,7 +388,7 @@ struct FileTranscriptionTests {
             probe.calls += 1
             return "Hello."
         })
-        let file = FileTranscription(engines: .shared(transcription: transcription, turns: turns, open: { try source.open($0) }, isSpeechReady: { true }, settings: { FileTranscriptionSettings() }, captionsRun: { false }))
+        let file = FileTranscription(engines: .shared(transcription: transcription, turns: turns, open: { try source.open($0) }, isSpeechReady: { true }, settings: { FileTranscriptionSettings(language: .chinese) }, captionsRun: { false }))
         turns.dictationStarted()
         file.start(url)
         try await waitUntil { file.phase == .transcribing }
@@ -421,7 +421,7 @@ struct FileTranscriptionTests {
             }
             return "Segment \(segment)."
         })
-        let file = FileTranscription(engines: .shared(transcription: transcription, turns: turns, open: { try source.open($0) }, isSpeechReady: { true }, settings: { FileTranscriptionSettings() }, captionsRun: { false }))
+        let file = FileTranscription(engines: .shared(transcription: transcription, turns: turns, open: { try source.open($0) }, isSpeechReady: { true }, settings: { FileTranscriptionSettings(language: .chinese) }, captionsRun: { false }))
         file.start(url)
         try await waitUntil { probe.running }
         probe.pressed = .now

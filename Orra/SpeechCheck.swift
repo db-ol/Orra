@@ -160,17 +160,17 @@ nonisolated enum SpeechCheck {
     }
 
     /// Chinese, Japanese and Korean characters, which are counted and compared one by one.
+    /// Korean counts its syllables, see Hangul.isSyllable.
     static func isCharacterScript(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.value {
         case 0x3040...0x30FF, // Hiragana, Katakana
              0x3400...0x4DBF, // CJK Extension A
              0x4E00...0x9FFF, // CJK Unified Ideographs
-             0xAC00...0xD7AF, // Hangul syllables
              0xF900...0xFAFF, // CJK Compatibility Ideographs
              0x20000...0x2FA1F: // CJK Extensions B and on
             true
         default:
-            false
+            Hangul.isSyllable(scalar)
         }
     }
 }

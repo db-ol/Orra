@@ -52,7 +52,7 @@ nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
     ///   - projectsAvailable: Whether Projects can be turned on: a build that shows it, on a
     ///     Mac with the memory it needs. Its row shows only then.
     ///   - projectsOn: Whether Projects is on.
-    static func all(cleanupOn: Bool, cleanupModelInstalled: Bool, translationOn: Bool, language: DictationLanguage = .chinese, translationKey: Hotkey = .rightOption, translationMode: TriggerMode = .newTranslationKeyMode, projectsAvailable: Bool = false, projectsOn: Bool = false, locale: Locale = .interface) -> [WelcomeSuggestion] {
+    static func all(cleanupOn: Bool, cleanupModelInstalled: Bool, translationOn: Bool, language: DictationLanguage, translationKey: Hotkey = .rightOption, translationMode: TriggerMode = .newTranslationKeyMode, projectsAvailable: Bool = false, projectsOn: Bool = false, locale: Locale = .interface) -> [WelcomeSuggestion] {
         Kind.allCases.filter { $0 != .projects || projectsAvailable }.map { kind in
             let isOn: Bool = switch kind {
             case .cleanup: cleanupOn && cleanupModelInstalled

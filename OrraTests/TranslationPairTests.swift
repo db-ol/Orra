@@ -60,6 +60,112 @@ struct TranslationPairTests {
         #expect(TranslationPrompt.text(for: TranslationPromptCases.chineseTranscript, into: .chinese(.chinese)) == TranslationPromptCases.chinesePrompt)
     }
 
+    /// The sets of the Japanese and Spanish routes, whose texts the next two tests run on.
+    private static let pairSetFiles = ["translation-japanese.jsonl", "translation-spanish.jsonl", "adversarial-japanese.jsonl", "adversarial-spanish.jsonl", "translation-replies.jsonl", "adversarial-replies.jsonl"]
+
+    /// A SHA-256 in lowercase hexadecimal.
+    private static func hex(_ hasher: SHA256) -> String {
+        hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// The Japanese and Spanish routes keep their prompts character for character, for
+    /// every input of their sets, each on all four routes. The SHA-256 of each route is the
+    /// one this test computed at 231c92f8, before the code was prepared for more dictation
+    /// languages.
+    @Test func theJapaneseAndSpanishRoutesKeepTheirPrompts() throws {
+        var inputs: [String] = []
+        for file in Self.pairSetFiles {
+            for object in try RewriteEvalFiles.objects(file) {
+                inputs.append(try #require(object["input"] as? String))
+            }
+        }
+        #expect(inputs.count == 130 + 125 + 47 + 47 + 54 + 33)
+        var hashes: [String: String] = [:]
+        for route in Self.pairRoutes {
+            var hasher = SHA256()
+            for input in inputs {
+                hasher.update(data: Data((TranslationPrompt.text(for: input, into: route) + "\u{1E}").utf8))
+            }
+            hashes[route.logName] = Self.hex(hasher)
+        }
+        #expect(hashes == [
+            "English for Japanese dictation": "8144c911affdc20f5ccb74cb72e139564f55578cada2a77ea3a8eede2fced909",
+            "Japanese for Japanese dictation": "785d5351d1bd64b374b2e2219a7367c8cc09c6574c3424aca8376f14c0fd38a3",
+            "English for Spanish dictation": "386714a1fd90536b7db61b5546a02db573af2c165fe95ccc8329da345ab9d448",
+            "Spanish for Spanish dictation": "31cee7db6755fe3b41769a6a2b97b3820f524e6a7952d48c3f0916048aa0367d",
+        ])
+    }
+
+    /// Hangul, jamo and Cyrillic in the source or the translation. A translation may not
+    /// add Hangul syllables or Cyrillic that its source does not have. Jamo on their own,
+    /// such as ㅋㅋ, are not syllables.
+    private static let scriptProbes: [(source: String, output: String)] = [
+        ("Tell me a joke about cats, please.", "고양이에 대한 농담을 해 주세요."),
+        ("Tell me a joke about cats, please.", "Tell me a joke about cats, please ㅋㅋ"),
+        // Conjoining and halfwidth jamo.
+        ("That was really funny.", "\u{110F}\u{110F} That was really funny."),
+        ("That was really funny.", "\u{FFBE}\u{FFBE} That was really funny."),
+        ("明日の会議は10時からです。", "Tomorrow's meeting starts at 10. ㅎㅎ"),
+        ("明日の会議は10時からです。", "明日の会議は10時からです。ㅎㅎ"),
+        ("La reunión es el martes a las 3.", "The meeting is on Tuesday at 3. ㅎㅎ"),
+        ("La reunión es el martes a las 3.", "La reunión es el martes a las 3. ㅎㅎ"),
+        ("고양이 사진 보내 줘.", "Send me the cat picture."),
+        ("고양이 사진 보내 줘.", "猫の写真を送って。"),
+        ("고양이 사진 보내 줘.", "Mándame la foto del gato."),
+        ("ㅋㅋ send me the cat picture.", "ㅋㅋ 猫の写真を送って。"),
+        ("ㅋㅋ send me the cat picture.", "고양이 사진 보내 줘."),
+        ("힣 is the last syllable.", "힣 es la última sílaba."),
+        ("Привет, как дела?", "Hi, how are you?"),
+        ("Say hi to Ivan for me.", "Saluda a Иван de mi parte."),
+    ]
+
+    /// The checks of the Japanese and Spanish routes keep their verdicts. On each route
+    /// they check every input of the sets above against every reference and expected
+    /// translation of its own case and of the next one and against itself, every output of
+    /// TranslationGuardCases and RewriteGuardCases against its source, and the script
+    /// probes. The SHA-256 of each route over these texts and their verdicts is the one this
+    /// test computed at 231c92f8, before the code was prepared for more dictation languages.
+    @Test func theJapaneseAndSpanishChecksKeepTheirVerdicts() throws {
+        var pairs: [(source: String, output: String)] = []
+        for file in Self.pairSetFiles {
+            let objects = try RewriteEvalFiles.objects(file)
+            for (index, object) in objects.enumerated() {
+                let input = try #require(object["input"] as? String)
+                for other in [object, objects[(index + 1) % objects.count]] {
+                    for key in other.keys.sorted() where key.hasPrefix("ref") || key.hasPrefix("expected") {
+                        if let output = other[key] as? String, !output.isEmpty {
+                            pairs.append((input, output))
+                        }
+                    }
+                }
+                pairs.append((input, input))
+            }
+        }
+        for jsonl in [TranslationGuardCases.jsonl, RewriteGuardCases.jsonl] {
+            for line in jsonl.split(separator: "\n") {
+                let object = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+                pairs.append((try #require(object["source"] as? String), try #require(object["output"] as? String)))
+            }
+        }
+        pairs += Self.scriptProbes
+        #expect(pairs.count == 3963)
+        var hashes: [String: String] = [:]
+        for route in Self.pairRoutes {
+            var hasher = SHA256()
+            for pair in pairs {
+                let verdict = TranslationGuard.check(source: pair.source, output: pair.output, route: route)?.description ?? "pass"
+                hasher.update(data: Data((pair.source + "\u{1F}" + pair.output + "\u{1F}" + verdict + "\u{1E}").utf8))
+            }
+            hashes[route.logName] = Self.hex(hasher)
+        }
+        #expect(hashes == [
+            "English for Japanese dictation": "7bf9393ee7b6b5d494b5e8d63fcaec087d9bcbe41b194205c1c9639e716c0736",
+            "Japanese for Japanese dictation": "37ee1e6657ead8168e71806ff0783408146166ad739d1620cce46e6f23c6b539",
+            "English for Spanish dictation": "40a86a97c0d0f30233e3b5375723d0a65abb8fe700d9f09d27a9110b3f8a3402",
+            "Spanish for Spanish dictation": "8c0cb9911477f5fe4ef71c359b7e9f776ebe8b654609fb486aa54f2719649c4b",
+        ])
+    }
+
     /// Each route has at least the 14 examples the Chinese ones have, mostly in the
     /// language that the automatic direction sends to its target, and its own prompt.
     @Test func eachRouteHasItsOwnPrompt() {

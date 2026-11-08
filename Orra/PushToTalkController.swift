@@ -448,7 +448,7 @@ final class PushToTalkController {
         usesScreenNames: Bool = false,
         saveUsesScreenNames: @escaping (Bool) -> Void = { _ in },
         readScreenNames: @escaping @Sendable (pid_t, ContinuousClock.Instant) async -> [String] = { await ScreenNames.read(inApp: $0, pressedAt: $1) },
-        dictationLanguage: DictationLanguage = .chinese,
+        dictationLanguage: DictationLanguage,
         dictationLanguageFollows: Bool = false,
         saveDictationLanguage: @escaping (DictationLanguage) -> Void = { _ in },
         saveDictationLanguagePicked: @escaping () -> Void = {},

@@ -215,7 +215,8 @@ struct ProjectsLatencyMeasurementTests {
             frontmostApp: { 100 },
             lidIsClosed: { false },
             isTrusted: { true },
-            minimumHold: .zero
+            minimumHold: .zero,
+            dictationLanguage: .chinese
         )
         controller.setTranslationKeyOn(true)
         var latest: DictationTimings?
