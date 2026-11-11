@@ -105,24 +105,30 @@ struct LiveTextControllerTests {
     /// stopped, which the release makes it do at once.
     @Test func theReleaseStopsThePassUnderWayAndTheTranscriptionFollowsIt() async throws {
         var runningAtTheFinalPass: [Int] = []
+        var cancelledAtTheFinalPass: [Int] = []
         let (controller, _) = await makeController(transcribe: { [passes] _, _, _ in
             runningAtTheFinalPass.append(passes.running)
+            cancelledAtTheFinalPass.append(passes.cancelled)
             return "整段"
         })
-        passes.delay = .seconds(30)
+        // An hour, so only the release ends the pass, however long the test process stalls.
+        // The wait for idle in release(_:) gives up long before, unless the release stops it.
+        passes.delay = .seconds(3_600)
         var timings: [DictationTimings] = []
         controller.onTimings = { timings.append($0) }
         recording.samples = CaptionAudio.tone(1.5)
         try await press(controller)
         try await waitUntil { passes.running == 1 }
-        let released = ContinuousClock.now
         try await release(controller)
-        #expect(released.duration(to: .now) < .seconds(5))
         #expect(passes.cancelled == 1)
+        // The pass had stopped at the cancel when the transcription started.
         #expect(runningAtTheFinalPass == [0])
+        #expect(cancelledAtTheFinalPass == [1])
         #expect(inserter.inserted == ["整段"])
         let timing = try #require(timings.first)
-        #expect(timing.durations[.liveTextStop]! < .seconds(2))
+        // The wait for the pass to stop did not last as long as the pass would have run.
+        let stop = try #require(timing.durations[.liveTextStop])
+        #expect(stop < passes.delay)
     }
 
     @Test func aCancelTakesTheTextAwayAndPastesNothing() async throws {
@@ -131,8 +137,12 @@ struct LiveTextControllerTests {
         recording.samples = CaptionAudio.tone(1.5)
         try await press(controller)
         try await waitUntil { shown.last?.interim == "片段" }
-        passes.delay = .seconds(30)
-        recording.samples += CaptionAudio.tone(1.5)
+        // The sentence ends, and the pass of its piece runs until the cancel. An hour, so no
+        // stall of the test process outlasts it. A piece gets its pass whatever the earlier
+        // passes took, unlike a second interim pass, which needs new speech of twice the
+        // time the first one took.
+        passes.delay = .seconds(3_600)
+        recording.samples += CaptionAudio.silence(1)
         try await waitUntil { passes.running == 1 }
         controller.handle(.cancelled)
         #expect(controller.state == .idle)
