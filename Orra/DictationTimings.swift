@@ -14,6 +14,9 @@ nonisolated struct DictationTimings: Equatable, Sendable {
         case releaseTail
         /// Stopping the microphone and taking its samples.
         case microphoneStop
+        /// The wait for the pass under way at the release to stop, while the text shows as
+        /// the user speaks, see LiveDictation. Almost nothing otherwise, also with it off.
+        case liveTextStop
         /// Resampling to 16 kHz and the silence check.
         case resampling
         /// The speech model, with the language guard, the vocabulary echo check and any

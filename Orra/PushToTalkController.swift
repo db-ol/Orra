@@ -57,6 +57,10 @@ nonisolated enum DictationCue: Equatable, Sendable {
 /// While translation is on, the translation key works the same way, and its dictation is
 /// translated after the rule steps, see TranslationStep. Whenever the translation cannot
 /// be used, the text is pasted without it, never nothing.
+///
+/// While Show text while you speak is on, the speech model's text shows in the recording
+/// indicator as the user speaks, see LiveDictation. The paste still comes from the pass
+/// over the whole recording after the release.
 @Observable
 final class PushToTalkController {
     nonisolated enum ModelState: Equatable, Sendable {
@@ -155,6 +159,10 @@ final class PushToTalkController {
     /// with the vocabulary, see ScreenNames. Off until the user turns it on. Saved through
     /// `saveUsesScreenNames` whenever it changes.
     private(set) var usesScreenNames: Bool
+    /// Whether the recording indicator shows the speech model's text while the user speaks,
+    /// see LiveDictation. The paste does not change. Off until the user turns it on. Saved
+    /// through `saveShowsLiveText` whenever it changes.
+    private(set) var showsLiveText: Bool
     /// The language the user dictates in besides English, see DictationLanguage. Read once
     /// per dictation. Saved through `saveDictationLanguage` whenever it changes.
     private(set) var dictationLanguage: DictationLanguage
@@ -217,6 +225,14 @@ final class PushToTalkController {
     @ObservationIgnored var onTimings: (DictationTimings) -> Void = { _ in }
     /// Told at each press of the Live Captions shortcut. AppDelegate sets it.
     @ObservationIgnored var onLiveCaptionsShortcut: () -> Void = {}
+    /// Told the speech model's text of the dictation under way while the user speaks, and
+    /// nil when it goes, see `showsLiveText`. Never logged. AppDelegate sets it.
+    @ObservationIgnored var onLiveText: (LiveText?) -> Void = { _ in }
+    /// For measurements only: while the text shows as the user speaks, the paste joins the
+    /// texts of the pieces transcribed during the hold with the rest of the recording after
+    /// them, see `LiveDictation.PiecePass`, instead of one pass over the whole recording.
+    /// False and never saved. Only tests set it.
+    @ObservationIgnored var joinsLivePieces = false
 
     @ObservationIgnored private let capture: AudioCapture
     @ObservationIgnored private let transcription: Transcription
@@ -328,6 +344,15 @@ final class PushToTalkController {
     /// The reading of the screen for the current hold, started when its press counted,
     /// while Use names on screen is on. Nil otherwise.
     @ObservationIgnored private var holdScreenRead: ScreenNamesRead?
+    @ObservationIgnored private let saveShowsLiveText: (Bool) -> Void
+    /// Whether the text may show as the user speaks now, besides `showsLiveText`: read at
+    /// the press that counts and again during the hold, see LiveDictation.
+    @ObservationIgnored private let liveTextAllowed: () -> Bool
+    /// The text shown while the current hold records. Nil while it is off, and once the
+    /// hold was released or cancelled.
+    @ObservationIgnored private var live: LiveDictation?
+    /// Whether the dictation under way started the text, so its end takes the text away.
+    @ObservationIgnored private var holdHadLiveText = false
     @ObservationIgnored private var accessCheckTask: Task<Void, Never>?
     @ObservationIgnored private var accessObserver: (any NSObjectProtocol)?
     @ObservationIgnored private let logger = Logger.pushToTalk
@@ -393,6 +418,12 @@ final class PushToTalkController {
     ///   - saveUsesScreenNames: Saves the choice after the user changes it.
     ///   - readScreenNames: Reads the names on the screen of an app, until a time limit
     ///     after the press. Tests pass fakes.
+    ///   - showsLiveText: Whether the text shows as the user speaks, as saved.
+    ///   - saveShowsLiveText: Saves the choice after the user changes it.
+    ///   - liveTextAllowed: Whether the text may show now, read at the press that counts
+    ///     and during the hold. The app answers no while On screen hint hides the
+    ///     indicator, in Low Power Mode, while the Mac is hot, while the app in front holds
+    ///     secure input and while the user edits a word in the notice of a learned word.
     ///   - dictationLanguage: The language the user dictates in besides English, as saved,
     ///     or as it starts for this user while nothing is saved, see
     ///     DictationLanguagePreference.
@@ -448,6 +479,9 @@ final class PushToTalkController {
         usesScreenNames: Bool = false,
         saveUsesScreenNames: @escaping (Bool) -> Void = { _ in },
         readScreenNames: @escaping @Sendable (pid_t, ContinuousClock.Instant) async -> [String] = { await ScreenNames.read(inApp: $0, pressedAt: $1) },
+        showsLiveText: Bool = false,
+        saveShowsLiveText: @escaping (Bool) -> Void = { _ in },
+        liveTextAllowed: @escaping () -> Bool = { true },
         dictationLanguage: DictationLanguage = .chinese,
         dictationLanguageFollows: Bool = false,
         saveDictationLanguage: @escaping (DictationLanguage) -> Void = { _ in },
@@ -501,6 +535,9 @@ final class PushToTalkController {
         self.usesScreenNames = usesScreenNames
         self.saveUsesScreenNames = saveUsesScreenNames
         self.readScreenNames = readScreenNames
+        self.showsLiveText = showsLiveText
+        self.saveShowsLiveText = saveShowsLiveText
+        self.liveTextAllowed = liveTextAllowed
         self.dictationLanguage = dictationLanguage
         self.dictationLanguageFollows = dictationLanguageFollows
         self.saveDictationLanguage = saveDictationLanguage
@@ -617,6 +654,14 @@ final class PushToTalkController {
         guard on != usesScreenNames else { return }
         usesScreenNames = on
         saveUsesScreenNames(on)
+    }
+
+    /// Turns Show text while you speak on or off and saves the choice. Turned off during a
+    /// hold, its text goes within half a second, see `LiveDictation.Settings.rulesInterval`.
+    func setShowsLiveText(_ on: Bool) {
+        guard on != showsLiveText else { return }
+        showsLiveText = on
+        saveShowsLiveText(on)
     }
 
     /// Chooses the language the user dictates in besides English for the next dictations,
@@ -1103,6 +1148,7 @@ final class PushToTalkController {
             cleanup.dictationStarted()
             reserveModelGate()
             startReadingScreen()
+            startLiveText()
             // The delay counts from the key down, which the wait has used up already.
             let held = holdTimings.map { $0.keyDown.duration(to: counted) } ?? .zero
             scheduleListeningCue(after: state == .listening ? max(.zero, listeningCueDelay - held) : .zero, hold: holdNumber)
@@ -1111,6 +1157,7 @@ final class PushToTalkController {
             recordingLimitTask?.cancel()
             listeningCueTask?.cancel()
             holdScreenRead = nil
+            cancelLiveText()
             cancelCapture(logsTimings: false)
         case .startedListening, .startedHandsFree:
             clearHoldNotes()
@@ -1167,8 +1214,13 @@ final class PushToTalkController {
             let captureTimings = holdTimings
             let screen = holdScreenRead
             holdScreenRead = nil
+            // Before the tail, so the pass under way stops while the tail records. The text
+            // stays as it is until the paste.
+            let live = live
+            self.live = nil
+            live?.release()
             Task { [weak self] in
-                await self?.finishRecording(start: start, chosen: chosen, heldFor: heldFor, target: target, translating: translating, screen: screen, releasedAt: released)
+                await self?.finishRecording(start: start, live: live, chosen: chosen, heldFor: heldFor, target: target, translating: translating, screen: screen, releasedAt: released)
                 // After the paste, because the microphone gets ready for the next hold once
                 // it stopped, and reading how it started waits for that.
                 if let startedAt = await start?.value {
@@ -1181,6 +1233,10 @@ final class PushToTalkController {
             listeningCueTask?.cancel()
             holdScreenRead = nil
             endUserActivity()
+            // A pass under way stops at its next check. It may run that long after the
+            // reservation ends, which a voice request waits for, since a shared call holds
+            // the gate until it returns. It never waits for a voice request itself.
+            cancelLiveText()
             cancelCapture(logsTimings: true)
             endCue(holdMessage ?? problem)
             cleanup.dictationEnded()
@@ -1194,9 +1250,85 @@ final class PushToTalkController {
                 endLimitWait()
                 endCue(holdMessage ?? problem ?? notice)
             }
+            // Also when the hold showed no indicator for the cue to clear.
+            if holdHadLiveText {
+                holdHadLiveText = false
+                onLiveText(nil)
+            }
             cleanup.dictationEnded()
             endModelGateReservation()
         }
+    }
+
+    /// Starts the text shown while the user speaks for the current hold, while it is on and
+    /// allowed, once the press counted and the gate is reserved. It reads from the start of
+    /// the microphone on, so it never delays that start, see LiveDictation.
+    private func startLiveText() {
+        live?.cancel()
+        live = nil
+        guard showsLiveText, liveTextAllowed(), let start = captureStart else { return }
+        let hold = holdNumber
+        let live = LiveDictation(
+            read: capture.recorded,
+            transcribe: { [transcription] samples in try await transcription.stoppablePass(samples) },
+            language: dictationLanguage,
+            allowed: { [weak self] in
+                guard let self else { return false }
+                return showsLiveText && liveTextAllowed()
+            },
+            mayStartPass: { [cleanup] in !cleanup.isPreparing() },
+            piecePass: joinsLivePieces ? livePiecePass() : nil,
+            publish: { [weak self] text in
+                // Never the text of an earlier hold.
+                guard let self, holdNumber == hold else { return }
+                onLiveText(text)
+            }
+        )
+        live.start(after: start)
+        self.live = live
+        holdHadLiveText = true
+    }
+
+    /// Ends the text of a hold that ends without a paste, and takes it away.
+    private func cancelLiveText() {
+        guard let live else { return }
+        live.cancel()
+        self.live = nil
+        holdHadLiveText = false
+        onLiveText(nil)
+    }
+
+    /// For `joinsLivePieces`: each piece gets the dictation's own call, with the context the
+    /// release would give if it came when the first piece's pass starts.
+    private func livePiecePass() -> LiveDictation.PiecePass {
+        LiveDictation.PiecePass(
+            context: { [weak self] in
+                guard let self else { return DictationContext(vocabulary: [], holdsScreenNames: false, takingDigits: false, language: .chinese) }
+                return dictationContext(names: screenNamesNow())
+            },
+            transcribe: { [transcription] samples, context in
+                try await transcription.transcribe(
+                    samples,
+                    vocabulary: context.vocabulary,
+                    holdsScreenNames: context.holdsScreenNames,
+                    audioSeconds: Double(samples.count) / Double(RecordingLimits.sampleRate),
+                    takingDigits: context.takingDigits,
+                    language: context.language
+                )
+            }
+        )
+    }
+
+    /// What the speech model gets besides the audio for a dictation with `names` from the
+    /// screen.
+    private func dictationContext(names: [String]) -> DictationContext {
+        let spoken = dictationLanguage
+        return DictationContext(
+            vocabulary: names.isEmpty ? Vocabulary.forModel(vocabulary) : Vocabulary.forModel(vocabulary, screenNames: names),
+            holdsScreenNames: !names.isEmpty,
+            takingDigits: writesNumbersAsDigits && spoken.takesDigitsFromPassWithoutVocabulary,
+            language: spoken
+        )
     }
 
     /// Shows why the recording limit stopped the dictation, and lets the key wait
@@ -1349,6 +1481,7 @@ final class PushToTalkController {
             holdTimings?.counted = counted
             scheduleListeningCue(after: cueDelay, hold: holdNumber)
             startReadingScreen()
+            startLiveText()
         case .notDetermined:
             // The system prompt that follows says enough.
             handle(.cancelled)
@@ -1490,6 +1623,14 @@ final class PushToTalkController {
         return finished.names
     }
 
+    /// The names the reading of the screen for the current hold found, when it has ended
+    /// and read the app in front now, as `screenNames(from:target:)` takes them at the
+    /// release, without its log lines. For the pieces of `joinsLivePieces`.
+    private func screenNamesNow() -> [String] {
+        guard usesScreenNames, let read = holdScreenRead, let finished = read.finished, read.app == frontmostApp() else { return [] }
+        return finished.names
+    }
+
     private func recordingFailedToStart(_ error: any Error, hold: Int, chosen: MicrophoneChoice?) {
         logger.error("Could not start recording: \(String(describing: error), privacy: .public)")
         // A newer hold has started since. This one was cancelled and nobody waits for it.
@@ -1521,11 +1662,16 @@ final class PushToTalkController {
     /// Ends a hold that was released: waits for the microphone to have started, records
     /// the short tail, stops, and transcribes unless the hold was too short or cut.
     /// `translating` is the direction when the translation key started the dictation, and
-    /// `screen` the reading of the screen for it, if any.
-    private func finishRecording(start: Task<ContinuousClock.Instant?, Never>?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, translating: TranslationCue?, screen: ScreenNamesRead?, releasedAt released: ContinuousClock.Instant) async {
+    /// `screen` the reading of the screen for it, if any. `live` is the text shown while
+    /// the user spoke, which the release told to stop, and the transcription starts only
+    /// once it has, so nothing of the hold runs beside it or after it.
+    private func finishRecording(start: Task<ContinuousClock.Instant?, Never>?, live: LiveDictation?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, translating: TranslationCue?, screen: ScreenNamesRead?, releasedAt released: ContinuousClock.Instant) async {
         var timings = DictationTimings(releasedAt: released)
         // A failed start already set the problem.
-        guard await start?.value != nil else { return }
+        guard await start?.value != nil else {
+            _ = await live?.ended()
+            return
+        }
         timings.lap(.start)
         if releaseTail > .zero {
             try? await Task.sleep(for: releaseTail)
@@ -1533,6 +1679,12 @@ final class PushToTalkController {
         timings.lap(.releaseTail)
         let recording = await capture.stop()
         timings.lap(.microphoneStop)
+        // Usually over by now, since the pass under way stopped during the tail.
+        let joined = await live?.ended()
+        timings.lap(.liveTextStop)
+        if let live {
+            logger.notice("Text while speaking: \(live.counts.summary, privacy: .public), stopped \(DictationTimings.milliseconds(timings.durations[.liveTextStop] ?? .zero), privacy: .public) ms after the microphone")
+        }
         if recording.wasCut {
             problem = String(localized: "The microphone changed during the recording. Try again.")
             return
@@ -1553,14 +1705,15 @@ final class PushToTalkController {
                 microphoneNotice = String(localized: "\(chosen.name) is not connected, so the system default input recorded.")
             }
         }
-        await transcribeAndInsert(recording, chosen: chosen, target: target, translating: translating, screen: screen, timings: &timings)
+        await transcribeAndInsert(recording, chosen: chosen, target: target, translating: translating, screen: screen, joined: joined, timings: &timings)
     }
 
     /// Turns a recording into text and pastes it, translated when `translating` is set and
     /// the translation passes its checks. The speech model gets the names `screen` found
-    /// before the vocabulary. Logs timings, never the text. `timings` gets the time of each
+    /// before the vocabulary. `joined` holds the pieces of the hold under
+    /// `joinsLivePieces`. Logs timings, never the text. `timings` gets the time of each
     /// step.
-    private func transcribeAndInsert(_ recording: AudioRecording, chosen: MicrophoneChoice?, target: pid_t?, translating: TranslationCue?, screen: ScreenNamesRead?, timings: inout DictationTimings) async {
+    private func transcribeAndInsert(_ recording: AudioRecording, chosen: MicrophoneChoice?, target: pid_t?, translating: TranslationCue?, screen: ScreenNamesRead?, joined: LiveDictation.JoinedPieces?, timings: inout DictationTimings) async {
         do {
             let (samples, silent) = await Self.prepared(recording)
             timings.lap(.resampling)
@@ -1584,16 +1737,9 @@ final class PushToTalkController {
                 logger.notice("The microphone delivered no sound for \(recording.duration, privacy: .public) s, lid closed: \(situation.lidClosed, privacy: .public)")
                 return
             }
-            let names = screenNames(from: screen, target: target)
-            let spoken = dictationLanguage
-            let pieces = try await transcription.transcribeInPieces(
-                samples,
-                vocabulary: names.isEmpty ? Vocabulary.forModel(vocabulary) : Vocabulary.forModel(vocabulary, screenNames: names),
-                holdsScreenNames: !names.isEmpty,
-                audioSeconds: recording.duration,
-                takingDigits: writesNumbersAsDigits && spoken.takesDigitsFromPassWithoutVocabulary,
-                language: spoken
-            )
+            let context = dictationContext(names: screenNames(from: screen, target: target))
+            let spoken = context.language
+            let pieces = try await recognize(samples, context: context, audioSeconds: recording.duration, joining: joined)
             timings.lap(.recognition)
             let transcript = RecordingPieces.transcript(of: pieces, simplifying: spoken.simplifiesCharacters)
             var text = transcript.text
@@ -1736,6 +1882,32 @@ final class PushToTalkController {
             problem = String(localized: "The recording could not be transcribed")
             logger.error("Transcription failed: \(String(describing: error), privacy: .public)")
         }
+    }
+
+    /// The speech model's text of a recording, in pieces of at most a minute, see
+    /// `Transcription.transcribeInPieces`. Under `joinsLivePieces`, `joined` holds the
+    /// pieces transcribed during the hold, and when they had the context the release gives,
+    /// only the rest of the recording after the last of them is transcribed now. Otherwise
+    /// the whole recording is, as always. Logs counts and times only.
+    private func recognize(_ samples: [Float], context: DictationContext, audioSeconds: Double, joining joined: LiveDictation.JoinedPieces?) async throws -> [TranscribedPiece] {
+        if let joined {
+            if joined.context == context, joined.cut <= samples.count {
+                let rest = Array(samples[joined.cut...])
+                let seconds = Double(rest.count) / Double(RecordingLimits.sampleRate)
+                let last = rest.isEmpty ? [] : try await transcription.transcribeInPieces(rest, vocabulary: context.vocabulary, holdsScreenNames: context.holdsScreenNames, audioSeconds: seconds, takingDigits: context.takingDigits, language: context.language)
+                logger.notice("Joined \(joined.pieces.count, privacy: .public) pieces of the hold with \(seconds, format: .fixed(precision: 1), privacy: .public) s after them")
+                return joined.pieces + last
+            }
+            logger.notice("The pieces of the hold had another context, so the whole recording is transcribed")
+        }
+        return try await transcription.transcribeInPieces(
+            samples,
+            vocabulary: context.vocabulary,
+            holdsScreenNames: context.holdsScreenNames,
+            audioSeconds: audioSeconds,
+            takingDigits: context.takingDigits,
+            language: context.language
+        )
     }
 
     /// Paste Original Text in the menu: pastes the latest dictation as it was before the

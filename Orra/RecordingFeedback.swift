@@ -8,7 +8,9 @@ import Observation
 /// finish during a hands free dictation, a slow wave of the same bars while it transcribes,
 /// and for a few seconds the reason when a hold ends without a paste. In the last seconds
 /// before the recording limit, the seconds left show next to the bars. Next to the bars of a
-/// dictation of the translation key, a small badge says that it will be translated. In between, while
+/// dictation of the translation key, a small badge says that it will be translated. While
+/// Show text while you speak is on, the speech model's text shows above the bars as the
+/// user speaks, and stays as it was until the paste. In between, while
 /// Orra can dictate, a small bar at the bottom of the screen shows that it is ready, unless
 /// Settings turns it off.
 @Observable
@@ -48,6 +50,13 @@ final class RecordingFeedback {
     /// The whole seconds left before the recording limit stops the dictation on screen,
     /// from its limitNear cue until it stops recording. Nil otherwise.
     private(set) var secondsLeft: Int?
+    /// The speech model's text of the dictation on screen while the user speaks, which the
+    /// indicator shows above the bars, see LiveDictation. Nil while there is none, and from
+    /// the end of the dictation on. In memory only, never logged or saved.
+    private(set) var liveText: LiveText?
+    /// Told when the text above the bars appears and when it goes, so the notice of a
+    /// learned word steps aside meanwhile. AppDelegate sets it.
+    @ObservationIgnored var onLiveTextShown: (Bool) -> Void = { _ in }
     /// The indicator and the idle bar as the one choice Settings shows. Setting it saves once
     /// and updates the panel once.
     var onScreenHint: OnScreenHint {
@@ -161,6 +170,10 @@ final class RecordingFeedback {
             if playsSounds {
                 play(.start)
             }
+            // A new dictation never shows the text of an earlier one.
+            if display?.showsMeter != true {
+                showLiveText(nil)
+            }
             self.translation = translation
             show(.listening)
         case .handsFree(let hint, let translation):
@@ -168,6 +181,9 @@ final class RecordingFeedback {
             // A hold that turned hands free has played the start sound already.
             if playsSounds, display?.showsMeter != true {
                 play(.start)
+            }
+            if display?.showsMeter != true {
+                showLiveText(nil)
             }
             show(.handsFree(finishHint: hint))
         case .transcribing:
@@ -178,15 +194,31 @@ final class RecordingFeedback {
             }
         case .finished(let message?):
             translation = nil
+            showLiveText(nil)
             showMessage(message, for: messageDuration)
         case .finished(nil):
             translation = nil
+            showLiveText(nil)
             show(nil)
         case .limitNear(let remaining):
             countDown(to: .now + remaining)
         case .stoppedAtLimit(let message):
             translation = nil
+            showLiveText(nil)
             showMessage(message, for: limitMessageDuration)
+        }
+    }
+
+    /// Shows the speech model's text of the dictation on screen above the bars, or takes it
+    /// away for nil or an empty text. The view follows on its own, so the panel stays where
+    /// it is.
+    func showLiveText(_ text: LiveText?) {
+        let shown = text?.isEmpty == false ? text : nil
+        guard shown != liveText else { return }
+        let appears = (liveText == nil) != (shown == nil)
+        liveText = shown
+        if appears {
+            onLiveTextShown(shown != nil)
         }
     }
 

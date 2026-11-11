@@ -75,6 +75,8 @@ final class TestClock: Sendable {
 final class HoldingEngine {
     var holdsLoads = false
     var holdsUnloads = false
+    /// Holds the reading of translation prompts ahead too.
+    var holdsPrepares = false
     var failsNextLoad = false
     var answer = #"{"cleaned": "我们下午3点开会。"}"#
     var translationAnswer = #"{"cleaned": "我们下周二开会。", "translation": "We have a meeting next Tuesday."}"#
@@ -118,8 +120,11 @@ final class HoldingEngine {
         return translationAnswer
     }
 
-    private func prepare(_ target: TranslationTarget) throws {
+    private func prepare(_ target: TranslationTarget) async throws {
         guard isLoaded else { throw RewriteError.notLoaded }
+        if holdsPrepares {
+            await withCheckedContinuation { held.append($0) }
+        }
         prepared.append(target)
     }
 
@@ -157,6 +162,7 @@ final class HoldingEngine {
     func letGo() {
         holdsLoads = false
         holdsUnloads = false
+        holdsPrepares = false
         let continuations = held
         held = []
         for continuation in continuations {
@@ -228,6 +234,31 @@ struct CleanupIdleUnloadTests {
     }
 
     // MARK: Idle unload
+
+    /// The text shown while the user speaks waits while the model loads and reads its
+    /// prompts after the load, which the engine state does not show, since it says ready
+    /// before the translation prompts are read.
+    @Test func theModelPreparesFromTheLoadToTheEndOfItsPrompts() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanup(translationIsOn: true)
+        #expect(!cleanup.isPreparing)
+        try await unloadWhileIdle(cleanup)
+        fake.holdsLoads = true
+        cleanup.dictationStarted()
+        #expect(cleanup.isPreparing)
+        #expect(cleanup.model.isPreparing())
+        try await settle { fake.isHolding }
+        fake.letGo()
+        fake.holdsPrepares = true
+        try await settle { fake.isHolding }
+        #expect(cleanup.engineState == .ready)
+        #expect(cleanup.isPreparing)
+        fake.letGo()
+        await cleanup.waitForLoad()
+        #expect(!cleanup.isPreparing)
+        #expect(!cleanup.model.isPreparing())
+        cleanup.dictationEnded()
+    }
 
     @Test func theModelIsUnloadedAfterTheIdleTime() async throws {
         defer { temporary.remove() }

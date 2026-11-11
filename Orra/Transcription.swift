@@ -13,9 +13,24 @@ struct Transcription {
     /// The model gate the speech model runs at, see `gated`. Nil when it runs at none, as
     /// a test's fake does. A dictation reserves it, see PushToTalkController.
     var gate: ModelGate? = nil
+    /// Turns 16 kHz mono samples into text without context or language, and stops the
+    /// pass under way when its task is cancelled, see `Qwen3Engine.transcribe`. Nil uses
+    /// `transcribe`, as a test's fake does. See `stoppablePass(_:)`.
+    var stoppable: ((_ samples: [Float]) async throws -> String)? = nil
 }
 
 extension Transcription {
+    /// One pass without the vocabulary, the names or a language, for the text shown while
+    /// the user speaks, see LiveDictation. A cancel of the task stops it, and it throws
+    /// CancellationError then. No other pass follows it, so no echo, list, number or
+    /// language pass.
+    func stoppablePass(_ samples: [Float]) async throws -> String {
+        if let stoppable {
+            return try await stoppable(samples)
+        }
+        return try await transcribe(samples, nil, nil)
+    }
+
     /// Turns samples into text with the vocabulary as context, guarded against a transcript
     /// in a language the user does not dictate in, see `checkingLanguage`, and against an
     /// echo of the vocabulary, see VocabularyEcho. When the text is only vocabulary terms,

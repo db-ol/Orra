@@ -79,6 +79,15 @@ nonisolated struct AudioRecording: Equatable, Sendable {
     }
 }
 
+/// What a recording in progress holds past an index, at the device's sample rate, for the
+/// text shown while the user speaks, see `AudioCapture.recorded`.
+nonisolated struct RecordedAudio: Equatable, Sendable {
+    var samples: [Float]
+    var sampleRate: Double
+    /// Which recording they belong to, as the recorder counts them.
+    var recording: Int
+}
+
 /// Takes the first channel of a Float32 buffer.
 ///
 /// Averaging all channels would make a single microphone on a multichannel interface
@@ -173,6 +182,14 @@ nonisolated final class SampleStore: Sendable {
             let taken = current.samples
             current.samples = []
             return taken
+        }
+    }
+
+    /// A copy of what was collected after the first `count` samples, leaving the store as
+    /// it is. The lock is held only for the copy, about 100 ms of audio at each read.
+    func samples(after count: Int) -> [Float] {
+        state.withLock { current in
+            count < current.samples.count ? Array(current.samples[max(count, 0)...]) : []
         }
     }
 }
@@ -335,7 +352,8 @@ nonisolated struct CaptureOnset: Equatable, Sendable {
 /// AVAudioEngine calls the tap on an audio thread. The tap block is built in a nonisolated
 /// function, so it is not tied to any actor. It only copies the first channel into the
 /// lock protected store. Resampling happens once, after the recording ends, in
-/// AudioResampler.
+/// AudioResampler. While the text shows as the user speaks, LiveDictation reads copies of
+/// what the hold recorded so far and converts them on its own, see `recorded(after:of:)`.
 actor AudioRecorder {
     private enum Source {
         /// AVAudioEngine records the default input, read at the start of the hold.
@@ -360,6 +378,9 @@ actor AudioRecorder {
     /// How the latest recording started, for the timing log.
     private var latestPath: CaptureOnset.Path?
     private var latestTransport: UInt32 = 0
+    /// Counts the recordings, so a read of the recording in progress names which one, see
+    /// `recorded(after:of:)`.
+    private var recordingNumber = 0
     private let logger = Logger.audio
 
     /// Starts recording. Call only when microphone access is authorized, because starting
@@ -368,6 +389,7 @@ actor AudioRecorder {
     ///   the system default. While that microphone is not connected, the default records.
     func start(preferredInput: String?) throws {
         guard source == nil else { return }
+        recordingNumber += 1
         meter.reset()
         arrival.reset()
         latestPath = nil
@@ -407,6 +429,22 @@ actor AudioRecorder {
     func microphoneChosen(_ preferredInput: String?) {
         guard let unit, unit.device.uid != preferredInput else { return }
         self.unit = nil
+    }
+
+    /// What the recording in progress holds after its first `count` samples, without taking
+    /// anything away, for the text shown while the user speaks, see LiveDictation. Nil
+    /// between recordings, and when `recording` names another than the one in progress, so
+    /// a reader left from an earlier hold reads nothing of a newer one. On this actor, so a
+    /// read never meets a stop, which takes the samples, or the clear of a unit. The real
+    /// time thread does nothing new for it.
+    func recorded(after count: Int, of recording: Int?) -> RecordedAudio? {
+        guard let source, recording == nil || recording == recordingNumber else { return nil }
+        switch source {
+        case .unit(let unit):
+            return RecordedAudio(samples: unit.samples(after: count), sampleRate: unit.sampleRate, recording: recordingNumber)
+        case .engine:
+            return RecordedAudio(samples: store.samples(after: count), sampleRate: sampleRate, recording: recordingNumber)
+        }
     }
 
     /// Stops recording and returns what was recorded.
@@ -636,6 +674,11 @@ struct AudioCapture {
     /// Tells the microphone the UID of the newly chosen microphone, or nil for the system
     /// default, so what it kept for the choice before goes at once. Fakes may ignore it.
     var microphoneChosen: (String?) async -> Void = { _ in }
+    /// What the recording in progress holds after the first `count` samples, of the
+    /// recording numbered `recording`, or of the one in progress for nil, see
+    /// `AudioRecorder.recorded(after:of:)`. Fakes may give nothing, and then no text shows
+    /// while the user speaks.
+    var recorded: (_ count: Int, _ recording: Int?) async -> RecordedAudio? = { _, _ in nil }
 
     static func live() -> AudioCapture {
         let recorder = AudioRecorder()
@@ -648,7 +691,8 @@ struct AudioCapture {
             level: { recorder.meter.peak },
             waitForSound: { deadline in await recorder.arrival.waitForSound(until: deadline) },
             onset: { await recorder.onset() },
-            microphoneChosen: { preferredInput in await recorder.microphoneChosen(preferredInput) }
+            microphoneChosen: { preferredInput in await recorder.microphoneChosen(preferredInput) },
+            recorded: { count, recording in await recorder.recorded(after: count, of: recording) }
         )
     }
 }

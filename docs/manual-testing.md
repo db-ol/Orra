@@ -3835,6 +3835,51 @@ the last 15 s. Use a Release build:
   text:
   `/usr/bin/log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "push-to-talk"' | grep pieces`.
 
+Show text while you speak, added on 2026-11-09, not verified yet. Turn on Show text while
+you speak in Settings, Dictation first:
+
+- [ ] In Notes and in TextEdit, dictate a few sentences with pauses, in Hold, in Press to
+  start and stop and hands free: the text shows above the bars about a second after you
+  start, the dim words settle after each pause, the paste goes where the cursor is, and
+  the focus never moves.
+- [ ] Say one short word: no box, and the paste is as before.
+- [ ] `/usr/bin/log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "push-to-talk"'`
+  shows "Text while speaking:" with counts and times, and "Release to paste took" with
+  liveTextStop, never any text. Compare liveTextStop and the release to paste with the
+  switch off, also when you end the dictation right after a long sentence, and with a
+  vocabulary of 200 words.
+- [ ] A two minute hands free dictation: the box shows the last three lines, and Escape
+  cancels and takes it away.
+- [ ] An app whose input box sits at the bottom of a tall window: whether the box covers
+  it. Click on the box while you speak: the click goes to the window below it, and note
+  where the paste goes then.
+- [ ] Full screen apps, two displays, where the box stays on the display it started on
+  while the pointer moves, and Stage Manager.
+- [ ] The Projects window as the target, the translation key, Polish on, cleanup on and
+  off.
+- [ ] A password field, and Terminal with Secure Keyboard Entry on: no box, and no paste
+  into the password field, as before.
+- [ ] While an app in the background holds secure input, which
+  `ioreg -l -w 0 | grep SecureInput` shows with its process ID, the box still shows in
+  the app in front.
+- [ ] Low Power Mode: no box.
+- [ ] Live Captions on, with the microphone and with what the Mac plays: captions of the
+  microphone leave out the dictation, and captions of what the Mac plays wait until the
+  paste.
+- [ ] Light and dark mode, Increase Contrast, where the dim words turn as bright as the
+  rest, Reduce Transparency, and VoiceOver, which does not read the box.
+- [ ] A learned word notice on screen when you start the next dictation: it steps aside
+  while the box shows and comes back after the paste with the time it had left. While you
+  edit an offered word in it, start a dictation: no box, and the paste goes into the field.
+- [ ] Fix a word right after a paste so that Orra learns it, and start the next dictation
+  at once: the notice that comes while the box shows waits and appears after the paste,
+  with its whole time. Rest the pointer on a notice when you start a dictation: after
+  the paste the notice still goes after a few seconds.
+- [ ] Share the screen in a call or record it: the box shows in the shared picture.
+- [ ] On an older or fanless Mac, such as a MacBook Air, a two minute hands free dictation
+  with the switch on and off: the release to paste in the log, and Activity Monitor's
+  energy column.
+
 Transcribe File, added on 2026-11-05, not verified yet in the running app. The unit tests
 cover the segments and their times, the text and the subtitles, the progress and the time
 left, Stop, the turns with dictation and captions with fakes, files that cannot be read and

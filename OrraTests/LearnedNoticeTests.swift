@@ -46,6 +46,56 @@ struct LearnedNoticeTests {
         #expect(notice.countdown == nil)
     }
 
+    /// While the text of a dictation shows where the notice sits, the notice holds its
+    /// countdown, and goes on with the time it had left once the text goes. The pointer
+    /// keeps its own hold.
+    @Test func aDictationHoldsTheCountdownAndGivesBackWhatWasLeft() {
+        var now = Date(timeIntervalSince1970: 1_000)
+        let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) }, now: { now })
+        notice.show(learned)
+        now = now.addingTimeInterval(3)
+        notice.holdForDictation(true)
+        #expect(notice.countdown == nil)
+        #expect(notice.learned == learned)
+        // The pointer leaving does not end the dictation's hold.
+        notice.hold()
+        notice.release()
+        #expect(notice.countdown == nil)
+        now = now.addingTimeInterval(20)
+        notice.holdForDictation(false)
+        #expect(notice.countdown == LearnedNotice.Countdown(hidesAt: now.addingTimeInterval(7), seconds: 7))
+        // A notice that comes during a dictation starts its time after it.
+        notice.holdForDictation(true)
+        notice.close()
+        notice.show(learned)
+        #expect(notice.countdown == nil)
+        notice.holdForDictation(false)
+        #expect(notice.countdown == LearnedNotice.Countdown(hidesAt: now.addingTimeInterval(10), seconds: 10))
+        notice.close()
+    }
+
+    /// The text of a dictation that shows before any notice holds a notice that comes
+    /// meanwhile too, such as a word learned from a fix made just before the press, which
+    /// would sit on that text otherwise. A notice the pointer was over when the text came
+    /// counts down after it. The panel is never made, so no window shows.
+    @Test func theTextOfADictationHoldsANoticeThatComesAfterIt() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) }, now: { now })
+        let owner = LearnedNoticePanel(notice: notice) { _ in }
+        notice.onChange = nil
+        owner.dictationShowsText(true)
+        notice.show(learned)
+        #expect(notice.countdown == nil)
+        owner.dictationShowsText(false)
+        #expect(notice.countdown == LearnedNotice.Countdown(hidesAt: now.addingTimeInterval(10), seconds: 10))
+        // The panel goes from under the pointer, which AppKit may not say.
+        notice.hold()
+        owner.dictationShowsText(true)
+        owner.dictationShowsText(false)
+        #expect(notice.countdown == LearnedNotice.Countdown(hidesAt: now.addingTimeInterval(4), seconds: 4))
+        notice.close()
+    }
+
     @Test func closingHidesItAtOnce() {
         let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) })
         notice.show(learned)

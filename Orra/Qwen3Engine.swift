@@ -50,16 +50,30 @@ actor Qwen3Engine {
     ///     speech-swift puts in the prompt's system turn. The app passes the user's
     ///     vocabulary. ContextEvaluationTests measures what a vocabulary does.
     ///   - language: The language the model must write, or nil to let it choose.
-    func transcribe(_ samples: [Float], context: String? = nil, language: SpeechLanguage? = nil) throws -> String {
+    ///   - stopsWhenCancelled: Whether a cancel of the task stops the pass under way, which
+    ///     then throws CancellationError. speech-swift looks at the task before the
+    ///     features, the encoder, the prompt and every token, and says the text is the
+    ///     same. MLX computes lazily, so the encoder, the prompt and the first tokens run as
+    ///     one piece of work that a cancel does not cut short. Only the text shown while
+    ///     the user speaks asks for it, see LiveDictation. Every other call keeps the pass
+    ///     that a cancel stops only before it begins.
+    func transcribe(_ samples: [Float], context: String? = nil, language: SpeechLanguage? = nil, stopsWhenCancelled: Bool = false) throws -> String {
         // A call cancelled while it waited for the actor, such as a caption call at the
         // press of the talk key, starts no pass that cannot be stopped, see EngineTurns.
         try Task.checkCancellation()
         guard let model else { throw TranscriptionError.modelMissing }
         guard !samples.isEmpty else { throw TranscriptionError.noAudio }
-        return run(model, on: samples, context: context, language: language)
+        guard stopsWhenCancelled else {
+            return run(model, on: samples, context: context, language: language)
+        }
+        return try model.transcribeCheckingCancellation(audio: samples, sampleRate: RecordingLimits.sampleRate, options: Self.options(for: samples, context: context, language: language))
     }
 
     private func run(_ model: Qwen3ASRModel, on samples: [Float], context: String? = nil, language: SpeechLanguage? = nil) -> String {
+        model.transcribe(audio: samples, sampleRate: RecordingLimits.sampleRate, options: Self.options(for: samples, context: context, language: language))
+    }
+
+    private static func options(for samples: [Float], context: String?, language: SpeechLanguage?) -> Qwen3DecodingOptions {
         let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
         // No language hint by default: docs/asr-baseline.md shows that a fixed hint hurts
         // mixed Chinese and English. LanguageGuard asks for one only when the model chose
@@ -67,13 +81,12 @@ actor Qwen3Engine {
         // Use the options overload on purpose. The shorter overload bans any repeated
         // three token sequence once audio passes 15 seconds, which changes repeated
         // numbers and words. Loops are cut by TranscriptGuard and the token budget instead.
-        let options = Qwen3DecodingOptions(
+        return Qwen3DecodingOptions(
             maxTokens: max(448, Int(seconds * 12)),
             language: language?.rawValue,
             context: context,
             longInputThresholdSeconds: .infinity
         )
-        return model.transcribe(audio: samples, sampleRate: RecordingLimits.sampleRate, options: options)
     }
 }
 
@@ -102,7 +115,8 @@ extension Transcription {
     static func qwen3(_ engine: Qwen3Engine = Qwen3Engine(), gate: ModelGate = .live) -> Transcription {
         Transcription(
             load: { try await engine.load() },
-            transcribe: { samples, context, language in try await engine.transcribe(samples, context: context, language: language) }
+            transcribe: { samples, context, language in try await engine.transcribe(samples, context: context, language: language) },
+            stoppable: { samples in try await engine.transcribe(samples, stopsWhenCancelled: true) }
         ).gated(gate)
     }
 }

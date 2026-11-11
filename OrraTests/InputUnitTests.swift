@@ -60,6 +60,31 @@ struct InputUnitTests {
         #expect(buffer.samples() == [0.1])
     }
 
+    /// What follows an index can be read while another thread appends, as the real time
+    /// thread does while the unit records, and every read holds whole appends in order.
+    @Test func aReadAfterAnIndexWorksWhileSamplesArrive() async {
+        let buffer = CaptureBuffer(capacity: 48_000)
+        let writer = Task.detached {
+            let chunk = [Float](repeating: 0.5, count: 480)
+            for _ in 0..<100 {
+                chunk.withUnsafeBufferPointer { buffer.append($0.baseAddress!, count: $0.count) }
+                try? await Task.sleep(for: .microseconds(200))
+            }
+        }
+        var read = 0
+        while read < 48_000 {
+            let new = buffer.samples(after: read)
+            #expect(new.allSatisfy { $0 == 0.5 })
+            read += new.count
+            await Task.yield()
+        }
+        await writer.value
+        #expect(read == 48_000)
+        #expect(buffer.samples(after: 47_000).count == 1_000)
+        #expect(buffer.samples(after: 48_000).isEmpty)
+        #expect(buffer.samples().count == 48_000)
+    }
+
     @Test func anEmptyCaptureBufferDropsEverything() {
         let buffer = CaptureBuffer(capacity: 0)
         let samples: [Float] = [1, 2]
