@@ -70,6 +70,14 @@ struct LiveDictationTests {
         }
     }
 
+    /// What a task the test started saw when `ended()` returned, so the test can wait for
+    /// it without awaiting a task that may never end.
+    @MainActor
+    final class AtTheEnd {
+        /// The passes cancelled by then, nil until `ended()` returned.
+        var cancelled: Int?
+    }
+
     private func makeLive(
         _ published: Published,
         settings: LiveDictation.Settings = LiveDictationTests.settings,
@@ -154,7 +162,10 @@ struct LiveDictationTests {
         // Two sentences that ended, then silence: pieces only.
         recording.samples = CaptionAudio.tone(1.5) + CaptionAudio.silence(1) + CaptionAudio.tone(1.5) + CaptionAudio.silence(2)
         try await waitUntil { live.counts.piecePasses == 2 }
-        try await Task.sleep(for: .milliseconds(100))
+        // Two more reads, so the dictation chose its next step after the pieces at least
+        // once, however long the test process stalls.
+        let reads = recording.reads
+        try await waitUntil { recording.reads > reads + 1 }
         #expect(live.counts.interimPasses == 0)
         live.cancel()
         _ = await live.ended()
@@ -162,16 +173,27 @@ struct LiveDictationTests {
 
     @Test func theReleaseCancelsThePassUnderWayAndNothingShowsAfterIt() async throws {
         let published = Published()
-        passes.delay = .seconds(30)
+        // An hour, so only the cancel ends the pass, however long the test process stalls.
+        passes.delay = .seconds(3_600)
         let live = makeLive(published)
         recording.samples = CaptionAudio.tone(1.5)
         try await waitUntil { passes.running == 1 }
-        let released = ContinuousClock.now
-        live.release()
-        #expect(await live.ended() == nil)
-        // The pass stopped at once instead of running its 30 s.
-        #expect(released.duration(to: .now) < .seconds(5))
-        #expect(passes.cancelled == 1)
+        // The release and ended() in a task of their own, with nothing between them on the
+        // main actor, so the pass the release cancelled has not ended yet when ended()
+        // starts to wait. The task notes the cancelled passes once ended() returns. The test
+        // waits for that note instead of awaiting the task, so a release that stops no pass
+        // fails at the wait instead of waiting out the hour.
+        let atTheEnd = AtTheEnd()
+        let release = Task { [passes] in
+            live.release()
+            let joined = await live.ended()
+            atTheEnd.cancelled = passes.cancelled
+            return joined
+        }
+        try await waitUntil { atTheEnd.cancelled != nil }
+        // The pass had stopped at the cancel when ended() returned, long before its hour.
+        #expect(atTheEnd.cancelled == 1)
+        #expect(await release.value == nil)
         #expect(published.texts.isEmpty)
         // Nothing reads or runs after it.
         let reads = recording.reads
@@ -208,7 +230,9 @@ struct LiveDictationTests {
         let live = makeLive(published)
         recording.samples = CaptionAudio.tone(1.5) + CaptionAudio.silence(1)
         try await waitUntil { live.counts.failedPasses == 1 }
-        try await Task.sleep(for: .milliseconds(50))
+        // Two more reads, so the dictation chose its next step after the failed pass.
+        let reads = recording.reads
+        try await waitUntil { recording.reads > reads + 1 }
         #expect(passes.sampleCounts.count == 1)
         #expect(published.texts.isEmpty)
         live.cancel()
@@ -220,7 +244,9 @@ struct LiveDictationTests {
     @Test func whetherTheTextMayShowIsNotAskedAtEveryRead() async throws {
         let published = Published()
         var settings = Self.settings
-        settings.rulesInterval = .seconds(60)
+        // An hour, so the reads come long before the next question even when the test
+        // process stalls. With a minute, the busy CI runner took longer than that for them.
+        settings.rulesInterval = .seconds(3_600)
         var asked = 0
         let live = makeLive(published, settings: settings, allowed: {
             asked += 1
@@ -234,13 +260,14 @@ struct LiveDictationTests {
 
     @Test func aCancelStopsThePassAndShowsNothingMore() async throws {
         let published = Published()
-        passes.delay = .seconds(30)
+        // An hour, so only the cancel ends the pass, however long the test process stalls.
+        passes.delay = .seconds(3_600)
         let live = makeLive(published)
         recording.samples = CaptionAudio.tone(1.5)
         try await waitUntil { passes.running == 1 }
         live.cancel()
+        try await waitUntil { passes.cancelled == 1 }
         _ = await live.ended()
-        #expect(passes.cancelled == 1)
         #expect(published.texts.isEmpty)
     }
 
@@ -309,13 +336,19 @@ struct LiveDictationTests {
         let published = Published()
         var settings = Self.settings
         settings.busyShare = 0
+        // An hour, so the first pass stays in the window even when the test process stalls.
+        // With the app's 10 s, a longer stall would empty the window and let a second
+        // interim pass start.
+        settings.busyWindow = .seconds(3_600)
         let live = makeLive(published, settings: settings)
         passes.delay = .milliseconds(20)
         // A long sentence without a pause would get an interim pass every second.
         recording.samples = CaptionAudio.tone(1.2)
         try await waitUntil { live.counts.interimPasses == 1 }
+        let reads = recording.reads
         recording.samples += CaptionAudio.tone(3)
-        try await Task.sleep(for: .milliseconds(100))
+        // Two more reads, so the dictation read the new speech and chose its next step.
+        try await waitUntil { recording.reads > reads + 1 }
         #expect(live.counts.interimPasses == 1)
         recording.samples += CaptionAudio.silence(1)
         try await waitUntil { live.counts.piecePasses == 1 }
