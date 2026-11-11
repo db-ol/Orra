@@ -70,6 +70,14 @@ struct LiveDictationTests {
         }
     }
 
+    /// What a task the test started saw when `ended()` returned, so the test can wait for
+    /// it without awaiting a task that may never end.
+    @MainActor
+    final class AtTheEnd {
+        /// The passes cancelled by then, nil until `ended()` returned.
+        var cancelled: Int?
+    }
+
     private func makeLive(
         _ published: Published,
         settings: LiveDictation.Settings = LiveDictationTests.settings,
@@ -170,10 +178,22 @@ struct LiveDictationTests {
         let live = makeLive(published)
         recording.samples = CaptionAudio.tone(1.5)
         try await waitUntil { passes.running == 1 }
-        live.release()
-        // The pass stops at once instead of running its hour.
-        try await waitUntil { passes.cancelled == 1 }
-        #expect(await live.ended() == nil)
+        // The release and ended() in a task of their own, with nothing between them on the
+        // main actor, so the pass the release cancelled has not ended yet when ended()
+        // starts to wait. The task notes the cancelled passes once ended() returns. The test
+        // waits for that note instead of awaiting the task, so a release that stops no pass
+        // fails at the wait instead of waiting out the hour.
+        let atTheEnd = AtTheEnd()
+        let release = Task { [passes] in
+            live.release()
+            let joined = await live.ended()
+            atTheEnd.cancelled = passes.cancelled
+            return joined
+        }
+        try await waitUntil { atTheEnd.cancelled != nil }
+        // The pass had stopped at the cancel when ended() returned, long before its hour.
+        #expect(atTheEnd.cancelled == 1)
+        #expect(await release.value == nil)
         #expect(published.texts.isEmpty)
         // Nothing reads or runs after it.
         let reads = recording.reads

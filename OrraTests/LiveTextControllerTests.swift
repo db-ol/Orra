@@ -126,9 +126,9 @@ struct LiveTextControllerTests {
         #expect(cancelledAtTheFinalPass == [1])
         #expect(inserter.inserted == ["整段"])
         let timing = try #require(timings.first)
-        // The wait for the pass to stop did not last as long as the pass would have run.
-        let stop = try #require(timing.durations[.liveTextStop])
-        #expect(stop < passes.delay)
+        // The timings hold the wait for the pass to stop. Its length is not checked, since
+        // the wait for idle above succeeds only when the release stopped the pass.
+        _ = try #require(timing.durations[.liveTextStop])
     }
 
     @Test func aCancelTakesTheTextAwayAndPastesNothing() async throws {
@@ -139,8 +139,8 @@ struct LiveTextControllerTests {
         try await waitUntil { shown.last?.interim == "片段" }
         // The sentence ends, and the pass of its piece runs until the cancel. An hour, so no
         // stall of the test process outlasts it. A piece gets its pass whatever the earlier
-        // passes took, unlike a second interim pass, which needs new speech of twice the
-        // time the first one took.
+        // passes took, unlike a second interim pass, which needs a second of new speech, or
+        // twice the time the first one took when that is longer.
         passes.delay = .seconds(3_600)
         recording.samples += CaptionAudio.silence(1)
         try await waitUntil { passes.running == 1 }
