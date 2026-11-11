@@ -75,6 +75,11 @@ final class LearnedNotice {
     @ObservationIgnored private var hide: Task<Void, Never>?
     @ObservationIgnored private var pointerInside = false
     @ObservationIgnored private var editing = false
+    /// True while the text of a dictation shows where the notice sits, see
+    /// `holdForDictation(_:)`.
+    @ObservationIgnored private var dictationHolds = false
+    /// What was left of the countdown when the dictation held the notice.
+    @ObservationIgnored private var leftWhenHeld: Duration?
 
     init(
         sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
@@ -175,6 +180,24 @@ final class LearnedNotice {
         }
     }
 
+    /// Holds the notice while the text of a dictation shows above the recording indicator,
+    /// where the panel steps aside, see LearnedNoticePanel, and goes on afterwards with the
+    /// time it had left. A hold of its own, so the pointer and the editing of the offered
+    /// word keep theirs.
+    func holdForDictation(_ holding: Bool) {
+        guard holding != dictationHolds else { return }
+        dictationHolds = holding
+        if holding {
+            leftWhenHeld = countdown.map { .seconds(max($0.hidesAt.timeIntervalSince(now()), 0)) }
+            pause()
+            return
+        }
+        let left = leftWhenHeld
+        leftWhenHeld = nil
+        guard content != nil, !pointerInside, !editing else { return }
+        hide(after: left ?? Self.afterHover)
+    }
+
     private func pause() {
         hide?.cancel()
         hide = nil
@@ -182,11 +205,17 @@ final class LearnedNotice {
     }
 
     private func resume() {
-        guard content != nil, !pointerInside, !editing else { return }
+        guard content != nil, !pointerInside, !editing, !dictationHolds else { return }
         hide(after: Self.afterHover)
     }
 
     private func hide(after duration: Duration) {
+        // A notice that comes while a dictation holds the notice starts its countdown once
+        // the hold ends.
+        guard !dictationHolds else {
+            leftWhenHeld = duration
+            return
+        }
         hide?.cancel()
         let seconds = duration / .seconds(1)
         countdown = Countdown(hidesAt: now().addingTimeInterval(seconds), seconds: seconds)
@@ -273,6 +302,9 @@ final class LearnedNoticePanel {
     private var keyObservers: [NSObjectProtocol] = []
     /// The app in front when the notice appeared, given the focus back after typing.
     private var previousApp: NSRunningApplication?
+    /// True while the text of a dictation shows where the panel sits, which then steps
+    /// aside, see `dictationShowsText(_:)`.
+    private var hiddenForDictation = false
 
     init(
         notice: LearnedNotice,
@@ -305,6 +337,37 @@ final class LearnedNoticePanel {
 
     func offerKeyboardTip(_ key: TalkKey) {
         notice.offerKeyboardTip(key)
+    }
+
+    /// Whether the user edits the offered word in the panel now. A dictation then shows no
+    /// text above the bars, since the panel would have to step aside and the focus with it,
+    /// and its paste goes into the field as before.
+    var isEditing: Bool {
+        panel?.isKeyWindow == true
+    }
+
+    /// Steps aside while the text of a dictation shows above the recording indicator, where
+    /// the panel sits: the notice holds its countdown and the panel goes, and both come
+    /// back once the text goes. Also when no notice shows yet, so one that comes meanwhile,
+    /// such as a word learned from a fix made just before the press, waits too. Never while
+    /// the panel is key, see `isEditing`.
+    func dictationShowsText(_ shows: Bool) {
+        if shows {
+            guard panel?.isKeyWindow != true else { return }
+            notice.holdForDictation(true)
+            panel?.orderOut(nil)
+            hiddenForDictation = true
+            // The pointer is no longer over a panel that went, and AppKit may not say so,
+            // which would keep the notice from counting down after the dictation.
+            notice.release()
+        } else {
+            guard hiddenForDictation else { return }
+            hiddenForDictation = false
+            if notice.content != nil {
+                panel?.orderFrontRegardless()
+            }
+            notice.holdForDictation(false)
+        }
     }
 
     private func present(_ content: LearnedNotice.Content?) {
@@ -341,7 +404,10 @@ final class LearnedNoticePanel {
         panel.contentView = view
         panel.setContentSize(view.fittingSize)
         place(panel)
-        panel.orderFrontRegardless()
+        // While the text of a dictation shows, it comes once that text goes.
+        if !hiddenForDictation {
+            panel.orderFrontRegardless()
+        }
     }
 
     /// Orra never activates itself for the notice, so the app the user was in normally

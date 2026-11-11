@@ -369,3 +369,15 @@ struct FocusedFieldTests {
         #expect(await FocusedField.kind(inApp: Int32.max) == .unknown)
     }
 }
+
+struct SecureInputTests {
+    /// Show text while you speak keeps the text off the screen while the app in front holds
+    /// secure input, and not while a process in the background does, which some apps
+    /// leave on for good.
+    @Test func onlyTheAppInFrontHoldingSecureInputCounts() {
+        #expect(SecureInput.isHeld(byFrontmostApp: 100, holder: 100))
+        #expect(!SecureInput.isHeld(byFrontmostApp: 100, holder: 200))
+        #expect(!SecureInput.isHeld(byFrontmostApp: 100, holder: nil))
+        #expect(!SecureInput.isHeld(byFrontmostApp: nil, holder: 200))
+    }
+}

@@ -265,6 +265,7 @@ final class ProblemReporter {
                     .init(name: "Show in Dock", on: dockIcon.showsInDock),
                     .init(name: "Learn from corrections", on: learning.isOn),
                     .init(name: "Use names on screen", on: pushToTalk.usesScreenNames),
+                    .init(name: "Show text while you speak", on: pushToTalk.showsLiveText),
                     .init(name: "Clean up with a local model", on: cleanup.isOn),
                     .init(name: "Polish with a local model (\(cleanup.polishStyle.rawValue))", on: cleanup.polishIsOn),
                     .init(name: "Translate with the translation key", on: cleanup.translationIsOn),

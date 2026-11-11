@@ -826,6 +826,81 @@ struct ModelGateReservationTests {
         #expect(gate.snapshot == ModelGate.Snapshot())
     }
 
+    /// The passes of the text shown while the user speaks take the gate shared, as the other
+    /// calls of a dictation do, inside its reservation, so no voice request comes in
+    /// between them.
+    @Test func thePassesOfTheTextWhileSpeakingShareTheGate() async throws {
+        let gate = ModelGate()
+        let pass = HeldWork()
+        let transcription = Transcription(load: {}, transcribe: { _, _, _ in "" }, stoppable: { _ in
+            await pass.run()
+            return "你好"
+        }).gated(gate)
+        let reservation = gate.reserve()
+        let running = Task { try await transcription.stoppablePass([0.1]) }
+        try await eventually { pass.began == 1 }
+        #expect(gate.snapshot == ModelGate.Snapshot(shared: 1, reserved: 1))
+        let voice = HeldWork()
+        voice.release()
+        let speaking = Task { try await gate.run(.exclusive) { await voice.run() } }
+        try await eventually { gate.snapshot.waiting == [.exclusive] }
+        pass.release()
+        #expect(try await running.value == "你好")
+        #expect(voice.began == 0)
+        reservation.end()
+        try await speaking.value
+        #expect(voice.began == 1)
+    }
+
+    /// A cancel ends the reservation without waiting for the pass of the text shown while
+    /// the user speaks, whose work up to its next check a cancel cannot cut short. That pass
+    /// keeps the gate shared until then: a voice request waits for it, the calls of the next
+    /// dictation go in past that request, and the request enters once both are over, so
+    /// nothing waits for good.
+    @Test func aPassThatACancelLeftRunningHoldsTheGateUntilItsCheck() async throws {
+        let gate = ModelGate()
+        let pass = HeldWork()
+        let transcription = Transcription(load: {}, transcribe: { _, _, _ in "" }, stoppable: { _ in
+            // The work a cancel does not cut short, then the check that ends the pass.
+            await pass.run()
+            try Task.checkCancellation()
+            return "你好"
+        }).gated(gate)
+        let first = gate.reserve()
+        let running = Task { try await transcription.stoppablePass([0.1]) }
+        try await eventually { pass.began == 1 }
+        #expect(gate.snapshot == ModelGate.Snapshot(shared: 1, reserved: 1))
+        running.cancel()
+        first.end()
+        #expect(gate.snapshot == ModelGate.Snapshot(shared: 1))
+        let voice = HeldWork()
+        voice.release()
+        let speaking = Task { try await gate.run(.exclusive) { await voice.run() } }
+        try await eventually { gate.snapshot.waiting == [.exclusive] }
+        #expect(gate.snapshot == ModelGate.Snapshot(shared: 1, waiting: [.exclusive]))
+        // The next press reserves the gate, and its call goes in at once.
+        let second = gate.reserve()
+        #expect(gate.snapshot == ModelGate.Snapshot(shared: 1, reserved: 1, waiting: [.exclusive]))
+        let next = HeldWork()
+        let dictating = Task { try await gate.run(.shared) { await next.run() } }
+        try await eventually { next.began == 1 }
+        #expect(gate.snapshot == ModelGate.Snapshot(shared: 2, reserved: 1, waiting: [.exclusive]))
+        // The old pass ends at its check, and the voice request waits for the next dictation.
+        pass.release()
+        await #expect(throws: CancellationError.self) {
+            try await running.value
+        }
+        #expect(gate.snapshot == ModelGate.Snapshot(shared: 1, reserved: 1, waiting: [.exclusive]))
+        next.release()
+        try await dictating.value
+        #expect(gate.snapshot == ModelGate.Snapshot(reserved: 1, waiting: [.exclusive]))
+        #expect(voice.began == 0)
+        second.end()
+        try await speaking.value
+        #expect(voice.began == 1)
+        #expect(gate.snapshot == ModelGate.Snapshot())
+    }
+
     /// At the key down the cleanup model hears of the dictation before the dictation
     /// reserves the gate, so captions and Projects can take a call that waits at the gate
     /// out of it before the reservation lets it in.

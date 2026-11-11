@@ -589,6 +589,165 @@ struct RecordingFeedbackTests {
         #expect(visible.contains { $0.redComponent > 0.9 })
     }
 
+    // MARK: The text while the user speaks
+
+    @Test func theTextShowsWithTheBarsAndGoesWithTheDictation() {
+        let feedback = makeFeedback()
+        var shown: [Bool] = []
+        feedback.onLiveTextShown = { shown.append($0) }
+        feedback.handle(.listening)
+        feedback.showLiveText(LiveText(finished: "", interim: "你好"))
+        #expect(feedback.liveText == LiveText(finished: "", interim: "你好"))
+        feedback.showLiveText(LiveText(finished: "你好，", interim: "今天"))
+        // It stays, frozen, while Orra transcribes.
+        feedback.handle(.transcribing)
+        #expect(feedback.liveText == LiveText(finished: "你好，", interim: "今天"))
+        feedback.handle(.recordingStopped)
+        feedback.handle(.finished(message: nil))
+        #expect(feedback.liveText == nil)
+        #expect(shown == [true, false])
+        // Showing text never places the panel again, so it never jumps between displays.
+        #expect(outputs.presented == [.listening, .transcribing, nil])
+    }
+
+    @Test func aMessageTakesTheTextAway() {
+        let feedback = makeFeedback()
+        feedback.handle(.listening)
+        feedback.showLiveText(LiveText(finished: "你好"))
+        feedback.handle(.finished(message: "No speech was recognized"))
+        #expect(feedback.liveText == nil)
+        feedback.handle(.handsFree(finishHint: "Press right Control to finish"))
+        feedback.showLiveText(LiveText(finished: "你好"))
+        feedback.handle(.stoppedAtLimit(message: PushToTalkController.limitNotice))
+        #expect(feedback.liveText == nil)
+    }
+
+    /// The text of a hold that ended without a cue never shows above the next one, and an
+    /// empty text shows nothing.
+    @Test func aNewDictationStartsWithoutText() {
+        let feedback = makeFeedback()
+        feedback.showLiveText(LiveText(finished: "旧的"))
+        feedback.handle(.listening)
+        #expect(feedback.liveText == nil)
+        feedback.showLiveText(LiveText(finished: "新的"))
+        // A hold that turns hands free keeps it.
+        feedback.handle(.handsFree(finishHint: "Press right Control to finish"))
+        #expect(feedback.liveText == LiveText(finished: "新的"))
+        feedback.showLiveText(LiveText())
+        #expect(feedback.liveText == nil)
+        feedback.showLiveText(LiveText(finished: "", interim: ""))
+        #expect(feedback.liveText == nil)
+    }
+
+    /// The rows of the indicator view that hold a pixel that is not clear, counted from the
+    /// bottom in points.
+    private func drawnRowsFromTheBottom(_ feedback: RecordingFeedback) throws -> ClosedRange<CGFloat> {
+        let view = NSHostingView(rootView: RecordingIndicatorView(feedback: feedback))
+        view.frame = NSRect(origin: .zero, size: RecordingIndicatorView.panelSize)
+        view.layoutSubtreeIfNeeded()
+        let image = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: image)
+        let scale = CGFloat(image.pixelsHigh) / view.bounds.height
+        let rows = (0..<image.pixelsHigh).filter { y in
+            stride(from: 0, to: image.pixelsWide, by: 2).contains { x in (image.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5 }
+        }
+        let top = try #require(rows.first)
+        let bottom = try #require(rows.last)
+        return CGFloat(image.pixelsHigh - 1 - bottom) / scale ... CGFloat(image.pixelsHigh - 1 - top) / scale
+    }
+
+    /// The box sits above the capsule, inside the panel, and grows to three lines at most,
+    /// however long the text gets.
+    @Test func theTextBoxSitsAboveTheBarsAndStopsAtThreeLines() throws {
+        let plain = makeFeedback()
+        plain.handle(.listening)
+        let bars = try drawnRowsFromTheBottom(plain)
+        let short = makeFeedback()
+        short.handle(.listening)
+        short.showLiveText(LiveText(finished: "你好"))
+        let withShort = try drawnRowsFromTheBottom(short)
+        #expect(withShort.lowerBound == bars.lowerBound)
+        #expect(withShort.upperBound > bars.upperBound + RecordingIndicatorView.liveTextSpacing + 10)
+        func height(_ text: String) throws -> CGFloat {
+            let feedback = makeFeedback()
+            feedback.handle(.listening)
+            feedback.showLiveText(LiveText(finished: text))
+            return try drawnRowsFromTheBottom(feedback).upperBound
+        }
+        let sentence = "我们下周二下午三点在会议室讨论新版本的发布计划，请大家提前准备好材料。"
+        let three = try height(String(repeating: sentence, count: 3))
+        let many = try height(String(repeating: sentence, count: 12))
+        #expect(many == three)
+        #expect(many < RecordingIndicatorView.panelSize.height - 4)
+        let english = try height(String(repeating: "We will talk about the release plan for the new version next Tuesday afternoon. ", count: 12))
+        #expect(english < RecordingIndicatorView.panelSize.height - 4)
+        #expect(english > withShort.upperBound)
+    }
+
+    /// The box is dark gray with white text, like the rest of the indicator, also where the
+    /// text of the sentence still being heard is dimmer.
+    @Test func theTextBoxDrawsWhiteOnDarkWithoutColor() throws {
+        let feedback = makeFeedback()
+        feedback.handle(.listening)
+        feedback.showLiveText(LiveText(finished: "We will meet at three.", interim: "Bring the slides"))
+        let view = NSHostingView(rootView: RecordingIndicatorView(feedback: feedback))
+        view.frame = NSRect(origin: .zero, size: RecordingIndicatorView.panelSize)
+        view.layoutSubtreeIfNeeded()
+        let image = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: image)
+        var visible: [NSColor] = []
+        for y in 0..<image.pixelsHigh {
+            for x in stride(from: 0, to: image.pixelsWide, by: 2) {
+                if let color = image.colorAt(x: x, y: y)?.usingColorSpace(.sRGB), color.alphaComponent > 0.5 {
+                    visible.append(color)
+                }
+            }
+        }
+        for color in visible {
+            #expect(abs(color.redComponent - color.greenComponent) < 0.08)
+            #expect(abs(color.greenComponent - color.blueComponent) < 0.08)
+        }
+        #expect(visible.contains { $0.redComponent < 0.2 })
+        #expect(visible.contains { $0.redComponent > 0.9 })
+    }
+
+    /// Renders the text above the bars to PNGs, on a light and on a dark background, for a
+    /// look without running the app. Off unless ORRA_SETTINGS_SNAPSHOTS names a folder, as
+    /// for the settings pages.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] != nil))
+    func renderTheTextWhileSpeaking() throws {
+        let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let hint = Hotkey.defaultKey.finishHint()
+        let chinese = "我们下周二下午三点在会议室讨论新版本的发布计划，请大家提前准备好材料。另外，"
+        let english = "We will talk about the release plan for the new version next Tuesday afternoon. Please bring the slides, and "
+        let cases: [(String, [DictationCue], LiveText)] = [
+            ("chinese-short", [.listening], LiveText(finished: "", interim: "我们下周二")),
+            ("chinese-long", [.listening], LiveText(finished: String(repeating: chinese, count: 4), interim: "记得带上电脑")),
+            ("chinese-transcribing", [.listening, .transcribing], LiveText(finished: String(repeating: chinese, count: 2))),
+            ("english-short", [.listening], LiveText(finished: "", interim: "We will talk")),
+            ("english-long", [.listening], LiveText(finished: String(repeating: english, count: 3), interim: "remember the laptop")),
+            ("mixed-hands-free", [.handsFree(finishHint: hint)], LiveText(finished: "明天的 demo 改到下午四点，", interim: "Sprint review 照常")),
+            ("translation-key", [.listening(translation: .english)], LiveText(finished: "我们明天上午十点开会。", interim: "请准时")),
+        ]
+        for (name, sequence, text) in cases {
+            for (appearance, background) in [("light", Color(white: 0.96)), ("dark", Color(white: 0.12))] {
+                let feedback = makeFeedback(FeedbackOutputs())
+                sequence.forEach(feedback.handle)
+                feedback.showLiveText(text)
+                let view = RecordingIndicatorView(feedback: feedback)
+                    .background(background)
+                    .environment(\.colorScheme, appearance == "dark" ? .dark : .light)
+                let renderer = ImageRenderer(content: view)
+                renderer.scale = 2
+                let image = try #require(renderer.nsImage)
+                let tiff = try #require(image.tiffRepresentation)
+                let png = try #require(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
+                try png.write(to: folder.appendingPathComponent("live-text-\(name)-\(appearance).png"))
+            }
+        }
+    }
+
     @Test func theIdleBarAreaSurroundsTheBar() {
         let area = RecordingIndicatorPanel.idleBarArea(inPanelAt: NSRect(x: 100, y: 50, width: 520, height: 150))
         #expect(area.contains(NSPoint(x: 360, y: 50 + RecordingIndicatorView.bottomPadding + 3)))

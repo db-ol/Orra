@@ -4,10 +4,15 @@ import os
 /// How meeting captions share the speech model and the cleanup model with dictation.
 ///
 /// Both models are actors that run one call at a time, and a call cannot be interrupted
-/// halfway except a cleanup model call, which stops early when its task is cancelled. So
+/// halfway except a cleanup model call, which stops early when its task is cancelled, and
+/// a pass for the text shown while the user speaks, which stops at its next check. So
 /// dictation keeps priority this way:
 ///
 /// - Dictation never waits here. Its calls go straight to the models, as before captions.
+///   So do the passes for the text shown while the user speaks, see LiveDictation, which
+///   are the dictation's own and run within its reservation of the model gate, except
+///   that after a cancel the pass under way may run on to its next check once the
+///   reservation ended.
 /// - From the press of the talk key or the translation key until the dictation is pasted
 ///   or cancelled, captions start no model call. Sentences of what the Mac plays heard
 ///   meanwhile wait in order and are captioned after the dictation. Captions of the

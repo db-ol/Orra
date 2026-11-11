@@ -157,22 +157,38 @@ extension NSPanel {
 /// during a hands free dictation, and that settle into a slow wave while it transcribes,
 /// or a message. In the last seconds before the recording limit, the seconds left follow
 /// the bars. No microphone and no color, since macOS already shows its orange
-/// microphone indicator in the menu bar while Orra records.
+/// microphone indicator in the menu bar while Orra records. While Show text while you
+/// speak is on, the speech model's text shows in a dark box above the bars, see
+/// LiveTextBox.
 struct RecordingIndicatorView: View {
     static let panelSize = CGSize(width: 520, height: 150)
     static let idleBarSize = CGSize(width: 40, height: 6)
     /// Room for the shadow below the indicator, and where the idle bar sits.
     static let bottomPadding: CGFloat = 16
+    /// Between the text of a dictation and the bars below it.
+    static let liveTextSpacing: CGFloat = 8
     let feedback: RecordingFeedback
 
     var body: some View {
-        VStack {
+        VStack(spacing: Self.liveTextSpacing) {
             Spacer(minLength: 0)
+            if let text = liveText {
+                LiveTextBox(text: text)
+            }
             content
                 .padding(.bottom, Self.bottomPadding)
         }
         .frame(width: Self.panelSize.width, height: Self.panelSize.height)
         .environment(\.colorScheme, .dark)
+    }
+
+    /// The text of the dictation, only while the bars show, so a message never has it
+    /// above it.
+    private var liveText: LiveText? {
+        switch feedback.presented {
+        case .listening, .handsFree, .transcribing: feedback.liveText
+        case .message, .idle, nil: nil
+        }
     }
 
     /// What VoiceOver reads for the indicator: what it shows, that the dictation will be
@@ -286,6 +302,89 @@ struct TranslationBadge: View {
             .frame(minWidth: 18, minHeight: 16)
             .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(.white))
             .accessibilityHidden(true)
+    }
+}
+
+/// The speech model's text of a dictation while the user speaks, see LiveDictation, in the
+/// dark box of the indicator's messages, above the bars. At most three lines: a longer
+/// text shows its last lines, so the latest words are always in view. The text of the
+/// sentence still being heard is dimmer, and as bright as the rest with Increase
+/// Contrast. Nothing in it moves, so it needs nothing for Reduce Motion. Hidden from
+/// VoiceOver, which would read out every change, and it takes no clicks, as the whole
+/// panel takes none.
+struct LiveTextBox: View {
+    let text: LiveText
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    /// The widest the box gets within the panel's 520 points, its padding included.
+    static let maximumWidth: CGFloat = 480
+    static let horizontalPadding: CGFloat = 14
+    static let verticalPadding: CGFloat = 8
+    /// The most characters laid out, more than three lines of English hold.
+    static let characterLimit = 300
+    /// How many lines show.
+    static let lines = 3
+
+    var body: some View {
+        let shown = text.tail(Self.characterLimit)
+        LastLines(maximumWidth: Self.maximumWidth - 2 * Self.horizontalPadding, maximumHeight: Self.maximumTextHeight(for: shown)) {
+            Text(attributed(shown))
+                .font(.body)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .clipped()
+        .padding(.horizontal, Self.horizontalPadding)
+        .padding(.vertical, Self.verticalPadding)
+        .background(IndicatorBackground(shape: RoundedRectangle(cornerRadius: 14, style: .continuous)))
+        .accessibilityHidden(true)
+    }
+
+    private func attributed(_ text: LiveText) -> AttributedString {
+        var finished = AttributedString(text.finished)
+        finished.foregroundColor = .white
+        var interim = AttributedString(text.interimAfterFinished)
+        interim.foregroundColor = .white.opacity(contrast == .increased ? 1 : 0.6)
+        return finished + interim
+    }
+
+    /// Three lines of the body font. A line with Chinese or Japanese characters is a little
+    /// taller than one of Latin letters only, so a text with such characters gets their
+    /// height, and a cut line never peeks out at the top.
+    static func maximumTextHeight(for text: LiveText) -> CGFloat {
+        let wide = (text.finished + (text.interim ?? "")).unicodeScalars.contains { ChineseText.isHan($0) || (0x3000...0x30FF).contains($0.value) || (0xFF00...0xFFEF).contains($0.value) }
+        return CGFloat(lines) * (wide ? wideLineHeight : latinLineHeight)
+    }
+
+    /// The height of a line of the body font, as AppKit lays it out, for Latin letters and
+    /// for Chinese characters, which come from another font.
+    static let latinLineHeight = lineHeight("Orra")
+    static let wideLineHeight = max(lineHeight("中文"), latinLineHeight)
+
+    private static func lineHeight(_ sample: String) -> CGFloat {
+        let font = NSFont.preferredFont(forTextStyle: .body)
+        let bounds = NSAttributedString(string: sample, attributes: [.font: font]).boundingRect(with: NSSize(width: 1_000, height: 1_000), options: [.usesLineFragmentOrigin, .usesFontLeading])
+        return ceil(bounds.height)
+    }
+}
+
+/// Lays out one text at most `maximumWidth` wide and at its own height up to
+/// `maximumHeight`, with its last lines in view when it is taller, for LiveTextBox, which
+/// clips what lies above them.
+private struct LastLines: Layout {
+    let maximumWidth: CGFloat
+    let maximumHeight: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let text = subviews.first else { return .zero }
+        let width = min(proposal.width ?? maximumWidth, maximumWidth)
+        let size = text.sizeThatFits(ProposedViewSize(width: width, height: nil))
+        return CGSize(width: min(size.width, width), height: min(size.height, maximumHeight))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let text = subviews.first else { return }
+        let size = text.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+        text.place(at: CGPoint(x: bounds.minX, y: bounds.maxY), anchor: .bottomLeading, proposal: ProposedViewSize(width: bounds.width, height: size.height))
     }
 }
 

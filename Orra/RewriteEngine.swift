@@ -574,6 +574,10 @@ struct CleanupModel {
     var waitUntilLoaded: () async -> Bool
     /// The talk key went down, see TextCleanup.dictationStarted.
     var dictationStarted: () -> Void = {}
+    /// Whether a load of the model, or the reading of its prompts that follows it, runs or
+    /// waits its turn, see TextCleanup.isPreparing. The text shown while the user speaks
+    /// starts no pass meanwhile, see LiveDictation.
+    var isPreparing: () -> Bool = { false }
     /// The dictation is over, see TextCleanup.dictationEnded.
     var dictationEnded: () -> Void = {}
     /// The model's answer for a transcript, see RewriteEngine.cleanUp.

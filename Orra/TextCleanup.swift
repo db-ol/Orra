@@ -89,6 +89,9 @@ final class TextCleanup {
     /// The latest load or unload. Each waits for the one before it, so they never overlap
     /// and never swap order.
     @ObservationIgnored private var engineWork: Task<Void, Never>?
+    /// The loads asked for whose work, the load with the prompts read after it, has not
+    /// ended, see `isPreparing`.
+    @ObservationIgnored private var loadsUnderWay = 0
     /// Counts the loads asked for, so a load the user turned off and on again since leaves
     /// the state alone.
     @ObservationIgnored private var loadGeneration = 0
@@ -232,6 +235,7 @@ final class TextCleanup {
             isOn: { [weak self] in self?.isOn ?? false },
             waitUntilLoaded: { [weak self] in await self?.waitUntilLoaded() ?? false },
             dictationStarted: { [weak self] in self?.dictationStarted() },
+            isPreparing: { [weak self] in self?.isPreparing ?? false },
             dictationEnded: { [weak self] in self?.dictationEnded() },
             complete: engine.complete,
             polishStyle: { [weak self] in self?.polishIsOn == true ? self?.polishStyle : nil },
@@ -296,6 +300,14 @@ final class TextCleanup {
     /// True when the model is in memory and nothing unloads it before the next dictation.
     private var isLoaded: Bool {
         engineState == .ready
+    }
+
+    /// True from a load asked for until its work ended: the load, the Polish prompt read
+    /// before the model counts as ready, and the translation prompts read after. The
+    /// engine state says ready before those. The text shown while the user speaks waits
+    /// meanwhile, so the load the press of a key started is not slowed, see LiveDictation.
+    var isPreparing: Bool {
+        loadsUnderWay > 0
     }
 
     /// Waits for a load under way while `isWanted` holds, once per dictation, so a
@@ -979,10 +991,13 @@ final class TextCleanup {
         engineState = .loading
         loadGeneration += 1
         let generation = loadGeneration
+        loadsUnderWay += 1
         enqueue { [weak self, engine] in
+            guard let self else { return }
+            defer { loadsUnderWay -= 1 }
             // Turned off, or off and on again, before its turn: the unload queued by
             // turning off runs next, and a newer load after it.
-            guard let self, generation == loadGeneration else { return }
+            guard generation == loadGeneration else { return }
             // A dictation began while the load waited for its turn. The waits of Projects
             // go on until the load after the dictation, see `waitUntilLoadedForProjects()`.
             guard !loadWaitsForDictation else {

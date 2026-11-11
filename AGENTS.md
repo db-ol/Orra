@@ -20,6 +20,7 @@ This file is the guide for anyone, human or agent, who changes this repository.
 
 ## Intended flow
 Hotkey -> Audio Capture -> TranscriptionEngine -> optional RewriteEngine -> Text Injection
+Show text while you speak (off until the user turns it on): the recording in progress -> pieces at pauses (CaptionSegmenter) -> speech model -> the recording indicator, never pasted
 Live Captions (off at every launch): what the Mac plays (SystemAudioTap), or the microphone when the user chooses it (CaptionMicrophone) -> CaptionSegmenter -> speech model -> optional translation -> caption window
 Projects (optional, a preview): Mail app (Apple Events) and project folders -> local index -> cleanup model -> Projects window -> Mail's reply window and the clipboard, on the user's click
 Transcribe File: the one file the user drops or picks -> FileAudioSource (16 kHz mono, streamed) -> segments at pauses -> speech model, after dictation -> Transcribe File window -> the clipboard or a file the user saves, on the user's click
@@ -144,6 +145,19 @@ trusted once in Xcode. docs/dependencies.md has the details.
   mixture of experts model, may join the shared group of ModelGate, see docs/dependencies.md.
   Projects code must load the cleanup model only while the Projects window is open or a
   Projects request runs.
+- Show text while you speak, off until the user turns it on, shows the speech model's text of
+  a dictation above the bars of the recording indicator while the user speaks. The paste
+  still comes from the pass over the whole recording after the release. Its passes are the
+  dictation's own calls on the speech model: one at a time, without the vocabulary, the
+  names or a language, shared at ModelGate within the dictation's reservation and never
+  through EngineTurns, and none while the cleanup model loads. The release and a cancel stop
+  the pass under way at its next check. The transcription after the release starts once it
+  stopped. A cancel does not wait for it, so that pass may hold the gate shared a little
+  past the reservation, and it never waits for a voice request. The text stays in memory
+  for that dictation only, in LiveDictation and RecordingFeedback, and is never pasted, kept
+  for Copy Last Dictation, logged or saved. It never shows while On screen hint hides the
+  indicator, in Low Power Mode, while the Mac's thermal state is serious or critical, or
+  while the app in front holds secure input.
 - Transcribe File reads only the one file the user drops on its window or picks in its open
   panel, through AVFoundation, which may follow no reference to another file or a URL, and
   it refuses a file that is not on this Mac yet instead of having macOS download it. It

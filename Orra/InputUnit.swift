@@ -146,6 +146,13 @@ nonisolated final class InputUnit {
         startedAt = .now
     }
 
+    /// What the recording in progress, or the last one before its stop, holds after its
+    /// first `count` samples, without taking them away. For the text shown while the user
+    /// speaks, see `AudioRecorder.recorded(after:of:)`.
+    func samples(after count: Int) -> [Float] {
+        context.buffer.samples(after: count)
+    }
+
     /// Stops the device's IO and returns what was recorded, and clears the capture buffer,
     /// so the audio does not stay in memory until the next hold. The unit stays
     /// initialized for the next start. Also right for a unit that never started.
@@ -308,8 +315,11 @@ nonisolated final class InputRenderContext: @unchecked Sendable {
 
 /// Room for a whole recording. Allocated and touched before the first recording starts, so
 /// the real time thread only copies. One thread appends, and the count it publishes with an
-/// atomic store covers only samples already written. Reading and clearing are for while the
-/// unit is stopped.
+/// atomic store covers only samples already written. Clearing is for while the unit is
+/// stopped. Reading all of it is too, and so a read of what follows an index, see
+/// `samples(after:)`, may also run while the unit records: it copies only what the count it
+/// loads has published, the storage never moves, and nothing but a clear changes a sample
+/// once it is published. The real time thread takes no lock and does nothing new for it.
 nonisolated final class CaptureBuffer: @unchecked Sendable {
     let capacity: Int
     private let storage: UnsafeMutablePointer<Float>
@@ -338,6 +348,15 @@ nonisolated final class CaptureBuffer: @unchecked Sendable {
 
     func samples() -> [Float] {
         Array(UnsafeBufferPointer(start: storage, count: count.load(ordering: .acquiring)))
+    }
+
+    /// A copy of the published samples after the first `start`. The acquiring load pairs
+    /// with the releasing store of `append`, so every sample the count covers is written.
+    func samples(after start: Int) -> [Float] {
+        let filled = count.load(ordering: .acquiring)
+        let from = max(start, 0)
+        guard from < filled else { return [] }
+        return Array(UnsafeBufferPointer(start: storage + from, count: filled - from))
     }
 
     /// Zeroes what was recorded and starts over at the beginning.

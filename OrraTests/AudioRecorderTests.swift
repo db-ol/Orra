@@ -107,6 +107,22 @@ struct AudioRecorderTests {
         #expect(store.take().isEmpty)
     }
 
+    /// The text shown while the user speaks reads what came after an index, and the stop
+    /// still takes the whole recording.
+    @Test func aReadAfterAnIndexLeavesTheStoreAsItIs() {
+        let store = SampleStore()
+        store.begin(limit: 10)
+        store.append([1, 2, 3])
+        #expect(store.samples(after: 0) == [1, 2, 3])
+        #expect(store.samples(after: 2) == [3])
+        #expect(store.samples(after: 3).isEmpty)
+        #expect(store.samples(after: 7).isEmpty)
+        store.append([4, 5])
+        #expect(store.samples(after: 3) == [4, 5])
+        #expect(store.take() == [1, 2, 3, 4, 5])
+        #expect(store.samples(after: 0).isEmpty)
+    }
+
     // MARK: When the first audio arrived
 
     @Test func theFirstBufferAndTheFirstSoundAreKeptUntilTheNextRecording() {

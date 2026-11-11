@@ -320,6 +320,14 @@ nonisolated enum SecureInput {
         }
         return pid_t(pid)
     }
+
+    /// Whether the app in front holds secure input, as it does while a password field in it
+    /// has the focus. Secure input that a process in the background holds, which some apps
+    /// leave on, does not count, as for the paste and for the names on screen.
+    static func isHeld(byFrontmostApp frontmost: pid_t?, holder: pid_t?) -> Bool {
+        guard let holder, let frontmost else { return false }
+        return holder == frontmost
+    }
 }
 
 /// Reads the current keyboard layout, so Command V uses the key that types "v" there, and

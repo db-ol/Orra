@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// Dictation, a page of Settings: the language the user speaks, Clean Up Text with Polish
-/// and its two rules, and the two features that help recognition by reading what is on
-/// screen. The model, Polish and the rules of Clean Up Text sit on the page itself, so
-/// turning one on or off takes one click.
+/// Dictation, a page of Settings: the language the user speaks, whether the speech model's
+/// text shows while the user speaks, Clean Up Text with Polish and its two rules, and the
+/// two features that help recognition by reading what is on screen. The model, Polish and
+/// the rules of Clean Up Text sit on the page itself, so turning one on or off takes one
+/// click.
 struct DictationSettings: View {
     let pushToTalk: PushToTalkController
     let cleanup: TextCleanup
@@ -15,6 +16,21 @@ struct DictationSettings: View {
                 DictationLanguageRow(pushToTalk: pushToTalk)
             } header: {
                 Text("Language")
+            }
+            // What the user sees while speaking, so no header of Clean Up Text or
+            // Recognition fits it.
+            Section {
+                Toggle(isOn: Binding(
+                    get: { pushToTalk.showsLiveText },
+                    set: { pushToTalk.setShowsLiveText($0) }
+                )) {
+                    DescribedLabel(
+                        title: "Show text while you speak",
+                        detail: "Shows what Orra hears above the bars at the bottom of the screen while you speak. Orra pastes once, when the dictation ends.",
+                        systemImage: "quote.bubble"
+                    )
+                }
+                .help(Text("When this is on, Orra transcribes what you say in pieces while you speak and shows the speech model's text above the bars at the bottom of the screen, without taking the focus from the app you are in. When the dictation ends, Orra transcribes the whole recording as usual, applies the rules and then cleanup, Polish or translation as you set them, and pastes the result once, so the pasted text can differ from the text shown. The text shown is never pasted, saved or logged, and it goes when the dictation ends. The speech model works while you speak, which uses more power. The text shows only while On screen hint shows the bars. It does not show for a very short dictation, in Low Power Mode, in a password field and in a few other cases, and VoiceOver does not read it."))
             }
             Section {
                 CleanupToggle(cleanup: cleanup, language: pushToTalk.dictationLanguage)

@@ -60,6 +60,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             saveWritesNumbersAsDigits: { NumberPreference.save($0) },
             usesScreenNames: ScreenNamesPreference.load(),
             saveUsesScreenNames: { ScreenNamesPreference.save($0) },
+            showsLiveText: LiveTextPreference.load(),
+            saveShowsLiveText: { LiveTextPreference.save($0) },
+            liveTextAllowed: { [weak self] in self?.liveTextAllowed() ?? false },
             dictationLanguage: DictationLanguagePreference.load(setUpBefore: setUpBefore),
             dictationLanguageFollows: DictationLanguagePreference.follows(setUpBefore: setUpBefore),
             // Translation goes between English and the dictation language, so the model
@@ -277,6 +280,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let environment = ProcessInfo.processInfo.environment
         return environment["XCTestConfigurationFilePath"] != nil
             || environment["XCODE_RUNNING_FOR_PREVIEWS"] != nil
+    }
+
+    /// Whether the speech model's text may show as the user speaks now, see
+    /// PushToTalkController: the indicator shows, there is no Low Power Mode, the Mac is not
+    /// hot, the user is not editing a word in the notice of a learned word, and the app in
+    /// front does not hold secure input, as it does while a password field in it has the
+    /// focus. The folder index of Projects pauses for the same power and heat.
+    private func liveTextAllowed() -> Bool {
+        let info = ProcessInfo.processInfo
+        return feedback.showsIndicator
+            && !info.isLowPowerModeEnabled
+            && info.thermalState != .serious && info.thermalState != .critical
+            && !learnedNotice.isEditing
+            && !SecureInput.isHeld(byFrontmostApp: NSWorkspace.shared.frontmostApplication?.processIdentifier, holder: SecureInput.holder())
     }
 
     /// Tells the feedback whether a hold would dictate, now and after every change, so the
@@ -526,6 +543,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 feedback.handle(cue)
             }
         }
+        // After the cues sent before it, in order.
+        pushToTalk.onLiveText = { [feedback] text in
+            DispatchQueue.main.async {
+                feedback.showLiveText(text)
+            }
+        }
+        // The notice of a learned word sits where the text of a dictation shows.
+        feedback.onLiveTextShown = { [learnedNotice] shows in learnedNotice.dictationShowsText(shows) }
         pushToTalk.onPasted = { [learning] text, app, beforeCleanup, replacements in
             learning.pasted(text, in: app, beforeCleanup: beforeCleanup, replacements: replacements)
         }

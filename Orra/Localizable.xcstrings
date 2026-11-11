@@ -16763,6 +16763,28 @@
         }
       }
     },
+    "Show text while you speak" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar el texto mientras hablas"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話している間にテキストを表示"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话时显示文字"
+          }
+        }
+      }
+    },
     "Show the report" : {
       "localizations" : {
         "es-419" : {
@@ -16897,6 +16919,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在这个窗口中显示你在“邮件”中选中的邮件并解释它。这封邮件必须在“项目”读取的邮箱中，并且在读取的时间范围内。"
+          }
+        }
+      }
+    },
+    "Shows what Orra hears above the bars at the bottom of the screen while you speak. Orra pastes once, when the dictation ends." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muestra lo que Orra escucha sobre las barras de la parte inferior de la pantalla mientras hablas. Orra pega el texto una sola vez, al terminar el dictado."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話している間、画面下部の音量バーの上に、Orraが聞き取った内容を表示します。ペーストは、音声入力が終わったときに1回だけ行われます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话时，在屏幕底部的音量条上方显示 Orra 听到的内容。听写结束时，Orra 只粘贴一次。"
           }
         }
       }
@@ -22134,6 +22178,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开后，每次粘贴后的 3 分钟内，只要你还在那个输入框里，Orra 就会读取它的文字，从不读取密码框。你改正一个听错的词，Orra 就会把正确的写法加入个人词库，并弹出提示，你可以撤销。Orra 只保存词对，只存在这台 Mac 上。它只在 macOS 能读取文字的 App 里生效，比如备忘录、邮件和 Safari，部分编辑器和终端不行。在这些 App 里，请拷贝正确的词，再从 Orra 菜单里添加。"
+          }
+        }
+      }
+    },
+    "When this is on, Orra transcribes what you say in pieces while you speak and shows the speech model's text above the bars at the bottom of the screen, without taking the focus from the app you are in. When the dictation ends, Orra transcribes the whole recording as usual, applies the rules and then cleanup, Polish or translation as you set them, and pastes the result once, so the pasted text can differ from the text shown. The text shown is never pasted, saved or logged, and it goes when the dictation ends. The speech model works while you speak, which uses more power. The text shows only while On screen hint shows the bars. It does not show for a very short dictation, in Low Power Mode, in a password field and in a few other cases, and VoiceOver does not read it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cuando esta opción está activada, Orra transcribe por partes lo que dices mientras hablas y muestra el texto del modelo de transcripción sobre las barras de la parte inferior de la pantalla, sin quitarle el foco a la app que estás usando. Cuando termina el dictado, Orra transcribe toda la grabación como siempre, aplica las reglas y luego la limpieza, el pulido o la traducción según lo que elegiste, y pega el resultado una sola vez, así que el texto pegado puede ser distinto del que se mostró. El texto que se muestra nunca se pega, se guarda ni se registra, y desaparece cuando termina el dictado. El modelo de transcripción trabaja mientras hablas, lo que consume más energía. El texto solo se muestra mientras Indicación en pantalla muestra las barras. No se muestra en un dictado muy corto, en el modo de bajo consumo, en un campo de contraseña ni en algunos otros casos, y VoiceOver no lo lee."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オンにすると、話している間にOrraが音声を区切って文字起こしし、音声認識モデルが書き出したテキストを画面下部の音量バーの上に表示します。使用中のアプリのフォーカスは奪いません。音声入力が終わると、Orraはいつもどおり録音全体を文字起こしし、ルールを適用してから、設定に応じて整文、推敲、翻訳を行い、結果を1回だけペーストします。そのため、ペーストされるテキストが表示された内容と異なることがあります。表示されたテキストは、ペーストも保存もされず、ログにも記録されません。音声入力が終わると消えます。話している間も音声認識モデルが動作するため、消費電力が増えます。テキストは“画面上のヒント”で音量バーが表示されるときだけ表示されます。ごく短い音声入力、“低電力モード”がオンのとき、パスワードフィールド、そのほか一部の場合には表示されず、VoiceOverも読み上げません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开后，Orra 会在你说话时分段转写，并在屏幕底部的音量条上方显示语音模型写出的文字，不会抢走你正在使用的 App 的焦点。听写结束时，Orra 照常转写整段录音，执行规则，再按你的设置整理、润色或翻译，然后只粘贴一次，所以粘贴的文字可能和显示的不同。显示的文字从不粘贴、保存，也不写进日志，听写结束时就会消失。说话时语音模型也在工作，耗电会多一些。只有“屏幕提示”显示音量条时才会显示文字。很短的听写、打开“低电量模式”时、在密码栏中以及其他少数情况下不会显示，旁白也不会朗读这些文字。"
           }
         }
       }

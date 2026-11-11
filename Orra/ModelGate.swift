@@ -325,12 +325,16 @@ extension Transcription {
     func gated(_ gate: ModelGate) -> Transcription {
         let load = load
         let transcribe = transcribe
+        let stoppable = stoppable
         return Transcription(
             load: { try await gate.run(.shared) { try await load() } },
             transcribe: { samples, context, language in
                 try await gate.run(.shared) { try await transcribe(samples, context, language) }
             },
-            gate: gate
+            gate: gate,
+            stoppable: stoppable.map { pass in
+                { samples in try await gate.run(.shared) { try await pass(samples) } }
+            }
         )
     }
 }
